@@ -1,0 +1,24 @@
+{
+	"main":"setting.html",
+	"logo": "favicon.png",
+	"preload": "preload.js",
+	"platform":["win32", "darwin", "linux"],
+	"features": [
+		{
+		  "code": "Completion",
+		  "explain": "AI智能补全文本",
+			"cmds":[
+				{	
+					"code":"over",
+					"label": "Completion",
+					"minLength": 1
+				}
+			]
+		},
+		{
+			"code":"Anywhere Settings",
+			"explain": "配置API",
+			"cmds":["Anywhere Settings","Settings"]
+		}
+	]
+}

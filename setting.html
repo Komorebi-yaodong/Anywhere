@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <style>
+        /* Common Styles */
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f8f8f4;
+            color: #323330;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            margin: 0;
+            padding: 20px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .container {
+            background-color: #F0EFE6;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 800px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            font-family: Georgia, serif;
+        }
+
+        h2 {
+            font-family: Georgia, serif;
+            font-weight: normal;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #66645e;
+            font-size: 2rem;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 95%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        button {
+            background-color: #807d77;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s ease-in-out;
+            font-family: Georgia, serif;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            background-color: #6b6964;
+        }
+
+        .model-select, .type-select {
+            width: 200px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23807d77'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 1em;
+        }
+        .type-select{
+          width: 80px;
+        }
+
+        .prompts-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .prompts-table th,
+        .prompts-table td {
+            padding: 10px;
+            border: 1px solid #ccc;
+            text-align: left;
+        }
+
+        .prompts-table th {
+            background-color: #e0dfdb;
+        }
+
+        .prompts-table input {
+            width: calc(100% - 20px);
+        }
+
+        .add-prompt-btn {
+            margin-top: 10px;
+        }
+        .delete-btn {
+            background-color: #e0dfdb;
+            color: #6b6964;
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            /* position: relative;
+            top: 50%;
+            left: 50%; */
+            /* transform: translate(-50%,-50%); */
+            
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    
+        .delete-btn:hover {
+            background-color: #c82333;
+            color: white;
+        }
+        .fetch-models-btn{
+            margin-left: 10px;
+            position: relative; /* Add this for the loading spinner */
+        }
+        .model-section{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .model-label{
+          width: 50px;
+        }
+        .stream-button {
+            width: 80px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            color: white;
+            margin-bottom: 0;
+        }
+
+        .stream-true {
+            background-color: #28a745; /* Green */
+        }
+
+        .stream-false {
+            background-color: #6c757d; /* Gray */
+        }
+        .save-prompts-btn{
+            margin-top: 10px;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 120px;
+            background-color: black;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 0;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        .stream-section{
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        /* Toast Container */
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        /* Toast Message */
+        .toast-message {
+            background-color: #d9534f;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .toast-message.show {
+            opacity: 1;
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #fff;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        .fetch-models-btn.loading .loading-spinner {
+            display: block;
+        }
+
+        .fetch-models-btn.loading {
+          pointer-events: none; /* Disable the button when loading */
+        }
+
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Configuration Settings</h2>
+
+        <div class="section">
+            <label for="api-url">API URL:</label>
+            <input type="text" id="api-url" placeholder="Enter API URL">
+        </div>
+
+        <div class="section">
+            <label for="api-key">API Key:</label>
+            <input type="text" id="api-key" placeholder="Enter API Key">
+        </div>
+
+        <div class="section model-section">
+          <div style="display: flex; align-items: center;">
+            <label for="model-select" class="model-label">Model:</label>
+            <select id="model-select" class="model-select"></select>
+            <button id="fetch-models-btn" class="fetch-models-btn">
+              Get Models
+              <div class="loading-spinner"></div>
+            </button>
+          </div>
+          <div class="stream-section">
+            <label>Stream:</label>
+            <div class="tooltip">
+              <button id="stream-btn" class="stream-button stream-true">True</button>
+              <span class="tooltiptext">Enable or disable streaming</span>
+            </div>
+          </div>
+          
+        </div>
+
+        <div class="section">
+            <label>Prompts($content=>input):</label>
+            <table class="prompts-table" id="prompts-table">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Type</th>
+                        <th>Value</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Prompts will be loaded here -->
+                </tbody>
+            </table>
+            <button class="add-prompt-btn" id="add-prompt-btn">Add Prompt</button>
+            <button class="save-prompts-btn" id="save-prompts-btn">Save Prompts</button>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const apiUrlInput = document.getElementById('api-url');
+            const apiKeyInput = document.getElementById('api-key');
+            const modelSelect = document.getElementById('model-select');
+            const streamBtn = document.getElementById('stream-btn');
+            const promptsTable = document.getElementById('prompts-table').getElementsByTagName('tbody')[0];
+            const addPromptBtn = document.getElementById('add-prompt-btn');
+            const savePromptsBtn = document.getElementById('save-prompts-btn');
+            const fetchModelsBtn = document.getElementById('fetch-models-btn');
+
+            let currentConfig = {};
+
+            function showToast(message) {
+                const toastContainer = document.getElementById('toast-container');
+                const toastMessage = document.createElement('div');
+                toastMessage.classList.add('toast-message');
+                toastMessage.textContent = message;
+                toastContainer.appendChild(toastMessage);
+
+                // Show the toast
+                setTimeout(() => {
+                    toastMessage.classList.add('show');
+                }, 100);
+
+                // Hide and remove the toast after 3 seconds
+                setTimeout(() => {
+                    toastMessage.classList.remove('show');
+                    setTimeout(() => {
+                        toastContainer.removeChild(toastMessage);
+                    }, 500);
+                }, 3000);
+            }
+
+            // Fetch models from the API
+            async function fetchModels() {
+                const apiUrl = apiUrlInput.value;
+                const apiKey = apiKeyInput.value;
+                // Show loading spinner
+                fetchModelsBtn.classList.add('loading');
+
+                if (!apiUrl || !apiKey) {
+                    console.error('API URL and API Key are required to fetch models.');
+                    showToast('API URL and API Key are required to fetch models.');
+                    fetchModelsBtn.classList.remove('loading');
+                    return;
+                }
+            
+                try {
+                    const response = await fetch(`${apiUrl}/models`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+            
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+            
+                    const data = await response.json();
+                    if (data.data && Array.isArray(data.data)) {
+                        const modelList = data.data.map(model => model.id);
+                        modelSelect.innerHTML = ''; // Clear existing options
+                        data.data.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.id;
+                            option.textContent = model.id;
+                            modelSelect.appendChild(option);
+                        });
+                        // Select the default model after fetching
+                        selectDefaultModel(modelList);
+                    } else {
+                        console.error('Invalid response format:', data);
+                        showToast(`Invalid response format: ${data}`);
+                    }
+                } catch (error) {
+                    console.error('Error fetching models:', error);
+                    showToast(`Error fetching models: ${error}`);
+                } finally {
+                    // Hide loading spinner
+                    fetchModelsBtn.classList.remove('loading');
+                }
+            }
+
+            // Select the default model
+            function selectDefaultModel(modelList) {
+                let selectedModel = currentConfig.config.modelSelect;
+
+                // 检查modelSelect是否存在于modelList中
+                if (!modelList.includes(selectedModel)) {
+                    selectedModel = modelList[0]; // 如果不存在，选择列表中的第一个模型
+                }
+
+                modelSelect.value = selectedModel;
+                saveCurrentModel(modelList); // 确保在更改后保存配置
+            }
+
+            // Load current configuration
+            async function loadConfig() {
+              defaultConfig = {
+                  config:{
+                  apiUrl:"https://api.openai.com/v1",
+                  apiKey:"sk-xxxxxx",
+                  modelList:[],
+                  modelSelect:"gpt-4o-mini",
+                  prompts:{
+                      "Completion":["over",`你现在是我，请基于我已写的内容，以我的口吻继续写下去，不要重复我已经写过的内容。我已写的内容如下：$content，请你继续：`]
+                  },
+                  stream:true
+              }
+              }
+                currentConfig = await window.api.getConfig()||defaultConfig;
+
+                apiUrlInput.value = currentConfig.config.apiUrl || '';
+                apiKeyInput.value = currentConfig.config.apiKey || '';
+                streamBtn.textContent = currentConfig.config.stream ? 'True' : 'False';
+                streamBtn.className = currentConfig.config.stream ? 'stream-button stream-true' : 'stream-button stream-false';
+
+                // Load models only if they exist in the config
+                if (currentConfig.config.modelList && currentConfig.config.modelList.length > 0) {
+                    modelSelect.innerHTML = '';
+                    currentConfig.config.modelList.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model;
+                        option.textContent = model;
+                        modelSelect.appendChild(option);
+                    });
+                    selectDefaultModel(currentConfig.config.modelList);
+                }
+
+                loadPrompts(currentConfig.config.prompts);
+            }
+
+            // Load prompts into the table
+            function loadPrompts(prompts) {
+                promptsTable.innerHTML = '';
+                for (const key in prompts) {
+                    addPromptRow(key, prompts[key][0], prompts[key][1], key === 'Completion');
+                }
+            }
+
+            // Add a new prompt row
+            function addPromptRow(key = '', type = 'over', value = '', readOnly = false) {
+                const row = promptsTable.insertRow();
+                const keyCell = row.insertCell();
+                const typeCell = row.insertCell();
+                const valueCell = row.insertCell();
+                const actionCell = row.insertCell();
+
+                const keyInput = document.createElement('input');
+                keyInput.type = 'text';
+                keyInput.value = key;
+                keyInput.disabled = readOnly;
+
+                const typeSelect = document.createElement('select');
+                typeSelect.className = 'type-select';
+                const optionOver = document.createElement('option');
+                optionOver.value = 'over';
+                optionOver.text = 'over';
+                const optionImg = document.createElement('option');
+                optionImg.value = 'img';
+                optionImg.text = 'img';
+                typeSelect.add(optionOver);
+                typeSelect.add(optionImg);
+                typeSelect.value = type;
+                typeSelect.disabled = readOnly;
+
+                const valueInput = document.createElement('input');
+                valueInput.type = 'text';
+                valueInput.value = value;
+                valueInput.disabled = readOnly;
+
+                keyCell.appendChild(keyInput);
+                typeCell.appendChild(typeSelect);
+                valueCell.appendChild(valueInput);
+
+                if (!readOnly) {
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = 'Delete';
+                    deleteBtn.className = 'delete-btn';
+                    deleteBtn.onclick = () => {
+                        promptsTable.deleteRow(row.rowIndex - 1);
+                    }
+                    actionCell.appendChild(deleteBtn);
+                }
+            }
+
+            // Save the currently selected model and model list
+            function saveCurrentModel(modelList) {
+              currentConfig.config.modelSelect = modelSelect.value;
+              if(modelList){
+                currentConfig.config.modelList = modelList;
+              }
+              window.api.updateConfig(currentConfig);
+          }
+        
+            // Auto-save for model selection
+            modelSelect.addEventListener('change', ()=>{
+              saveCurrentModel();
+            });
+
+            // Auto-save for API URL and API Key
+            apiUrlInput.addEventListener('change', () => {
+                currentConfig.config.apiUrl = apiUrlInput.value;
+                window.api.updateConfig(currentConfig);
+            });
+
+            apiKeyInput.addEventListener('change', () => {
+                currentConfig.config.apiKey = apiKeyInput.value;
+                window.api.updateConfig(currentConfig);
+            });
+
+            // Auto-save for stream checkbox
+            streamBtn.addEventListener('click', () => {
+              currentConfig.config.stream = !currentConfig.config.stream;
+              streamBtn.textContent = currentConfig.config.stream ? 'True' : 'False';
+              streamBtn.className = currentConfig.config.stream ? 'stream-button stream-true' : 'stream-button stream-false';
+              window.api.updateConfig(currentConfig);
+          });
+
+            // Save prompts
+            function savePrompts() {
+                const updatedPrompts = {};
+                for (let i = 0; i < promptsTable.rows.length; i++) {
+                    const row = promptsTable.rows[i];
+                    const key = row.cells[0].querySelector('input').value;
+                    const type = row.cells[1].querySelector('select').value;
+                    const value = row.cells[2].querySelector('input').value;
+                    updatedPrompts[key] = [type, value];
+                }
+                currentConfig.config.prompts = updatedPrompts;
+                window.api.updateConfig(currentConfig);
+            }
+
+            // Event listener for adding a new prompt
+            addPromptBtn.addEventListener('click', () => {
+                addPromptRow();
+            });
+
+            savePromptsBtn.addEventListener('click', () => {
+              savePrompts();
+            });
+
+            // Fetch models button event listener
+            fetchModelsBtn.addEventListener('click', fetchModels);
+
+            await loadConfig();
+        });
+    </script>
+</body>
+</html>
