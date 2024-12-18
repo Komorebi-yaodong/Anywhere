@@ -1,21 +1,18 @@
+const defaultConfig = {
+    config:{
+        apiUrl:"https://api.openai.com/v1",
+        apiKey:"sk-xxxxxx",
+        modelList:[],
+        modelSelect:"gpt-4o-mini",
+        prompts:{
+            Completion:["over",`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`]
+        },
+        stream:true
+    }
+}
+
 // 读取配置文件，如果不存在则返回默认配置
 function getConfig() {
-    defaultConfig = {
-        config:{
-            apiUrl:"https://api.openai.com/v1",
-            apiKey:"sk-xxxxxx",
-            modelList:[],
-            modelSelect:"gpt-4o-mini",
-            prompts:{
-                "Completion":["over",`你是一个文本续写模型，可以基于已经提供的内容，完成续写。注意续写开头不要重复的已经提供的内容，续写的内容不要在代码框内。已经完成的内容如下：
-\`\`\`
-$content
-\`\`\`
-请你进行续写：`]
-            },
-            stream:true
-        }
-    }
     const configDoc = utools.db.get("config")
     if (configDoc) {
         return configDoc.data
@@ -31,13 +28,11 @@ function updateConfig(newConfig) {
     let featuresMap = new Map(features.map(feature => [feature.code, feature]));
     // 查找prompts中的key是否在features的元素的code中，如不在则添加
     for (let key in newConfig.config.prompts) {
-        if (!featuresMap.has(key)) {
-            utools.setFeature({
-                code: key,
-                explain: key,
-                cmds: [{type:newConfig.config.prompts[key][0],label: key}]
-            });
-        }
+        utools.setFeature({
+            code: key,
+            explain: key,
+            cmds: [{type:newConfig.config.prompts[key][0],label: key}]
+        });
     }
     // 查找features的元素的code是否在prompts中的key中，如不在则删除
     for (let [key, feature] of featuresMap) {
@@ -45,6 +40,7 @@ function updateConfig(newConfig) {
             utools.removeFeature(key);
         }
     }
+    newConfig.config.prompts.Completion = defaultConfig.config.prompts.Completion
     let configDoc = utools.db.get("config")
     if (configDoc) {
         // 更新已存在的配置
@@ -54,9 +50,9 @@ function updateConfig(newConfig) {
     else {
         // 创建新的配置
         return utools.db.put({
-                _id: "config",
-                data: newConfig,
-            })
+            _id: "config",
+            data: newConfig,
+        })
     }
     
 }
@@ -84,8 +80,12 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                         model: config.modelSelect,
                         messages: [
                             {
+                                role: "system",
+                                content: config.prompts[code][1]
+                            },
+                            {
                                 role: "user",
-                                content: config.prompts[code][1].replace("$content", text)
+                                content: text
                             }
                         ],
                         stream: config.stream
@@ -162,6 +162,10 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                     body: JSON.stringify({
                         model: config.modelSelect,
                         messages: [
+                            {
+                                role:"system",
+                                content: config.prompts[code][1]
+                            },
                             {
                                 role: "user",
                                 content: [

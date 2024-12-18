@@ -307,7 +307,7 @@
         </div>
 
         <div class="section">
-            <label>Prompts($content=>input):</label>
+            <label>Prompts:</label>
             <table class="prompts-table" id="prompts-table">
                 <thead>
                     <tr>
@@ -489,10 +489,10 @@
                 typeSelect.className = 'type-select';
                 const optionOver = document.createElement('option');
                 optionOver.value = 'over';
-                optionOver.text = 'over';
+                optionOver.text = 'text';
                 const optionImg = document.createElement('option');
                 optionImg.value = 'img';
-                optionImg.text = 'img';
+                optionImg.text = 'image';
                 typeSelect.add(optionOver);
                 typeSelect.add(optionImg);
                 typeSelect.value = type;
