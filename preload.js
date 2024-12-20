@@ -3,11 +3,13 @@ const defaultConfig = {
         apiUrl:"https://api.openai.com/v1",
         apiKey:"sk-xxxxxx",
         modelList:[],
+        ModelsListByUser:[],
         modelSelect:"gpt-4o-mini",
         prompts:{
             Completion:["over",`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`]
         },
-        stream:true
+        stream:true,
+        skipLineBreak:true,
     }
 }
 
@@ -63,10 +65,16 @@ window.api = {
 };
 
 utools.onPluginEnter(async ({ code, type, payload, option }) => {
-
+    // 跟新默认配置比对defaultConfig中的key是否在config中，如不在则添加
+    config = window.api.getConfig().config;
+    for (let key in defaultConfig.config) {
+        if (!config[key]) {
+            config[key] = defaultConfig.config[key]
+        }
+    }
+    window.api.updateConfig({config});
     if (code !== "Anywhere Settings") {
-        utools.hideMainWindow(true);
-        config = window.api.getConfig().config;
+        utools.hideMainWindow(true); // 隐藏主窗口
         // 函数：处理文本
         async function handleText(text,config) {
             try {
@@ -100,6 +108,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder("utf-8");
                     let buffer = "";
+                    let output = "";
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) {
@@ -117,12 +126,16 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                             for (const line of lines) {
                                 const message = line.replace(/^data: /, "");
                                 if (message === "[DONE]") {
+                                    if (output.trim()) {
+                                        utools.hideMainWindowTypeString(output.trim());
+                                    }
                                     break;
                                 }
                                 try {
                                     const parsed = JSON.parse(message);
                                     if (parsed.choices[0].delta.content) {
-                                        utools.hideMainWindowTypeString(parsed.choices[0].delta.content);
+                                        utools.hideMainWindowTypeString(output);
+                                        output = parsed.choices[0].delta.content
                                     }
                                 } catch (error) {
                                     utools.showNotification("Could not parse stream message", message, error);
@@ -136,7 +149,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                 }
                 else {
                     const data = await response.json();
-                    utools.hideMainWindowTypeString(data.choices[0].message.content);
+                    utools.hideMainWindowTypeString(data.choices[0].message.content.trim());
                     utools.showNotification(code + " successfully!");
                 }
             } catch (error) {
@@ -194,6 +207,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder("utf-8");
                     let buffer = "";
+                    let output = "";
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) {
@@ -211,12 +225,16 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                             for (const line of lines) {
                                 const message = line.replace(/^data: /, "");
                                 if (message === "[DONE]") {
+                                    if (output.trim()) {
+                                        utools.hideMainWindowTypeString(output.trim());
+                                    }
                                     break;
                                 }
                                 try {
                                     const parsed = JSON.parse(message);
                                     if (parsed.choices[0].delta.content) {
-                                        utools.hideMainWindowTypeString(parsed.choices[0].delta.content);
+                                        utools.hideMainWindowTypeString(output);
+                                        output = parsed.choices[0].delta.content
                                     }
                                 } catch (error) {
                                     utools.showNotification("Could not parse stream message", message, error);
@@ -229,7 +247,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                     utools.showNotification(code + " successfully!");
                 } else {
                     const data = await response.json();
-                    utools.hideMainWindowTypeString(data.choices[0].message.content);
+                    utools.hideMainWindowTypeString(data.choices[0].message.content.trim());
                     utools.showNotification(code + " successfully!");
                 }
             }catch (error) {
@@ -242,6 +260,10 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
             }
         }
         if (type === "over") {
+            // 将换行符替换为空格
+            if (config.skipLineBreak) {
+                payload = payload.replace(/-\s*\n\s*/g, "").replace(/\s*\n\s*/g, " ");
+            }
             await handleText(payload,config);
         } else if (type === "img") {
             await handleImage(payload,config);

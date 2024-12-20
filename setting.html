@@ -91,8 +91,15 @@
             background-color: #6b6964;
         }
 
-        .model-select, .type-select {
-            width: 200px;
+        .model-select-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-grow: 1; /* Allow select to grow */
+        }
+
+        .model-select {
+            flex-grow: 1;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
@@ -105,9 +112,6 @@
             background-repeat: no-repeat;
             background-position: right 10px center;
             background-size: 1em;
-        }
-        .type-select{
-          width: 80px;
         }
 
         .prompts-table {
@@ -142,16 +146,11 @@
             font-size: 14px;
             cursor: pointer;
             transition: background-color 0.3s;
-            /* position: relative;
-            top: 50%;
-            left: 50%; */
-            /* transform: translate(-50%,-50%); */
-            
             display: flex;
             align-items: center;
             justify-content: center;
         }
-    
+
         .delete-btn:hover {
             background-color: #c82333;
             color: white;
@@ -164,9 +163,11 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         .model-label{
-          width: 50px;
+          width: 60px;
         }
         .stream-button {
             width: 80px;
@@ -271,6 +272,81 @@
             0% { transform: translate(-50%, -50%) rotate(0deg); }
             100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
+
+        .user-model-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .user-model-delete-btn {
+            background-color: transparent;
+            color: #c82333;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        .user-model-delete-btn:hover {
+            color: darkred;
+        }
+        .stream-settings-row {
+            display: flex;
+            align-items: center;
+            gap: 20px; /* Adjust as needed */
+        }
+        .custom-model-section {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .custom-model-section label{
+            margin-bottom: 0;
+             white-space: nowrap;
+        }
+        .custom-model-button{
+            background-color: #e0dfdb;
+            color: #6b6964;
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        /* New styles for the type select */
+        .type-select-container {
+            position: relative;
+            width: 80px;
+        }
+
+        .type-select-container select {
+            width: 100%;
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-color: #fff;
+            cursor: pointer;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23807d77'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 1em;
+        }
+
+        .type-select-container select:focus {
+            outline: none;
+            border-color: #807d77;
+            box-shadow: 0 0 0 2px rgba(128, 125, 119, 0.25);
+        }
     </style>
 </head>
 <body>
@@ -288,22 +364,40 @@
         </div>
 
         <div class="section model-section">
-          <div style="display: flex; align-items: center;">
-            <label for="model-select" class="model-label">Model:</label>
-            <select id="model-select" class="model-select"></select>
-            <button id="fetch-models-btn" class="fetch-models-btn">
-              Get Models
-              <div class="loading-spinner"></div>
-            </button>
-          </div>
-          <div class="stream-section">
-            <label>Stream:</label>
-            <div class="tooltip">
-              <button id="stream-btn" class="stream-button stream-true">True</button>
-              <span class="tooltiptext">Enable or disable streaming</span>
+            <div style="display: flex; align-items: center; flex-grow: 1;">
+                <label for="model-select" class="model-label">Model:</label>
+                <div class="model-select-container">
+                    <select id="model-select" class="model-select"></select>
+                </div>
+                <button id="fetch-models-btn" class="fetch-models-btn">
+                    Get Models
+                    <div class="loading-spinner"></div>
+                </button>
             </div>
-          </div>
-          
+        </div>
+
+        <div class="section custom-model-section">
+            <label for="add-model-input">Custom Model:</label>
+            <input type="text" id="add-model-input" placeholder="Enter model name">
+            <button id="add-model-btn" class="custom-model-button">Add</button>
+            <button id="delete-model-btn" class="custom-model-button">Delete</button>
+        </div>
+
+        <div class="section stream-settings-row">
+            <div class="stream-section">
+                <label>Stream:</label>
+                <div class="tooltip">
+                    <button id="stream-btn" class="stream-button stream-true">True</button>
+                    <span class="tooltiptext">Enable or disable streaming</span>
+                </div>
+            </div>
+            <div class="stream-section">
+                <label>Skip Line Break:</label>
+                <div class="tooltip">
+                    <button id="skip-line-break-btn" class="stream-button stream-true">True</button>
+                    <span class="tooltiptext">Enable or disable skipping line breaks</span>
+                </div>
+            </div>
         </div>
 
         <div class="section">
@@ -339,8 +433,27 @@
             const addPromptBtn = document.getElementById('add-prompt-btn');
             const savePromptsBtn = document.getElementById('save-prompts-btn');
             const fetchModelsBtn = document.getElementById('fetch-models-btn');
+            const addModelInput = document.getElementById('add-model-input');
+            const addModelBtn = document.getElementById('add-model-btn');
+            const deleteModelBtn = document.getElementById('delete-model-btn');
+            const skipLineBreakBtn = document.getElementById('skip-line-break-btn');
 
             let currentConfig = {};
+
+            const defaultConfig = {
+                config:{
+                    apiUrl:"https://api.openai.com/v1",
+                    apiKey:"sk-xxxxxx",
+                    modelList:[],
+                    ModelsListByUser:[],
+                    modelSelect:"gpt-4o-mini",
+                    prompts:{
+                        Completion:["over",`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`]
+                    },
+                    stream:true,
+                    skipLineBreak:true,
+                }
+            };
 
             function showToast(message) {
                 const toastContainer = document.getElementById('toast-container');
@@ -349,12 +462,10 @@
                 toastMessage.textContent = message;
                 toastContainer.appendChild(toastMessage);
 
-                // Show the toast
                 setTimeout(() => {
                     toastMessage.classList.add('show');
                 }, 100);
 
-                // Hide and remove the toast after 3 seconds
                 setTimeout(() => {
                     toastMessage.classList.remove('show');
                     setTimeout(() => {
@@ -363,11 +474,9 @@
                 }, 3000);
             }
 
-            // Fetch models from the API
             async function fetchModels() {
                 const apiUrl = apiUrlInput.value;
                 const apiKey = apiKeyInput.value;
-                // Show loading spinner
                 fetchModelsBtn.classList.add('loading');
 
                 if (!apiUrl || !apiKey) {
@@ -376,7 +485,7 @@
                     fetchModelsBtn.classList.remove('loading');
                     return;
                 }
-            
+
                 try {
                     const response = await fetch(`${apiUrl}/models`, {
                         method: 'GET',
@@ -385,23 +494,16 @@
                             'Content-Type': 'application/json'
                         }
                     });
-            
+
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
-            
+
                     const data = await response.json();
                     if (data.data && Array.isArray(data.data)) {
                         const modelList = data.data.map(model => model.id);
-                        modelSelect.innerHTML = ''; // Clear existing options
-                        data.data.forEach(model => {
-                            const option = document.createElement('option');
-                            option.value = model.id;
-                            option.textContent = model.id;
-                            modelSelect.appendChild(option);
-                        });
-                        // Select the default model after fetching
-                        selectDefaultModel(modelList);
+                        currentConfig.config.modelList = modelList;
+                        populateModelDropdown();
                     } else {
                         console.error('Invalid response format:', data);
                         showToast(`Invalid response format: ${data}`);
@@ -410,61 +512,58 @@
                     console.error('Error fetching models:', error);
                     showToast(`Error fetching models: ${error}`);
                 } finally {
-                    // Hide loading spinner
                     fetchModelsBtn.classList.remove('loading');
                 }
             }
 
-            // Select the default model
-            function selectDefaultModel(modelList) {
-                let selectedModel = currentConfig.config.modelSelect;
+            function populateModelDropdown() {
+                modelSelect.innerHTML = ''; // Clear existing options
+                const userModels = currentConfig.config.ModelsListByUser || []; // Ensure it's an array
 
-                // 检查modelSelect是否存在于modelList中
-                if (!modelList.includes(selectedModel)) {
-                    selectedModel = modelList[0]; // 如果不存在，选择列表中的第一个模型
+                // Add user-added models first
+                userModels.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = `${model}  (Custom)`;
+                    modelSelect.appendChild(option);
+                });
+
+                // Add fetched models after
+                currentConfig.config.modelList.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    modelSelect.appendChild(option);
+                });
+
+                // Re-select the current model if it exists
+                if (currentConfig.config.modelList.includes(currentConfig.config.modelSelect) || userModels.includes(currentConfig.config.modelSelect)) {
+                    modelSelect.value = currentConfig.config.modelSelect;
+                } else if (userModels.length > 0) {
+                    // If no model is selected and custom models exist, select the first custom model
+                    modelSelect.value = userModels[0];
+                    saveCurrentModel();
+                } else if (currentConfig.config.modelList.length > 0) {
+                    modelSelect.value = currentConfig.config.modelList[0];
+                    saveCurrentModel();
                 }
-
-                modelSelect.value = selectedModel;
-                saveCurrentModel(modelList); // 确保在更改后保存配置
             }
 
-            // Load current configuration
             async function loadConfig() {
-              defaultConfig = {
-                  config:{
-                  apiUrl:"https://api.openai.com/v1",
-                  apiKey:"sk-xxxxxx",
-                  modelList:[],
-                  modelSelect:"gpt-4o-mini",
-                  prompts:{
-                      "Completion":["over",`你现在是我，请基于我已写的内容，以我的口吻继续写下去，不要重复我已经写过的内容。我已写的内容如下：$content，请你继续：`]
-                  },
-                  stream:true
-              }
-              }
-                currentConfig = await window.api.getConfig()||defaultConfig;
+                currentConfig = await window.api.getConfig() || defaultConfig;
+                currentConfig.config.ModelsListByUser = currentConfig.config.ModelsListByUser || []; // Initialize if null/undefined
 
                 apiUrlInput.value = currentConfig.config.apiUrl || '';
                 apiKeyInput.value = currentConfig.config.apiKey || '';
                 streamBtn.textContent = currentConfig.config.stream ? 'True' : 'False';
                 streamBtn.className = currentConfig.config.stream ? 'stream-button stream-true' : 'stream-button stream-false';
+                skipLineBreakBtn.textContent = currentConfig.config.skipLineBreak ? 'True' : 'False';
+                skipLineBreakBtn.className = currentConfig.config.skipLineBreak ? 'stream-button stream-true' : 'stream-button stream-false';
 
-                // Load models only if they exist in the config
-                if (currentConfig.config.modelList && currentConfig.config.modelList.length > 0) {
-                    modelSelect.innerHTML = '';
-                    currentConfig.config.modelList.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model;
-                        option.textContent = model;
-                        modelSelect.appendChild(option);
-                    });
-                    selectDefaultModel(currentConfig.config.modelList);
-                }
-
+                populateModelDropdown();
                 loadPrompts(currentConfig.config.prompts);
             }
 
-            // Load prompts into the table
             function loadPrompts(prompts) {
                 promptsTable.innerHTML = '';
                 for (const key in prompts) {
@@ -472,7 +571,6 @@
                 }
             }
 
-            // Add a new prompt row
             function addPromptRow(key = '', type = 'over', value = '', readOnly = false) {
                 const row = promptsTable.insertRow();
                 const keyCell = row.insertCell();
@@ -484,6 +582,10 @@
                 keyInput.type = 'text';
                 keyInput.value = key;
                 keyInput.disabled = readOnly;
+
+                // Create a container for the select element
+                const typeSelectContainer = document.createElement('div');
+                typeSelectContainer.className = 'type-select-container';
 
                 const typeSelect = document.createElement('select');
                 typeSelect.className = 'type-select';
@@ -504,7 +606,8 @@
                 valueInput.disabled = readOnly;
 
                 keyCell.appendChild(keyInput);
-                typeCell.appendChild(typeSelect);
+                typeSelectContainer.appendChild(typeSelect); // Add select to container
+                typeCell.appendChild(typeSelectContainer); // Add container to cell
                 valueCell.appendChild(valueInput);
 
                 if (!readOnly) {
@@ -518,21 +621,13 @@
                 }
             }
 
-            // Save the currently selected model and model list
-            function saveCurrentModel(modelList) {
-              currentConfig.config.modelSelect = modelSelect.value;
-              if(modelList){
-                currentConfig.config.modelList = modelList;
-              }
-              window.api.updateConfig(currentConfig);
-          }
-        
-            // Auto-save for model selection
-            modelSelect.addEventListener('change', ()=>{
-              saveCurrentModel();
-            });
+            function saveCurrentModel() {
+                currentConfig.config.modelSelect = modelSelect.value;
+                window.api.updateConfig(currentConfig);
+            }
 
-            // Auto-save for API URL and API Key
+            modelSelect.addEventListener('change', saveCurrentModel);
+
             apiUrlInput.addEventListener('change', () => {
                 currentConfig.config.apiUrl = apiUrlInput.value;
                 window.api.updateConfig(currentConfig);
@@ -543,21 +638,26 @@
                 window.api.updateConfig(currentConfig);
             });
 
-            // Auto-save for stream checkbox
             streamBtn.addEventListener('click', () => {
-              currentConfig.config.stream = !currentConfig.config.stream;
-              streamBtn.textContent = currentConfig.config.stream ? 'True' : 'False';
-              streamBtn.className = currentConfig.config.stream ? 'stream-button stream-true' : 'stream-button stream-false';
-              window.api.updateConfig(currentConfig);
-          });
+                currentConfig.config.stream = !currentConfig.config.stream;
+                streamBtn.textContent = currentConfig.config.stream ? 'True' : 'False';
+                streamBtn.className = currentConfig.config.stream ? 'stream-button stream-true' : 'stream-button stream-false';
+                window.api.updateConfig(currentConfig);
+            });
 
-            // Save prompts
+            skipLineBreakBtn.addEventListener('click', () => {
+                currentConfig.config.skipLineBreak = !currentConfig.config.skipLineBreak;
+                skipLineBreakBtn.textContent = currentConfig.config.skipLineBreak ? 'True' : 'False';
+                skipLineBreakBtn.className = currentConfig.config.skipLineBreak ? 'stream-button stream-true' : 'stream-button stream-false';
+                window.api.updateConfig(currentConfig);
+            });
+
             function savePrompts() {
                 const updatedPrompts = {};
                 for (let i = 0; i < promptsTable.rows.length; i++) {
                     const row = promptsTable.rows[i];
                     const key = row.cells[0].querySelector('input').value;
-                    const type = row.cells[1].querySelector('select').value;
+                    const type = row.cells[1].querySelector('.type-select').value; // Corrected selector
                     const value = row.cells[2].querySelector('input').value;
                     updatedPrompts[key] = [type, value];
                 }
@@ -565,17 +665,41 @@
                 window.api.updateConfig(currentConfig);
             }
 
-            // Event listener for adding a new prompt
             addPromptBtn.addEventListener('click', () => {
                 addPromptRow();
             });
 
-            savePromptsBtn.addEventListener('click', () => {
-              savePrompts();
+            savePromptsBtn.addEventListener('click', savePrompts);
+
+            fetchModelsBtn.addEventListener('click', fetchModels);
+
+            addModelBtn.addEventListener('click', () => {
+                const newModelName = addModelInput.value.trim();
+                if (newModelName) {
+                    if (!currentConfig.config.ModelsListByUser.includes(newModelName)) {
+                        currentConfig.config.ModelsListByUser.push(newModelName);
+                        addModelInput.value = '';
+                        populateModelDropdown();
+                        window.api.updateConfig(currentConfig);
+                    } else {
+                        showToast('Model already exists in custom list.');
+                    }
+                }
             });
 
-            // Fetch models button event listener
-            fetchModelsBtn.addEventListener('click', fetchModels);
+            deleteModelBtn.addEventListener('click', () => {
+                const modelToDelete = addModelInput.value.trim();
+                if (modelToDelete) {
+                    if (currentConfig.config.ModelsListByUser.includes(modelToDelete)) {
+                        currentConfig.config.ModelsListByUser = currentConfig.config.ModelsListByUser.filter(m => m !== modelToDelete);
+                        addModelInput.value = '';
+                        populateModelDropdown();
+                        window.api.updateConfig(currentConfig);
+                    } else {
+                        showToast('Model not found in custom list.');
+                    }
+                }
+            });
 
             await loadConfig();
         });
