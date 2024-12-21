@@ -1,22 +1,23 @@
-const {ipcRenderer} = require('electron');
-
-
-function sendMsgTo(id, channel, msg) {
-    ipcRenderer.sendTo(id, channel, msg)
-}
-
-function receiveMsg(channel, callback) {
-    ipcRenderer.on(channel, (_event, res) => {
-        callback(res);
-    })
-}
-
+const { ipcRenderer } = require('electron')
+// 插件的窗口ID
+let parentId = null;
+// 管道名称，可以自定义，只需要和发送时的管道名称一致即可
+const channel =  'show_page'
 
 window.preload = {
-    sendMsgTo, receiveMsg
+    /***  接收主窗口发送过来的消息  ***/
+    receiveMsg: (callback) => {
+        ipcRenderer.on(channel, (event, res) => {
+            // 保存插件的窗口ID
+            parentId = event.senderId;
+            if (res) {
+                callback(res);
+            }
+        })
+    }
 }
 
-// 默认配置
+
 const defaultConfig = {
     config:{
         apiUrl:"https://api.openai.com/v1",
@@ -68,7 +69,7 @@ function updateConfig(newConfig) {
             utools.removeFeature(key);
         }
     }
-    newConfig.config.prompts["Completion"] = defaultConfig.config.prompts["Completion"]
+    newConfig.config.prompts.Completion = defaultConfig.config.prompts.Completion
     let configDoc = utools.db.get("config")
     if (configDoc) {
         // 更新已存在的配置
@@ -82,7 +83,6 @@ function updateConfig(newConfig) {
             data: newConfig,
         })
     }
-    
 }
 
 // 函数：输出
@@ -210,73 +210,15 @@ async function handleImageOpenAI(code,imagePath,config) {
     return response
 }
 
+
+function showSuccess(code){
+    utools.showNotification(code + " successfully!");
+}
 window.api = {
     getConfig,        // 添加 getConfig 到 api
     updateConfig,     // 添加 updateConfig 到 api
     handelReplyOpenAI, // 添加 handelReplyOpenAI 到 api
     handleTextOpenAI, // 添加 handleTextOpenAI 到 api
-    handleImageOpenAI // 添加 handleImageOpenAI 到 api
+    handleImageOpenAI, // 添加 handleImageOpenAI 到 api
+    showSuccess,    // 添加 showSuccess 到 api
 };
-
-utools.onPluginEnter(async ({ code, type, payload, option }) => {
-    // 主逻辑
-    if (code !== "Anywhere Settings") {
-        // 获取配置文件，隐藏主窗口
-        config = getConfig().config;
-        console.log(config);
-        utools.hideMainWindow(true); 
-        
-        // 非窗口运行
-        if (config.prompts[code].showMode === "input") {
-            if (type === "over") {
-                // 将换行符替换为空格或空
-                if (config.skipLineBreak) {
-                    payload = payload.replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2").replace(/\s*\n\s*/g, "");
-                }
-                response = await handleTextOpenAI(code,payload,config);
-
-                handelReplyOpenAI(code,response,config.stream);
-            } else if (type === "img") {
-                response = await handleImageOpenAI(code,payload,config);
-            } else {
-                utools.showNotification("Unsupported input type");
-                handelReplyOpenAI(code,response,config.stream);
-            }
-        }
-        
-        // 窗口运行
-        else if (config.prompts[code].showMode === "window") {
-            mouse_position = utools.getCursorScreenPoint();
-            let msg = {
-                code:code,
-                type:type,
-                payload:payload,
-            }
-            const channel = "show_page"
-            // 创建运行窗口
-            const ubWindow = utools.createBrowserWindow("show_page.html",{
-
-                show:true,
-                title:"Anywhere",
-                useContentSize: true,
-                frame:true,
-                width: 500,
-                height: 380,
-                alwaysOnTop: true,
-                x: mouse_position.x-250,
-                y: mouse_position.y-190,
-                webPreferences: {
-                    preload:"show_page.js",
-                    devTools: false
-                }
-            },()=>{
-                window.preload.sendMsgTo(ubWindow.webContents.id,channel,msg);
-                ubWindow.webContents.show();  // 显示窗口
-                ubWindow.setAlwaysOnTop(true);  // 窗口置顶
-                ubWindow.setFullScreen(false);  // 窗口全屏
-            });
-            // ubWindow.webContents.openDevTools({mode:'detach'});
-        }
-        utools.outPlugin(); // 关闭插件窗口
-    }
-});

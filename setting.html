@@ -36,6 +36,7 @@
             flex-direction: column;
             gap: 15px;
             font-family: Georgia, serif;
+            position: relative; /* For absolute positioning of reset button */
         }
 
         h2 {
@@ -319,12 +320,12 @@
         }
 
         /* New styles for the type select */
-        .type-select-container {
+        .type-select-container, .showMode-select-container {
             position: relative;
             width: 80px;
         }
 
-        .type-select-container select {
+        .type-select-container select, .showMode-select-container select {
             width: 100%;
             padding: 5px 10px;
             border: 1px solid #ccc;
@@ -342,16 +343,130 @@
             background-size: 1em;
         }
 
-        .type-select-container select:focus {
+        .type-select-container select:focus, .showMode-select-container select:focus {
             outline: none;
             border-color: #807d77;
             box-shadow: 0 0 0 2px rgba(128, 125, 119, 0.25);
+        }
+
+        .prompts-table th:nth-child(3),
+        .prompts-table td:nth-child(3) {
+            width: 100px; /* Adjust width as needed */
+        }
+
+        .prompts-table th:nth-child(4),
+        .prompts-table td:nth-child(4) {
+            width: 100px; /* Adjust width as needed */
+        }
+
+        /* Reset Button Styles */
+        .reset-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: #d9534f; /* Red color for reset */
+        }
+
+        .reset-button:hover {
+            background-color: #c9302c;
+        }
+
+        /* Confirmation Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 30%;
+            max-width: 400px;
+            border-radius: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            font-family: Georgia, serif;
+        }
+
+        .modal-content p {
+            margin-top: 0;
+            color: #323330;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 10px;
+        }
+
+        .modal-buttons button {
+            background-color: #807d77;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-family: Georgia, serif;
+        }
+
+        .modal-buttons button:hover {
+            background-color: #6b6964;
+        }
+
+        .modal-buttons .cancel {
+            background-color: #ccc;
+        }
+
+        .modal-buttons .cancel:hover {
+            background-color: #bbb;
+        }
+
+        .prompts-table tbody tr .drag-handle {
+            cursor: move; /* Change cursor to move icon */
+            text-align: center;
+        }
+        .prompts-table tbody tr:first-child .drag-handle {
+            cursor: default; /* Change cursor to move icon */
+            text-align: center;
+        }
+        .prompts-table tbody tr input, .prompts-table tbody tr select{
+            pointer-events: auto;
+        }
+
+        .prompts-table th:first-child,
+        .prompts-table td:first-child {
+            width: 50px; /* Adjust width as needed */
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <button id="reset-button" class="reset-button">Reset</button>
         <h2>Configuration Settings</h2>
+
+        <!-- Confirmation Modal -->
+        <div id="confirm-modal" class="modal">
+            <div class="modal-content">
+                <p>Are you sure you want to reset all settings to default?</p>
+                <div class="modal-buttons">
+                    <button id="confirm-reset">Yes</button>
+                    <button id="cancel-reset" class="cancel">No</button>
+                </div>
+            </div>
+        </div>
 
         <div class="section">
             <label for="api-url">API URL:</label>
@@ -405,9 +520,11 @@
             <table class="prompts-table" id="prompts-table">
                 <thead>
                     <tr>
+                        <th>Index</th>
                         <th>Key</th>
                         <th>Type</th>
-                        <th>Value</th>
+                        <th>Show Mode</th>
+                        <th>Prompt</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -437,8 +554,13 @@
             const addModelBtn = document.getElementById('add-model-btn');
             const deleteModelBtn = document.getElementById('delete-model-btn');
             const skipLineBreakBtn = document.getElementById('skip-line-break-btn');
+            const resetButton = document.getElementById('reset-button');
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmResetBtn = document.getElementById('confirm-reset');
+            const cancelResetBtn = document.getElementById('cancel-reset');
 
             let currentConfig = {};
+            let draggedRow = null;
 
             const defaultConfig = {
                 config:{
@@ -448,12 +570,18 @@
                     ModelsListByUser:[],
                     modelSelect:"gpt-4o-mini",
                     prompts:{
-                        Completion:["over",`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`]
+                        Completion:{
+                            idex:0, // 用于排序
+                            type:"over",
+                            prompt:`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
+                            showMode:"input" // input, window
+                        }
                     },
                     stream:true,
                     skipLineBreak:true,
+                    version:"1.2.0"
                 }
-            };
+            }
 
             function showToast(message) {
                 const toastContainer = document.getElementById('toast-container');
@@ -550,7 +678,7 @@
             }
 
             async function loadConfig() {
-                currentConfig = await window.api.getConfig() || defaultConfig;
+                currentConfig = await window.api.getConfig();
                 currentConfig.config.ModelsListByUser = currentConfig.config.ModelsListByUser || []; // Initialize if null/undefined
 
                 apiUrlInput.value = currentConfig.config.apiUrl || '';
@@ -566,24 +694,103 @@
 
             function loadPrompts(prompts) {
                 promptsTable.innerHTML = '';
-                for (const key in prompts) {
-                    addPromptRow(key, prompts[key][0], prompts[key][1], key === 'Completion');
+
+                // Convert prompts object to array and sort by idex
+                let promptsArray = Object.entries(prompts).map(([key, value]) => ({ key, ...value }));
+                promptsArray.forEach(prompt => {
+                    if (prompt.idex === undefined) {
+                        prompt.idex = Number.MAX_SAFE_INTEGER;
+                    }
+                });
+                promptsArray.sort((a, b) => a.idex - b.idex);
+
+                for (const prompt of promptsArray) {
+                    addPromptRow(prompt.key, prompt.type, prompt.showMode, prompt.prompt, prompt.key === 'Completion', prompt.idex);
                 }
+
+                // Update the original prompts object with sorted array
+                const sortedPrompts = {};
+                promptsArray.forEach((prompt, index) => {
+                    prompt.idex = index;
+                    sortedPrompts[prompt.key] = {
+                        idex: prompt.idex,
+                        type: prompt.type,
+                        showMode: prompt.showMode,
+                        prompt: prompt.prompt
+                    };
+                });
+
+                currentConfig.config.prompts = sortedPrompts;
+                addDragAndDropListeners();
             }
 
-            function addPromptRow(key = '', type = 'over', value = '', readOnly = false) {
+            function addDragAndDropListeners() {
+                const rows = promptsTable.querySelectorAll('tr');
+
+                rows.forEach((row, index) => {
+                    const dragHandle = row.querySelector('.drag-handle');
+                    if (index === 0) {
+                        row.setAttribute('draggable', 'false'); // Disable dragging for the first row
+                    } else {
+                        row.setAttribute('draggable', 'true');
+                        dragHandle.addEventListener('mousedown', () => {
+                            row.setAttribute('draggable', 'true');
+                        });
+                        row.addEventListener('dragstart', (event) => {
+                            draggedRow = row;
+                            event.dataTransfer.setData('text', ''); // Required in Firefox
+                            row.classList.add('dragging');
+                        });
+
+                        row.addEventListener('dragover', (event) => {
+                            event.preventDefault();
+                            if (draggedRow === null || row === draggedRow || row.rowIndex === 0) return;
+
+                            const targetRow = row;
+                            const targetRect = targetRow.getBoundingClientRect();
+                            const offset = event.clientY - targetRect.top;
+
+                            if (offset < targetRect.height / 2) {
+                                if (targetRow.previousElementSibling !== draggedRow) {
+                                    promptsTable.insertBefore(draggedRow, targetRow);
+                                }
+                            } else {
+                                if (targetRow.nextElementSibling !== draggedRow) {
+                                    promptsTable.insertBefore(draggedRow, targetRow.nextElementSibling);
+                                }
+                            }
+                        });
+
+                        row.addEventListener('dragend', () => {
+                            if (draggedRow !== null) {
+                                draggedRow.classList.remove('dragging');
+                                draggedRow = null;
+                            }
+                        });
+                    }
+                });
+            }
+
+            function addPromptRow(key = '', type = 'over', showMode = 'input', prompt = '', readOnly = false, idex = 0) {
                 const row = promptsTable.insertRow();
+                const indexCell = row.insertCell();
                 const keyCell = row.insertCell();
                 const typeCell = row.insertCell();
-                const valueCell = row.insertCell();
+                const showModeCell = row.insertCell();
+                const promptCell = row.insertCell();
                 const actionCell = row.insertCell();
+
+                const indexLabel = document.createElement('div');
+                indexLabel.className = 'drag-handle';
+                indexLabel.textContent = idex;
+                indexCell.appendChild(indexLabel)
 
                 const keyInput = document.createElement('input');
                 keyInput.type = 'text';
                 keyInput.value = key;
                 keyInput.disabled = readOnly;
 
-                // Create a container for the select element
+                // Create a container for the type select element
                 const typeSelectContainer = document.createElement('div');
                 typeSelectContainer.className = 'type-select-container';
 
@@ -600,15 +807,36 @@
                 typeSelect.value = type;
                 typeSelect.disabled = readOnly;
 
-                const valueInput = document.createElement('input');
-                valueInput.type = 'text';
-                valueInput.value = value;
-                valueInput.disabled = readOnly;
+                // Create a container for the showMode select element
+                const showModeSelectContainer = document.createElement('div');
+                showModeSelectContainer.className = 'showMode-select-container';
+
+                const showModeSelect = document.createElement('select');
+                showModeSelect.className = 'showMode-select';
+                const optionInput = document.createElement('option');
+                optionInput.value = 'input';
+                optionInput.text = 'input';
+                const optionWindow = document.createElement('option');
+                optionWindow.value = 'window';
+                optionWindow.text = 'window';
+                showModeSelect.add(optionInput);
+                showModeSelect.add(optionWindow);
+                showModeSelect.value = showMode;
+                showModeSelect.disabled = readOnly;
+
+                const promptInput = document.createElement('input');
+                promptInput.type = 'text';
+                promptInput.value = prompt;
+                promptInput.disabled = readOnly;
 
                 keyCell.appendChild(keyInput);
                 typeSelectContainer.appendChild(typeSelect); // Add select to container
                 typeCell.appendChild(typeSelectContainer); // Add container to cell
-                valueCell.appendChild(valueInput);
+
+                showModeSelectContainer.appendChild(showModeSelect);
+                showModeCell.appendChild(showModeSelectContainer);
+
+                promptCell.appendChild(promptInput);
 
                 if (!readOnly) {
                     const deleteBtn = document.createElement('button');
@@ -619,6 +847,7 @@
                     }
                     actionCell.appendChild(deleteBtn);
                 }
+                addDragAndDropListeners();
             }
 
             function saveCurrentModel() {
@@ -654,15 +883,17 @@
 
             function savePrompts() {
                 const updatedPrompts = {};
-                for (let i = 0; i < promptsTable.rows.length; i++) {
-                    const row = promptsTable.rows[i];
-                    const key = row.cells[0].querySelector('input').value;
-                    const type = row.cells[1].querySelector('.type-select').value; // Corrected selector
-                    const value = row.cells[2].querySelector('input').value;
-                    updatedPrompts[key] = [type, value];
-                }
+                const rows = Array.from(promptsTable.rows);
+                rows.forEach((row, index) => {
+                    const key = row.cells[1].querySelector('input').value;
+                    const type = row.cells[2].querySelector('.type-select').value;
+                    const showMode = row.cells[3].querySelector('.showMode-select').value;
+                    const prompt = row.cells[4].querySelector('input').value;
+                    updatedPrompts[key] = { idex: index, type, showMode, prompt };
+                });
                 currentConfig.config.prompts = updatedPrompts;
                 window.api.updateConfig(currentConfig);
+                loadPrompts(currentConfig.config.prompts);
             }
 
             addPromptBtn.addEventListener('click', () => {
@@ -698,6 +929,30 @@
                     } else {
                         showToast('Model not found in custom list.');
                     }
+                }
+            });
+
+            // Reset Button Logic
+            resetButton.addEventListener('click', () => {
+                confirmModal.style.display = 'block';
+            });
+
+            confirmResetBtn.addEventListener('click', async () => {
+                window.utools.db.remove("config")
+                currentConfig = defaultConfig;
+                await loadConfig(); // Reload the configuration from the reset default
+                window.api.updateConfig(currentConfig);
+                confirmModal.style.display = 'none';
+                showToast('Configuration reset to default.');
+            });
+
+            cancelResetBtn.addEventListener('click', () => {
+                confirmModal.style.display = 'none';
+            });
+            // Close modal if clicked outside
+            window.addEventListener('click', (event) => {
+                if (event.target === confirmModal) {
+                    confirmModal.style.display = 'none';
                 }
             });
 

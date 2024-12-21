@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anywhere</title>
+    <style>
+        /* Common Styles */
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Hide the body scrollbar */
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f8f8f4;
+            color: #323330;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .container {
+            background-color: #F0EFE6;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            font-family: Georgia, serif;
+            overflow: hidden;
+            position: relative; /* For absolute positioning of the copy button */
+        }
+
+        h2 {
+            font-family: Georgia, serif;
+            font-weight: normal;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #66645e;
+            font-size: 2rem;
+        }
+
+        .output-area {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #fff;
+            overflow-y: auto;
+            flex-grow: 1;
+
+            /* Firefox Scrollbar Styling */
+            scrollbar-width: thin;
+            scrollbar-color: #b8b8b8 #f0f0f0;
+        }
+
+        /* WebKit Scrollbar Styling */
+        .output-area::-webkit-scrollbar {
+            width: 12px;
+        }
+
+        .output-area::-webkit-scrollbar-track {
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+
+        .output-area::-webkit-scrollbar-thumb {
+            background-color: #b8b8b8;
+            border-radius: 10px;
+            border: 3px solid #f0f0f0;
+        }
+
+        .output-area::-webkit-scrollbar-thumb:hover {
+            background-color: #999;
+        }
+
+        .code {
+            font-family: Georgia, serif;
+            font-weight: normal;
+            text-align: left;
+            margin-top: 0;
+            margin-bottom: 5px;
+            color: #66645e;
+            font-size: 1.2rem;
+        }
+
+        /* Copy Button Styles */
+        .copy-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+        }
+
+        .copy-button:hover {
+            opacity: 1;
+        }
+
+        /* Toast Styles */
+        .toast {
+            position: absolute;
+            top: 15px;
+            right: 60px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            z-index: 10; /* Ensure it's above other elements */
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <button class="copy-button" onclick="copyContent()">Copy</button>
+        <div class="toast" id="toast">Copied!</div>
+        <h2 class="code"></h2>
+        <div class="output-area" id="output-area" contenteditable="true" style="user-select: auto;"></div>
+    </div>
+
+    <script>
+        window.preload.receiveMsg(async (msg) => {
+            console.log('Received message from plugin:', msg);
+            const outputArea = document.getElementById('output-area');
+            const codeHeader = document.querySelector('.code');
+            codeHeader.textContent = msg.code;
+            outputArea.contentEditable = "false";
+            outputArea.textContent = "";
+
+            let config = await window.api.getConfig().config;
+            let response;
+
+            if (msg.type === "over") {
+                // Replace line breaks with spaces or remove them
+                let text = msg.payload;
+                if (config.skipLineBreak) {
+                    text = text.replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2").replace(/\s*\n\s*/g, "");
+                }
+                response = await window.api.handleTextOpenAI(msg.code, text, config);
+            } else if (msg.type === "img") {
+                response = await window.api.handleImageOpenAI(msg.code, msg.payload, config);
+            } else {
+                outputArea.textContent = "Unsupported input type";
+                return;
+            }
+            if (!response.ok) {
+                outputArea.textContent = `HTTP error! status: ${response.status}`;
+                return;
+            } else{
+                let autoScroll = true;
+
+                // Listen for scroll events
+                outputArea.addEventListener('scroll', () => {
+                    // Check if the user scrolled up manually
+                    if (outputArea.scrollTop + outputArea.clientHeight < outputArea.scrollHeight - 5) {
+                        autoScroll = false;
+                    } else {
+                        autoScroll = true;
+                    }
+                });
+
+                if (config.stream) {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder("utf-8");
+                    let buffer = "";
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) {
+                            break;
+                        }
+
+                        buffer += decoder.decode(value, { stream: true });
+
+                        let boundary = buffer.indexOf("data:");
+                        while (boundary !== -1) {
+                            const jsonData = buffer.substring(boundary + 5);
+                            buffer = "";
+
+                            let doneBoundary = jsonData.indexOf("data:");
+                            if (doneBoundary === -1) {
+                                doneBoundary = jsonData.indexOf("\n\n");
+                            }
+                            if (doneBoundary !== -1) {
+                                const message = jsonData.substring(0, doneBoundary);
+                                if (message.trim() === "[DONE]") {
+                                    break;
+                                }
+                                try {
+                                    const parsed = JSON.parse(message.trim());
+                                    if (parsed.choices[0].delta.content) {
+                                        outputArea.textContent += parsed.choices[0].delta.content;
+                                        // Scroll to the bottom automatically
+                                        if (autoScroll) {
+                                          outputArea.scrollTop = outputArea.scrollHeight;
+                                        }
+                                    }
+                                } catch (error) {
+                                    outputArea.textContent += "Could not parse stream message"+message+error
+                                    console.error("Could not parse stream message", message, error);
+                                }
+                                buffer = jsonData.substring(doneBoundary);
+                                boundary = buffer.indexOf("data:");
+                            } else {
+                                buffer = jsonData;
+                                break;
+                            }
+                        }
+                    }
+
+                } else {
+                    const data = await response.json();
+                    outputArea.textContent = data.choices[0].message.content.trim();
+                    // Scroll to the bottom automatically
+                    outputArea.scrollTop = outputArea.scrollHeight;
+                }
+
+                // 在回复展示完成后，让 output-area 可编辑
+                outputArea.contentEditable = "true";
+                // 在展示完成后，把光标移动到末尾
+                outputArea.focus();
+                const range = document.createRange();
+                range.selectNodeContents(outputArea);
+                range.collapse(false);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                window.api.showSuccess(msg.code);
+            }
+        });
+
+        // Copy content to clipboard
+        function copyContent() {
+            const outputArea = document.getElementById('output-area');
+            const textToCopy = outputArea.textContent;
+
+            navigator.clipboard.writeText(textToCopy)
+                .then(() => {
+                    // Show a toast message instead of an alert
+                    const toast = document.getElementById('toast');
+                    toast.classList.add('show');
+                    setTimeout(() => {
+                        toast.classList.remove('show');
+                    }, 2000); // Hide after 2 seconds
+                })
+                .catch(err => {
+                    console.error('Failed to copy content: ', err);
+                });
+        }
+
+        // Add an event listener to handle paste
+        document.addEventListener('DOMContentLoaded', () => {
+          const outputArea = document.getElementById('output-area');
+          outputArea.addEventListener('paste', (event) => {
+            // Prevent default paste behavior
+            event.preventDefault();
+
+            // Get the plain text version of the pasted content
+            const text = (event.clipboardData || window.clipboardData).getData('text/plain');
+
+            // Insert the text at the current cursor position
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return false;
+            const range = selection.getRangeAt(0);
+            range.deleteContents();
+            const textNode = document.createTextNode(text);
+            range.insertNode(textNode);
+
+            // Move the cursor to the end of the inserted text
+            range.setStartAfter(textNode);
+            range.setEndAfter(textNode);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          });
+        });
+    </script>
+</body>
+</html>
