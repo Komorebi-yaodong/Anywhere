@@ -319,12 +319,12 @@
         }
 
         /* New styles for the type select */
-        .type-select-container {
+        .type-select-container, .showMode-select-container {
             position: relative;
             width: 80px;
         }
 
-        .type-select-container select {
+        .type-select-container select, .showMode-select-container select {
             width: 100%;
             padding: 5px 10px;
             border: 1px solid #ccc;
@@ -342,11 +342,22 @@
             background-size: 1em;
         }
 
-        .type-select-container select:focus {
+        .type-select-container select:focus, .showMode-select-container select:focus {
             outline: none;
             border-color: #807d77;
             box-shadow: 0 0 0 2px rgba(128, 125, 119, 0.25);
         }
+
+        .prompts-table th:nth-child(2),
+        .prompts-table td:nth-child(2) {
+            width: 100px; /* Adjust width as needed */
+        }
+
+        .prompts-table th:nth-child(3),
+        .prompts-table td:nth-child(3) {
+            width: 100px; /* Adjust width as needed */
+        }
+
     </style>
 </head>
 <body>
@@ -407,7 +418,8 @@
                     <tr>
                         <th>Key</th>
                         <th>Type</th>
-                        <th>Value</th>
+                        <th>Show Mode</th>
+                        <th>Prompt</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -448,10 +460,14 @@
                     ModelsListByUser:[],
                     modelSelect:"gpt-4o-mini",
                     prompts:{
-                        Completion:["over",`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`]
+                        Completion:{
+                            type:"over",
+                            prompt:`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
+                            showMode:"input" // input, window
+                        }
                     },
                     stream:true,
-                    skipLineBreak:true,
+                    skipLineBreak:true
                 }
             };
 
@@ -567,15 +583,16 @@
             function loadPrompts(prompts) {
                 promptsTable.innerHTML = '';
                 for (const key in prompts) {
-                    addPromptRow(key, prompts[key][0], prompts[key][1], key === 'Completion');
+                    addPromptRow(key, prompts[key].type, prompts[key].showMode, prompts[key].prompt, key === 'Completion');
                 }
             }
 
-            function addPromptRow(key = '', type = 'over', value = '', readOnly = false) {
+            function addPromptRow(key = '', type = 'over', showMode = 'input', prompt = '', readOnly = false) {
                 const row = promptsTable.insertRow();
                 const keyCell = row.insertCell();
                 const typeCell = row.insertCell();
-                const valueCell = row.insertCell();
+                const showModeCell = row.insertCell();
+                const promptCell = row.insertCell();
                 const actionCell = row.insertCell();
 
                 const keyInput = document.createElement('input');
@@ -583,7 +600,7 @@
                 keyInput.value = key;
                 keyInput.disabled = readOnly;
 
-                // Create a container for the select element
+                // Create a container for the type select element
                 const typeSelectContainer = document.createElement('div');
                 typeSelectContainer.className = 'type-select-container';
 
@@ -600,15 +617,36 @@
                 typeSelect.value = type;
                 typeSelect.disabled = readOnly;
 
-                const valueInput = document.createElement('input');
-                valueInput.type = 'text';
-                valueInput.value = value;
-                valueInput.disabled = readOnly;
+                // Create a container for the showMode select element
+                const showModeSelectContainer = document.createElement('div');
+                showModeSelectContainer.className = 'showMode-select-container';
+
+                const showModeSelect = document.createElement('select');
+                showModeSelect.className = 'showMode-select';
+                const optionInput = document.createElement('option');
+                optionInput.value = 'input';
+                optionInput.text = 'input';
+                const optionWindow = document.createElement('option');
+                optionWindow.value = 'window';
+                optionWindow.text = 'window';
+                showModeSelect.add(optionInput);
+                showModeSelect.add(optionWindow);
+                showModeSelect.value = showMode;
+                showModeSelect.disabled = readOnly;
+
+                const promptInput = document.createElement('input');
+                promptInput.type = 'text';
+                promptInput.value = prompt;
+                promptInput.disabled = readOnly;
 
                 keyCell.appendChild(keyInput);
                 typeSelectContainer.appendChild(typeSelect); // Add select to container
                 typeCell.appendChild(typeSelectContainer); // Add container to cell
-                valueCell.appendChild(valueInput);
+
+                showModeSelectContainer.appendChild(showModeSelect);
+                showModeCell.appendChild(showModeSelectContainer);
+
+                promptCell.appendChild(promptInput);
 
                 if (!readOnly) {
                     const deleteBtn = document.createElement('button');
@@ -657,9 +695,10 @@
                 for (let i = 0; i < promptsTable.rows.length; i++) {
                     const row = promptsTable.rows[i];
                     const key = row.cells[0].querySelector('input').value;
-                    const type = row.cells[1].querySelector('.type-select').value; // Corrected selector
-                    const value = row.cells[2].querySelector('input').value;
-                    updatedPrompts[key] = [type, value];
+                    const type = row.cells[1].querySelector('.type-select').value;
+                    const showMode = row.cells[2].querySelector('.showMode-select').value;
+                    const prompt = row.cells[3].querySelector('input').value;
+                    updatedPrompts[key] = { type, showMode, prompt };
                 }
                 currentConfig.config.prompts = updatedPrompts;
                 window.api.updateConfig(currentConfig);
