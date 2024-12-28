@@ -1,6 +1,5 @@
 const {ipcRenderer} = require('electron');
 
-
 function sendMsgTo(id, channel, msg) {
     ipcRenderer.sendTo(id, channel, msg)
 }
@@ -267,7 +266,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                 y: mouse_position.y-190,
                 webPreferences: {
                     preload:"show_page.js",
-                    devTools: false
+                    devTools: true
                 }
             },()=>{
                 window.preload.sendMsgTo(ubWindow.webContents.id,channel,msg);
@@ -275,8 +274,8 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                 ubWindow.setAlwaysOnTop(true);  // 窗口置顶
                 ubWindow.setFullScreen(false);  // 窗口全屏
             });
-            // ubWindow.webContents.openDevTools({mode:'detach'});
+            ubWindow.webContents.openDevTools({mode:'detach'});
         }
-        utools.outPlugin(); // 关闭插件窗口
+        // utools.outPlugin(); // 关闭插件窗口
     }
 });

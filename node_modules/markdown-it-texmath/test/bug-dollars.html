@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
+  <link rel="stylesheet" href="../css/texmath.css">
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
+  <script src="../texmath.js"></script>
+</head>
+<body>
+  <div id="out"></div>
+  <script>
+    const str = `
+  # Simple Dollar tests
+  ## Inline
+
+  here "$a+\\$ = b$" we "$\\$$" go "$\\text{\\$some...\\$}$"
+
+  ## Inline block (single line only)
+  
+  $$a+\\$ = \\text{\\$more...\\$} \\$$$  or ...
+
+  ## Block (multiline)
+
+  $$
+  a+\\$ = \\text{\\$text...\\$} \\$
+  $$
+
+inline $$x^2$$ formula
+`
+    document.addEventListener("DOMContentLoaded", () => {
+        const md = markdownit().use(texmath, { engine: katex, delimiters: 'dollars' });
+        out.innerHTML = md.render(str);
+    })
+  </script>
+</body>
+</html>

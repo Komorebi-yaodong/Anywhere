@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
+  <link rel="stylesheet" href="../css/texmath.css">
+  <style>blockquote { background-color:#eee;} </style>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
+  <script src="../texmath.js"></script>
+</head>
+<body>
+  <div id="out"></div>
+  <script>
+
+const str = `
+hello$a+b=c$with 
+>$$
+> \\frac{1}{2}
+> $$ (4)
+> hello`
+/*
+const str = `
+ hello
+>
+> \`\`\`math 
+ x = \\frac{1}{2} 
+ \`\`\` (4)
+hartnäckig
+ hello`
+*/
+document.addEventListener("DOMContentLoaded", () => {
+        const md = markdownit().use(texmath, {engine:katex, delimiters:'dollars',macros:{"\\RR": "\\mathbb{R}"}});
+//        const md = markdownit().use(texmath, {engine:katex, delimiters:'gitlab',macros:{"\\RR": "\\mathbb{R}"}});
+        out.innerHTML = md.render(str);
+//console.log(out.innerHTML)
+//console.log(md)
+/*
+md.block.ruler.disable(texmath.blockRuleNames, true);
+md.inline.ruler.disable(texmath.inlineRuleNames, true);
+*/
+//console.log(md.render(str))
+/*
+md.block.ruler.enable(texmath.blockRuleNames, true);
+md.inline.ruler.enable(texmath.inlineRuleNames, true);
+
+console.log(md.render(str))
+*/
+    })
+  </script>
+</body>
+</html>

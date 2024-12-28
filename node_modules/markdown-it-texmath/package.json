@@ -1,0 +1,26 @@
+{
+  "name": "markdown-it-texmath",
+  "version": "1.0.0",
+  "description": "markdown-it extension for rendering TeX Math",
+  "keywords": [
+    "TeX",
+    "LaTeX",
+    "KaTeX",
+    "markdown",
+    "markdown-it",
+    "markdown-it-plugin",
+    "math",
+    "math formulas"
+  ],
+  "author": "Stefan Goessner <fang03@web.de>",
+  "main": "texmath.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/goessner/markdown-it-texmath.git"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "katex": "^0.15.6",
+    "markdown-it": "^13.0.1"
+  }
+}

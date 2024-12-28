@@ -211,6 +211,24 @@ async function handleImageOpenAI(code,imagePath,config) {
 }
 
 
+// 函数： 追问模式
+async function handleAskOpenAI(history,config) {
+    const response = await fetch(config.apiUrl + '/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + config.apiKey
+        },
+        body: JSON.stringify({
+            model: config.modelSelect,
+            messages: history,
+            stream: config.stream
+        })
+    });
+    return response
+}
+
+
 function showSuccess(code){
     utools.showNotification(code + " successfully!");
 }
@@ -221,4 +239,5 @@ window.api = {
     handleTextOpenAI, // 添加 handleTextOpenAI 到 api
     handleImageOpenAI, // 添加 handleImageOpenAI 到 api
     showSuccess,    // 添加 showSuccess 到 api
+    handleAskOpenAI, // 添加 handleAskOpenAI 到 api
 };

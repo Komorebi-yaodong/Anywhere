@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
+  <link rel="stylesheet" href="../css/texmath.css">
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
+  <script src="../texmath.js"></script>
+  <title>beg_end test</title>
+</head>
+<body>
+  <div id="out"></div>
+  <script>
+    const str = 
+`"Euler\'s identity 
+
+\\begin{equation}
+ e^{i\\pi}+1=0
+\\end{equation} 
+
+$$
+e^{i\\pi}+1=0
+$$
+
+\\begin{equation}
+\\begin{pmatrix}
+A & B \\\\ B & C
+\\end{pmatrix} 
+\\end{equation} 
+
+
+is a beautiful $a^2+b^2=c^2$ formula."`
+    document.addEventListener("DOMContentLoaded", () => {
+        const md = markdownit({html:true}).use(texmath, { engine: katex,
+                                                          delimiters: ["dollars","beg_end"]
+                                                        });
+        out.innerHTML = md.render(str);
+//        console.log(md.render(str))
+    })
+  </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="stylesheet" href="node_modules/katex/katex.min.css">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anywhere</title>
@@ -34,7 +35,7 @@
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 5px; /* Reduced gap between elements */
             font-family: Georgia, serif;
             overflow: hidden;
             position: relative; /* For absolute positioning of the copy button */
@@ -53,7 +54,7 @@
         .output-area {
             width: calc(100% - 20px);
             padding: 10px;
-            margin-bottom: 10px;
+            margin-bottom: 5px; /* Reduced margin */
             border: 1px solid #ccc;
             border-radius: 5px;
             font-size: 16px;
@@ -63,6 +64,8 @@
             background-color: #fff;
             overflow-y: auto;
             flex-grow: 1;
+            user-select: text; /* Allow text selection */
+            outline: none; /* Remove default focus outline */
 
             /* Firefox Scrollbar Styling */
             scrollbar-width: thin;
@@ -89,6 +92,24 @@
             background-color: #999;
         }
 
+        .output-area p {
+            margin: 0.1em 0; /* 减小段落间距 */
+        }
+
+        .output-area ul, 
+        .output-area ol {
+            margin: 0.1em 0; /* 减小列表整体的上下间距 */
+            padding-left: 2em; /* 调整列表缩进 */
+        }
+
+        .output-area li {
+            margin: 0.1em 0; /* 减小列表项之间的间距 */
+        }
+
+        .output-area li p {
+            margin: 0; /* 移除列表项内段落的额外间距 */
+        }
+
         .code {
             font-family: Georgia, serif;
             font-weight: normal;
@@ -103,7 +124,7 @@
         .copy-button {
             position: absolute;
             top: 10px;
-            right: 10px;
+            right: 70px;  /* 调整位置，为 preview 按钮留出空间 */
             padding: 5px 10px;
             background-color: rgba(0, 0, 0, 0.5);
             color: white;
@@ -112,6 +133,7 @@
             cursor: pointer;
             opacity: 0.6;
             transition: opacity 0.3s ease;
+            z-index: 20;
         }
 
         .copy-button:hover {
@@ -121,18 +143,128 @@
         /* Toast Styles */
         .toast {
             position: absolute;
-            top: 15px;
-            right: 60px;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
             background-color: rgba(0, 0, 0, 0.7);
             color: white;
             padding: 5px 10px;
             border-radius: 5px;
             opacity: 0;
             transition: opacity 0.5s ease;
-            z-index: 10; /* Ensure it's above other elements */
+            z-index: 10; /* 确保 toast 在其他元素之上 */
         }
 
         .toast.show {
+            opacity: 1;
+        }
+
+        /* Input Area Styles */
+        .input-area {
+            display: flex;
+            flex-direction: column;
+            gap: 5px; /* Reduced gap */
+            margin-top: 5px; /* Reduced margin */
+        }
+
+        .input-container {
+            display: flex;
+            gap: 5px; /* Further reduced gap */
+        }
+
+        .input-area textarea {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: none; /* Disabled resizing */
+            min-height: 30px; /* Further reduced height */
+            max-height: 30px;
+            overflow-y: auto;
+        }
+        /* Input Area Scrollbar Styling - WebKit (Chrome, Safari) */
+        .input-area textarea::-webkit-scrollbar {
+            width: 8px; /* Width of the scrollbar */
+        }
+
+        .input-area textarea::-webkit-scrollbar-track {
+            background: #f0f0f0; /* Color of the track */
+            border-radius: 10px; /* Radius of the track */
+        }
+
+        .input-area textarea::-webkit-scrollbar-thumb {
+            background-color: #b8b8b8; /* Color of the thumb */
+            border-radius: 10px; /* Radius of the thumb */
+            border: 2px solid #f0f0f0; /* Creates padding around the thumb */
+        }
+
+        .input-area textarea::-webkit-scrollbar-thumb:hover {
+            background-color: #999; /* Color of the thumb on hover */
+        }
+
+        /* Input Area Scrollbar Styling - Firefox */
+        .input-area textarea {
+            scrollbar-width: thin; /* "auto" or "thin" */
+            scrollbar-color: #b8b8b8 #f0f0f0; /* thumb and track color */
+        }
+
+        .image-previews {
+            display: flex;
+            gap: 5px; /* Further reduced gap */
+            align-items: center;
+            overflow-x: auto;
+            padding: 5px 0;
+            margin-top: 0px; /* Removed margin-top */
+        }
+
+        .image-preview-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .image-preview {
+            width: 60px;
+            height: 60px;
+            border-radius: 5px;
+            object-fit: cover;
+        }
+
+        .image-delete {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        /* Preview Button Styles */
+        .preview-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;  /* 位于右侧 */
+            padding: 5px 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+            z-index: 20;
+        }
+
+        .preview-button:hover {
             opacity: 1;
         }
     </style>
@@ -140,61 +272,113 @@
 <body>
     <div class="container">
         <button class="copy-button" onclick="copyContent()">Copy</button>
+        <button class="preview-button" onclick="togglePreview()">Preview</button>
         <div class="toast" id="toast">Copied!</div>
         <h2 class="code"></h2>
-        <div class="output-area" id="output-area" contenteditable="true" style="user-select: auto;"></div>
+        <div class="output-area" id="output-area"></div>
+        <div class="input-area">
+            <div class="image-previews" id="image-previews">
+                <!-- Image previews will be added here -->
+            </div>
+            <div class="input-container">
+                <textarea id="ask-input" placeholder="Ask a follow-up question or drag/paste an image here..."></textarea>
+            </div>
+        </div>
     </div>
+    <script src="node_modules/markdown-it/dist/markdown-it.min.js"></script>
+    <script src="node_modules/katex/katex.min.js"></script>
+    <script src="node_modules/markdown-it-texmath/texmath.js"></script>
 
     <script>
-        window.preload.receiveMsg(async (msg) => {
-            console.log('Received message from plugin:', msg);
-            const outputArea = document.getElementById('output-area');
-            const codeHeader = document.querySelector('.code');
-            codeHeader.textContent = msg.code;
-            outputArea.contentEditable = "false";
-            outputArea.textContent = "";
+        const outputArea = document.getElementById('output-area');
+        const codeHeader = document.querySelector('.code');
+        const askInput = document.getElementById('ask-input');
+        const imagePreviews = document.getElementById('image-previews');
+        const previewButton = document.querySelector('.preview-button');
+        let conversationHistory = [];
+        let uploadedImages = [];
+        let isRequesting = false;
+        let isPreviewMode = false;
+        let originalContent = "";
 
+        const md = new markdownit({
+            html: false,
+            xhtmlOut: false,
+            breaks: false,
+            linkify: false,
+            typographer: true
+        }).use(texmath, { // 添加 texmath 插件
+            engine: katex,
+            delimiters: 'dollars',
+            katexOptions: { macros: { "\\RR": "\\mathbb{R}" } }
+        });
+
+        window.preload.receiveMsg(async (msg) => {
+            isRequesting = true;
+            outputArea.contentEditable = "false";
             let config = await window.api.getConfig().config;
             let response;
+            console.log('Received message from plugin:', msg);
+            codeHeader.textContent = msg.code;
+            originalContent = "";
+            outputArea.innerHTML = "";
+            conversationHistory = [{ role: "system", content: config.prompts[msg.code].prompt }];
+            uploadedImages = [];
+            imagePreviews.innerHTML = '';
 
             if (msg.type === "over") {
-                // Replace line breaks with spaces or remove them
                 let text = msg.payload;
                 if (config.skipLineBreak) {
                     text = text.replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2").replace(/\s*\n\s*/g, "");
                 }
                 response = await window.api.handleTextOpenAI(msg.code, text, config);
+                conversationHistory.push({ role: "user", content: text });
             } else if (msg.type === "img") {
                 response = await window.api.handleImageOpenAI(msg.code, msg.payload, config);
+                conversationHistory.push({
+                    role: "user",
+                    content: [
+                        {
+                            type: "text",
+                            text: config.prompts[msg.code].prompt
+                        },
+                        {
+                            type: "image_url",
+                            image_url: {
+                                url: msg.payload
+                            }
+                        }
+                    ]
+                });
             } else {
                 outputArea.textContent = "Unsupported input type";
+                isRequesting = false;
+                outputArea.contentEditable = "true";
                 return;
             }
+
             if (!response.ok) {
                 outputArea.textContent = `HTTP error! status: ${response.status}`;
+                conversationHistory.pop();
+                isRequesting = false;
+                outputArea.contentEditable = "true";
                 return;
-            } else{
+            } else {
                 let autoScroll = true;
+                let responseContent = "";
 
-                // Listen for scroll events
                 outputArea.addEventListener('scroll', () => {
-                    // Check if the user scrolled up manually
-                    if (outputArea.scrollTop + outputArea.clientHeight < outputArea.scrollHeight - 5) {
-                        autoScroll = false;
-                    } else {
-                        autoScroll = true;
-                    }
+                    autoScroll = (outputArea.scrollTop + outputArea.clientHeight >= outputArea.scrollHeight - 5);
                 });
 
                 if (config.stream) {
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder("utf-8");
                     let buffer = "";
+
                     while (true) {
                         const { done, value } = await reader.read();
-                        if (done) {
-                            break;
-                        }
+                        if (done) break;
 
                         buffer += decoder.decode(value, { stream: true });
 
@@ -209,22 +393,23 @@
                             }
                             if (doneBoundary !== -1) {
                                 const message = jsonData.substring(0, doneBoundary);
-                                if (message.trim() === "[DONE]") {
-                                    break;
-                                }
+                                if (message.trim() === "[DONE]") break;
+
                                 try {
                                     const parsed = JSON.parse(message.trim());
                                     if (parsed.choices[0].delta.content) {
-                                        outputArea.textContent += parsed.choices[0].delta.content;
-                                        // Scroll to the bottom automatically
+                                        const content = parsed.choices[0].delta.content;
+                                        originalContent += content;
+                                        outputArea.textContent += content;
+                                        responseContent += content;
                                         if (autoScroll) {
-                                          outputArea.scrollTop = outputArea.scrollHeight;
+                                            outputArea.scrollTop = outputArea.scrollHeight;
                                         }
                                     }
                                 } catch (error) {
-                                    outputArea.textContent += "Could not parse stream message"+message+error
                                     console.error("Could not parse stream message", message, error);
                                 }
+
                                 buffer = jsonData.substring(doneBoundary);
                                 boundary = buffer.indexOf("data:");
                             } else {
@@ -233,72 +418,269 @@
                             }
                         }
                     }
-
                 } else {
                     const data = await response.json();
-                    outputArea.textContent = data.choices[0].message.content.trim();
-                    // Scroll to the bottom automatically
-                    outputArea.scrollTop = outputArea.scrollHeight;
+                    responseContent = data.choices[0].message.content.trim();
+                    originalContent = responseContent;
+                    outputArea.textContent = responseContent;
                 }
 
-                // 在回复展示完成后，让 output-area 可编辑
-                outputArea.contentEditable = "true";
-                // 在展示完成后，把光标移动到末尾
-                outputArea.focus();
-                const range = document.createRange();
-                range.selectNodeContents(outputArea);
-                range.collapse(false);
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(range);
+                conversationHistory.push({ role: "assistant", content: responseContent });
                 window.api.showSuccess(msg.code);
+                isRequesting = false;
+                outputArea.contentEditable = "true";
+                togglePreview(); // 自动切换到预览模式
             }
         });
 
-        // Copy content to clipboard
         function copyContent() {
-            const outputArea = document.getElementById('output-area');
-            const textToCopy = outputArea.textContent;
-
-            navigator.clipboard.writeText(textToCopy)
+            const textToCopy = outputArea.innerText;
+            navigator.clipboard.writeText(textToCopy.trim())
                 .then(() => {
-                    // Show a toast message instead of an alert
                     const toast = document.getElementById('toast');
                     toast.classList.add('show');
-                    setTimeout(() => {
-                        toast.classList.remove('show');
-                    }, 2000); // Hide after 2 seconds
+                    setTimeout(() => toast.classList.remove('show'), 2000);
                 })
-                .catch(err => {
-                    console.error('Failed to copy content: ', err);
-                });
+                .catch(err => console.error('Failed to copy content: ', err));
         }
 
-        // Add an event listener to handle paste
+        function togglePreview() {
+            if (isPreviewMode) {
+                // Switch to original mode
+                outputArea.innerHTML = '';
+                outputArea.textContent = originalContent;
+                outputArea.classList.remove('markdown-mode');
+                outputArea.style.overflowY = 'auto';
+                outputArea.contentEditable = "true"; // 启用编辑
+                previewButton.textContent = 'Preview';
+                isPreviewMode = false;
+            } else {
+                // 保存当前编辑的内容
+                originalContent = outputArea.innerText;
+                
+                // 预处理内容，保留合理的换行
+                let processedContent = originalContent
+                    // .replace(/\n\s*\n+/g, '\n')
+                    .replace(/^\s+|\s+$/g, '');
+                
+                // Switch to preview mode
+                console.log('Original content:', originalContent);
+                console.log('Markdown content:', processedContent);
+                const markdownContent = md.render(processedContent);
+                
+                const styledContent = markdownContent;
+                
+                outputArea.innerHTML = styledContent;
+                outputArea.classList.add('markdown-mode');
+                outputArea.style.overflowY = 'auto';
+                outputArea.contentEditable = "false"; // 禁用编辑
+                previewButton.textContent = 'Origin';
+                isPreviewMode = true;
+            }
+        }
+
+        async function handlePaste(items) {
+            for (const item of items) {
+                if (item.type.indexOf('image') === 0) {
+                    const blob = item.getAsFile();
+                    const base64 = await readFileAsBase64(blob);
+                    addImageToPreview(base64);
+                    return;
+                }
+            }
+        }
+
+        async function handleImageUpload(files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (file.type.startsWith('image/')) {
+                    const base64 = await readFileAsBase64(file);
+                    addImageToPreview(base64);
+                } else {
+                    console.log('Unsupported file type.');
+                }
+            }
+        }
+
+        function addImageToPreview(base64Image) {
+            uploadedImages.push(base64Image);
+            const previewContainer = document.createElement('div');
+            previewContainer.className = 'image-preview-container';
+
+            const img = document.createElement('img');
+            img.src = base64Image;
+            img.className = 'image-preview';
+
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'image-delete';
+            deleteButton.innerHTML = '&#10006;';
+            deleteButton.onclick = () => removeImage(base64Image, previewContainer);
+
+            previewContainer.appendChild(img);
+            previewContainer.appendChild(deleteButton);
+            imagePreviews.appendChild(previewContainer);
+        }
+
+        function removeImage(base64Image, previewElement) {
+            uploadedImages = uploadedImages.filter(img => img !== base64Image);
+            imagePreviews.removeChild(previewElement);
+        }
+
+        async function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    resolve(reader.result);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function askQuestion() {
+            if (isRequesting) return;
+            
+            const question = askInput.value.trim();
+            if (!question && uploadedImages.length === 0) return;
+
+            const content = [];
+            if (question) content.push({ type: "text", text: question });
+            uploadedImages.forEach(base64Image => {
+                content.push({ type: "image_url", image_url: { url: base64Image } });
+            });
+
+            conversationHistory.push({ role: "user", content: content });
+            outputArea.textContent = "Loading...";
+            outputArea.contentEditable = "false";
+            isRequesting = true;
+            askInput.value = "";
+            uploadedImages = [];
+            imagePreviews.innerHTML = '';
+
+            let config = await window.api.getConfig().config;
+            const response = await window.api.handleAskOpenAI(conversationHistory, config);
+
+            if (!response.ok) {
+                outputArea.textContent = `HTTP error! status: ${response.status}`;
+                conversationHistory.pop();
+                isRequesting = false;
+                outputArea.contentEditable = "true";
+                return;
+            }
+
+            let autoScroll = true;
+            outputArea.scrollTop = 0;
+            let responseContent = "";
+            outputArea.innerHTML = "";
+            originalContent = ""; // 重置 originalContent
+
+            if (config.stream) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+
+                    let boundary = buffer.indexOf("data:");
+                    while (boundary !== -1) {
+                        const jsonData = buffer.substring(boundary + 5);
+                        buffer = "";
+
+                        let doneBoundary = jsonData.indexOf("data:");
+                        if (doneBoundary === -1) {
+                            doneBoundary = jsonData.indexOf("\n\n");
+                        }
+                        if (doneBoundary !== -1) {
+                            const message = jsonData.substring(0, doneBoundary);
+                            if (message.trim() === "[DONE]") break;
+
+                            try {
+                                const parsed = JSON.parse(message.trim());
+                                if (parsed.choices[0].delta.content) {
+                                    const content = parsed.choices[0].delta.content;
+                                    originalContent += content;
+                                    outputArea.textContent += content;
+                                    responseContent += content;
+                                    if (autoScroll) {
+                                        outputArea.scrollTop = outputArea.scrollHeight;
+                                    }
+                                }
+                            } catch (error) {
+                                console.error("Could not parse stream message", message, error);
+                            }
+
+                            buffer = jsonData.substring(doneBoundary);
+                            boundary = buffer.indexOf("data:");
+                        } else {
+                            buffer = jsonData;
+                            break;
+                        }
+                    }
+                }
+                
+                // 处理完流数据后
+                responseContent = originalContent
+                    .replace(/\n\s*\n\s*\n/g, '\n\n')
+                    .replace(/^\s+|\s+$/g, '');
+                originalContent = responseContent;
+                
+            } else {
+                const data = await response.json();
+                responseContent = data.choices[0].message.content.trim()
+                    .replace(/\n\s*\n\s*\n/g, '\n\n')
+                    .replace(/^\s+|\s+$/g, '');
+                originalContent = responseContent;
+                outputArea.textContent = responseContent;
+            }
+
+            conversationHistory.push({ role: "assistant", content: responseContent });
+            isRequesting = false;
+            outputArea.contentEditable = "true";
+            
+            // 确保内容已完全更新后再切换到预览模式
+            setTimeout(() => {
+                if (!isPreviewMode) {
+                    togglePreview();
+                } else {
+                    // 如果已经在预览模式，先切换回原始模式再切换到预览模式
+                    togglePreview();
+                    togglePreview();
+                }
+            }, 0);
+        }
+
+
+        // 事件监听器设置
         document.addEventListener('DOMContentLoaded', () => {
-          const outputArea = document.getElementById('output-area');
-          outputArea.addEventListener('paste', (event) => {
-            // Prevent default paste behavior
-            event.preventDefault();
+            askInput.addEventListener('keydown', function(event) {
+                if (event.keyCode === 13 && event.ctrlKey) {
+                    event.preventDefault();
+                    askQuestion();
+                }
+            });
 
-            // Get the plain text version of the pasted content
-            const text = (event.clipboardData || window.clipboardData).getData('text/plain');
+            askInput.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
 
-            // Insert the text at the current cursor position
-            const selection = window.getSelection();
-            if (!selection.rangeCount) return false;
-            const range = selection.getRangeAt(0);
-            range.deleteContents();
-            const textNode = document.createTextNode(text);
-            range.insertNode(textNode);
+            askInput.addEventListener('drop', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const files = event.dataTransfer.files;
+                handleImageUpload(files);
+            });
 
-            // Move the cursor to the end of the inserted text
-            range.setStartAfter(textNode);
-            range.setEndAfter(textNode);
-            selection.removeAllRanges();
-            selection.addRange(range);
-          });
+            askInput.addEventListener('paste', async (event) => {
+                const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+                handlePaste(items);
+            });
         });
+        
     </script>
 </body>
 </html>
