@@ -9,6 +9,10 @@
 ![image](/image/5.png)
 ![image](/image/6.png)
 
+<video id="video" controls="" preload="none" poster="/image/5.png">
+      <source id="mp4" src="./image/show.mp4" type="video/mp4">
+</video>
+
 ## 功能：
 1. 选中文本后，在要输入的地方调用快捷方式“Completion”（没有选中文本不会显示快捷方式），搭配快捷键更好“食用”
 2. 复制图片后，在要输入的地方调用快捷方式（未默认定义图片的快捷方式，用户可以自行定义），搭配快捷键更好“食用”
