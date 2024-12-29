@@ -92,24 +92,6 @@
             background-color: #999;
         }
 
-        .output-area p {
-            margin: 0.1em 0; /* 减小段落间距 */
-        }
-
-        .output-area ul, 
-        .output-area ol {
-            margin: 0.1em 0; /* 减小列表整体的上下间距 */
-            padding-left: 2em; /* 调整列表缩进 */
-        }
-
-        .output-area li {
-            margin: 0.1em 0; /* 减小列表项之间的间距 */
-        }
-
-        .output-area li p {
-            margin: 0; /* 移除列表项内段落的额外间距 */
-        }
-
         .code {
             font-family: Georgia, serif;
             font-weight: normal;
@@ -267,6 +249,10 @@
         .preview-button:hover {
             opacity: 1;
         }
+
+        .markdown-mode{
+            white-space:inherit;
+        }
     </style>
 </head>
 <body>
@@ -318,7 +304,6 @@
             outputArea.contentEditable = "false";
             let config = await window.api.getConfig().config;
             let response;
-            console.log('Received message from plugin:', msg);
             codeHeader.textContent = msg.code;
             originalContent = "";
             outputArea.innerHTML = "";
@@ -434,7 +419,7 @@
         });
 
         function copyContent() {
-            const textToCopy = outputArea.innerText;
+            const textToCopy = originalContent.trim();
             navigator.clipboard.writeText(textToCopy.trim())
                 .then(() => {
                     const toast = document.getElementById('toast');
@@ -464,10 +449,8 @@
                     .replace(/^\s+|\s+$/g, '');
                 
                 // Switch to preview mode
-                console.log('Original content:', originalContent);
-                console.log('Markdown content:', processedContent);
                 const markdownContent = md.render(processedContent);
-                
+                console.log(markdownContent);
                 const styledContent = markdownContent;
                 
                 outputArea.innerHTML = styledContent;
@@ -567,7 +550,7 @@
                 outputArea.contentEditable = "true";
                 return;
             }
-
+            outputArea.classList.remove('markdown-mode'); // 切换到非Markdown模式
             let autoScroll = true;
             outputArea.scrollTop = 0;
             let responseContent = "";
