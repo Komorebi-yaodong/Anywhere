@@ -26,10 +26,10 @@
         }
 
         .container {
-            background-color: #F0EFE6;
+            background-color: #f8f8f4; /* 与背景色相同 */
             padding: 20px;
             border-radius: 20px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); */
             width: 100%;
             height: 100vh;
             box-sizing: border-box;
@@ -55,13 +55,13 @@
             width: calc(100% - 20px);
             padding: 10px;
             margin-bottom: 5px; /* Reduced margin */
-            border: 1px solid #ccc;
+            border: none; /* 去除边框 */
             border-radius: 5px;
             font-size: 16px;
             font-family: inherit;
             white-space: pre-wrap;
             word-wrap: break-word;
-            background-color: #fff;
+            background-color: transparent; /* 背景透明 */
             overflow-y: auto;
             flex-grow: 1;
             user-select: text; /* Allow text selection */
@@ -92,7 +92,7 @@
             background-color: #999;
         }
 
-        .code {
+        .model_name {
             font-family: Georgia, serif;
             font-weight: normal;
             text-align: left;
@@ -145,60 +145,92 @@
         .input-area {
             display: flex;
             flex-direction: column;
-            gap: 5px; /* Reduced gap */
-            margin-top: 5px; /* Reduced margin */
+            gap: 5px;
+            margin-top: 5px;
         }
 
         .input-container {
             display: flex;
-            gap: 5px; /* Further reduced gap */
+            gap: 5px;
+            align-items: center;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            padding: 5px 10px;
         }
 
         .input-area textarea {
             flex-grow: 1;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 10px;
+            border: none;
             font-size: 16px;
             font-family: inherit;
-            resize: none; /* Disabled resizing */
-            min-height: 30px; /* Further reduced height */
-            max-height: 30px;
-            overflow-y: auto;
+            resize: none;
+            min-height: 40px; /* 调整输入框高度 */
+            max-height: 40px;
+            overflow-y: hidden;
+            outline: none;
+            background-color: transparent;
+            padding: 0;
+            line-height: 40px; /* 新增：使文字垂直居中 */
         }
+
+        .input-area textarea::placeholder {
+            color: #999;
+        }
+
         /* Input Area Scrollbar Styling - WebKit (Chrome, Safari) */
         .input-area textarea::-webkit-scrollbar {
-            width: 8px; /* Width of the scrollbar */
+            width: 8px;
         }
 
         .input-area textarea::-webkit-scrollbar-track {
-            background: #f0f0f0; /* Color of the track */
-            border-radius: 10px; /* Radius of the track */
+            background: #f0f0f0;
+            border-radius: 10px;
         }
 
         .input-area textarea::-webkit-scrollbar-thumb {
-            background-color: #b8b8b8; /* Color of the thumb */
-            border-radius: 10px; /* Radius of the thumb */
-            border: 2px solid #f0f0f0; /* Creates padding around the thumb */
+            background-color: #b8b8b8;
+            border-radius: 10px;
+            border: 2px solid #f0f0f0;
         }
 
         .input-area textarea::-webkit-scrollbar-thumb:hover {
-            background-color: #999; /* Color of the thumb on hover */
+            background-color: #999;
         }
 
         /* Input Area Scrollbar Styling - Firefox */
         .input-area textarea {
-            scrollbar-width: thin; /* "auto" or "thin" */
-            scrollbar-color: #b8b8b8 #f0f0f0; /* thumb and track color */
+            scrollbar-width: thin;
+            scrollbar-color: #b8b8b8 #f0f0f0;
+        }
+
+        /* Send Button Styles */
+        .send-button {
+            background-color: transparent;
+            color: #323330;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .send-button:hover {
+            background-color: #e0e0e0;
         }
 
         .image-previews {
             display: flex;
-            gap: 5px; /* Further reduced gap */
+            gap: 5px;
             align-items: center;
             overflow-x: auto;
             padding: 5px 0;
-            margin-top: 0px; /* Removed margin-top */
+            margin-top: 0px;
+            margin-left: 10px;
+            max-height: 70px; /* 限制图片预览区域的高度 */
         }
 
         .image-preview-container {
@@ -211,6 +243,7 @@
             height: 60px;
             border-radius: 5px;
             object-fit: cover;
+            cursor: pointer;
         }
 
         .image-delete {
@@ -234,7 +267,7 @@
         .preview-button {
             position: absolute;
             top: 10px;
-            right: 10px;  /* 位于右侧 */
+            right: 10px;
             padding: 5px 10px;
             background-color: rgba(0, 0, 0, 0.5);
             color: white;
@@ -250,8 +283,59 @@
             opacity: 1;
         }
 
-        .markdown-mode{
-            white-space:inherit;
+        .markdown-mode {
+            white-space: inherit;
+        }
+
+        /* Image Upload Icon Styles */
+        .image-upload-icon {
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            margin-right: 5px;
+        }
+
+        /* Hidden File Input */
+        .hidden-file-input {
+            display: none;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+
+        .modal-content {
+            margin: auto;
+            display: block;
+            max-width: 90%;
+            max-height: 90%;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            transition: 0.3s;
+            z-index: 101;
+        }
+
+        .close-modal:hover,
+        .close-modal:focus {
+            color: #bbb;
+            text-decoration: none;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -260,16 +344,26 @@
         <button class="copy-button" onclick="copyContent()">Copy</button>
         <button class="preview-button" onclick="togglePreview()">Preview</button>
         <div class="toast" id="toast">Copied!</div>
-        <h2 class="code"></h2>
+        <h2 class="model_name"></h2>
         <div class="output-area" id="output-area"></div>
         <div class="input-area">
             <div class="image-previews" id="image-previews">
                 <!-- Image previews will be added here -->
             </div>
             <div class="input-container">
-                <textarea id="ask-input" placeholder="Ask a follow-up question or drag/paste an image here..."></textarea>
+                <label for="file-input">
+                    <img src="image.png" class="image-upload-icon">
+                </label>
+                <input type="file" id="file-input" class="hidden-file-input" accept="image/*" onchange="handleImageUpload(this.files)" multiple>
+                <textarea id="ask-input" placeholder="send your message here"></textarea>
+                <button class="send-button" onclick="askQuestion()">></button>
             </div>
         </div>
+    </div>
+    <!-- Modal -->
+    <div id="imageModal" class="modal">
+        <span class="close-modal" onclick="closeModal()">&times;</span>
+        <img class="modal-content" id="modalImage">
     </div>
     <script src="node_modules/markdown-it/dist/markdown-it.min.js"></script>
     <script src="node_modules/katex/katex.min.js"></script>
@@ -277,10 +371,13 @@
 
     <script>
         const outputArea = document.getElementById('output-area');
-        const codeHeader = document.querySelector('.code');
+        const modelHeader = document.querySelector('.model_name');
         const askInput = document.getElementById('ask-input');
         const imagePreviews = document.getElementById('image-previews');
         const previewButton = document.querySelector('.preview-button');
+        const sendButton = document.querySelector('.send-button');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
         let conversationHistory = [];
         let uploadedImages = [];
         let isRequesting = false;
@@ -304,7 +401,8 @@
             outputArea.contentEditable = "false";
             let config = await window.api.getConfig().config;
             let response;
-            codeHeader.textContent = msg.code;
+            modelHeader.textContent = config.modelSelect;
+            document.title = msg.code; // 更新title内容
             originalContent = "";
             outputArea.innerHTML = "";
             conversationHistory = [{ role: "system", content: config.prompts[msg.code].prompt }];
@@ -442,17 +540,16 @@
             } else {
                 // 保存当前编辑的内容
                 originalContent = outputArea.innerText;
-                
+              
                 // 预处理内容，保留合理的换行
                 let processedContent = originalContent
                     // .replace(/\n\s*\n+/g, '\n')
                     .replace(/^\s+|\s+$/g, '');
-                
+              
                 // Switch to preview mode
                 const markdownContent = md.render(processedContent);
-                console.log(markdownContent);
                 const styledContent = markdownContent;
-                
+              
                 outputArea.innerHTML = styledContent;
                 outputArea.classList.add('markdown-mode');
                 outputArea.style.overflowY = 'auto';
@@ -483,6 +580,10 @@
                     console.log('Unsupported file type.');
                 }
             }
+            // 设置输入框高度，显示图片预览区域
+            askInput.style.maxHeight = "100px"; // 调整为合适的高度
+            askInput.style.height = "100px"; // 调整为合适的高度
+            askInput.style.overflowY = "auto";
         }
 
         function addImageToPreview(base64Image) {
@@ -493,6 +594,7 @@
             const img = document.createElement('img');
             img.src = base64Image;
             img.className = 'image-preview';
+            img.onclick = () => openModal(base64Image);
 
             const deleteButton = document.createElement('button');
             deleteButton.className = 'image-delete';
@@ -507,6 +609,13 @@
         function removeImage(base64Image, previewElement) {
             uploadedImages = uploadedImages.filter(img => img !== base64Image);
             imagePreviews.removeChild(previewElement);
+
+            // 如果没有图片了，收起输入框
+            if (uploadedImages.length === 0) {
+                askInput.style.maxHeight = "40px";
+                askInput.style.height = "40px";
+                askInput.style.overflowY = "hidden";
+            }
         }
 
         async function readFileAsBase64(file) {
@@ -522,7 +631,7 @@
 
         async function askQuestion() {
             if (isRequesting) return;
-            
+          
             const question = askInput.value.trim();
             if (!question && uploadedImages.length === 0) return;
 
@@ -539,6 +648,11 @@
             askInput.value = "";
             uploadedImages = [];
             imagePreviews.innerHTML = '';
+
+            // 重置输入框样式
+            askInput.style.maxHeight = "40px";
+            askInput.style.height = "40px";
+            askInput.style.overflowY = "hidden";
 
             let config = await window.api.getConfig().config;
             const response = await window.api.handleAskOpenAI(conversationHistory, config);
@@ -604,13 +718,13 @@
                         }
                     }
                 }
-                
+              
                 // 处理完流数据后
                 responseContent = originalContent
                     .replace(/\n\s*\n\s*\n/g, '\n\n')
                     .replace(/^\s+|\s+$/g, '');
                 originalContent = responseContent;
-                
+              
             } else {
                 const data = await response.json();
                 responseContent = data.choices[0].message.content.trim()
@@ -623,7 +737,7 @@
             conversationHistory.push({ role: "assistant", content: responseContent });
             isRequesting = false;
             outputArea.contentEditable = "true";
-            
+          
             // 确保内容已完全更新后再切换到预览模式
             setTimeout(() => {
                 if (!isPreviewMode) {
@@ -635,10 +749,23 @@
                 }
             }, 0);
         }
+        function openModal(imgSrc) {
+            imageModal.style.display = "block";
+            modalImage.src = imgSrc;
+        }
 
+        function closeModal() {
+            imageModal.style.display = "none";
+        }
 
         // 事件监听器设置
         document.addEventListener('DOMContentLoaded', () => {
+            // 添加新的事件监听器到发送按钮
+            const sendButton = document.querySelector('.send-button');
+            sendButton.innerHTML = ">";
+            sendButton.addEventListener('click', askQuestion);
+
+            // 恢复 Ctrl+Enter 发送消息的功能
             askInput.addEventListener('keydown', function(event) {
                 if (event.keyCode === 13 && event.ctrlKey) {
                     event.preventDefault();
@@ -663,7 +790,7 @@
                 handlePaste(items);
             });
         });
-        
+      
     </script>
 </body>
 </html>

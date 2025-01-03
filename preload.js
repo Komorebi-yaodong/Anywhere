@@ -114,7 +114,7 @@ async function handelReplyOpenAI(code,response,stream) {
                         const message = line.replace(/^data: /, "");
                         if (message === "[DONE]") {
                             if (output.trim()) {
-                                utools.hideMainWindowTypeString(output.trim());
+                                utools.hideMainWindowTypeString(output.trimEnd());
                             }
                             break;
                         }
@@ -259,8 +259,8 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
                 title:"Anywhere",
                 useContentSize: true,
                 frame:true,
-                width: 500,
-                height: 380,
+                width: 400,
+                height: 520,
                 alwaysOnTop: true,
                 x: mouse_position.x-250,
                 y: mouse_position.y-190,

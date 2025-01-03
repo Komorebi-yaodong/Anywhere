@@ -7,11 +7,6 @@
 ![image](/image/3.png)
 ![image](/image/4.png)
 ![image](/image/5.png)
-![image](/image/6.png)
-
-<video id="video" controls="" preload="none" poster="/image/5.png">
-      <source id="mp4" src="./image/show.mp4" type="video/mp4">
-</video>
 
 ## 功能：
 1. 选中文本后，在要输入的地方调用快捷方式“Completion”（没有选中文本不会显示快捷方式），搭配快捷键更好“食用”
@@ -20,7 +15,6 @@
 4. 支持自定义补全提示词，如果需要更新默认提示词需要手动清除utools数据（建议自定义提示词与自定义快捷键），发送文本则选择“text”类型，发送图片则选择“image”类型
 5. 支持跳过输入文本换行符的功能
 6. 支持多种输出选项，可以直接作为文本输入，或是通过窗口展示
-7. 窗口模式支持追问（支持文字输入与图片粘贴、拖拽上传），Ctrl+Enter发送
 
 
 ## 注意：
