@@ -7,7 +7,7 @@
     <style>
         /* Common Styles */
         html, body {
-            width: 100%;
+            width: 98%;
             height: 100%;
         }
         body {
@@ -19,7 +19,7 @@
             align-items: center;
             justify-content: flex-start;
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             overflow-y: auto;
             overflow-x: hidden;
         }
@@ -30,7 +30,7 @@
             border-radius: 20px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 800px;
+            max-width: 1000px;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
@@ -49,9 +49,7 @@
             font-size: 2rem;
         }
 
-        .section {
-            margin-bottom: 20px;
-        }
+        
 
         label {
             display: block;
@@ -61,18 +59,12 @@
 
         input[type="text"],
         textarea {
-            width: 95%;
             padding: 10px;
             margin-bottom: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
             font-size: 16px;
             font-family: inherit;
-        }
-
-        textarea {
-            resize: vertical;
-            min-height: 120px;
         }
 
         button {
@@ -100,65 +92,161 @@
         }
 
         .model-select {
-            flex-grow: 1;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 16px;
-            font-family: inherit;
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23807d77'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            background-size: 1em;
-        }
-
-        .prompts-table {
             width: 100%;
-            border-collapse: collapse;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
 
+        .model-select:focus {
+            border-color: #807d77;
+            box-shadow: 0 0 0 2px rgba(128, 125, 119, 0.1);
+            background: #fff;
+        }
+        
+        /* 调整表格列宽 */
+        .prompts-table th:nth-child(1),
+        .prompts-table td:nth-child(1) {
+            width: 140px; /* Key列加宽，确保能显示完整的key */
+        }
+
+        .prompts-table th:nth-child(2),
+        .prompts-table td:nth-child(2) {
+            width: 100px; /* Type列稍微加宽以完整显示"text/image" */
+        }
+
+        .prompts-table th:nth-child(3),
+        .prompts-table td:nth-child(3) {
+            width: 100px; /* Show Mode列适当加宽以显示"input/window" */
+        }
+
+        .prompts-table th:nth-child(4),
+        .prompts-table td:nth-child(4) {
+            width: 300px; /* Prompt列给予较大宽度以显示更多提示文本 */
+        }
+
+        .prompts-table th:nth-child(5),
+        .prompts-table td:nth-child(5) {
+            width: 120px; /* Model列加宽以显示provider和model名称 */
+        }
+
+        .prompts-table th:nth-child(6),
+        .prompts-table td:nth-child(6) {
+            width: 100px; /* Action列保持适中宽度以容纳按钮 */
+        }
+
+        /* 调整下拉框和输入框的宽度 */
+        .model-provider-select-container {
+            width: 100%; /* 容器宽度占满单元格 */
+            padding: 0 5px; /* 添加少许内边距 */
+            box-sizing: border-box; /* 确保padding不会增加总宽度 */
+        }
+
+        .model-provider-select-container select {
+            width: 100%; /* 选择框宽度占满容器 */
+            box-sizing: border-box;
+        }
+
+        /* 所有选择框容器通用样式 */
+        .type-select-container,
+        .showMode-select-container,
+        .model-provider-select-container {
+            width: 100%;
+            padding: 0 5px;
+            box-sizing: border-box;
+        }
+
+        /* 所有选择框通用样式 */
+        .type-select-container select,
+        .showMode-select-container select,
+        .model-provider-select-container select {
+            width: 100%;
+            min-width: unset;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+
+        .prompts-table input[type="text"] {
+            width: 90%;
+            min-width: 90px;
+        }
+
+        /* 确保表格内容溢出时显示省略号 */
         .prompts-table th,
         .prompts-table td {
-            padding: 10px;
-            border: 1px solid #ccc;
-            text-align: left;
+            padding: 8px 5px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
+        /* 调整删除按钮样式 */
+        .delete-btn {
+            width: 100px;
+            margin: 0 auto;
+            display: block;
+        }
+
+        /* 确保表格使用固定布局并水平滚动 */
+        .prompts-table {
+            table-layout: fixed;
+            width: 100%;
+            min-width: 950px; /* 总宽度约等于所有列宽之和 */
+        }
+
+        .section {
+            width: 100%;
+        }
+        .prompt-section{
+            overflow-x: auto;
+        }
         .prompts-table th {
             background-color: #e0dfdb;
         }
 
-        .prompts-table input {
-            width: calc(100% - 20px);
+        .prompts-table input,
+        .prompts-table select {
+            width: 100px;
+            box-sizing: border-box;
         }
 
+        .prompts-table tbody tr .drag-handle {
+            cursor: move; /* Change cursor to move icon */
+            text-align: center;
+        }
+        .prompts-table tbody tr:first-child .drag-handle {
+            cursor: default; /* Change cursor to move icon */
+            text-align: center;
+        }
+        .prompts-table tbody tr input, .prompts-table tbody tr select{
+            pointer-events: auto;
+        }
         .add-prompt-btn {
             margin-top: 10px;
         }
-        .delete-btn {
-            background-color: #e0dfdb;
-            color: #6b6964;
-            border: 1px solid #ccc;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        
 
         .delete-btn:hover {
             background-color: #c82333;
             color: white;
         }
-        .fetch-models-btn{
-            margin-left: 10px;
-            position: relative; /* Add this for the loading spinner */
+        .fetch-models-btn {
+            padding: 8px 16px;
+            background: #807d77;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 100px;
+        }
+        .fetch-models-btn:hover {
+            background: #6b6964;
         }
         .model-section{
             display: flex;
@@ -169,17 +257,6 @@
         }
         .model-label{
           width: 60px;
-        }
-        .stream-button {
-            width: 80px;
-            padding: 5px 10px;
-            border-radius: 5px;
-            text-align: center;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            color: white;
-            margin-bottom: 0;
         }
 
         .stream-true {
@@ -217,10 +294,35 @@
             visibility: visible;
             opacity: 1;
         }
-        .stream-section{
-          display: flex;
-          align-items: center;
-          gap: 10px;
+        
+        .stream-settings-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stream-section {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .stream-section label {
+            margin-bottom: 0;
+            white-space: nowrap;
+        }
+
+        .stream-button {
+            width: 80px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            color: white;
+            margin-right: 20px;
         }
 
         /* Toast Container */
@@ -233,7 +335,7 @@
 
         /* Toast Message */
         .toast-message {
-            background-color: #d9534f;
+            background-color: #4CAF50;
             color: white;
             padding: 15px 20px;
             border-radius: 5px;
@@ -241,7 +343,9 @@
             opacity: 0;
             transition: opacity 0.5s ease-in-out;
         }
-
+        .toast-message.error {
+            background-color: #d9534f;
+        }
         .toast-message.show {
             opacity: 1;
         }
@@ -274,58 +378,51 @@
             100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
-        .user-model-item {
+        .custom-model-section {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin-bottom: 5px;
+            gap: 12px;
+            margin-top: 12px;
         }
 
-        .user-model-delete-btn {
-            background-color: transparent;
-            color: #c82333;
+        .custom-model-section input[type="text"] {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f8f9fa;
+        }
+
+        .custom-model-button {
+            padding: 8px 16px;
+            background: #f0f0f0;
+            color: #666;
             border: none;
+            border-radius: 8px;
             font-size: 14px;
             cursor: pointer;
-            margin-left: 10px;
+            transition: all 0.3s ease;
         }
 
-        .user-model-delete-btn:hover {
-            color: darkred;
-        }
-        .stream-settings-row {
-            display: flex;
-            align-items: center;
-            gap: 20px; /* Adjust as needed */
-        }
-        .custom-model-section {
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .custom-model-button:hover {
+            background: #e0e0e0;
         }
         .custom-model-section label{
             margin-bottom: 0;
              white-space: nowrap;
         }
-        .custom-model-button{
-            background-color: #e0dfdb;
-            color: #6b6964;
-            border: 1px solid #ccc;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
 
-        /* New styles for the type select */
-        .type-select-container, .showMode-select-container {
+        .type-select-container, 
+        .showMode-select-container,
+        .model-provider-select-container {
             position: relative;
-            width: 80px;
+            width: 100px;
         }
 
-        .type-select-container select, .showMode-select-container select {
+        .type-select-container select, 
+        .showMode-select-container select,
+        .model-provider-select-container select {
             width: 100%;
             padding: 5px 10px;
             border: 1px solid #ccc;
@@ -343,20 +440,12 @@
             background-size: 1em;
         }
 
-        .type-select-container select:focus, .showMode-select-container select:focus {
+        .type-select-container select:focus, 
+        .showMode-select-container select:focus,
+        .model-provider-select-container select:focus {
             outline: none;
             border-color: #807d77;
             box-shadow: 0 0 0 2px rgba(128, 125, 119, 0.25);
-        }
-
-        .prompts-table th:nth-child(3),
-        .prompts-table td:nth-child(3) {
-            width: 100px; /* Adjust width as needed */
-        }
-
-        .prompts-table th:nth-child(4),
-        .prompts-table td:nth-child(4) {
-            width: 100px; /* Adjust width as needed */
         }
 
         /* Reset Button Styles */
@@ -375,7 +464,7 @@
         .modal {
             display: none;
             position: fixed;
-            z-index: 1;
+            z-index: 10;
             left: 0;
             top: 0;
             width: 100%;
@@ -389,8 +478,8 @@
             margin: 15% auto;
             padding: 20px;
             border: 1px solid #888;
-            width: 30%;
-            max-width: 400px;
+            width: 80%;
+            max-width: 1200px;
             border-radius: 20px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             font-family: Georgia, serif;
@@ -405,7 +494,7 @@
 
         .modal-buttons {
             display: flex;
-            justify-content: center;
+            justify-content: space-between; /* 按钮靠右对齐 */
             margin-top: 20px;
             gap: 10px;
         }
@@ -434,21 +523,312 @@
             background-color: #bbb;
         }
 
-        .prompts-table tbody tr .drag-handle {
-            cursor: move; /* Change cursor to move icon */
-            text-align: center;
+        .save-provider-btn{
+            position: relative;
         }
-        .prompts-table tbody tr:first-child .drag-handle {
-            cursor: default; /* Change cursor to move icon */
-            text-align: center;
+        .save-provider-modal{
+            z-index: 10;
         }
-        .prompts-table tbody tr input, .prompts-table tbody tr select{
-            pointer-events: auto;
+        .confirm-save-provider{
+            justify-content: space-between;
+        }
+        .cancel-save-provider{
+            justify-content: space-between;
+        }
+        .provider-modal {
+            display: none;
+            position: fixed;
+            z-index: 2;
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            height: 100%; 
+            transform: translate(0, 0); 
+            background-color: rgba(0, 0, 0, 0.4); /* Optional: Add a semi-transparent background */
+            font-family: Georgia, serif;
+            overflow: auto; 
         }
 
-        .prompts-table th:first-child,
-        .prompts-table td:first-child {
-            width: 50px; /* Adjust width as needed */
+        .provider-modal-content {
+            padding: 20px;
+            background-color: #fefefe; 
+            border-radius: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin: 2% auto; 
+            width: 80%; 
+            max-width: 1200px; 
+        }
+
+        .provider-modal-content input[type="text"] {
+            width: calc(100% - 22px); /* 调整宽度以占据整行，并考虑 padding */
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        .provider-modal-content .custom-model-section .custom-model-button{
+            margin-top: 10px;
+        }
+
+        .provider-modal-section {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .provider-fetch-models-btn{
+            padding: 8px 16px;
+            background: #807d77;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 100px;
+        }
+        .provider-modal-section label {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .provider-modal-section input {
+            width: 80%;
+        }
+
+        .provider-modal-content h3 {
+            margin-top: 0;
+            color: #323330;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        .provider-modal-buttons {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            gap: 10px;
+        }
+
+        .provider-modal-buttons button {
+            background-color: #807d77;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-family: Georgia, serif;
+        }
+
+        .provider-modal-buttons button:hover {
+            background-color: #6b6964;
+        }
+
+        .provider-tabs-container {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .scroll-button {
+            background-color: #e0dfdb;
+            color: #6b6964;
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+            border-radius: 0; /* 移除原有的 border-radius */
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin: 0 5px; /* 按钮与标签之间的间距 */
+        }
+
+        .config-item {
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .section-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+        }
+
+        /* 标签样式 */
+        .section-content label {
+            min-width: 100px;
+            text-align: right;
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* 输入框样式 */
+        .section-content input[type="text"] {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+
+        .section-content input[type="text"]:focus {
+            border-color: #807d77;
+            box-shadow: 0 0 0 2px rgba(128, 125, 119, 0.1);
+            background: #fff;
+        }
+
+        /* 下拉框容器样式 */
+        .model-select-container {
+            flex: 1;
+            position: relative;
+        }
+
+        .scroll-button:hover {
+            background-color: #c8c6c3;
+        }
+
+        .provider-tabs {
+            display: flex;
+            overflow-x: hidden; /* 隐藏水平滚动条 */
+            scroll-behavior: smooth; /* 平滑滚动 */
+            flex-wrap: nowrap; /* 禁止换行 */
+            gap: 10px;
+            width: calc(100% - 80px);
+        }
+        .provider-tabs:not(:has(> .provider-tab.active)) .provider-tab {
+            opacity: 0.6;
+        }
+
+        .provider-tab {
+            background-color: #f5f5f5; /* 更柔和的背景色 */
+            color: #333; /* 更深的文字颜色 */
+            border: none; /* 移除边框 */
+            padding: 8px 16px; /* 调整内边距 */
+            border-radius: 20px 20px 0 0; /* 上圆角 */
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            white-space: nowrap; /* 强制不换行 */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 添加阴影 */
+            position: relative; /* 为了底部伪元素的定位 */
+            z-index: 1; /* 确保在伪元素之上 */
+        }
+
+        .provider-tab:before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px; /* 底部线条高度 */
+            background-color: transparent; /* 初始为透明 */
+            transition: background-color 0.3s;
+        }
+
+        .provider-tab:hover {
+            background-color: #e8e8e8; /* 悬停时更亮的背景色 */
+        }
+
+        .provider-tab:hover:before {
+            background-color: #807d77; /* 悬停时底部线条颜色 */
+        }
+
+        .provider-tab.active {
+            background-color: #807d77; /* 当前选中的标签背景颜色 */
+            color: white;              /* 当前选中的标签文字颜色 */
+            z-index: 2; /* 提高层级 */
+        }
+        .provider-tab.active:before {
+            background-color: #807d77; /* 选中标签底部线条颜色 */
+        }
+
+        .provider-tab.active:hover:before {
+            background-color: #807d77; /* 选中标签底部线条颜色 */
+        }
+        .provider-section{
+            position: relative;
+        }
+        .provider-modal .custom-model-section{
+            margin-bottom: 10px;
+            align-items: flex-start;
+        }
+        .provider-model-select-container{
+            flex: 1;
+            position: relative;
+        }
+        .provider-model-select-container label{
+            gap: 10px;
+        }
+        .provider-model-select{
+            width: 95%;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .provider-modal .model-section{
+            margin-bottom: 10px;
+        }
+        .provider-section .model-section{
+            margin-bottom: 0;
+        }
+        .provider-section .section-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .provider-section .section-content label {
+            flex: 0 0 120px; /* Fixed width for labels */
+            text-align: right;
+        }
+
+        .provider-section .section-content input[type="text"] {
+            width: 100%;
+            flex: 1; /* Input fields take the remaining space */
+        }
+
+        .provider-modal .section-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .provider-modal .section-content label {
+            flex: 0 0 120px; /* Fixed width for labels */
+            text-align: right;
+        }
+
+        .provider-modal .section-content input[type="text"] {
+            width: 100%;
+            flex: 1; /* Input fields take the remaining space */
+        }
+
+        .provider-modal .model-label{
+            flex: 0 0 120px; /* Fixed width for labels */
+            text-align: right;
+        }
+
+        .provider-modal .custom-model-section label{
+            flex: 0 0 120px; /* Fixed width for labels */
+            text-align: right;
         }
     </style>
 </head>
@@ -468,34 +848,67 @@
             </div>
         </div>
 
-        <div class="section">
-            <label for="api-url">API URL:</label>
-            <input type="text" id="api-url" placeholder="Enter API URL">
+        <!-- Provider Tabs Container -->
+        <div class="provider-tabs-container">
+            <button id="scroll-left" class="scroll-button">
+                < </button>
+            <div class="provider-tabs" id="provider-tabs">
+                <!-- Provider tabs will be added here -->
+            </div>
+            <button id="scroll-right" class="scroll-button">></button>
         </div>
 
-        <div class="section">
-            <label for="api-key">API Key:</label>
-            <input type="text" id="api-key" placeholder="Enter API Key">
-        </div>
-
-        <div class="section model-section">
-            <div style="display: flex; align-items: center; flex-grow: 1;">
-                <label for="model-select" class="model-label">Model:</label>
-                <div class="model-select-container">
-                    <select id="model-select" class="model-select"></select>
-                </div>
-                <button id="fetch-models-btn" class="fetch-models-btn">
-                    Get Models
-                    <div class="loading-spinner"></div>
-                </button>
+        <!-- Provider Modal -->
+        <div id="provider-modal" class="modal">
+            <div class="modal-content" id="provider-modal-content">
+                <!-- Content will be dynamically loaded here -->
             </div>
         </div>
 
-        <div class="section custom-model-section">
-            <label for="add-model-input">Custom Model:</label>
-            <input type="text" id="add-model-input" placeholder="Enter model name">
-            <button id="add-model-btn" class="custom-model-button">Add</button>
-            <button id="delete-model-btn" class="custom-model-button">Delete</button>
+        <div class="section provider-section">
+            <div class="config-item">
+                <div class="section-content">
+                    <label for="api-url">Default API URL:</label>
+                    <input type="text" id="api-url" placeholder="Enter API URL">
+                </div>
+                <div class="section-content">
+                    <label for="api-key">Default API Key:</label>
+                    <input type="text" id="api-key" placeholder="Enter API Key">
+                </div>
+                <div class="section-content">
+                    <label for="model-select">Default Model:</label>
+                    <div class="model-select-container">
+                        <select id="model-select" class="model-select"></select>
+                    </div>
+                    <button id="fetch-models-btn" class="fetch-models-btn">
+                        Get Models
+                        <div class="loading-spinner"></div>
+                    </button>
+                </div>
+                <div class="section-content">
+                    <label for="add-model-input">Default Custom:</label>
+                    <input type="text" id="add-model-input" placeholder="Enter model name">
+                    <button id="add-model-btn" class="custom-model-button">Add</button>
+                    <button id="delete-model-btn" class="custom-model-button">Delete</button>
+                </div>
+            </div>
+            <button id="save-provider-btn" class="save-provider-btn">Save Provider</button>
+        </div>
+
+  
+
+        <!-- Save Provider Modal -->
+        <div id="save-provider-modal" class="modal">
+            <div class="modal-content">
+                <div class="provider-modal-section">
+                    <label for="provider-name">Name:</label>
+                    <input type="text" id="provider-name" placeholder="Enter Provider Name">
+                </div>
+                <div class="modal-buttons">
+                    <button id="confirm-save-provider">Save</button>
+                    <button id="cancel-save-provider" class="cancel">Cancel</button>
+                </div>
+            </div>
         </div>
 
         <div class="section stream-settings-row">
@@ -505,8 +918,7 @@
                     <button id="stream-btn" class="stream-button stream-true">True</button>
                     <span class="tooltiptext">Enable or disable streaming</span>
                 </div>
-            </div>
-            <div class="stream-section">
+            
                 <label>Skip Line Break:</label>
                 <div class="tooltip">
                     <button id="skip-line-break-btn" class="stream-button stream-true">True</button>
@@ -517,21 +929,24 @@
 
         <div class="section">
             <label>Prompts:</label>
-            <table class="prompts-table" id="prompts-table">
-                <thead>
-                    <tr>
-                        <th>Index</th>
-                        <th>Key</th>
-                        <th>Type</th>
-                        <th>Show Mode</th>
-                        <th>Prompt</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Prompts will be loaded here -->
-                </tbody>
-            </table>
+            <div class="prompt-section">
+                <table class="prompts-table" id="prompts-table">
+                    <thead>
+                        <tr>
+                            <!-- <th>Index</th> -->
+                            <th>Key</th>
+                            <th>Type</th>
+                            <th>Show Mode</th>
+                            <th>Prompt</th>
+                            <th>Model</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Prompts will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
             <button class="add-prompt-btn" id="add-prompt-btn">Add Prompt</button>
             <button class="save-prompts-btn" id="save-prompts-btn">Save Prompts</button>
         </div>
@@ -558,6 +973,16 @@
             const confirmModal = document.getElementById('confirm-modal');
             const confirmResetBtn = document.getElementById('confirm-reset');
             const cancelResetBtn = document.getElementById('cancel-reset');
+            const saveProviderBtn = document.getElementById('save-provider-btn');
+            const saveProviderModal = document.getElementById('save-provider-modal');
+            const providerNameInput = document.getElementById('provider-name');
+            const confirmSaveProviderBtn = document.getElementById('confirm-save-provider');
+            const cancelSaveProviderBtn = document.getElementById('cancel-save-provider');
+            const providerTabsContainer = document.getElementById('provider-tabs');
+            const providerModal = document.getElementById('provider-modal');
+            const providerModalContent = document.getElementById('provider-modal-content');
+            const scrollLeftBtn = document.getElementById('scroll-left');
+            const scrollRightBtn = document.getElementById('scroll-right');
 
             let currentConfig = {};
             let draggedRow = null;
@@ -569,12 +994,14 @@
                     modelList:[],
                     ModelsListByUser:[],
                     modelSelect:"gpt-4o-mini",
+                    providers:{},
                     prompts:{
                         Completion:{
                             idex:0, // 用于排序
                             type:"over",
                             prompt:`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-                            showMode:"input" // input, window
+                            showMode:"input", // input, window
+                            model:""
                         }
                     },
                     stream:true,
@@ -583,11 +1010,14 @@
                 }
             }
 
-            function showToast(message) {
+            function showToast(message, type = 'success') {
                 const toastContainer = document.getElementById('toast-container');
                 const toastMessage = document.createElement('div');
                 toastMessage.classList.add('toast-message');
                 toastMessage.textContent = message;
+                if (type === 'error') {
+                  toastMessage.classList.add('error');
+                }
                 toastContainer.appendChild(toastMessage);
 
                 setTimeout(() => {
@@ -602,18 +1032,12 @@
                 }, 3000);
             }
 
-            async function fetchModels() {
-                const apiUrl = apiUrlInput.value;
-                const apiKey = apiKeyInput.value;
-                fetchModelsBtn.classList.add('loading');
-
-                if (!apiUrl || !apiKey) {
-                    console.error('API URL and API Key are required to fetch models.');
-                    showToast('API URL and API Key are required to fetch models.');
-                    fetchModelsBtn.classList.remove('loading');
-                    return;
+            async function fetchModels(apiUrl, apiKey, providerId = null) {
+                let fetchBtn = fetchModelsBtn;
+                if(providerId){
+                    fetchBtn = document.getElementById('provider-fetch-models-btn')
                 }
-
+                fetchBtn.classList.add('loading');
                 try {
                     const response = await fetch(`${apiUrl}/models`, {
                         method: 'GET',
@@ -630,56 +1054,76 @@
                     const data = await response.json();
                     if (data.data && Array.isArray(data.data)) {
                         const modelList = data.data.map(model => model.id);
-                        currentConfig.config.modelList = modelList;
-                        populateModelDropdown();
+                        if (providerId && currentConfig.config.providers[providerId]) {
+                            currentConfig.config.providers[providerId].modelList = modelList;
+                        } else {
+                            currentConfig.config.modelList = modelList;
+                        }
+                        showToast('Models fetched successfully.');
+                        return modelList;
                     } else {
                         console.error('Invalid response format:', data);
-                        showToast(`Invalid response format: ${data}`);
+                        showToast(`Invalid response format: ${data}`,'error');
+                        return [];
                     }
                 } catch (error) {
                     console.error('Error fetching models:', error);
-                    showToast(`Error fetching models: ${error}`);
+                    showToast(`Error fetching models: ${error}`, 'error');
+                    return [];
                 } finally {
-                    fetchModelsBtn.classList.remove('loading');
+                    fetchBtn.classList.remove('loading');
                 }
             }
 
-            function populateModelDropdown() {
-                modelSelect.innerHTML = ''; // Clear existing options
-                const userModels = currentConfig.config.ModelsListByUser || []; // Ensure it's an array
+            function populateModelDropdown(selectElement, providerId = null) {
+                const select = selectElement || modelSelect;
+                select.innerHTML = ''; // Clear existing options
+                
+                let userModels = [];
+                let fetchedModels = [];
+
+                if(providerId && currentConfig.config.providers[providerId]){
+                    userModels = currentConfig.config.providers[providerId].modelListByUser || [];
+                    fetchedModels = currentConfig.config.providers[providerId].modelList || [];
+                } else {
+                    userModels = currentConfig.config.ModelsListByUser || [];
+                    fetchedModels = currentConfig.config.modelList || [];
+                }
 
                 // Add user-added models first
                 userModels.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model;
                     option.textContent = `${model}  (Custom)`;
-                    modelSelect.appendChild(option);
+                    select.appendChild(option);
                 });
 
                 // Add fetched models after
-                currentConfig.config.modelList.forEach(model => {
+                fetchedModels.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model;
                     option.textContent = model;
-                    modelSelect.appendChild(option);
+                    select.appendChild(option);
                 });
 
                 // Re-select the current model if it exists
-                if (currentConfig.config.modelList.includes(currentConfig.config.modelSelect) || userModels.includes(currentConfig.config.modelSelect)) {
-                    modelSelect.value = currentConfig.config.modelSelect;
-                } else if (userModels.length > 0) {
-                    // If no model is selected and custom models exist, select the first custom model
-                    modelSelect.value = userModels[0];
-                    saveCurrentModel();
-                } else if (currentConfig.config.modelList.length > 0) {
-                    modelSelect.value = currentConfig.config.modelList[0];
-                    saveCurrentModel();
+                if(!providerId){
+                    if (currentConfig.config.modelList.includes(currentConfig.config.modelSelect) || userModels.includes(currentConfig.config.modelSelect)) {
+                        select.value = currentConfig.config.modelSelect;
+                    } else if (userModels.length > 0) {
+                        select.value = userModels[0];
+                        saveCurrentModel();
+                    } else if (currentConfig.config.modelList.length > 0) {
+                        select.value = currentConfig.config.modelList[0];
+                        saveCurrentModel();
+                    }
                 }
             }
 
             async function loadConfig() {
                 currentConfig = await window.api.getConfig();
                 currentConfig.config.ModelsListByUser = currentConfig.config.ModelsListByUser || []; // Initialize if null/undefined
+                currentConfig.config.providers = currentConfig.config.providers || {};
 
                 apiUrlInput.value = currentConfig.config.apiUrl || '';
                 apiKeyInput.value = currentConfig.config.apiKey || '';
@@ -690,6 +1134,7 @@
 
                 populateModelDropdown();
                 loadPrompts(currentConfig.config.prompts);
+                createProviderTabs();
             }
 
             function loadPrompts(prompts) {
@@ -705,7 +1150,7 @@
                 promptsArray.sort((a, b) => a.idex - b.idex);
 
                 for (const prompt of promptsArray) {
-                    addPromptRow(prompt.key, prompt.type, prompt.showMode, prompt.prompt, prompt.key === 'Completion', prompt.idex);
+                    addPromptRow(prompt.key, prompt.type, prompt.showMode, prompt.prompt,prompt.model, prompt.key === 'Completion', prompt.idex);
                 }
 
                 // Update the original prompts object with sorted array
@@ -716,7 +1161,8 @@
                         idex: prompt.idex,
                         type: prompt.type,
                         showMode: prompt.showMode,
-                        prompt: prompt.prompt
+                        prompt: prompt.prompt,
+                        model: prompt.model
                     };
                 });
 
@@ -728,17 +1174,14 @@
                 const rows = promptsTable.querySelectorAll('tr');
 
                 rows.forEach((row, index) => {
-                    const dragHandle = row.querySelector('.drag-handle');
                     if (index === 0) {
-                        row.setAttribute('draggable', 'false'); // Disable dragging for the first row
+                        row.setAttribute('draggable', 'false'); // 禁用第一行的拖拽
                     } else {
                         row.setAttribute('draggable', 'true');
-                        dragHandle.addEventListener('mousedown', () => {
-                            row.setAttribute('draggable', 'true');
-                        });
+                        
                         row.addEventListener('dragstart', (event) => {
                             draggedRow = row;
-                            event.dataTransfer.setData('text', ''); // Required in Firefox
+                            event.dataTransfer.setData('text', ''); // Firefox需要
                             row.classList.add('dragging');
                         });
 
@@ -771,19 +1214,21 @@
                 });
             }
 
-            function addPromptRow(key = '', type = 'over', showMode = 'input', prompt = '', readOnly = false, idex = 0) {
+            function addPromptRow(key = '', type = 'over', showMode = 'input', prompt = '',model = '', readOnly = false, idex = 0) {
                 const row = promptsTable.insertRow();
-                const indexCell = row.insertCell();
+                // const indexCell = row.insertCell();
                 const keyCell = row.insertCell();
                 const typeCell = row.insertCell();
                 const showModeCell = row.insertCell();
                 const promptCell = row.insertCell();
+                const modelCell = row.insertCell();
                 const actionCell = row.insertCell();
 
-                const indexLabel = document.createElement('div');
-                indexLabel.className = 'drag-handle';
-                indexLabel.textContent = idex;
-                indexCell.appendChild(indexLabel)
+                // const indexLabel = document.createElement('div');
+                // indexLabel.className = 'drag-handle';
+                // indexLabel.textContent = idex;
+                // indexCell.appendChild(indexLabel)
+                row.setAttribute('data-idex', idex);
 
                 const keyInput = document.createElement('input');
                 keyInput.type = 'text';
@@ -796,12 +1241,20 @@
 
                 const typeSelect = document.createElement('select');
                 typeSelect.className = 'type-select';
+                // Create the options for the type select element
                 const optionOver = document.createElement('option');
                 optionOver.value = 'over';
                 optionOver.text = 'text';
                 const optionImg = document.createElement('option');
                 optionImg.value = 'img';
                 optionImg.text = 'image';
+
+                const optionGeneral = document.createElement('option');
+                optionGeneral.value = 'general';
+                optionGeneral.text = 'general';
+
+                
+                typeSelect.add(optionGeneral);
                 typeSelect.add(optionOver);
                 typeSelect.add(optionImg);
                 typeSelect.value = type;
@@ -829,6 +1282,43 @@
                 promptInput.value = prompt;
                 promptInput.disabled = readOnly;
 
+                // Model select
+                const modelProviderSelectContainer = document.createElement('div');
+                modelProviderSelectContainer.className = 'model-provider-select-container';
+
+                const modelProviderSelect = document.createElement('select');
+                modelProviderSelect.className = 'model-provider-select';
+              
+                // Populate model select
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.text = 'Default';
+                modelProviderSelect.add(defaultOption);
+
+                for (const providerId in currentConfig.config.providers) {
+                    const provider = currentConfig.config.providers[providerId];
+                    const providerName = provider.name;
+
+                    // Add provider's modelList
+                    provider.modelList.forEach(modelName => {
+                        const option = document.createElement('option');
+                        option.value = `${providerId}|${modelName}`;
+                        option.text = `${providerName}|${modelName}`;
+                        modelProviderSelect.add(option);
+                    });
+
+                    // Add provider's modelListByUser
+                    if (provider.modelListByUser) {
+                        provider.modelListByUser.forEach(modelName => {
+                            const option = document.createElement('option');
+                            option.value = `${providerId}|${modelName}`;
+                            option.text = `${providerName}|${modelName} (Custom)`;
+                            modelProviderSelect.add(option);
+                        });
+                    }
+                }
+                modelProviderSelect.value = model;
+
                 keyCell.appendChild(keyInput);
                 typeSelectContainer.appendChild(typeSelect); // Add select to container
                 typeCell.appendChild(typeSelectContainer); // Add container to cell
@@ -837,6 +1327,9 @@
                 showModeCell.appendChild(showModeSelectContainer);
 
                 promptCell.appendChild(promptInput);
+
+                modelProviderSelectContainer.appendChild(modelProviderSelect);
+                modelCell.appendChild(modelProviderSelectContainer)
 
                 if (!readOnly) {
                     const deleteBtn = document.createElement('button');
@@ -885,11 +1378,12 @@
                 const updatedPrompts = {};
                 const rows = Array.from(promptsTable.rows);
                 rows.forEach((row, index) => {
-                    const key = row.cells[1].querySelector('input').value;
-                    const type = row.cells[2].querySelector('.type-select').value;
-                    const showMode = row.cells[3].querySelector('.showMode-select').value;
-                    const prompt = row.cells[4].querySelector('input').value;
-                    updatedPrompts[key] = { idex: index, type, showMode, prompt };
+                    const key = row.cells[0].querySelector('input').value;
+                    const type = row.cells[1].querySelector('.type-select').value;
+                    const showMode = row.cells[2].querySelector('.showMode-select').value;
+                    const prompt = row.cells[3].querySelector('input').value;
+                    const model = row.cells[4].querySelector('.model-provider-select').value;
+                    updatedPrompts[key] = { idex: index, type, showMode, prompt, model };
                 });
                 currentConfig.config.prompts = updatedPrompts;
                 window.api.updateConfig(currentConfig);
@@ -902,7 +1396,14 @@
 
             savePromptsBtn.addEventListener('click', savePrompts);
 
-            fetchModelsBtn.addEventListener('click', fetchModels);
+            fetchModelsBtn.addEventListener('click', async () => {
+                const apiUrl = apiUrlInput.value;
+                const apiKey = apiKeyInput.value;
+                const modelList = await fetchModels(apiUrl, apiKey); // Pass null for providerId to update the default model list
+                currentConfig.config.modelList = modelList;
+                populateModelDropdown();
+            });
+          
 
             addModelBtn.addEventListener('click', () => {
                 const newModelName = addModelInput.value.trim();
@@ -954,6 +1455,212 @@
                 if (event.target === confirmModal) {
                     confirmModal.style.display = 'none';
                 }
+            });
+
+            // Save Provider Button Logic
+            saveProviderBtn.addEventListener('click', () => {
+                saveProviderModal.style.display = 'block';
+            });
+
+            confirmSaveProviderBtn.addEventListener('click', async () => {
+                const providerName = providerNameInput.value.trim();
+                if (providerName) {
+                    const newProviderId = Date.now();
+                    const newProvider = {
+                        name: providerName,
+                        url: apiUrlInput.value,
+                        api_key: apiKeyInput.value,
+                        modelList: currentConfig.config.modelList,
+                        modelListByUser: currentConfig.config.ModelsListByUser
+                    };
+                    
+                    currentConfig.config.providers[newProviderId] = newProvider;
+                    // Fetch models for the new provider
+                    // const modelList = await fetchModels(newProvider.url, newProvider.api_key);
+                    // newProvider.modelList = modelList;
+                    // currentConfig.config.providers[newProviderId].modelList = modelList;
+
+                    window.api.updateConfig(currentConfig);
+                    createProviderTabs();
+                    providerNameInput.value = '';
+                    saveProviderModal.style.display = 'none';
+                    loadPrompts(currentConfig.config.prompts);
+                    showToast(`Provider "${providerName}" saved.`);
+                } else {
+                    showToast('Please enter a provider name.','error');
+                }
+            });
+
+            cancelSaveProviderBtn.addEventListener('click', () => {
+                saveProviderModal.style.display = 'none';
+            });
+
+            function createProviderTabs() {
+                providerTabsContainer.innerHTML = '';
+                let activeTabExists = false;
+                for (const providerId in currentConfig.config.providers) {
+                    const provider = currentConfig.config.providers[providerId];
+                    const tab = document.createElement('div');
+                    tab.classList.add('provider-tab');
+                    tab.textContent = provider.name;
+                    if(providerId === currentConfig.config.activeProviderId){
+                        tab.classList.add('active');
+                        activeTabExists = true;
+                    }
+                    tab.addEventListener('click', () => {
+                        // 移除所有标签的 active 类
+                        document.querySelectorAll('.provider-tab').forEach(t => t.classList.remove('active'));
+                        // 为当前点击的标签添加 active 类
+                        tab.classList.add('active');
+                        currentConfig.config.activeProviderId = providerId;
+                        showProviderModal(providerId);
+                    });
+                    providerTabsContainer.appendChild(tab);
+                }
+                if(!activeTabExists && providerTabsContainer.firstElementChild){
+                    providerTabsContainer.firstElementChild.classList.add('active');
+                    currentConfig.config.activeProviderId = Object.keys(currentConfig.config.providers)[0];
+                }
+                window.api.updateConfig(currentConfig);
+            }
+
+            function showProviderModal(providerId) {
+                const provider = currentConfig.config.providers[providerId];
+                if (!provider) return;
+
+                providerModalContent.innerHTML = `
+                    <h3>${provider.name}</h3>
+                    <div class="provider-modal-section">
+                        <label for="provider-url">API URL:</label>
+                        <input type="text" id="provider-url" value="${provider.url || ''}">
+                    </div>
+                    <div class="provider-modal-section">
+                        <label for="provider-key">API Key:</label>
+                        <input type="text" id="provider-key" value="${provider.api_key || ''}">
+                    </div>
+                    <div class="provider-modal-section model-section">
+                        <div style="display: flex; align-items: center; flex-grow: 1; gap: 10px;">
+                            <label for="provider-model-select">Models:</label>
+                            <div class="provider-model-select-container">
+                                <select id="provider-model-select" class="provider-model-select"></select>
+                            </div>
+                            <button id="provider-fetch-models-btn" class="fetch-models-btn">
+                                Get Models
+                                <div class="loading-spinner"></div>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="provider-modal-section custom-model-section">
+                        <label for="provider-add-model-input">Custom Model:</label>
+                        <input type="text" id="provider-add-model-input" placeholder="Enter model name">
+                        <button id="provider-add-model-btn" class="custom-model-button">Add</button>
+                        <button id="provider-delete-model-btn" class="custom-model-button">Delete</button>
+                    </div>
+                    <div class="provider-modal-buttons">
+                        <button data-id="${providerId}" class="update-provider-btn">Update</button>
+                        <button data-id="${providerId}" class="delete-provider-btn">Delete</button>
+                        <button class="cancel-provider-btn">Cancel</button>
+                    </div>
+                `;
+
+                const providerUrlInput = document.getElementById('provider-url');
+                const providerKeyInput = document.getElementById('provider-key');
+                const providerModelSelect = document.getElementById('provider-model-select');
+                const providerFetchModelsBtn = document.getElementById('provider-fetch-models-btn');
+                const providerAddModelInput = document.getElementById('provider-add-model-input');
+                const providerAddModelBtn = document.getElementById('provider-add-model-btn');
+                const providerDeleteModelBtn = document.getElementById('provider-delete-model-btn');
+                const updateProviderBtn = document.querySelector('.update-provider-btn');
+                const deleteProviderBtn = document.querySelector('.delete-provider-btn');
+                const cancelProviderBtn = document.querySelector('.cancel-provider-btn');
+
+                // Populate provider model select
+                populateModelDropdown(providerModelSelect, providerId);
+
+                // Fetch models for the provider
+                providerFetchModelsBtn.addEventListener('click', async () => {
+                    const apiUrl = providerUrlInput.value;
+                    const apiKey = providerKeyInput.value;
+                    const modelList = await fetchModels(apiUrl, apiKey, providerId);
+                    provider.modelList = modelList;
+                    populateModelDropdown(providerModelSelect, providerId);
+                });
+
+                // Add custom model for the provider
+                providerAddModelBtn.addEventListener('click', () => {
+                    const newModelName = providerAddModelInput.value.trim();
+                    if (newModelName && !provider.modelListByUser.includes(newModelName)) {
+                        provider.modelListByUser.push(newModelName);
+                        providerAddModelInput.value = '';
+                        populateModelDropdown(providerModelSelect, providerId);
+                        window.api.updateConfig(currentConfig);
+                        showToast('Custom model added.');
+                    } else {
+                        showToast('Model already exists or input is empty.');
+                    }
+                });
+
+                // Delete custom model for the provider
+                providerDeleteModelBtn.addEventListener('click', () => {
+                    const modelToDelete = providerAddModelInput.value.trim();
+                    if (modelToDelete && provider.modelListByUser.includes(modelToDelete)) {
+                        provider.modelListByUser = provider.modelListByUser.filter(m => m !== modelToDelete);
+                        providerAddModelInput.value = '';
+                        // Remove the option from the select
+                       populateModelDropdown(providerModelSelect, providerId);
+                        window.api.updateConfig(currentConfig);
+                        showToast('Custom model deleted.');
+                    } else {
+                        showToast('Model not found or input is empty.');
+                    }
+                });
+
+                // Update provider
+                updateProviderBtn.addEventListener('click', () => {
+                    provider.url = providerUrlInput.value;
+                    provider.api_key = providerKeyInput.value;
+                    window.api.updateConfig(currentConfig);
+                    createProviderTabs();
+                    providerModal.style.display = 'none';
+                    showToast(`Provider "${provider.name}" updated.`);
+                    loadPrompts(currentConfig.config.prompts);
+                });
+
+                // Delete provider
+                deleteProviderBtn.addEventListener('click', () => {
+                    delete currentConfig.config.providers[providerId];
+                    window.api.updateConfig(currentConfig);
+                    createProviderTabs();
+                    providerModal.style.display = 'none';
+                    showToast(`Provider "${provider.name}" deleted.`);
+                    loadPrompts(currentConfig.config.prompts);
+                });
+
+                cancelProviderBtn.addEventListener('click', () => {
+                    providerModal.style.display = 'none';
+                });
+
+                providerModal.style.display = 'block';
+            }
+
+            window.addEventListener('click', (event) => {
+                if (event.target === providerModal) {
+                    providerModal.style.display = 'none';
+                }
+            });
+
+            scrollLeftBtn.addEventListener('click', () => {
+                providerTabsContainer.scrollBy({
+                    left: -100, // Adjust scroll distance as needed
+                    behavior: 'smooth'
+                });
+            });
+
+            scrollRightBtn.addEventListener('click', () => {
+                providerTabsContainer.scrollBy({
+                    left: 100, // Adjust scroll distance as needed
+                    behavior: 'smooth'
+                });
             });
 
             await loadConfig();

@@ -164,13 +164,15 @@
             font-size: 16px;
             font-family: inherit;
             resize: none;
-            min-height: 40px; /* 调整输入框高度 */
-            max-height: 40px;
-            overflow-y: hidden;
+            height: 40px; /* 默认高度 */
+            min-height: 40px; /* 最小高度 */
+            max-height: 150px; /* 最大高度 */
+            overflow-y: auto; /* 改为 auto，这样在需要时显示滚动条 */
             outline: none;
             background-color: transparent;
-            padding: 0;
-            line-height: 40px; /* 新增：使文字垂直居中 */
+            padding: 10px 0; /* 添加垂直内边距 */
+            line-height: 20px; /* 调整行高 */
+            box-sizing: border-box; /* 确保padding计入高度 */
         }
 
         .input-area textarea::placeholder {
@@ -208,7 +210,7 @@
             background-color: transparent;
             color: #323330;
             border: none;
-            border-radius: 50%;
+            border-radius: 55%;
             cursor: pointer;
             width: 30px;
             height: 30px;
@@ -219,6 +221,25 @@
         }
 
         .send-button:hover {
+            background-color: #e0e0e0;
+        }
+
+        /* Clear Button Styles */
+        .clear-button {
+            background-color: transparent;
+            color: #323330;
+            border: none;
+            border-radius: 45%;
+            cursor: pointer;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .clear-button:hover {
             background-color: #e0e0e0;
         }
 
@@ -285,6 +306,14 @@
 
         .markdown-mode {
             white-space: inherit;
+        }
+
+        /* 关键修改： 调整图片在 Markdown 预览中的样式 */
+        .markdown-mode img {
+            max-width: 50%; /* 根据需要调整图片最大宽度 */
+            height: auto;  /* 保持图片纵横比 */
+            display: block;/* 使图片居中并独占一行 */
+            margin: 0 auto;
         }
 
         /* Image Upload Icon Styles */
@@ -356,6 +385,7 @@
                 </label>
                 <input type="file" id="file-input" class="hidden-file-input" accept="image/*" onchange="handleImageUpload(this.files)" multiple>
                 <textarea id="ask-input" placeholder="send your message here"></textarea>
+                <button class="clear-button" onclick="clearConversation()">&#x2716;</button>
                 <button class="send-button" onclick="askQuestion()">></button>
             </div>
         </div>
@@ -383,6 +413,8 @@
         let isRequesting = false;
         let isPreviewMode = false;
         let originalContent = "";
+        let window_code = "";
+        let systemPrompt = ""; // 用于存储 system 提示词
 
         const md = new markdownit({
             html: false,
@@ -401,11 +433,20 @@
             outputArea.contentEditable = "false";
             let config = await window.api.getConfig().config;
             let response;
-            modelHeader.textContent = config.modelSelect;
+            const modelInfo = config.prompts[msg.code].model;
+            if (modelInfo) {
+                const [providerId, modelName] = modelInfo.split("|");
+                modelHeader.textContent = modelName;
+            }
+            else{
+                modelHeader.textContent = config.modelSelect;
+            }
             document.title = msg.code; // 更新title内容
+            window_code = msg.code;
             originalContent = "";
             outputArea.innerHTML = "";
-            conversationHistory = [{ role: "system", content: config.prompts[msg.code].prompt }];
+            systemPrompt = config.prompts[msg.code].prompt; // 保存 system 提示词
+            conversationHistory = [{ role: "system", content: systemPrompt }];
             uploadedImages = [];
             imagePreviews.innerHTML = '';
 
@@ -477,7 +518,6 @@
                             if (doneBoundary !== -1) {
                                 const message = jsonData.substring(0, doneBoundary);
                                 if (message.trim() === "[DONE]") break;
-
                                 try {
                                     const parsed = JSON.parse(message.trim());
                                     if (parsed.choices[0].delta.content) {
@@ -503,7 +543,7 @@
                     }
                 } else {
                     const data = await response.json();
-                    responseContent = data.choices[0].message.content.trim();
+                    responseContent = data.choices[0].message.content;
                     originalContent = responseContent;
                     outputArea.textContent = responseContent;
                 }
@@ -540,16 +580,16 @@
             } else {
                 // 保存当前编辑的内容
                 originalContent = outputArea.innerText;
-              
+          
                 // 预处理内容，保留合理的换行
                 let processedContent = originalContent
                     // .replace(/\n\s*\n+/g, '\n')
                     .replace(/^\s+|\s+$/g, '');
-              
+          
                 // Switch to preview mode
                 const markdownContent = md.render(processedContent);
                 const styledContent = markdownContent;
-              
+          
                 outputArea.innerHTML = styledContent;
                 outputArea.classList.add('markdown-mode');
                 outputArea.style.overflowY = 'auto';
@@ -580,10 +620,8 @@
                     console.log('Unsupported file type.');
                 }
             }
-            // 设置输入框高度，显示图片预览区域
-            askInput.style.maxHeight = "100px"; // 调整为合适的高度
-            askInput.style.height = "100px"; // 调整为合适的高度
-            askInput.style.overflowY = "auto";
+            // 有图片时也触发一次高度调整
+            askInput.dispatchEvent(new Event('input'));
         }
 
         function addImageToPreview(base64Image) {
@@ -610,11 +648,10 @@
             uploadedImages = uploadedImages.filter(img => img !== base64Image);
             imagePreviews.removeChild(previewElement);
 
-            // 如果没有图片了，收起输入框
-            if (uploadedImages.length === 0) {
-                askInput.style.maxHeight = "40px";
-                askInput.style.height = "40px";
-                askInput.style.overflowY = "hidden";
+            // 如果没有图片且输入框内容不超过一行，则重置高度
+            if (uploadedImages.length === 0 && askInput.scrollHeight <= 40) {
+                askInput.style.height = '40px';
+                askInput.style.overflowY = 'hidden';
             }
         }
 
@@ -631,7 +668,7 @@
 
         async function askQuestion() {
             if (isRequesting) return;
-          
+
             const question = askInput.value.trim();
             if (!question && uploadedImages.length === 0) return;
 
@@ -648,14 +685,11 @@
             askInput.value = "";
             uploadedImages = [];
             imagePreviews.innerHTML = '';
-
-            // 重置输入框样式
-            askInput.style.maxHeight = "40px";
-            askInput.style.height = "40px";
-            askInput.style.overflowY = "hidden";
+            askInput.style.height = '40px';
+            askInput.style.overflowY = 'hidden';
 
             let config = await window.api.getConfig().config;
-            const response = await window.api.handleAskOpenAI(conversationHistory, config);
+            const response = await window.api.handleAskOpenAI(conversationHistory, config, window_code);
 
             if (!response.ok) {
                 outputArea.textContent = `HTTP error! status: ${response.status}`;
@@ -718,13 +752,13 @@
                         }
                     }
                 }
-              
+          
                 // 处理完流数据后
                 responseContent = originalContent
                     .replace(/\n\s*\n\s*\n/g, '\n\n')
                     .replace(/^\s+|\s+$/g, '');
                 originalContent = responseContent;
-              
+          
             } else {
                 const data = await response.json();
                 responseContent = data.choices[0].message.content.trim()
@@ -737,7 +771,6 @@
             conversationHistory.push({ role: "assistant", content: responseContent });
             isRequesting = false;
             outputArea.contentEditable = "true";
-          
             // 确保内容已完全更新后再切换到预览模式
             setTimeout(() => {
                 if (!isPreviewMode) {
@@ -749,6 +782,18 @@
                 }
             }, 0);
         }
+
+        function clearConversation() {
+            conversationHistory = [{ role: "system", content: systemPrompt }]; // 重置对话历史为只包含 system 提示词
+            outputArea.textContent = "";
+            originalContent = "";
+            askInput.value = "";
+            uploadedImages = [];
+            imagePreviews.innerHTML = '';
+            askInput.style.height = '40px';
+            askInput.style.overflowY = 'hidden';
+        }
+
         function openModal(imgSrc) {
             imageModal.style.display = "block";
             modalImage.src = imgSrc;
@@ -789,8 +834,27 @@
                 const items = (event.clipboardData || event.originalEvent.clipboardData).items;
                 handlePaste(items);
             });
+            
+            // 自动调整高度
+            askInput.addEventListener('input', function() {
+                // 先重置高度，以便正确计算 scrollHeight
+                this.style.height = '40px';
+                
+                // 计算内容高度
+                const scrollHeight = this.scrollHeight;
+                
+                if (scrollHeight > 40) {
+                    // 如果内容高度超过默认高度，则自动调整
+                    this.style.height = Math.min(scrollHeight, 150) + 'px';
+                    this.style.overflowY = scrollHeight > 150 ? 'auto' : 'hidden';
+                } else {
+                    // 如果内容高度不超过默认高度，则保持默认高度
+                    this.style.height = '40px';
+                    this.style.overflowY = 'hidden';
+                }
+            });
         });
-      
+  
     </script>
 </body>
 </html>
