@@ -100,6 +100,77 @@
             margin-bottom: 5px;
             color: #66645e;
             font-size: 1.2rem;
+            cursor: pointer; /* 添加光标样式，表示可点击 */
+            user-select: none; /* 防止文本被选中 */
+            position: relative; /* 为下拉菜单定位 */
+        }
+
+        .model_name:hover {
+            text-decoration: underline;
+        }
+
+        .model-dropdown {
+            position: absolute;
+            top: 55px; /* 调整这个值，使下拉框位于 .model_name 下方 */
+            left: 0;
+            background-color: #f8f8f4;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            display: none;
+            max-height: 200px;
+            overflow-y: auto;
+            overflow-x: auto;
+            width: 90vw;
+        }
+
+
+        /* WebKit Scrollbar Styling (Both Vertical and Horizontal) */
+        .model-dropdown::-webkit-scrollbar {
+            width: 8px; /* 垂直滚动条宽度 */
+            height: 8px; /* 水平滚动条高度 */
+        }
+
+        .model-dropdown::-webkit-scrollbar-track {
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+
+        .model-dropdown::-webkit-scrollbar-thumb {
+            background-color: #b8b8b8;
+            border-radius: 10px;
+            border: 2px solid #f0f0f0;
+        }
+
+        .model-dropdown::-webkit-scrollbar-thumb:hover {
+            background-color: #999;
+        }
+
+        /* Firefox Scrollbar Styling (Both Vertical and Horizontal) */
+        .model-dropdown {
+            scrollbar-width: thin;
+            scrollbar-color: #b8b8b8 #f0f0f0;
+        }
+
+        .model-dropdown ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .model-dropdown li {
+            padding: 10px;
+            cursor: pointer;
+            white-space: nowrap; /* 防止文本换行 */
+        }
+
+        .model-dropdown li:hover {
+            background-color: #e0e0e0;
+        }
+
+        .model-dropdown.show {
+            display: block;
         }
 
         /* Copy Button Styles */
@@ -373,7 +444,10 @@
         <button class="copy-button" onclick="copyContent()">Copy</button>
         <button class="preview-button" onclick="togglePreview()">Preview</button>
         <div class="toast" id="toast">Copied!</div>
-        <h2 class="model_name"></h2>
+        <h2 class="model_name" id="model_name"></h2>
+        <div class="model-dropdown" id="model-dropdown">
+            <ul id="model-list"></ul>
+        </div>
         <div class="output-area" id="output-area"></div>
         <div class="input-area">
             <div class="image-previews" id="image-previews">
@@ -401,20 +475,24 @@
 
     <script>
         const outputArea = document.getElementById('output-area');
-        const modelHeader = document.querySelector('.model_name');
+        const modelHeader = document.getElementById('model_name');
         const askInput = document.getElementById('ask-input');
         const imagePreviews = document.getElementById('image-previews');
         const previewButton = document.querySelector('.preview-button');
         const sendButton = document.querySelector('.send-button');
         const imageModal = document.getElementById('imageModal');
         const modalImage = document.getElementById('modalImage');
+        const modelDropdown = document.getElementById('model-dropdown');
+        const modelList = document.getElementById('model-list');
         let conversationHistory = [];
         let uploadedImages = [];
         let isRequesting = false;
         let isPreviewMode = false;
         let originalContent = "";
         let window_code = "";
-        let systemPrompt = ""; // 用于存储 system 提示词
+        let systemPrompt = "";
+        let modelInfo = ""
+        let currentConfig = null;
 
         const md = new markdownit({
             html: false,
@@ -428,17 +506,76 @@
             katexOptions: { macros: { "\\RR": "\\mathbb{R}" } }
         });
 
+        // 初始化模型选择列表
+        async function initModelList() {
+            let config = await window.api.getConfig().config;
+            currentConfig = config; // 更新全局配置
+            modelList.innerHTML = ''; // 清空现有列表
+
+            for (const providerId in config.providers) {
+                const provider = config.providers[providerId];
+                const providerName = provider.name;
+
+                // 添加 provider 标题
+                const providerTitle = document.createElement('li');
+                providerTitle.textContent = providerName;
+                providerTitle.style.fontWeight = 'bold';
+                providerTitle.style.backgroundColor = '#e0e0e0'; // 不同的背景色
+                providerTitle.style.cursor = 'default';
+                providerTitle.onclick = null; // 移除点击事件
+                modelList.appendChild(providerTitle);
+
+                // 遍历并添加每个 model
+                provider.modelList.forEach(model => {
+                    const modelItem = document.createElement('li');
+                    modelItem.textContent = `${providerName}|${model}`;
+                    modelItem.onclick = () => selectModel(providerId, model);
+                    modelList.appendChild(modelItem);
+                });
+
+                // 遍历并添加每个用户自定义的 model
+                provider.modelListByUser.forEach(model => {
+                    const modelItem = document.createElement('li');
+                    modelItem.textContent = `${providerName}|${model}`;
+                    modelItem.onclick = () => selectModel(providerId, model);
+                    modelList.appendChild(modelItem);
+                });
+            }
+        }
+
+        // 选择模型
+        function selectModel(providerId, modelName) {
+            modelInfo = `${providerId}|${modelName}`;
+            modelHeader.textContent = currentConfig.providers[providerId].name + "|" + modelName;
+            modelDropdown.classList.remove('show'); // 隐藏下拉菜单
+        }
+
+        // 切换模型列表的显示
+        modelHeader.onclick = () => {
+            modelDropdown.classList.toggle('show');
+        };
+
+        // 点击页面其他地方时隐藏模型列表
+        window.onclick = (event) => {
+            if (!event.target.matches('.model_name') && !event.target.matches('#model-dropdown *')) {
+                modelDropdown.classList.remove('show');
+            }
+        };
+
         window.preload.receiveMsg(async (msg) => {
             isRequesting = true;
             outputArea.contentEditable = "false";
             let config = await window.api.getConfig().config;
+            currentConfig = config; // 更新全局配置
             let response;
-            const modelInfo = config.prompts[msg.code].model;
-            if (modelInfo) {
+            modelInfo = config.prompts[msg.code].model;
+            // provider_model : "provider_id|model_name" || config.modelSelect
+            if (modelInfo.includes("|")) {
                 const [providerId, modelName] = modelInfo.split("|");
-                modelHeader.textContent = modelName;
+                modelHeader.textContent = config.providers[providerId].name + "|" + modelName;
             }
             else{
+                modelInfo = config.modelSelect;
                 modelHeader.textContent = config.modelSelect;
             }
             document.title = msg.code; // 更新title内容
@@ -449,6 +586,7 @@
             conversationHistory = [{ role: "system", content: systemPrompt }];
             uploadedImages = [];
             imagePreviews.innerHTML = '';
+            initModelList(); // 初始化模型列表
 
             if (msg.type === "over") {
                 let text = msg.payload;
@@ -580,16 +718,16 @@
             } else {
                 // 保存当前编辑的内容
                 originalContent = outputArea.innerText;
-          
+        
                 // 预处理内容，保留合理的换行
                 let processedContent = originalContent
                     // .replace(/\n\s*\n+/g, '\n')
                     .replace(/^\s+|\s+$/g, '');
-          
+        
                 // Switch to preview mode
                 const markdownContent = md.render(processedContent);
                 const styledContent = markdownContent;
-          
+        
                 outputArea.innerHTML = styledContent;
                 outputArea.classList.add('markdown-mode');
                 outputArea.style.overflowY = 'auto';
@@ -673,12 +811,19 @@
             if (!question && uploadedImages.length === 0) return;
 
             const content = [];
-            if (question) content.push({ type: "text", text: question });
+            
             uploadedImages.forEach(base64Image => {
                 content.push({ type: "image_url", image_url: { url: base64Image } });
             });
 
-            conversationHistory.push({ role: "user", content: content });
+            if (content.length === 0 && question){
+                // 如果没有图片，则直接发送问题
+                conversationHistory.push({ role: "user", content: question });
+            }else{
+                // 如果有图片，则将问题和图片一起发送
+                content.push({ type: "text", text: question });
+                conversationHistory.push({ role: "user", content: content });
+            }
             outputArea.textContent = "Loading...";
             outputArea.contentEditable = "false";
             isRequesting = true;
@@ -689,7 +834,8 @@
             askInput.style.overflowY = 'hidden';
 
             let config = await window.api.getConfig().config;
-            const response = await window.api.handleAskOpenAI(conversationHistory, config, window_code);
+            currentConfig = config; // 更新全局配置
+            const response = await window.api.handleAskOpenAI(conversationHistory, config, modelInfo);
 
             if (!response.ok) {
                 outputArea.textContent = `HTTP error! status: ${response.status}`;
@@ -752,13 +898,13 @@
                         }
                     }
                 }
-          
+        
                 // 处理完流数据后
                 responseContent = originalContent
                     .replace(/\n\s*\n\s*\n/g, '\n\n')
                     .replace(/^\s+|\s+$/g, '');
                 originalContent = responseContent;
-          
+        
             } else {
                 const data = await response.json();
                 responseContent = data.choices[0].message.content.trim()

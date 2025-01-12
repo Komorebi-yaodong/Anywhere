@@ -248,18 +248,18 @@ async function handelReplyOpenAI(code, response, stream) {
 
 
 // 函数： 追问模式
-async function handleAskOpenAI(history,config,code) {
-    const modelInfo = config.prompts[code].model;
+async function handleAskOpenAI(history,config,modelInfo) {
     let apiUrl = config.apiUrl;
     let apiKey = config.apiKey;
     let model = config.modelSelect;
-    if (modelInfo) {
+    // provider_model : "provider_id|model_name" || config.modelSelect
+    if (modelInfo.includes("|")) {
         const [providerId, modelName] = modelInfo.split("|");
         const provider = config.providers[providerId];
         if (provider) {
-        apiUrl = provider.url;
-        apiKey = provider.api_key;
-        model = modelName;
+          apiUrl = provider.url;
+          apiKey = provider.api_key;
+          model = modelName;
         }
     }
     const response = await fetch(apiUrl + '/chat/completions', {
