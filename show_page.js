@@ -17,29 +17,30 @@ window.preload = {
     }
 }
 
-
 const defaultConfig = {
-    config: {
-      apiUrl: "https://api.openai.com/v1",
-      apiKey: "sk-xxxxxx",
-      modelList: [],
-      ModelsListByUser: [],
-      modelSelect: "gpt-4o-mini",
-      providers: {},
-      prompts: {
-        Completion: {
-          idex: 0, // 用于排序
-          type: "over",
-          prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-          showMode: "input", // input, window
-          model: "", // providers_id|model
-        },
+  config: {
+    apiUrl: "https://api.openai.com/v1",
+    apiKey: "sk-xxxxxx",
+    modelList: [],
+    ModelsListByUser: [],
+    modelSelect: "gpt-4o-mini",
+    providers: {},
+    prompts: {
+      Completion: {
+        idex: 0, // 用于排序
+        type: "over",
+        prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
+        showMode: "input", // input, window
+        model: "", // providers_id|model
       },
-      stream: true,
-      skipLineBreak: true,
-      version: "1.2.0",
     },
-  };
+    stream: true,
+    skipLineBreak: true,
+    window_height: 520,
+    window_width: 400,
+    autoCloseOnBlur: false
+  }
+};
 
 // 读取配置文件，如果不存在则返回默认配置
 function getConfig() {

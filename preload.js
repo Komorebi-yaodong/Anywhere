@@ -35,8 +35,10 @@ const defaultConfig = {
     },
     stream: true,
     skipLineBreak: true,
-    version: "1.2.0",
-  },
+    window_height: 520,
+    window_width: 400,
+    autoCloseOnBlur: false
+  }
 };
 
 // 读取配置文件，如果不存在则返回默认配置
@@ -46,6 +48,26 @@ function getConfig() {
     return configDoc.data;
   } else {
     return defaultConfig;
+  }
+}
+
+
+// 检查并更新配置文件
+function checkConfig(config) {
+  let flag = false;
+  // 检查是否存在窗口大小配置
+  if(!config.window_width || !config.window_height) {
+    config.window_width = 400;
+    config.window_height = 520;
+    flag = true;
+  }
+  if(!config.autoCloseOnBlur) {
+    config.autoCloseOnBlur = false;
+    flag = true;
+  }
+
+  if(flag) {
+    updateConfig({"config":config});
   }
 }
 
@@ -268,7 +290,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
     // 获取配置文件，隐藏主窗口
     config = getConfig().config;
     utools.hideMainWindow(true);
-
+    checkConfig(config);
     // 非窗口运行
     if (config.prompts[code].showMode === "input") {
       if (type === "over") {
@@ -292,6 +314,25 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
     // 窗口运行
     else if (config.prompts[code].showMode === "window") {
       mouse_position = utools.getCursorScreenPoint();
+      const displays = utools.getAllDisplays();
+      const currentDisplay = displays.find(display => 
+        mouse_position.x >= display.bounds.x && 
+        mouse_position.x <= display.bounds.x + display.bounds.width &&
+        mouse_position.y >= display.bounds.y && 
+        mouse_position.y <= display.bounds.y + display.bounds.height
+      );
+      let windowX = mouse_position.x - (config.window_width / 2);
+      let windowY = mouse_position.y - (config.window_height / 2);
+      if (currentDisplay) {
+        // 左边界检查
+        windowX = Math.max(windowX, currentDisplay.bounds.x);
+        // 右边界检查
+        windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - config.window_width);
+        // 上边界检查（预留标题栏高度，比如30像素）
+        windowY = Math.max(windowY, currentDisplay.bounds.y + 30);
+        // 下边界检查
+        windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height);
+      }
       let msg = {
         code: code,
         type: type,
@@ -306,14 +347,14 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
           title: "Anywhere",
           useContentSize: true,
           frame: true,
-          width: 400,
-          height: 520,
-          alwaysOnTop: true,
-          x: mouse_position.x - 200,
-          y: mouse_position.y - 260,
+          width: config.window_width,
+          height: config.window_height,
+          alwaysOnTop: false,
+          x: windowX,
+          y: windowY,
           webPreferences: {
             preload: "show_page.js",
-            devTools: true,
+            // devTools: true,
           },
         },
         () => {
@@ -321,10 +362,11 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
           ubWindow.webContents.show(); // 显示窗口
           ubWindow.setAlwaysOnTop(true); // 窗口置顶
           ubWindow.setFullScreen(false); // 窗口全屏
+          ubWindow.focus(); // 窗口聚焦
         }
       );
-      ubWindow.webContents.openDevTools({ mode: "detach" });
+      // ubWindow.webContents.openDevTools({ mode: "detach" });
     }
-    // utools.outPlugin(); // 关闭插件窗口
+    utools.outPlugin(); // 关闭插件窗口
   }
 });

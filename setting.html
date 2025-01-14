@@ -108,47 +108,54 @@
             background: #fff;
         }
         
-        /* 调整表格列宽 */
+       /* 调整表格列宽 */
         .prompts-table th:nth-child(1),
         .prompts-table td:nth-child(1) {
-            width: 140px; /* Key列加宽，确保能显示完整的key */
+            width: 140px; /* Key列宽度 */
         }
 
         .prompts-table th:nth-child(2),
         .prompts-table td:nth-child(2) {
-            width: 100px; /* Type列稍微加宽以完整显示"text/image" */
+            width: 100px; /* Type列宽度 */
         }
 
         .prompts-table th:nth-child(3),
         .prompts-table td:nth-child(3) {
-            width: 100px; /* Show Mode列适当加宽以显示"input/window" */
+            width: 100px; /* Show Mode列宽度 */
         }
 
         .prompts-table th:nth-child(4),
         .prompts-table td:nth-child(4) {
-            width: 300px; /* Prompt列给予较大宽度以显示更多提示文本 */
+            width: 300px; /* Prompt列宽度 */
         }
 
         .prompts-table th:nth-child(5),
         .prompts-table td:nth-child(5) {
-            width: 120px; /* Model列加宽以显示provider和model名称 */
+            width: 200px; /* Model列宽度从120px增加到200px */
         }
 
         .prompts-table th:nth-child(6),
         .prompts-table td:nth-child(6) {
-            width: 100px; /* Action列保持适中宽度以容纳按钮 */
+            width: 100px; /* Action列宽度 */
         }
 
         /* 调整下拉框和输入框的宽度 */
         .model-provider-select-container {
-            width: 100%; /* 容器宽度占满单元格 */
-            padding: 0 5px; /* 添加少许内边距 */
-            box-sizing: border-box; /* 确保padding不会增加总宽度 */
+            width: 100%;
+            padding: 0 5px;
+            box-sizing: border-box;
         }
 
         .model-provider-select-container select {
-            width: 100%; /* 选择框宽度占满容器 */
+            width: 180px;
+            width: 100%;
+            min-width: 180px;
+            padding: 5px;
             box-sizing: border-box;
+        }
+
+        .model-provider-select {
+            width: 180px !important; /* 使用!important确保优先级 */
         }
 
         /* 所有选择框容器通用样式 */
@@ -195,7 +202,7 @@
         .prompts-table {
             table-layout: fixed;
             width: 100%;
-            min-width: 950px; /* 总宽度约等于所有列宽之和 */
+            min-width: 1040px; /* 总宽度约等于所有列宽之和 */
         }
 
         .section {
@@ -210,7 +217,7 @@
 
         .prompts-table input,
         .prompts-table select {
-            width: 100px;
+            width: 180px;
             box-sizing: border-box;
         }
 
@@ -225,10 +232,6 @@
         .prompts-table tbody tr input, .prompts-table tbody tr select{
             pointer-events: auto;
         }
-        .add-prompt-btn {
-            margin-top: 10px;
-        }
-        
 
         .delete-btn:hover {
             background-color: #c82333;
@@ -266,8 +269,16 @@
         .stream-false {
             background-color: #6c757d; /* Gray */
         }
-        .save-prompts-btn{
-            margin-top: 10px;
+
+        .prompt-buttons-container {
+            display: flex;
+            justify-content: center; /* 水平居中 */
+            gap: 20px; /* 按钮之间的间距 */
+            margin: 20px 0; /* 上下外边距 */
+        }
+        .add-prompt-btn,
+        .save-prompts-btn {
+            margin: 0;
         }
         .tooltip {
             position: relative;
@@ -295,7 +306,7 @@
             opacity: 1;
         }
         
-        .stream-settings-row {
+        .other-settings-row {
             display: flex;
             align-items: center;
             gap: 20px;
@@ -523,7 +534,9 @@
             background-color: #bbb;
         }
 
-        .save-provider-btn{
+        .save-provider-btn {
+            display: block; /* 将按钮设置为块级元素 */
+            margin: 20px auto; /* 上下间距20px，左右自动居中 */
             position: relative;
         }
         .save-provider-modal{
@@ -759,8 +772,9 @@
         .provider-tab.active:hover:before {
             background-color: #807d77; /* 选中标签底部线条颜色 */
         }
-        .provider-section{
+        .provider-section {
             position: relative;
+            text-align: center;
         }
         .provider-modal .custom-model-section{
             margin-bottom: 10px;
@@ -911,7 +925,7 @@
             </div>
         </div>
 
-        <div class="section stream-settings-row">
+        <div class="section other-settings-row">
             <div class="stream-section">
                 <label>Stream:</label>
                 <div class="tooltip">
@@ -919,10 +933,16 @@
                     <span class="tooltiptext">Enable or disable streaming</span>
                 </div>
             
-                <label>Skip Line Break:</label>
+                <label>Skip LineBreak:</label>
                 <div class="tooltip">
                     <button id="skip-line-break-btn" class="stream-button stream-true">True</button>
                     <span class="tooltiptext">Enable or disable skipping line breaks</span>
+                </div>
+
+                <label>Auto CloseOnBlur:</label>
+                <div class="tooltip">
+                    <button id="auto-close-on-blur-btn" class="stream-button stream-true">True</button>
+                    <span class="tooltiptext">Enable or disable auto close on blur</span>
                 </div>
             </div>
         </div>
@@ -947,8 +967,10 @@
                     </tbody>
                 </table>
             </div>
-            <button class="add-prompt-btn" id="add-prompt-btn">Add Prompt</button>
-            <button class="save-prompts-btn" id="save-prompts-btn">Save Prompts</button>
+            <div class="prompt-buttons-container">
+                <button class="add-prompt-btn" id="add-prompt-btn">Add Prompt</button>
+                <button class="save-prompts-btn" id="save-prompts-btn">Save Prompts</button>
+            </div>
         </div>
     </div>
 
@@ -983,30 +1005,33 @@
             const providerModalContent = document.getElementById('provider-modal-content');
             const scrollLeftBtn = document.getElementById('scroll-left');
             const scrollRightBtn = document.getElementById('scroll-right');
+            const autoCloseOnBlurBtn = document.getElementById('auto-close-on-blur-btn');
 
             let currentConfig = {};
             let draggedRow = null;
 
             const defaultConfig = {
-                config:{
-                    apiUrl:"https://api.openai.com/v1",
-                    apiKey:"sk-xxxxxx",
-                    modelList:[],
-                    ModelsListByUser:[],
-                    modelSelect:"gpt-4o-mini",
-                    providers:{},
-                    prompts:{
-                        Completion:{
-                            idex:0, // 用于排序
-                            type:"over",
-                            prompt:`你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-                            showMode:"input", // input, window
-                            model:""
-                        }
+                config: {
+                    apiUrl: "https://api.openai.com/v1",
+                    apiKey: "sk-xxxxxx",
+                    modelList: [],
+                    ModelsListByUser: [],
+                    modelSelect: "gpt-4o-mini",
+                    providers: {},
+                    prompts: {
+                    Completion: {
+                        idex: 0, // 用于排序
+                        type: "over",
+                        prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
+                        showMode: "input", // input, window
+                        model: "", // providers_id|model
                     },
-                    stream:true,
-                    skipLineBreak:true,
-                    version:"1.2.0"
+                    },
+                    stream: true,
+                    skipLineBreak: true,
+                    window_height: 520,
+                    window_width: 400,
+                    autoCloseOnBlur: false
                 }
             }
 
@@ -1131,7 +1156,8 @@
                 streamBtn.className = currentConfig.config.stream ? 'stream-button stream-true' : 'stream-button stream-false';
                 skipLineBreakBtn.textContent = currentConfig.config.skipLineBreak ? 'True' : 'False';
                 skipLineBreakBtn.className = currentConfig.config.skipLineBreak ? 'stream-button stream-true' : 'stream-button stream-false';
-
+                autoCloseOnBlurBtn.textContent = currentConfig.config.autoCloseOnBlur ? 'True' : 'False';
+                autoCloseOnBlurBtn.className = currentConfig.config.autoCloseOnBlur ? 'stream-button stream-true' : 'stream-button stream-false';
                 populateModelDropdown();
                 loadPrompts(currentConfig.config.prompts);
                 createProviderTabs();
@@ -1371,6 +1397,13 @@
                 currentConfig.config.skipLineBreak = !currentConfig.config.skipLineBreak;
                 skipLineBreakBtn.textContent = currentConfig.config.skipLineBreak ? 'True' : 'False';
                 skipLineBreakBtn.className = currentConfig.config.skipLineBreak ? 'stream-button stream-true' : 'stream-button stream-false';
+                window.api.updateConfig(currentConfig);
+            });
+
+            autoCloseOnBlurBtn.addEventListener('click', () => {
+                currentConfig.config.autoCloseOnBlur = !currentConfig.config.autoCloseOnBlur;
+                autoCloseOnBlurBtn.textContent = currentConfig.config.autoCloseOnBlur ? 'True' : 'False';
+                autoCloseOnBlurBtn.className = currentConfig.config.autoCloseOnBlur ? 'stream-button stream-true' : 'stream-button stream-false';
                 window.api.updateConfig(currentConfig);
             });
 

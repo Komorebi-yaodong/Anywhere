@@ -1,20 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="stylesheet" href="node_modules/katex/katex.min.css">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anywhere</title>
+    <link rel="stylesheet" href="node_modules/katex/katex.min.css">
     <style>
-        /* Common Styles */
         html, body {
             width: 100%;
             height: 100%;
             margin: 0;
             padding: 0;
-            overflow: hidden; /* Hide the body scrollbar */
+            overflow: hidden;
         }
-
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
             background-color: #f8f8f4;
@@ -24,23 +22,20 @@
             align-items: center;
             justify-content: flex-start;
         }
-
         .container {
-            background-color: #f8f8f4; /* 与背景色相同 */
-            padding: 20px;
+            background-color: #f8f8f4;
+            padding: 10px 20px 20px 20px;
             border-radius: 20px;
-            /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); */
             width: 100%;
             height: 100vh;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            gap: 5px; /* Reduced gap between elements */
+            gap: 0px;
             font-family: Georgia, serif;
             overflow: hidden;
-            position: relative; /* For absolute positioning of the copy button */
+            position: relative;
         }
-
         h2 {
             font-family: Georgia, serif;
             font-weight: normal;
@@ -50,48 +45,51 @@
             color: #66645e;
             font-size: 2rem;
         }
-
         .output-area {
             width: calc(100% - 20px);
             padding: 10px;
-            margin-bottom: 5px; /* Reduced margin */
-            border: none; /* 去除边框 */
+            margin-bottom: 5px;
+            border: none;
             border-radius: 5px;
             font-size: 16px;
             font-family: inherit;
             white-space: pre-wrap;
             word-wrap: break-word;
-            background-color: transparent; /* 背景透明 */
+            background-color: transparent;
             overflow-y: auto;
             flex-grow: 1;
-            user-select: text; /* Allow text selection */
-            outline: none; /* Remove default focus outline */
-
-            /* Firefox Scrollbar Styling */
+            user-select: text;
+            outline: none;
             scrollbar-width: thin;
             scrollbar-color: #b8b8b8 #f0f0f0;
         }
-
-        /* WebKit Scrollbar Styling */
         .output-area::-webkit-scrollbar {
             width: 12px;
         }
-
         .output-area::-webkit-scrollbar-track {
             background: #f0f0f0;
             border-radius: 10px;
         }
-
         .output-area::-webkit-scrollbar-thumb {
             background-color: #b8b8b8;
             border-radius: 10px;
             border: 3px solid #f0f0f0;
         }
-
         .output-area::-webkit-scrollbar-thumb:hover {
             background-color: #999;
         }
-
+        .windows-logo {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+        .model-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
         .model_name {
             font-family: Georgia, serif;
             font-weight: normal;
@@ -100,100 +98,97 @@
             margin-bottom: 5px;
             color: #66645e;
             font-size: 1.2rem;
-            cursor: pointer; /* 添加光标样式，表示可点击 */
-            user-select: none; /* 防止文本被选中 */
-            position: relative; /* 为下拉菜单定位 */
+            cursor: pointer;
+            user-select: none;
+            position: relative;
         }
-
         .model_name:hover {
             text-decoration: underline;
         }
-
         .model-dropdown {
             position: absolute;
-            top: 55px; /* 调整这个值，使下拉框位于 .model_name 下方 */
-            left: 0;
+            top: 40px;
+            left: 10px;
             background-color: #f8f8f4;
             border: 1px solid #ccc;
             border-radius: 5px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             z-index: 100;
             display: none;
-            max-height: 200px;
+            max-height: 50vh;
             overflow-y: auto;
             overflow-x: auto;
             width: 90vw;
+            height:50vh;
         }
-
-
-        /* WebKit Scrollbar Styling (Both Vertical and Horizontal) */
         .model-dropdown::-webkit-scrollbar {
-            width: 8px; /* 垂直滚动条宽度 */
-            height: 8px; /* 水平滚动条高度 */
+            width: 8px;
+            height: 8px;
         }
-
         .model-dropdown::-webkit-scrollbar-track {
             background: #f0f0f0;
             border-radius: 10px;
         }
-
         .model-dropdown::-webkit-scrollbar-thumb {
             background-color: #b8b8b8;
             border-radius: 10px;
             border: 2px solid #f0f0f0;
         }
-
         .model-dropdown::-webkit-scrollbar-thumb:hover {
             background-color: #999;
         }
-
-        /* Firefox Scrollbar Styling (Both Vertical and Horizontal) */
         .model-dropdown {
             scrollbar-width: thin;
             scrollbar-color: #b8b8b8 #f0f0f0;
         }
-
         .model-dropdown ul {
             list-style: none;
             padding: 0;
             margin: 0;
         }
-
         .model-dropdown li {
             padding: 10px;
             cursor: pointer;
-            white-space: nowrap; /* 防止文本换行 */
+            white-space: nowrap;
         }
-
         .model-dropdown li:hover {
             background-color: #e0e0e0;
         }
-
         .model-dropdown.show {
             display: block;
         }
-
-        /* Copy Button Styles */
-        .copy-button {
+        .copy-button, .preview-button, .auto-close-button {
             position: absolute;
             top: 10px;
-            right: 70px;  /* 调整位置，为 preview 按钮留出空间 */
-            padding: 5px 10px;
+            padding: 6px;
             background-color: rgba(0, 0, 0, 0.5);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 4px;
             cursor: pointer;
             opacity: 0.6;
             transition: opacity 0.3s ease;
             z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-
-        .copy-button:hover {
+        .copy-button {
+            right: 40px;
+        }
+        .preview-button {
+            right: 10px;
+        }
+        .auto-close-button {
+            right: 70px;
+        }
+        .copy-button svg, .preview-icon, .auto-close-button svg {
+            width: 14px;
+            height: 14px;
+        }
+        .copy-button:hover, .preview-button:hover, .auto-close-button:hover {
             opacity: 1;
         }
-
-        /* Toast Styles */
         .toast {
             position: absolute;
             top: 10px;
@@ -205,21 +200,17 @@
             border-radius: 5px;
             opacity: 0;
             transition: opacity 0.5s ease;
-            z-index: 10; /* 确保 toast 在其他元素之上 */
+            z-index: 10;
         }
-
         .toast.show {
             opacity: 1;
         }
-
-        /* Input Area Styles */
         .input-area {
             display: flex;
             flex-direction: column;
             gap: 5px;
             margin-top: 5px;
         }
-
         .input-container {
             display: flex;
             gap: 5px;
@@ -228,92 +219,65 @@
             border-radius: 20px;
             padding: 5px 10px;
         }
-
         .input-area textarea {
             flex-grow: 1;
             border: none;
             font-size: 16px;
             font-family: inherit;
             resize: none;
-            height: 40px; /* 默认高度 */
-            min-height: 40px; /* 最小高度 */
-            max-height: 150px; /* 最大高度 */
-            overflow-y: auto; /* 改为 auto，这样在需要时显示滚动条 */
+            height: 40px;
+            min-height: 40px;
+            max-height: 150px;
+            overflow-y: auto;
             outline: none;
             background-color: transparent;
-            padding: 10px 0; /* 添加垂直内边距 */
-            line-height: 20px; /* 调整行高 */
-            box-sizing: border-box; /* 确保padding计入高度 */
+            padding: 10px 0;
+            line-height: 20px;
+            box-sizing: border-box;
+            scrollbar-width: thin;
+            scrollbar-color: #b8b8b8 #f0f0f0;
         }
-
         .input-area textarea::placeholder {
             color: #999;
         }
-
-        /* Input Area Scrollbar Styling - WebKit (Chrome, Safari) */
         .input-area textarea::-webkit-scrollbar {
             width: 8px;
         }
-
         .input-area textarea::-webkit-scrollbar-track {
             background: #f0f0f0;
             border-radius: 10px;
         }
-
         .input-area textarea::-webkit-scrollbar-thumb {
             background-color: #b8b8b8;
             border-radius: 10px;
             border: 2px solid #f0f0f0;
         }
-
         .input-area textarea::-webkit-scrollbar-thumb:hover {
             background-color: #999;
         }
-
-        /* Input Area Scrollbar Styling - Firefox */
-        .input-area textarea {
-            scrollbar-width: thin;
-            scrollbar-color: #b8b8b8 #f0f0f0;
-        }
-
-        /* Send Button Styles */
-        .send-button {
+        .send-button, .clear-button {
             background-color: transparent;
             color: #323330;
             border: none;
-            border-radius: 55%;
+            border-radius: 50%;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .send-button {
             width: 30px;
             height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-size: 20px;
         }
-
-        .send-button:hover {
-            background-color: #e0e0e0;
-        }
-
-        /* Clear Button Styles */
         .clear-button {
-            background-color: transparent;
-            color: #323330;
-            border: none;
-            border-radius: 45%;
-            cursor: pointer;
             width: 28px;
             height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-size: 16px;
         }
-
-        .clear-button:hover {
+        .send-button:hover, .clear-button:hover {
             background-color: #e0e0e0;
         }
-
         .image-previews {
             display: flex;
             gap: 5px;
@@ -322,14 +286,12 @@
             padding: 5px 0;
             margin-top: 0px;
             margin-left: 10px;
-            max-height: 70px; /* 限制图片预览区域的高度 */
+            max-height: 70px;
         }
-
         .image-preview-container {
             position: relative;
             display: inline-block;
         }
-
         .image-preview {
             width: 60px;
             height: 60px;
@@ -337,7 +299,6 @@
             object-fit: cover;
             cursor: pointer;
         }
-
         .image-delete {
             position: absolute;
             top: -8px;
@@ -354,53 +315,24 @@
             justify-content: center;
             cursor: pointer;
         }
-
-        /* Preview Button Styles */
-        .preview-button {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 5px 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            opacity: 0.6;
-            transition: opacity 0.3s ease;
-            z-index: 20;
-        }
-
-        .preview-button:hover {
-            opacity: 1;
-        }
-
         .markdown-mode {
             white-space: inherit;
         }
-
-        /* 关键修改： 调整图片在 Markdown 预览中的样式 */
         .markdown-mode img {
-            max-width: 50%; /* 根据需要调整图片最大宽度 */
-            height: auto;  /* 保持图片纵横比 */
-            display: block;/* 使图片居中并独占一行 */
+            max-width: 50%;
+            height: auto;
+            display: block;
             margin: 0 auto;
         }
-
-        /* Image Upload Icon Styles */
         .image-upload-icon {
             cursor: pointer;
             width: 24px;
             height: 24px;
             margin-right: 5px;
         }
-
-        /* Hidden File Input */
         .hidden-file-input {
             display: none;
         }
-
-        /* Modal Styles */
         .modal {
             display: none;
             position: fixed;
@@ -412,14 +344,12 @@
             overflow: auto;
             background-color: rgba(0, 0, 0, 0.9);
         }
-
         .modal-content {
             margin: auto;
             display: block;
             max-width: 90%;
             max-height: 90%;
         }
-
         .close-modal {
             position: absolute;
             top: 15px;
@@ -430,9 +360,7 @@
             transition: 0.3s;
             z-index: 101;
         }
-
-        .close-modal:hover,
-        .close-modal:focus {
+        .close-modal:hover, .close-modal:focus {
             color: #bbb;
             text-decoration: none;
             cursor: pointer;
@@ -441,30 +369,43 @@
 </head>
 <body>
     <div class="container">
-        <button class="copy-button" onclick="copyContent()">Copy</button>
-        <button class="preview-button" onclick="togglePreview()">Preview</button>
+        <button class="auto-close-button" onclick="toggleAutoClose()" title="Toggle auto-close on blur">
+            <svg viewBox="0 0 24 24" width="16" height="16">
+                <path fill="currentColor" id="auto-close-path" d="M12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-9h-1V7c0-2.76-2.24-5-5-5S7 4.24 7 7v1H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 7c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v1H8.9V7z"/>
+            </svg>
+        </button>
+        <button class="copy-button" onclick="copyContent()" title="Copy content to clipboard">
+            <svg viewBox="0 0 24 24" width="16" height="16">
+                <path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+            </svg>
+        </button>
+        <button class="preview-button" onclick="togglePreview()" title="Toggle preview mode">
+            <svg class="preview-icon" viewBox="0 0 24 24" width="16" height="16">
+                <path fill="currentColor" id="preview-path" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+            </svg>
+        </button>
         <div class="toast" id="toast">Copied!</div>
-        <h2 class="model_name" id="model_name"></h2>
+        <div class="model-header">
+            <img src="favicon.png" class="windows-logo" id="windows-logo" title="Save window size">
+            <h2 class="model_name" id="model_name"></h2>
+        </div>
         <div class="model-dropdown" id="model-dropdown">
             <ul id="model-list"></ul>
         </div>
         <div class="output-area" id="output-area"></div>
         <div class="input-area">
-            <div class="image-previews" id="image-previews">
-                <!-- Image previews will be added here -->
-            </div>
+            <div class="image-previews" id="image-previews"></div>
             <div class="input-container">
                 <label for="file-input">
                     <img src="image.png" class="image-upload-icon">
                 </label>
                 <input type="file" id="file-input" class="hidden-file-input" accept="image/*" onchange="handleImageUpload(this.files)" multiple>
-                <textarea id="ask-input" placeholder="send your message here"></textarea>
+                <textarea id="ask-input" placeholder="Ask anything!"></textarea>
                 <button class="clear-button" onclick="clearConversation()">&#x2716;</button>
                 <button class="send-button" onclick="askQuestion()">></button>
             </div>
         </div>
     </div>
-    <!-- Modal -->
     <div id="imageModal" class="modal">
         <span class="close-modal" onclick="closeModal()">&times;</span>
         <img class="modal-content" id="modalImage">
@@ -472,269 +413,292 @@
     <script src="node_modules/markdown-it/dist/markdown-it.min.js"></script>
     <script src="node_modules/katex/katex.min.js"></script>
     <script src="node_modules/markdown-it-texmath/texmath.js"></script>
-
     <script>
-        const outputArea = document.getElementById('output-area');
-        const modelHeader = document.getElementById('model_name');
-        const askInput = document.getElementById('ask-input');
-        const imagePreviews = document.getElementById('image-previews');
-        const previewButton = document.querySelector('.preview-button');
-        const sendButton = document.querySelector('.send-button');
-        const imageModal = document.getElementById('imageModal');
-        const modalImage = document.getElementById('modalImage');
-        const modelDropdown = document.getElementById('model-dropdown');
-        const modelList = document.getElementById('model-list');
-        let conversationHistory = [];
-        let uploadedImages = [];
-        let isRequesting = false;
-        let isPreviewMode = false;
-        let originalContent = "";
-        let window_code = "";
-        let systemPrompt = "";
-        let modelInfo = ""
-        let currentConfig = null;
-
         const md = new markdownit({
-            html: false,
-            xhtmlOut: false,
-            breaks: false,
-            linkify: false,
-            typographer: true
-        }).use(texmath, { // 添加 texmath 插件
-            engine: katex,
-            delimiters: 'dollars',
-            katexOptions: { macros: { "\\RR": "\\mathbb{R}" } }
+            html: false, xhtmlOut: false, breaks: false, linkify: false, typographer: true
+        }).use(texmath, {
+            engine: katex, delimiters: 'dollars', katexOptions: { macros: { "\\RR": "\\mathbb{R}" } }
         });
 
-        // 初始化模型选择列表
-        async function initModelList() {
-            let config = await window.api.getConfig().config;
-            currentConfig = config; // 更新全局配置
-            modelList.innerHTML = ''; // 清空现有列表
+        const elements = {
+            outputArea: document.getElementById('output-area'),
+            modelHeader: document.getElementById('model_name'),
+            askInput: document.getElementById('ask-input'),
+            imagePreviews: document.getElementById('image-previews'),
+            previewButton: document.querySelector('.preview-button'),
+            sendButton: document.querySelector('.send-button'),
+            imageModal: document.getElementById('imageModal'),
+            modalImage: document.getElementById('modalImage'),
+            modelDropdown: document.getElementById('model-dropdown'),
+            modelList: document.getElementById('model-list'),
+            toast: document.getElementById('toast'),
+            windowsLogo: document.getElementById('windows-logo'),
+            previewPath: document.getElementById('preview-path')
+        };
 
-            for (const providerId in config.providers) {
-                const provider = config.providers[providerId];
-                const providerName = provider.name;
+        let state = {
+            conversationHistory: [],
+            uploadedImages: [],
+            isRequesting: false,
+            isPreviewMode: false,
+            originalContent: "",
+            window_code: "",
+            systemPrompt: "",
+            modelInfo: "",
+            currentConfig: null,
+            autoCloseOnBlur: false // 新增
+        };
 
-                // 添加 provider 标题
-                const providerTitle = document.createElement('li');
-                providerTitle.textContent = providerName;
-                providerTitle.style.fontWeight = 'bold';
-                providerTitle.style.backgroundColor = '#e0e0e0'; // 不同的背景色
-                providerTitle.style.cursor = 'default';
-                providerTitle.onclick = null; // 移除点击事件
-                modelList.appendChild(providerTitle);
-
-                // 遍历并添加每个 model
-                provider.modelList.forEach(model => {
-                    const modelItem = document.createElement('li');
-                    modelItem.textContent = `${providerName}|${model}`;
-                    modelItem.onclick = () => selectModel(providerId, model);
-                    modelList.appendChild(modelItem);
-                });
-
-                // 遍历并添加每个用户自定义的 model
-                provider.modelListByUser.forEach(model => {
-                    const modelItem = document.createElement('li');
-                    modelItem.textContent = `${providerName}|${model}`;
-                    modelItem.onclick = () => selectModel(providerId, model);
-                    modelList.appendChild(modelItem);
-                });
+        function initModelList() {
+            elements.modelList.innerHTML = '';
+            for (const providerId in state.currentConfig.providers) {
+                const provider = state.currentConfig.providers[providerId];
+                addProviderTitle(provider.name);
+                provider.modelList.forEach(model => addModelItem(providerId, model, provider.name));
+                provider.modelListByUser.forEach(model => addModelItem(providerId, model, provider.name));
             }
         }
 
-        // 选择模型
+        function addProviderTitle(providerName) {
+            const providerTitle = document.createElement('li');
+            providerTitle.textContent = providerName;
+            providerTitle.style.fontWeight = 'bold';
+            providerTitle.style.backgroundColor = '#e0e0e0';
+            providerTitle.style.cursor = 'default';
+            providerTitle.onclick = null;
+            elements.modelList.appendChild(providerTitle);
+        }
+
+        function addModelItem(providerId, modelName, providerName) {
+            const modelItem = document.createElement('li');
+            modelItem.textContent = `${providerName}|${modelName}`;
+            modelItem.onclick = () => selectModel(providerId, modelName);
+            elements.modelList.appendChild(modelItem);
+        }
+
         function selectModel(providerId, modelName) {
-            modelInfo = `${providerId}|${modelName}`;
-            modelHeader.textContent = currentConfig.providers[providerId].name + "|" + modelName;
-            modelDropdown.classList.remove('show'); // 隐藏下拉菜单
+            state.modelInfo = `${providerId}|${modelName}`;
+            elements.modelHeader.textContent = state.currentConfig.providers[providerId].name + "|" + modelName;
+            elements.modelDropdown.classList.remove('show');
         }
 
-        // 切换模型列表的显示
-        modelHeader.onclick = () => {
-            modelDropdown.classList.toggle('show');
-        };
-
-        // 点击页面其他地方时隐藏模型列表
-        window.onclick = (event) => {
-            if (!event.target.matches('.model_name') && !event.target.matches('#model-dropdown *')) {
-                modelDropdown.classList.remove('show');
-            }
-        };
-
-        window.preload.receiveMsg(async (msg) => {
-            isRequesting = true;
-            outputArea.contentEditable = "false";
-            let config = await window.api.getConfig().config;
-            currentConfig = config; // 更新全局配置
-            let response;
-            modelInfo = config.prompts[msg.code].model;
-            // provider_model : "provider_id|model_name" || config.modelSelect
-            if (modelInfo.includes("|")) {
-                const [providerId, modelName] = modelInfo.split("|");
-                modelHeader.textContent = config.providers[providerId].name + "|" + modelName;
-            }
-            else{
-                modelInfo = config.modelSelect;
-                modelHeader.textContent = config.modelSelect;
-            }
-            document.title = msg.code; // 更新title内容
-            window_code = msg.code;
-            originalContent = "";
-            outputArea.innerHTML = "";
-            systemPrompt = config.prompts[msg.code].prompt; // 保存 system 提示词
-            conversationHistory = [{ role: "system", content: systemPrompt }];
-            uploadedImages = [];
-            imagePreviews.innerHTML = '';
-            initModelList(); // 初始化模型列表
-
-            if (msg.type === "over") {
-                let text = msg.payload;
-                if (config.skipLineBreak) {
-                    text = text.replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2").replace(/\s*\n\s*/g, "");
-                }
-                response = await window.api.handleTextOpenAI(msg.code, text, config);
-                conversationHistory.push({ role: "user", content: text });
-            } else if (msg.type === "img") {
-                response = await window.api.handleImageOpenAI(msg.code, msg.payload, config);
-                conversationHistory.push({
-                    role: "user",
-                    content: [
-                        {
-                            type: "text",
-                            text: config.prompts[msg.code].prompt
-                        },
-                        {
-                            type: "image_url",
-                            image_url: {
-                                url: msg.payload
-                            }
-                        }
-                    ]
-                });
-            } else {
-                outputArea.textContent = "Unsupported input type";
-                isRequesting = false;
-                outputArea.contentEditable = "true";
-                return;
-            }
-
-            if (!response.ok) {
-                outputArea.textContent = `HTTP error! status: ${response.status}`;
-                conversationHistory.pop();
-                isRequesting = false;
-                outputArea.contentEditable = "true";
-                return;
-            } else {
-                let autoScroll = true;
-                let responseContent = "";
-
-                outputArea.addEventListener('scroll', () => {
-                    autoScroll = (outputArea.scrollTop + outputArea.clientHeight >= outputArea.scrollHeight - 5);
-                });
-
-                if (config.stream) {
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder("utf-8");
-                    let buffer = "";
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-
-                        buffer += decoder.decode(value, { stream: true });
-
-                        let boundary = buffer.indexOf("data:");
-                        while (boundary !== -1) {
-                            const jsonData = buffer.substring(boundary + 5);
-                            buffer = "";
-
-                            let doneBoundary = jsonData.indexOf("data:");
-                            if (doneBoundary === -1) {
-                                doneBoundary = jsonData.indexOf("\n\n");
-                            }
-                            if (doneBoundary !== -1) {
-                                const message = jsonData.substring(0, doneBoundary);
-                                if (message.trim() === "[DONE]") break;
-                                try {
-                                    const parsed = JSON.parse(message.trim());
-                                    if (parsed.choices[0].delta.content) {
-                                        const content = parsed.choices[0].delta.content;
-                                        originalContent += content;
-                                        outputArea.textContent += content;
-                                        responseContent += content;
-                                        if (autoScroll) {
-                                            outputArea.scrollTop = outputArea.scrollHeight;
-                                        }
-                                    }
-                                } catch (error) {
-                                    console.error("Could not parse stream message", message, error);
-                                }
-
-                                buffer = jsonData.substring(doneBoundary);
-                                boundary = buffer.indexOf("data:");
-                            } else {
-                                buffer = jsonData;
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    const data = await response.json();
-                    responseContent = data.choices[0].message.content;
-                    originalContent = responseContent;
-                    outputArea.textContent = responseContent;
-                }
-
-                conversationHistory.push({ role: "assistant", content: responseContent });
-                window.api.showSuccess(msg.code);
-                isRequesting = false;
-                outputArea.contentEditable = "true";
-                togglePreview(); // 自动切换到预览模式
-            }
-        });
+        function showToast(message) {
+            elements.toast.textContent = message;
+            elements.toast.classList.add('show');
+            setTimeout(() => elements.toast.classList.remove('show'), 2000);
+        }
 
         function copyContent() {
-            const textToCopy = originalContent.trim();
-            navigator.clipboard.writeText(textToCopy.trim())
-                .then(() => {
-                    const toast = document.getElementById('toast');
-                    toast.classList.add('show');
-                    setTimeout(() => toast.classList.remove('show'), 2000);
-                })
+            navigator.clipboard.writeText(state.originalContent.trim())
+                .then(() => showToast('Copied!'))
                 .catch(err => console.error('Failed to copy content: ', err));
         }
 
-        function togglePreview() {
-            if (isPreviewMode) {
-                // Switch to original mode
-                outputArea.innerHTML = '';
-                outputArea.textContent = originalContent;
-                outputArea.classList.remove('markdown-mode');
-                outputArea.style.overflowY = 'auto';
-                outputArea.contentEditable = "true"; // 启用编辑
-                previewButton.textContent = 'Preview';
-                isPreviewMode = false;
+        function toggleAutoClose() {
+            state.autoCloseOnBlur = !state.autoCloseOnBlur;
+            updateAutoCloseButton();
+        }
+
+        function updateAutoCloseButton() {
+            const autoClosePath = document.getElementById('auto-close-path');
+            if (state.autoCloseOnBlur) {
+                autoClosePath.setAttribute('d', "M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z");
             } else {
-                // 保存当前编辑的内容
-                originalContent = outputArea.innerText;
-        
-                // 预处理内容，保留合理的换行
-                let processedContent = originalContent
-                    // .replace(/\n\s*\n+/g, '\n')
-                    .replace(/^\s+|\s+$/g, '');
-        
-                // Switch to preview mode
-                const markdownContent = md.render(processedContent);
-                const styledContent = markdownContent;
-        
-                outputArea.innerHTML = styledContent;
-                outputArea.classList.add('markdown-mode');
-                outputArea.style.overflowY = 'auto';
-                outputArea.contentEditable = "false"; // 禁用编辑
-                previewButton.textContent = 'Origin';
-                isPreviewMode = true;
+                autoClosePath.setAttribute('d', "M12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-9h-1V7c0-2.76-2.24-5-5-5S7 4.24 7 7v1H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 7c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v1H8.9V7z");
             }
+        }
+
+        function togglePreview() {
+            if (state.isPreviewMode) {
+                elements.outputArea.innerHTML = '';
+                elements.outputArea.textContent = state.originalContent;
+                elements.outputArea.classList.remove('markdown-mode');
+                elements.previewPath.setAttribute('d', "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z");
+                state.isPreviewMode = false;
+            } else {
+                state.originalContent = elements.outputArea.innerText;
+                let processedContent = state.originalContent.replace(/^\s+|\s+$/g, '');
+                const markdownContent = md.render(processedContent);
+                elements.outputArea.innerHTML = markdownContent;
+                elements.outputArea.classList.add('markdown-mode');
+                elements.previewPath.setAttribute('d', 'M12.126 8.125l1.937-1.937 3.747 3.747-1.937 1.937zM20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83a1 1 0 0 0 0-1.41zM2 20h3.75l13.72-13.72-3.75-3.75L2 16.25V20z');
+                state.isPreviewMode = true;
+            }
+            elements.outputArea.contentEditable = !state.isPreviewMode;
+        }
+
+        async function handleImageUpload(files) {
+            for (const file of files) {
+                if (file.type.startsWith('image/')) {
+                    const base64 = await readFileAsBase64(file);
+                    addImageToPreview(base64);
+                }
+            }
+            elements.askInput.dispatchEvent(new Event('input'));
+        }
+
+        function addImageToPreview(base64Image) {
+            state.uploadedImages.push(base64Image);
+            const previewContainer = document.createElement('div');
+            previewContainer.className = 'image-preview-container';
+            const img = document.createElement('img');
+            img.src = base64Image;
+            img.className = 'image-preview';
+            img.onclick = () => openModal(base64Image);
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'image-delete';
+            deleteButton.innerHTML = '&#10006;';
+            deleteButton.onclick = () => removeImage(base64Image, previewContainer);
+            previewContainer.appendChild(img);
+            previewContainer.appendChild(deleteButton);
+            elements.imagePreviews.appendChild(previewContainer);
+        }
+
+        function removeImage(base64Image, previewElement) {
+            state.uploadedImages = state.uploadedImages.filter(img => img !== base64Image);
+            elements.imagePreviews.removeChild(previewElement);
+            if (state.uploadedImages.length === 0 && elements.askInput.scrollHeight <= 40) {
+                elements.askInput.style.height = '40px';
+                elements.askInput.style.overflowY = 'hidden';
+            }
+        }
+
+        async function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function handleAskOpenAI(response, autoScroll, decoder) {
+            if (state.currentConfig.stream) {
+                await handleStreamResponse(response, autoScroll, decoder);
+            } else {
+                await handleNonStreamResponse(response);
+            }
+            state.conversationHistory.push({ role: "assistant", content: state.originalContent });
+            state.isRequesting = false;
+            elements.outputArea.contentEditable = "true";
+            if (!state.isPreviewMode) {
+                togglePreview();
+            } else {
+                togglePreview();
+                togglePreview();
+            }
+
+            // 窗口自动获得焦点
+            window.focus();
+        }
+
+        async function handleStreamResponse(response, autoScroll, decoder) {
+  
+            elements.outputArea.addEventListener('scroll', () => {
+                autoScroll = (elements.outputArea.scrollTop + elements.outputArea.clientHeight >= elements.outputArea.scrollHeight - 5);
+            });
+            const reader = response.body.getReader();
+            let buffer = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let boundary = buffer.indexOf("data:");
+                while (boundary !== -1) {
+                    const jsonData = buffer.substring(boundary + 5);
+                    buffer = "";
+                    let doneBoundary = jsonData.indexOf("data:");
+                    if (doneBoundary === -1) {
+                        doneBoundary = jsonData.indexOf("\n\n");
+                    }
+                    if (doneBoundary !== -1) {
+                        const message = jsonData.substring(0, doneBoundary);
+                        if (message.trim() === "[DONE]") break;
+                        try {
+                            const parsed = JSON.parse(message.trim());
+                            if (parsed.choices[0].delta.content) {
+                                const content = parsed.choices[0].delta.content;
+                                state.originalContent += content;
+                                elements.outputArea.textContent += content;
+                                if (autoScroll) {
+                                    elements.outputArea.scrollTop = elements.outputArea.scrollHeight;
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Could not parse stream message", message, error);
+                        }
+                        buffer = jsonData.substring(doneBoundary);
+                        boundary = buffer.indexOf("data:");
+                    } else {
+                        buffer = jsonData;
+                        break;
+                    }
+                }
+            }
+            state.originalContent = state.originalContent;
+        }
+
+        async function handleNonStreamResponse(response) {
+            const data = await response.json();
+            state.originalContent = data.choices[0].message.content.trim();
+            elements.outputArea.textContent = state.originalContent;
+        }
+
+        async function askQuestion() {
+            if (state.isRequesting) return;
+            const question = elements.askInput.value.trim();
+            if (!question && state.uploadedImages.length === 0) return;
+            const content = state.uploadedImages.map(base64Image => ({ type: "image_url", image_url: { url: base64Image } }));
+            if (content.length === 0 && question){
+                state.conversationHistory.push({ role: "user", content: question });
+            }else{
+                content.push({ type: "text", text: question });
+                state.conversationHistory.push({ role: "user", content: content });
+            }
+            elements.outputArea.textContent = "Loading...";
+            elements.outputArea.contentEditable = "false";
+            state.isRequesting = true;
+            elements.askInput.value = "";
+            state.uploadedImages = [];
+            elements.imagePreviews.innerHTML = '';
+            elements.askInput.style.height = '40px';
+            elements.askInput.style.overflowY = 'hidden';
+            state.currentConfig = await window.api.getConfig().config;
+            const response = await window.api.handleAskOpenAI(state.conversationHistory, state.currentConfig, state.modelInfo);
+            if (!response.ok) {
+                elements.outputArea.textContent = `HTTP error! status: ${response.status}`;
+                state.conversationHistory.pop();
+                state.isRequesting = false;
+                elements.outputArea.contentEditable = "true";
+                return;
+            }
+            elements.outputArea.classList.remove('markdown-mode');
+            let autoScroll = true;
+            elements.outputArea.scrollTop = 0;
+            state.originalContent = "";
+            elements.outputArea.innerHTML = "";
+            const decoder = new TextDecoder("utf-8");
+            await handleAskOpenAI(response, autoScroll, decoder);
+        }
+
+        function clearConversation() {
+            state.conversationHistory = [{ role: "system", content: state.systemPrompt }];
+            elements.outputArea.textContent = "";
+            state.originalContent = "";
+            elements.askInput.value = "";
+            state.uploadedImages = [];
+            elements.imagePreviews.innerHTML = '';
+            elements.askInput.style.height = '40px';
+            elements.askInput.style.overflowY = 'hidden';
+        }
+
+        function openModal(imgSrc) {
+            elements.imageModal.style.display = "block";
+            elements.modalImage.src = imgSrc;
+        }
+
+        function closeModal() {
+            elements.imageModal.style.display = "none";
         }
 
         async function handlePaste(items) {
@@ -748,259 +712,135 @@
             }
         }
 
-        async function handleImageUpload(files) {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                if (file.type.startsWith('image/')) {
-                    const base64 = await readFileAsBase64(file);
-                    addImageToPreview(base64);
-                } else {
-                    console.log('Unsupported file type.');
-                }
-            }
-            // 有图片时也触发一次高度调整
-            askInput.dispatchEvent(new Event('input'));
-        }
-
-        function addImageToPreview(base64Image) {
-            uploadedImages.push(base64Image);
-            const previewContainer = document.createElement('div');
-            previewContainer.className = 'image-preview-container';
-
-            const img = document.createElement('img');
-            img.src = base64Image;
-            img.className = 'image-preview';
-            img.onclick = () => openModal(base64Image);
-
-            const deleteButton = document.createElement('button');
-            deleteButton.className = 'image-delete';
-            deleteButton.innerHTML = '&#10006;';
-            deleteButton.onclick = () => removeImage(base64Image, previewContainer);
-
-            previewContainer.appendChild(img);
-            previewContainer.appendChild(deleteButton);
-            imagePreviews.appendChild(previewContainer);
-        }
-
-        function removeImage(base64Image, previewElement) {
-            uploadedImages = uploadedImages.filter(img => img !== base64Image);
-            imagePreviews.removeChild(previewElement);
-
-            // 如果没有图片且输入框内容不超过一行，则重置高度
-            if (uploadedImages.length === 0 && askInput.scrollHeight <= 40) {
-                askInput.style.height = '40px';
-                askInput.style.overflowY = 'hidden';
-            }
-        }
-
-        async function readFileAsBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    resolve(reader.result);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        async function askQuestion() {
-            if (isRequesting) return;
-
-            const question = askInput.value.trim();
-            if (!question && uploadedImages.length === 0) return;
-
-            const content = [];
-            
-            uploadedImages.forEach(base64Image => {
-                content.push({ type: "image_url", image_url: { url: base64Image } });
-            });
-
-            if (content.length === 0 && question){
-                // 如果没有图片，则直接发送问题
-                conversationHistory.push({ role: "user", content: question });
-            }else{
-                // 如果有图片，则将问题和图片一起发送
-                content.push({ type: "text", text: question });
-                conversationHistory.push({ role: "user", content: content });
-            }
-            outputArea.textContent = "Loading...";
-            outputArea.contentEditable = "false";
-            isRequesting = true;
-            askInput.value = "";
-            uploadedImages = [];
-            imagePreviews.innerHTML = '';
-            askInput.style.height = '40px';
-            askInput.style.overflowY = 'hidden';
-
-            let config = await window.api.getConfig().config;
-            currentConfig = config; // 更新全局配置
-            const response = await window.api.handleAskOpenAI(conversationHistory, config, modelInfo);
-
-            if (!response.ok) {
-                outputArea.textContent = `HTTP error! status: ${response.status}`;
-                conversationHistory.pop();
-                isRequesting = false;
-                outputArea.contentEditable = "true";
-                return;
-            }
-            outputArea.classList.remove('markdown-mode'); // 切换到非Markdown模式
-            let autoScroll = true;
-            outputArea.scrollTop = 0;
-            let responseContent = "";
-            outputArea.innerHTML = "";
-            originalContent = ""; // 重置 originalContent
-
-            if (config.stream) {
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder("utf-8");
-                let buffer = "";
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    buffer += decoder.decode(value, { stream: true });
-
-                    let boundary = buffer.indexOf("data:");
-                    while (boundary !== -1) {
-                        const jsonData = buffer.substring(boundary + 5);
-                        buffer = "";
-
-                        let doneBoundary = jsonData.indexOf("data:");
-                        if (doneBoundary === -1) {
-                            doneBoundary = jsonData.indexOf("\n\n");
-                        }
-                        if (doneBoundary !== -1) {
-                            const message = jsonData.substring(0, doneBoundary);
-                            if (message.trim() === "[DONE]") break;
-
-                            try {
-                                const parsed = JSON.parse(message.trim());
-                                if (parsed.choices[0].delta.content) {
-                                    const content = parsed.choices[0].delta.content;
-                                    originalContent += content;
-                                    outputArea.textContent += content;
-                                    responseContent += content;
-                                    if (autoScroll) {
-                                        outputArea.scrollTop = outputArea.scrollHeight;
-                                    }
-                                }
-                            } catch (error) {
-                                console.error("Could not parse stream message", message, error);
-                            }
-
-                            buffer = jsonData.substring(doneBoundary);
-                            boundary = buffer.indexOf("data:");
-                        } else {
-                            buffer = jsonData;
-                            break;
-                        }
-                    }
-                }
-        
-                // 处理完流数据后
-                responseContent = originalContent
-                    .replace(/\n\s*\n\s*\n/g, '\n\n')
-                    .replace(/^\s+|\s+$/g, '');
-                originalContent = responseContent;
-        
-            } else {
-                const data = await response.json();
-                responseContent = data.choices[0].message.content.trim()
-                    .replace(/\n\s*\n\s*\n/g, '\n\n')
-                    .replace(/^\s+|\s+$/g, '');
-                originalContent = responseContent;
-                outputArea.textContent = responseContent;
-            }
-
-            conversationHistory.push({ role: "assistant", content: responseContent });
-            isRequesting = false;
-            outputArea.contentEditable = "true";
-            // 确保内容已完全更新后再切换到预览模式
-            setTimeout(() => {
-                if (!isPreviewMode) {
-                    togglePreview();
-                } else {
-                    // 如果已经在预览模式，先切换回原始模式再切换到预览模式
-                    togglePreview();
-                    togglePreview();
-                }
-            }, 0);
-        }
-
-        function clearConversation() {
-            conversationHistory = [{ role: "system", content: systemPrompt }]; // 重置对话历史为只包含 system 提示词
-            outputArea.textContent = "";
-            originalContent = "";
-            askInput.value = "";
-            uploadedImages = [];
-            imagePreviews.innerHTML = '';
-            askInput.style.height = '40px';
-            askInput.style.overflowY = 'hidden';
-        }
-
-        function openModal(imgSrc) {
-            imageModal.style.display = "block";
-            modalImage.src = imgSrc;
-        }
-
-        function closeModal() {
-            imageModal.style.display = "none";
-        }
-
-        // 事件监听器设置
-        document.addEventListener('DOMContentLoaded', () => {
-            // 添加新的事件监听器到发送按钮
-            const sendButton = document.querySelector('.send-button');
-            sendButton.innerHTML = ">";
-            sendButton.addEventListener('click', askQuestion);
-
-            // 恢复 Ctrl+Enter 发送消息的功能
-            askInput.addEventListener('keydown', function(event) {
+        function setupEventListeners() {
+            elements.sendButton.innerHTML = ">";
+            elements.sendButton.addEventListener('click', askQuestion);
+            elements.askInput.addEventListener('keydown', function(event) {
                 if (event.keyCode === 13 && event.ctrlKey) {
                     event.preventDefault();
                     askQuestion();
                 }
             });
-
-            askInput.addEventListener('dragover', (event) => {
+            elements.askInput.addEventListener('dragover', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
             });
-
-            askInput.addEventListener('drop', async (event) => {
+            elements.askInput.addEventListener('drop', async (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                const files = event.dataTransfer.files;
-                handleImageUpload(files);
+                handleImageUpload(event.dataTransfer.files);
             });
-
-            askInput.addEventListener('paste', async (event) => {
-                const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-                handlePaste(items);
+            elements.askInput.addEventListener('paste', async (event) => {
+                handlePaste((event.clipboardData || event.originalEvent.clipboardData).items);
             });
-            
-            // 自动调整高度
-            askInput.addEventListener('input', function() {
-                // 先重置高度，以便正确计算 scrollHeight
+            elements.askInput.addEventListener('input', function() {
                 this.style.height = '40px';
-                
-                // 计算内容高度
                 const scrollHeight = this.scrollHeight;
-                
                 if (scrollHeight > 40) {
-                    // 如果内容高度超过默认高度，则自动调整
                     this.style.height = Math.min(scrollHeight, 150) + 'px';
                     this.style.overflowY = scrollHeight > 150 ? 'auto' : 'hidden';
                 } else {
-                    // 如果内容高度不超过默认高度，则保持默认高度
                     this.style.height = '40px';
                     this.style.overflowY = 'hidden';
                 }
             });
-        });
-  
+            elements.modelHeader.onclick = () => elements.modelDropdown.classList.toggle('show');
+            window.onclick = (event) => {
+                if (!event.target.matches('.model_name') && !event.target.matches('#model-dropdown *')) {
+                    elements.modelDropdown.classList.remove('show');
+                }
+            };
+            elements.windowsLogo.addEventListener('click', async function() {
+                try {
+                    const currentHeight = window.innerHeight;
+                    const currentWidth = window.innerWidth;
+                    state.currentConfig.window_height = currentHeight;
+                    state.currentConfig.window_width = currentWidth;
+                    await window.api.updateConfig({"config":state.currentConfig});
+                    showToast('Window size saved!');
+                } catch (error) {
+                    console.error('Failed to save window size:', error);
+                }
+            });
+        }
+
+        async function init() {
+            setupEventListeners();
+            state.currentConfig = await window.api.getConfig().config;
+            state.autoCloseOnBlur = state.currentConfig.autoCloseOnBlur;
+            updateAutoCloseButton();
+            window.addEventListener('blur', () => {
+                if (state.autoCloseOnBlur && !state.isRequesting) {
+                    window.close();
+                }
+            });
+            window.preload.receiveMsg(async (msg) => {
+                state.isRequesting = true;
+                elements.outputArea.contentEditable = "false";
+                state.currentConfig = await window.api.getConfig().config;
+                state.modelInfo = state.currentConfig.prompts[msg.code].model;
+                if (state.modelInfo.includes("|")) {
+                    const [providerId, modelName] = state.modelInfo.split("|");
+                    elements.modelHeader.textContent = state.currentConfig.providers[providerId].name + "|" + modelName;
+                } else {
+                    state.modelInfo = state.currentConfig.modelSelect;
+                    elements.modelHeader.textContent = state.currentConfig.modelSelect;
+                }
+                document.title = msg.code;
+                state.window_code = msg.code;
+                state.originalContent = "";
+                elements.outputArea.innerHTML = "";
+                state.systemPrompt = state.currentConfig.prompts[msg.code].prompt;
+                state.conversationHistory = [{ role: "system", content: state.systemPrompt }];
+                state.uploadedImages = [];
+                elements.imagePreviews.innerHTML = '';
+                initModelList();
+                let response;
+                if (msg.type === "over") {
+                    let text = msg.payload;
+                    if (state.currentConfig.skipLineBreak) {
+                        text = text.replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2").replace(/\s*\n\s*/g, "");
+                    }
+                    response = await window.api.handleTextOpenAI(msg.code, text, state.currentConfig);
+                    state.conversationHistory.push({ role: "user", content: text });
+                } else if (msg.type === "img") {
+                    response = await window.api.handleImageOpenAI(msg.code, msg.payload, state.currentConfig);
+                    state.conversationHistory.push({
+                        role: "user",
+                        content: [
+                            { type: "text", text: state.currentConfig.prompts[msg.code].prompt },
+                            { type: "image_url", image_url: { url: msg.payload } }
+                        ]
+                    });
+                } else {
+                    elements.outputArea.textContent = "Unsupported input type";
+                    state.isRequesting = false;
+                    elements.outputArea.contentEditable = "true";
+                    return;
+                }
+                if (!response.ok) {
+                    elements.outputArea.textContent = `HTTP error! status: ${response.status}`;
+                    state.conversationHistory.pop();
+                    state.isRequesting = false;
+                    elements.outputArea.contentEditable = "true";
+                    return;
+                }
+                let autoScroll = true;
+                if (state.currentConfig.stream) {
+                    const decoder = new TextDecoder("utf-8");
+                    await handleStreamResponse(response, autoScroll, decoder);
+                } else {
+                    handleNonStreamResponse(response)
+                }
+                state.conversationHistory.push({ role: "assistant", content: state.originalContent });
+                window.api.showSuccess(msg.code);
+                state.isRequesting = false;
+                elements.outputArea.contentEditable = "true";
+                togglePreview();
+            });
+        }
+
+        init();
     </script>
 </body>
 </html>
