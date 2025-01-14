@@ -17,29 +17,30 @@ window.preload = {
     }
 }
 
-
 const defaultConfig = {
-    config: {
-      apiUrl: "https://api.openai.com/v1",
-      apiKey: "sk-xxxxxx",
-      modelList: [],
-      ModelsListByUser: [],
-      modelSelect: "gpt-4o-mini",
-      providers: {},
-      prompts: {
-        Completion: {
-          idex: 0, // 用于排序
-          type: "over",
-          prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-          showMode: "input", // input, window
-          model: "", // providers_id|model
-        },
+  config: {
+    apiUrl: "https://api.openai.com/v1",
+    apiKey: "sk-xxxxxx",
+    modelList: [],
+    ModelsListByUser: [],
+    modelSelect: "gpt-4o-mini",
+    providers: {},
+    prompts: {
+      Completion: {
+        idex: 0, // 用于排序
+        type: "over",
+        prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
+        showMode: "input", // input, window
+        model: "", // providers_id|model
       },
-      stream: true,
-      skipLineBreak: true,
-      version: "1.2.0",
     },
-  };
+    stream: true,
+    skipLineBreak: true,
+    window_height: 520,
+    window_width: 400,
+    autoCloseOnBlur: false
+  }
+};
 
 // 读取配置文件，如果不存在则返回默认配置
 function getConfig() {
@@ -89,162 +90,162 @@ function updateConfig(newConfig) {
 
 // 函数：输出
 async function handelReplyOpenAI(code, response, stream) {
-    try {
-      if (!response.ok) {
-        utools.showNotification(`HTTP error! status: ${response.status}`);
-        return;
-      }
-      if (stream) {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        let buffer = "";
-        let output = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-  
-          buffer += decoder.decode(value, { stream: true });
-  
-          let boundary = buffer.lastIndexOf("\n");
-          if (boundary !== -1) {
-            const completeData = buffer.substring(0, boundary);
-            buffer = buffer.substring(boundary + 1);
-  
-            const lines = completeData
-              .split("\n")
-              .filter((line) => line.trim() !== "");
-            for (const line of lines) {
-              const message = line.replace(/^data: /, "");
-              if (message === "[DONE]") {
-                if (output.trim()) {
-                  utools.hideMainWindowTypeString(output.trimEnd());
-                }
-                break;
+  try {
+    if (!response.ok) {
+      utools.showNotification(`HTTP error! status: ${response.status}`);
+      return;
+    }
+    if (stream) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let output = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+
+        let boundary = buffer.lastIndexOf("\n");
+        if (boundary !== -1) {
+          const completeData = buffer.substring(0, boundary);
+          buffer = buffer.substring(boundary + 1);
+
+          const lines = completeData
+            .split("\n")
+            .filter((line) => line.trim() !== "");
+          for (const line of lines) {
+            const message = line.replace(/^data: /, "");
+            if (message === "[DONE]") {
+              if (output.trim()) {
+                utools.hideMainWindowTypeString(output.trimEnd());
               }
-              try {
-                const parsed = JSON.parse(message);
-                if (parsed.choices[0].delta.content) {
-                  utools.hideMainWindowTypeString(output);
-                  output = parsed.choices[0].delta.content;
-                }
-              } catch (error) {
-                utools.showNotification(
-                  "Could not parse stream message",
-                  message,
-                  error
-                );
-                return;
+              break;
+            }
+            try {
+              const parsed = JSON.parse(message);
+              if (parsed.choices[0].delta.content) {
+                utools.hideMainWindowTypeString(output);
+                output = parsed.choices[0].delta.content;
               }
+            } catch (error) {
+              utools.showNotification(
+                "Could not parse stream message",
+                message,
+                error
+              );
+              return;
             }
           }
         }
-        utools.showNotification(code + " successfully!");
-      } else {
-        const data = await response.json();
-        utools.hideMainWindowTypeString(data.choices[0].message.content.trimEnd());
-        utools.showNotification(code + " successfully!");
       }
-    } catch (error) {
-      utools.showNotification("error: " + error);
+      utools.showNotification(code + " successfully!");
+    } else {
+      const data = await response.json();
+      utools.hideMainWindowTypeString(data.choices[0].message.content.trimEnd());
+      utools.showNotification(code + " successfully!");
+    }
+  } catch (error) {
+    utools.showNotification("error: " + error);
+  }
+}
+  
+// 函数：处理文本
+async function handleTextOpenAI(code, text, config) {
+  // 从 prompt 配置中获取模型信息
+  const modelInfo = config.prompts[code].model;
+  let apiUrl = config.apiUrl;
+  let apiKey = config.apiKey;
+  let model = config.modelSelect;
+
+  if (modelInfo) {
+    const [providerId, modelName] = modelInfo.split("|");
+    const provider = config.providers[providerId];
+    if (provider) {
+      apiUrl = provider.url;
+      apiKey = provider.api_key;
+      model = modelName;
     }
   }
+
+  const response = await fetch(apiUrl + "/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + apiKey,
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        {
+          role: "system",
+          content: config.prompts[code].prompt,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ],
+      stream: config.stream,
+    }),
+  });
+  return response;
+}
   
-  // 函数：处理文本
-  async function handleTextOpenAI(code, text, config) {
-    // 从 prompt 配置中获取模型信息
-    const modelInfo = config.prompts[code].model;
-    let apiUrl = config.apiUrl;
-    let apiKey = config.apiKey;
-    let model = config.modelSelect;
-  
-    if (modelInfo) {
-      const [providerId, modelName] = modelInfo.split("|");
-      const provider = config.providers[providerId];
-      if (provider) {
-        apiUrl = provider.url;
-        apiKey = provider.api_key;
-        model = modelName;
-      }
+// 函数：处理图片
+async function handleImageOpenAI(code, imagePath, config) {
+  // 从 prompt 配置中获取模型信息
+  const modelInfo = config.prompts[code].model;
+  let apiUrl = config.apiUrl;
+  let apiKey = config.apiKey;
+  let model = config.modelSelect;
+
+  if (modelInfo) {
+    const [providerId, modelName] = modelInfo.split("|");
+    const provider = config.providers[providerId];
+    if (provider) {
+      apiUrl = provider.url;
+      apiKey = provider.api_key;
+      model = modelName;
     }
-  
-    const response = await fetch(apiUrl + "/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + apiKey,
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          {
-            role: "system",
-            content: config.prompts[code].prompt,
-          },
-          {
-            role: "user",
-            content: text,
-          },
-        ],
-        stream: config.stream,
-      }),
-    });
-    return response;
   }
-  
-  // 函数：处理图片
-  async function handleImageOpenAI(code, imagePath, config) {
-    // 从 prompt 配置中获取模型信息
-    const modelInfo = config.prompts[code].model;
-    let apiUrl = config.apiUrl;
-    let apiKey = config.apiKey;
-    let model = config.modelSelect;
-  
-    if (modelInfo) {
-      const [providerId, modelName] = modelInfo.split("|");
-      const provider = config.providers[providerId];
-      if (provider) {
-        apiUrl = provider.url;
-        apiKey = provider.api_key;
-        model = modelName;
-      }
-    }
-    const base64Image = imagePath;
-    const response = await fetch(apiUrl + "/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + apiKey,
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          {
-            role: "system",
-            content: config.prompts[code].prompt,
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: config.prompts[code].prompt,
+  const base64Image = imagePath;
+  const response = await fetch(apiUrl + "/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + apiKey,
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        {
+          role: "system",
+          content: config.prompts[code].prompt,
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: config.prompts[code].prompt,
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: base64Image,
               },
-              {
-                type: "image_url",
-                image_url: {
-                  url: base64Image,
-                },
-              },
-            ],
-          },
-        ],
-        stream: config.stream,
-      }),
-    });
-    return response;
-  }
+            },
+          ],
+        },
+      ],
+      stream: config.stream,
+    }),
+  });
+  return response;
+}
 
 
 // 函数： 追问模式
@@ -281,6 +282,7 @@ async function handleAskOpenAI(history,config,modelInfo) {
 function showSuccess(code){
     utools.showNotification(code + " successfully!");
 }
+
 window.api = {
     getConfig,        // 添加 getConfig 到 api
     updateConfig,     // 添加 updateConfig 到 api
