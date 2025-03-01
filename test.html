@@ -1,21 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anywhere</title>
     <link rel="stylesheet" href="node_modules/katex/katex.min.css">
     <style>
-        html,
-        body {
+        html, body {
             width: 100%;
             height: 100%;
             margin: 0;
             padding: 0;
             overflow: hidden;
         }
-
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
             background-color: #f8f8f4;
@@ -25,7 +22,6 @@
             align-items: center;
             justify-content: flex-start;
         }
-
         .container {
             background-color: #f8f8f4;
             padding: 10px 20px 20px 20px;
@@ -40,7 +36,6 @@
             overflow: hidden;
             position: relative;
         }
-
         h2 {
             font-family: Georgia, serif;
             font-weight: normal;
@@ -50,7 +45,6 @@
             color: #66645e;
             font-size: 2rem;
         }
-
         .output-area {
             width: calc(100% - 20px);
             padding: 10px;
@@ -69,26 +63,21 @@
             scrollbar-width: thin;
             scrollbar-color: #b8b8b8 #f0f0f0;
         }
-
         .output-area::-webkit-scrollbar {
             width: 12px;
         }
-
         .output-area::-webkit-scrollbar-track {
             background: #f0f0f0;
             border-radius: 10px;
         }
-
         .output-area::-webkit-scrollbar-thumb {
             background-color: #b8b8b8;
             border-radius: 10px;
             border: 3px solid #f0f0f0;
         }
-
         .output-area::-webkit-scrollbar-thumb:hover {
             background-color: #999;
         }
-
         .windows-logo {
             width: 20px;
             height: 20px;
@@ -96,13 +85,11 @@
             cursor: pointer;
             vertical-align: middle;
         }
-
         .model-header {
             display: flex;
             align-items: center;
             margin-bottom: 15px;
         }
-
         .model_name {
             font-family: Georgia, serif;
             font-weight: normal;
@@ -115,11 +102,9 @@
             user-select: none;
             position: relative;
         }
-
         .model_name:hover {
             text-decoration: underline;
         }
-
         .model-dropdown {
             position: absolute;
             top: 40px;
@@ -134,57 +119,45 @@
             overflow-y: auto;
             overflow-x: auto;
             width: 90vw;
-            height: 50vh;
+            height:50vh;
         }
-
         .model-dropdown::-webkit-scrollbar {
             width: 8px;
             height: 8px;
         }
-
         .model-dropdown::-webkit-scrollbar-track {
             background: #f0f0f0;
             border-radius: 10px;
         }
-
         .model-dropdown::-webkit-scrollbar-thumb {
             background-color: #b8b8b8;
             border-radius: 10px;
             border: 2px solid #f0f0f0;
         }
-
         .model-dropdown::-webkit-scrollbar-thumb:hover {
             background-color: #999;
         }
-
         .model-dropdown {
             scrollbar-width: thin;
             scrollbar-color: #b8b8b8 #f0f0f0;
         }
-
         .model-dropdown ul {
             list-style: none;
             padding: 0;
             margin: 0;
         }
-
         .model-dropdown li {
             padding: 10px;
             cursor: pointer;
             white-space: nowrap;
         }
-
         .model-dropdown li:hover {
             background-color: #e0e0e0;
         }
-
         .model-dropdown.show {
             display: block;
         }
-
-        .copy-button,
-        .preview-button,
-        .auto-close-button {
+        .copy-button, .preview-button, .auto-close-button {
             position: absolute;
             top: 10px;
             padding: 6px;
@@ -200,32 +173,22 @@
             align-items: center;
             justify-content: center;
         }
-
         .copy-button {
             right: 40px;
         }
-
         .preview-button {
             right: 10px;
         }
-
         .auto-close-button {
             right: 70px;
         }
-
-        .copy-button svg,
-        .preview-icon,
-        .auto-close-button svg {
+        .copy-button svg, .preview-icon, .auto-close-button svg {
             width: 14px;
             height: 14px;
         }
-
-        .copy-button:hover,
-        .preview-button:hover,
-        .auto-close-button:hover {
+        .copy-button:hover, .preview-button:hover, .auto-close-button:hover {
             opacity: 1;
         }
-
         .toast {
             position: absolute;
             top: 10px;
@@ -239,18 +202,15 @@
             transition: opacity 0.5s ease;
             z-index: 10;
         }
-
         .toast.show {
             opacity: 1;
         }
-
         .input-area {
             display: flex;
             flex-direction: column;
             gap: 5px;
             margin-top: 5px;
         }
-
         .input-container {
             display: flex;
             gap: 5px;
@@ -259,7 +219,6 @@
             border-radius: 20px;
             padding: 5px 10px;
         }
-
         .input-area textarea {
             flex-grow: 1;
             border: none;
@@ -278,32 +237,25 @@
             scrollbar-width: thin;
             scrollbar-color: #b8b8b8 #f0f0f0;
         }
-
         .input-area textarea::placeholder {
             color: #999;
         }
-
         .input-area textarea::-webkit-scrollbar {
             width: 8px;
         }
-
         .input-area textarea::-webkit-scrollbar-track {
             background: #f0f0f0;
             border-radius: 10px;
         }
-
         .input-area textarea::-webkit-scrollbar-thumb {
             background-color: #b8b8b8;
             border-radius: 10px;
             border: 2px solid #f0f0f0;
         }
-
         .input-area textarea::-webkit-scrollbar-thumb:hover {
             background-color: #999;
         }
-
-        .send-button,
-        .clear-button {
+        .send-button, .clear-button {
             background-color: transparent;
             color: #323330;
             border: none;
@@ -313,24 +265,19 @@
             align-items: center;
             justify-content: center;
         }
-
         .send-button {
             width: 30px;
             height: 30px;
             font-size: 20px;
         }
-
         .clear-button {
             width: 28px;
             height: 28px;
             font-size: 16px;
         }
-
-        .send-button:hover,
-        .clear-button:hover {
+        .send-button:hover, .clear-button:hover {
             background-color: #e0e0e0;
         }
-
         .image-previews {
             display: flex;
             gap: 5px;
@@ -341,12 +288,10 @@
             margin-left: 10px;
             max-height: 70px;
         }
-
         .image-preview-container {
             position: relative;
             display: inline-block;
         }
-
         .image-preview {
             width: 60px;
             height: 60px;
@@ -354,7 +299,6 @@
             object-fit: cover;
             cursor: pointer;
         }
-
         .image-delete {
             position: absolute;
             top: -8px;
@@ -371,11 +315,9 @@
             justify-content: center;
             cursor: pointer;
         }
-
         .markdown-mode {
             white-space: inherit;
         }
-
         .markdown-mode img {
             max-width: 50%;
             height: auto;
@@ -384,29 +326,18 @@
             transition: transform 0.2s ease;
             cursor: pointer;
         }
-
         .markdown-mode img:hover {
             transform: scale(1.02);
         }
-
-        .refresh-button {
-            transform: scale(0.8);
+        .image-upload-icon {
             cursor: pointer;
             width: 24px;
             height: 24px;
             margin-right: 5px;
         }
-
-        .refresh-button svg {
-            width: 24px;
-            height: 24px;
-            fill: #323330;
-        }
-
         .hidden-file-input {
             display: none;
         }
-
         .modal {
             display: none;
             position: fixed;
@@ -418,7 +349,6 @@
             overflow: auto;
             background-color: rgba(0, 0, 0, 0.9);
         }
-
         .modal-content {
             margin: auto;
             display: block;
@@ -430,7 +360,6 @@
             left: 50%;
             transform: translate(-50%, -50%);
         }
-
         .close-modal {
             position: absolute;
             top: 15px;
@@ -441,34 +370,28 @@
             transition: 0.3s;
             z-index: 101;
         }
-
-        .close-modal:hover,
-        .close-modal:focus {
+        .close-modal:hover, .close-modal:focus {
             color: #bbb;
             text-decoration: none;
             cursor: pointer;
         }
     </style>
 </head>
-
 <body>
     <div class="container">
         <button class="auto-close-button" onclick="toggleAutoClose()" title="Toggle auto-close on blur">
             <svg viewBox="0 0 24 24" width="16" height="16">
-                <path fill="currentColor" id="auto-close-path"
-                    d="M12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-9h-1V7c0-2.76-2.24-5-5-5S7 4.24 7 7v1H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 7c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v1H8.9V7z" />
+                <path fill="currentColor" id="auto-close-path" d="M12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-9h-1V7c0-2.76-2.24-5-5-5S7 4.24 7 7v1H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 7c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v1H8.9V7z"/>
             </svg>
         </button>
         <button class="copy-button" onclick="copyContent()" title="Copy content to clipboard">
             <svg viewBox="0 0 24 24" width="16" height="16">
-                <path fill="currentColor"
-                    d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                <path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
             </svg>
         </button>
         <button class="preview-button" onclick="togglePreview()" title="Toggle preview mode">
             <svg class="preview-icon" viewBox="0 0 24 24" width="16" height="16">
-                <path fill="currentColor" id="preview-path"
-                    d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                <path fill="currentColor" id="preview-path" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
             </svg>
         </button>
         <div class="toast" id="toast">Copied!</div>
@@ -483,25 +406,14 @@
         <div class="input-area">
             <div class="image-previews" id="image-previews"></div>
             <div class="input-container">
-                <button class="clear-button" onclick="clearConversation()" title="Clear history">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-                        <path d="M0 0h24v24H0z" fill="none" />
-                    </svg>
-                </button>
+                <label for="file-input">
+                    <img src="image.png" class="image-upload-icon">
+                </label>
+                <input type="file" id="file-input" class="hidden-file-input" accept="image/*" onchange="handleImageUpload(this.files)" multiple>
                 <textarea id="ask-input" placeholder="Ask anything!"></textarea>
-                <div class="refresh-button" id="refresh-button" title="Refresh or Cancel">
-                    <svg id="refresh-icon" width="24" height="24" viewBox="0 0 24 24">
-                        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-                    </svg>
-                </div>
-                <button class="send-button" onclick="askQuestion()" title="Send message">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                        <path d="M0 0h24v24H0z" fill="none" />
-                    </svg>
-                </button>
-            </div>            
+                <button class="clear-button" onclick="clearConversation()">&#x2716;</button>
+                <button class="send-button" onclick="askQuestion()">></button>
+            </div>
         </div>
     </div>
     <div id="imageModal" class="modal">
@@ -531,10 +443,7 @@
             modelList: document.getElementById('model-list'),
             toast: document.getElementById('toast'),
             windowsLogo: document.getElementById('windows-logo'),
-            previewPath: document.getElementById('preview-path'),
-            refreshButton: document.getElementById('refresh-button'),
-            refreshIcon: document.getElementById('refresh-icon')
-
+            previewPath: document.getElementById('preview-path')
         };
 
         let state = {
@@ -547,11 +456,10 @@
             systemPrompt: "",
             modelInfo: "",
             currentConfig: null,
-            autoCloseOnBlur: false,
-            abortController: null,
-            lastRequestData: null,
+            autoCloseOnBlur: false // 新增
         };
 
+        // ... (所有函数保持不变，直到 init 函数) ...
         function initModelList() {
             elements.modelList.innerHTML = '';
             for (const providerId in state.currentConfig.providers) {
@@ -680,20 +588,15 @@
                 reader.readAsDataURL(file);
             });
         }
-        async function handleResponse(autoScroll, decoder) {
-            const response = state.currentResponse;
-            if (response) {
-                if (state.currentConfig.stream) {
-                    await handleStreamResponse(response, autoScroll, decoder);
-                } else {
-                    await handleNonStreamResponse(response);
-                }
-            }
 
-            if (!state.isRequesting) {
-                state.conversationHistory.push({ role: "assistant", content: state.originalContent });
+        async function handleAskOpenAI(response, autoScroll, decoder) {
+            if (state.currentConfig.stream) {
+                await handleStreamResponse(response, autoScroll, decoder);
+            } else {
+                await handleNonStreamResponse(response);
             }
-
+            state.conversationHistory.push({ role: "assistant", content: state.originalContent });
+            state.isRequesting = false;
             elements.outputArea.contentEditable = "true";
             if (!state.isPreviewMode) {
                 togglePreview();
@@ -702,203 +605,108 @@
                 togglePreview();
             }
 
+            // 窗口自动获得焦点
             window.focus();
         }
+
         async function handleStreamResponse(response, autoScroll, decoder) {
+
             elements.outputArea.addEventListener('scroll', () => {
                 autoScroll = (elements.outputArea.scrollTop + elements.outputArea.clientHeight >= elements.outputArea.scrollHeight - 5);
             });
             const reader = response.body.getReader();
             let buffer = "";
-
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    buffer += decoder.decode(value, { stream: true });
-                    let boundary = buffer.indexOf("data:");
-                    while (boundary !== -1) {
-                        const jsonData = buffer.substring(boundary + 5);
-                        buffer = "";
-                        let doneBoundary = jsonData.indexOf("data:");
-                        if (doneBoundary === -1) {
-                            doneBoundary = jsonData.indexOf("\n\n");
-                        }
-                        if (doneBoundary !== -1) {
-                            const message = jsonData.substring(0, doneBoundary);
-                            if (message.trim() === "[DONE]") break;
-                            try {
-                                const parsed = JSON.parse(message.trim());
-                                if (parsed.choices[0].delta.content) {
-                                    const content = parsed.choices[0].delta.content;
-                                    state.originalContent += content;
-                                    elements.outputArea.textContent += content;
-                                    if (autoScroll) {
-                                        elements.outputArea.scrollTop = elements.outputArea.scrollHeight;
-                                    }
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let boundary = buffer.indexOf("data:");
+                while (boundary !== -1) {
+                    const jsonData = buffer.substring(boundary + 5);
+                    buffer = "";
+                    let doneBoundary = jsonData.indexOf("data:");
+                    if (doneBoundary === -1) {
+                        doneBoundary = jsonData.indexOf("\n\n");
+                    }
+                    if (doneBoundary !== -1) {
+                        const message = jsonData.substring(0, doneBoundary);
+                        if (message.trim() === "[DONE]") break;
+                        try {
+                            const parsed = JSON.parse(message.trim());
+                            if (parsed.choices[0].delta.content) {
+                                const content = parsed.choices[0].delta.content;
+                                state.originalContent += content;
+                                elements.outputArea.textContent += content;
+                                if (autoScroll) {
+                                    elements.outputArea.scrollTop = elements.outputArea.scrollHeight;
                                 }
-                            } catch (error) {
-                                console.error("Could not parse stream message", message, error);
                             }
-                            buffer = jsonData.substring(doneBoundary);
-                            boundary = buffer.indexOf("data:");
-                        } else {
-                            buffer = jsonData;
-                            break;
+                        } catch (error) {
+                            console.error("Could not parse stream message", message, error);
                         }
+                        buffer = jsonData.substring(doneBoundary);
+                        boundary = buffer.indexOf("data:");
+                    } else {
+                        buffer = jsonData;
+                        break;
                     }
                 }
-            }
-            catch (error) {
-                if (error.name === 'AbortError') {
-                    console.log('Fetch aborted');
-                } else {
-                    console.error("Error reading stream:", error);
-                    elements.outputArea.textContent = "Error reading response stream.";
-                }
-            } finally {
-                state.isRequesting = false;
-                updateRefreshButtonIcon();
             }
             state.originalContent = state.originalContent;
         }
 
         async function handleNonStreamResponse(response) {
-            try {
-                const data = await response.json();
-                state.originalContent = data.choices[0].message.content.trim();
-                elements.outputArea.textContent = state.originalContent;
-                state.isRequesting = false;
-                updateRefreshButtonIcon();
-            } catch (error) {
-                if (error.name === 'AbortError') {
-                    console.log('Fetch aborted');
-                } else {
-                    console.error("Error reading stream:", error);
-                    elements.outputArea.textContent = "Error reading response stream.";
-                }
-            } finally {
-                state.isRequesting = false;
-                updateRefreshButtonIcon();
-            }
-        }
-        function prepareRequestData(question) {
-            const content = state.uploadedImages.map(base64Image => ({ type: "image_url", image_url: { url: base64Image } }));
-            if (content.length === 0 && question) {
-                content.push({ role: "user", content: question });
-            } else {
-                content.push({ type: "text", text: question });
-                content.unshift({ type: "text", text: state.currentConfig.prompts[state.window_code].prompt });
-            }
-            return content;
+            const data = await response.json();
+            state.originalContent = data.choices[0].message.content.trim();
+            elements.outputArea.textContent = state.originalContent;
         }
 
         async function askQuestion() {
             if (state.isRequesting) return;
             const question = elements.askInput.value.trim();
             if (!question && state.uploadedImages.length === 0) return;
-
-            const requestData = prepareRequestData(question);
-            state.lastRequestData = requestData;
-            state.conversationHistory.push({ role: "user", content: requestData.length === 1 && typeof requestData[0].content === 'string' ? requestData[0].content : requestData });
-
+            const content = state.uploadedImages.map(base64Image => ({ type: "image_url", image_url: { url: base64Image } }));
+            if (content.length === 0 && question){
+                state.conversationHistory.push({ role: "user", content: question });
+            }else{
+                content.push({ type: "text", text: question });
+                state.conversationHistory.push({ role: "user", content: content });
+            }
             elements.outputArea.textContent = "Loading...";
             elements.outputArea.contentEditable = "false";
             state.isRequesting = true;
-            updateRefreshButtonIcon();
             elements.askInput.value = "";
             state.uploadedImages = [];
             elements.imagePreviews.innerHTML = '';
             elements.askInput.style.height = '40px';
             elements.askInput.style.overflowY = 'hidden';
-
-            state.abortController = new AbortController();
-            const { signal } = state.abortController;
-
             state.currentConfig = await window.api.getConfig().config;
-
-            const response = await window.api.handleAskOpenAI(state.conversationHistory, state.currentConfig, state.modelInfo, signal);
-
-            state.currentResponse = response;
-
+            const response = await window.api.handleAskOpenAI(state.conversationHistory, state.currentConfig, state.modelInfo);
             if (!response.ok) {
                 elements.outputArea.textContent = `HTTP error! status: ${response.status}`;
                 state.conversationHistory.pop();
                 state.isRequesting = false;
-                updateRefreshButtonIcon();
                 elements.outputArea.contentEditable = "true";
                 return;
             }
-
             elements.outputArea.classList.remove('markdown-mode');
             let autoScroll = true;
             elements.outputArea.scrollTop = 0;
             state.originalContent = "";
             elements.outputArea.innerHTML = "";
             const decoder = new TextDecoder("utf-8");
-
-            await handleResponse(autoScroll, decoder);
+            await handleAskOpenAI(response, autoScroll, decoder);
         }
 
-        async function resendLastRequest() {
-            if (state.isRequesting || !state.lastRequestData) return;
-            state.conversationHistory.pop();
-
-            elements.outputArea.textContent = "Loading...";
-            elements.outputArea.contentEditable = "false";
-            state.isRequesting = true;
-            updateRefreshButtonIcon();
-            elements.outputArea.scrollTop = 0;
-            state.originalContent = "";
-            elements.outputArea.innerHTML = "";
-
-            state.abortController = new AbortController();
-            const { signal } = state.abortController;
-
-            state.currentConfig = await window.api.getConfig().config;
-
-            const response = await window.api.handleAskOpenAI(state.conversationHistory, state.currentConfig, state.modelInfo, signal);
-            state.currentResponse = response;
-
-            if (!response.ok) {
-                elements.outputArea.textContent = `HTTP error! status: ${response.status}`;
-                state.conversationHistory.pop();
-                state.isRequesting = false;
-                updateRefreshButtonIcon();
-                elements.outputArea.contentEditable = "true";
-                return;
-            }
-
-            elements.outputArea.classList.remove('markdown-mode');
-            let autoScroll = true;
-            const decoder = new TextDecoder("utf-8");
-            await handleResponse(autoScroll, decoder);
-        }
-
-
-        function abortCurrentRequest() {
-            if (state.abortController) {
-                state.abortController.abort();
-                state.abortController = null;
-                state.isRequesting = false;
-                updateRefreshButtonIcon();
-                elements.outputArea.contentEditable = "true";
-            }
-        }
-
-        function updateRefreshButtonIcon() {
-            if (state.isRequesting) {
-                elements.refreshIcon.innerHTML = '<path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>';
-            } else {
-                elements.refreshIcon.innerHTML = '<path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>';
-            }
-        }
         function clearConversation() {
             state.conversationHistory = [{ role: "system", content: state.systemPrompt }];
             elements.outputArea.textContent = "";
             state.originalContent = "";
+            elements.askInput.value = "";
             state.uploadedImages = [];
             elements.imagePreviews.innerHTML = '';
+            elements.askInput.style.height = '40px';
+            elements.askInput.style.overflowY = 'hidden';
         }
 
         function openModal(imgSrc) {
@@ -924,21 +732,8 @@
         function setupEventListeners() {
             elements.sendButton.innerHTML = ">";
             elements.sendButton.addEventListener('click', askQuestion);
-            elements.refreshButton.addEventListener('click', () => {
-                if (state.isRequesting) {
-                    abortCurrentRequest();
-                } else {
-                    resendLastRequest();
-                }
-            });
-            elements.askInput.addEventListener('keydown', async function (event) {
-                const currentConfig = await window.api.getConfig();
-                const ctrlEnterToSend = currentConfig.config.CtrlEnterToSend;
-
-                if (ctrlEnterToSend && event.ctrlKey && event.key === 'Enter') {
-                    event.preventDefault();
-                    askQuestion();
-                } else if (!ctrlEnterToSend && event.key === 'Enter' && !event.ctrlKey && !event.shiftKey) {
+            elements.askInput.addEventListener('keydown', function(event) {
+                if (event.keyCode === 13 && event.ctrlKey) {
                     event.preventDefault();
                     askQuestion();
                 }
@@ -955,7 +750,7 @@
             elements.askInput.addEventListener('paste', async (event) => {
                 handlePaste((event.clipboardData || event.originalEvent.clipboardData).items);
             });
-            elements.askInput.addEventListener('input', function () {
+            elements.askInput.addEventListener('input', function() {
                 this.style.height = '40px';
                 const scrollHeight = this.scrollHeight;
                 if (scrollHeight > 40) {
@@ -972,13 +767,13 @@
                     elements.modelDropdown.classList.remove('show');
                 }
             };
-            elements.windowsLogo.addEventListener('click', async function () {
+            elements.windowsLogo.addEventListener('click', async function() {
                 try {
                     const currentHeight = window.innerHeight;
                     const currentWidth = window.innerWidth;
                     state.currentConfig.window_height = currentHeight;
                     state.currentConfig.window_width = currentWidth;
-                    await window.api.updateConfig({ "config": state.currentConfig });
+                    await window.api.updateConfig({"config":state.currentConfig});
                     showToast('Window size saved!');
                 } catch (error) {
                     console.error('Failed to save window size:', error);
@@ -997,10 +792,12 @@
                 }
             });
             window.preload.receiveMsg(async (msg) => {
-                elements.outputArea.textContent = "Loading...";
-                elements.outputArea.contentEditable = "false";
-                state.isRequesting = true;
-                updateRefreshButtonIcon();
+                // --- 主要修改开始 ---
+                elements.outputArea.textContent = "Loading..."; // 显示 Loading...
+                elements.outputArea.contentEditable = "false"; // 禁用编辑
+                state.isRequesting = true;  // 设置请求状态
+                // --- 主要修改结束 ---
+
                 state.currentConfig = await window.api.getConfig().config;
                 state.modelInfo = state.currentConfig.prompts[msg.code].model;
                 if (state.modelInfo.includes("|")) {
@@ -1013,61 +810,56 @@
                 document.title = msg.code;
                 state.window_code = msg.code;
                 state.originalContent = "";
+                //elements.outputArea.innerHTML = ""; // 这里不要清空，因为我们已经设置了 "Loading..."
                 state.systemPrompt = state.currentConfig.prompts[msg.code].prompt;
                 state.conversationHistory = [{ role: "system", content: state.systemPrompt }];
                 state.uploadedImages = [];
                 elements.imagePreviews.innerHTML = '';
                 initModelList();
                 let response;
-
-                state.abortController = new AbortController();
-                const { signal } = state.abortController;
-
                 if (msg.type === "over") {
                     let text = msg.payload;
                     if (state.currentConfig.skipLineBreak) {
                         text = text.replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2").replace(/\s*\n\s*/g, "");
                     }
-
-                    state.lastRequestData = [{ role: "user", content: text }];
-                    response = await window.api.handleTextOpenAI(msg.code, text, state.currentConfig, signal);
+                    response = await window.api.handleTextOpenAI(msg.code, text, state.currentConfig);
                     state.conversationHistory.push({ role: "user", content: text });
                 } else if (msg.type === "img") {
-                    const imageData = { type: "image_url", image_url: { url: msg.payload } };
-                    const textData = { type: "text", text: state.currentConfig.prompts[msg.code].prompt };
-                    state.lastRequestData = [{ role: "user", content: [textData, imageData] }];
-                    response = await window.api.handleImageOpenAI(msg.code, msg.payload, state.currentConfig, signal);
+                    response = await window.api.handleImageOpenAI(msg.code, msg.payload, state.currentConfig);
                     state.conversationHistory.push({
                         role: "user",
-                        content: [textData, imageData]
+                        content: [
+                            { type: "text", text: state.currentConfig.prompts[msg.code].prompt },
+                            { type: "image_url", image_url: { url: msg.payload } }
+                        ]
                     });
                 } else {
+                    // --- 主要修改: 错误处理也需要清除 Loading... ---
                     elements.outputArea.textContent = "Unsupported input type";
                     state.isRequesting = false;
-                    updateRefreshButtonIcon();
                     elements.outputArea.contentEditable = "true";
                     return;
+                    // --- 主要修改结束 ---
                 }
                 if (!response.ok) {
+                    // --- 主要修改: 错误处理也需要清除 Loading... ---
                     elements.outputArea.textContent = `HTTP error! status: ${response.status}`;
                     state.conversationHistory.pop();
                     state.isRequesting = false;
-                    updateRefreshButtonIcon();
                     elements.outputArea.contentEditable = "true";
                     return;
+                    // --- 主要修改结束 ---
                 }
-                state.currentResponse = response;
                 let autoScroll = true;
                 elements.outputArea.textContent = "";
                 const decoder = new TextDecoder("utf-8");
-                await handleResponse(autoScroll, decoder);
+                await handleAskOpenAI(response, autoScroll, decoder); //统一调用handleAskOpenAI来处理
 
-                window.api.showSuccess(msg.code, state.currentConfig.showNotification);
+                window.api.showSuccess(msg.code);
             });
         }
 
         init();
     </script>
 </body>
-
 </html>

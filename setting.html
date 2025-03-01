@@ -261,14 +261,15 @@
         .model-label{
           width: 60px;
         }
-
-        .stream-true {
+        /* 修改true false按钮的样式 */
+        .stream-true, .ctrl-enter-true {
             background-color: #28a745; /* Green */
         }
 
-        .stream-false {
+        .stream-false, .ctrl-enter-false{
             background-color: #6c757d; /* Gray */
         }
+
 
         .prompt-buttons-container {
             display: flex;
@@ -311,8 +312,35 @@
             align-items: center;
             gap: 20px;
             margin-bottom: 20px;
+            width: 100%;
         }
 
+        /* 滚动容器样式 */
+        .scrollable-section {
+            display: flex;
+            align-items: center; /* 垂直居中 */
+            overflow-x: auto; /* 允许水平滚动 */
+            width: 100%; /* 占据父容器的全部宽度 */
+            padding: 10px 0; /* 增加一些内边距 */
+            gap: 10px;
+            flex-wrap: nowrap;
+        }
+
+        /* 调整按钮样式以适应滚动 */
+        .scrollable-section .stream-button,
+        .scrollable-section .ctrl-enter-button {
+            margin-right: 10px; /* 按钮间距 */
+            flex-shrink: 0; /* 防止按钮被压缩 */
+            white-space: nowrap;
+        }
+
+        /* 调整标签样式 */
+        .scrollable-section label {
+            margin-bottom: 0;
+            margin-right: 5px; /* 标签与按钮间距 */
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
         .stream-section {
             display: flex;
             align-items: center;
@@ -844,6 +872,17 @@
             flex: 0 0 120px; /* Fixed width for labels */
             text-align: right;
         }
+        .ctrl-enter-button {
+            width: 120px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            color: white;
+        }
+
     </style>
 </head>
 <body>
@@ -909,8 +948,6 @@
             <button id="save-provider-btn" class="save-provider-btn">Save Provider</button>
         </div>
 
-  
-
         <!-- Save Provider Modal -->
         <div id="save-provider-modal" class="modal">
             <div class="modal-content">
@@ -926,26 +963,39 @@
         </div>
 
         <div class="section other-settings-row">
-            <div class="stream-section">
-                <label>Stream:</label>
-                <div class="tooltip">
-                    <button id="stream-btn" class="stream-button stream-true">True</button>
-                    <span class="tooltiptext">Enable or disable streaming</span>
-                </div>
-            
-                <label>Skip LineBreak:</label>
-                <div class="tooltip">
-                    <button id="skip-line-break-btn" class="stream-button stream-true">True</button>
-                    <span class="tooltiptext">Enable or disable skipping line breaks</span>
-                </div>
+          <!-- 滚动容器 -->
+          <div class="scrollable-section">
+              <label>Stream:</label>
+              <div class="tooltip">
+                  <button id="stream-btn" class="stream-button stream-true">True</button>
+                  <span class="tooltiptext">Enable or disable streaming</span>
+              </div>
+          
+              <label>Skip LineBreak:</label>
+              <div class="tooltip">
+                  <button id="skip-line-break-btn" class="stream-button stream-true">True</button>
+                  <span class="tooltiptext">Enable or disable skipping line breaks</span>
+              </div>
+          
+              <label>Auto CloseOnBlur:</label>
+              <div class="tooltip">
+                  <button id="auto-close-on-blur-btn" class="stream-button stream-true">True</button>
+                  <span class="tooltiptext">Enable or disable auto close on blur</span>
+              </div>
+          
+              <label>Ctrl+Enter to Send:</label>
+              <div class="tooltip">
+                  <button id="ctrl-enter-btn" class="stream-button stream-true">False</button>
+                  <span class="tooltiptext">Use Ctrl+Enter or Enter to send</span>
+              </div>
 
-                <label>Auto CloseOnBlur:</label>
-                <div class="tooltip">
-                    <button id="auto-close-on-blur-btn" class="stream-button stream-true">True</button>
-                    <span class="tooltiptext">Enable or disable auto close on blur</span>
-                </div>
-            </div>
-        </div>
+              <label>Success Notification:</label>
+              <div class="tooltip">
+                  <button id="show-notification-btn" class="stream-button stream-true">False</button>
+                  <span class="tooltiptext">Successfully replied then display notification</span>
+              </div>
+          </div>
+      </div>
 
         <div class="section">
             <label>Prompts:</label>
@@ -1006,6 +1056,8 @@
             const scrollLeftBtn = document.getElementById('scroll-left');
             const scrollRightBtn = document.getElementById('scroll-right');
             const autoCloseOnBlurBtn = document.getElementById('auto-close-on-blur-btn');
+            const ctrlEnterBtn = document.getElementById('ctrl-enter-btn');
+            const showNotificationBtn = document.getElementById('show-notification-btn');
 
             let currentConfig = {};
             let draggedRow = null;
@@ -1031,7 +1083,9 @@
                     skipLineBreak: true,
                     window_height: 520,
                     window_width: 400,
-                    autoCloseOnBlur: false
+                    autoCloseOnBlur: false,
+                    CtrlEnterToSend: false,
+                    showNotification:true
                 }
             }
 
@@ -1158,6 +1212,11 @@
                 skipLineBreakBtn.className = currentConfig.config.skipLineBreak ? 'stream-button stream-true' : 'stream-button stream-false';
                 autoCloseOnBlurBtn.textContent = currentConfig.config.autoCloseOnBlur ? 'True' : 'False';
                 autoCloseOnBlurBtn.className = currentConfig.config.autoCloseOnBlur ? 'stream-button stream-true' : 'stream-button stream-false';
+                ctrlEnterBtn.textContent = currentConfig.config.CtrlEnterToSend ? 'True' : 'False';
+                ctrlEnterBtn.className = currentConfig.config.CtrlEnterToSend ? 'stream-button stream-true' : 'stream-button stream-false';
+                showNotificationBtn.textContent = currentConfig.config.showNotification ? 'True' : 'False';
+                showNotificationBtn.className = currentConfig.config.showNotification ? 'stream-button stream-true' : 'stream-button stream-false';
+
                 populateModelDropdown();
                 loadPrompts(currentConfig.config.prompts);
                 createProviderTabs();
@@ -1406,6 +1465,21 @@
                 autoCloseOnBlurBtn.className = currentConfig.config.autoCloseOnBlur ? 'stream-button stream-true' : 'stream-button stream-false';
                 window.api.updateConfig(currentConfig);
             });
+
+            // 新增：Ctrl+Enter 按钮点击事件
+            ctrlEnterBtn.addEventListener('click', () => {
+                currentConfig.config.CtrlEnterToSend = !currentConfig.config.CtrlEnterToSend;
+                ctrlEnterBtn.textContent = currentConfig.config.CtrlEnterToSend ? 'True' : 'False';
+                ctrlEnterBtn.className = currentConfig.config.CtrlEnterToSend ? 'stream-button stream-true' : 'stream-button stream-false';
+                window.api.updateConfig(currentConfig);
+            });
+
+            showNotificationBtn.addEventListener('click', () => {
+                currentConfig.config.showNotification = !currentConfig.config.showNotification;
+                showNotificationBtn.textContent = currentConfig.config.showNotification ? 'True' : 'False';
+                showNotificationBtn.className = currentConfig.config.showNotification ? 'stream-button stream-true' : 'stream-button stream-false';
+                window.api.updateConfig(currentConfig);
+            })
 
             function savePrompts() {
                 const updatedPrompts = {};

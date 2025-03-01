@@ -37,7 +37,9 @@ const defaultConfig = {
     skipLineBreak: true,
     window_height: 520,
     window_width: 400,
-    autoCloseOnBlur: false
+    autoCloseOnBlur: false,
+    CtrlEnterToSend: false,
+    showNotification: true
   }
 };
 
@@ -56,18 +58,25 @@ function getConfig() {
 function checkConfig(config) {
   let flag = false;
   // 检查是否存在窗口大小配置
-  if(!config.window_width || !config.window_height) {
+  if (!config.window_width || !config.window_height) {
     config.window_width = 400;
     config.window_height = 520;
     flag = true;
   }
-  if(!config.autoCloseOnBlur) {
+  if (!config.autoCloseOnBlur) {
     config.autoCloseOnBlur = false;
     flag = true;
   }
-
-  if(flag) {
-    updateConfig({"config":config});
+  if (!config.CtrlEnterToSend) {
+    config.CtrlEnterToSend = false;
+    flag = true;
+  }
+  if (!config.showNotification) {
+    config.showNotification = false;
+    flag = true;
+  }
+  if (flag) {
+    updateConfig({ "config": config });
   }
 }
 
@@ -86,7 +95,7 @@ function updateConfig(newConfig) {
           { type: "over", label: key },
           { type: "img", label: key },],
       });
-    } else{
+    } else {
       utools.setFeature({
         code: key,
         explain: key,
@@ -118,7 +127,7 @@ function updateConfig(newConfig) {
 }
 
 // 函数：输出
-async function handelReplyOpenAI(code, response, stream) {
+async function handelReplyOpenAI(code, response, stream, showNotification) {
   try {
     if (!response.ok) {
       utools.showNotification(`HTTP error! status: ${response.status}`);
@@ -170,11 +179,15 @@ async function handelReplyOpenAI(code, response, stream) {
           }
         }
       }
-      utools.showNotification(code + " successfully!");
+      if (showNotification) {
+        utools.showNotification(code + " successfully!");
+      }
     } else {
       const data = await response.json();
       utools.hideMainWindowTypeString(data.choices[0].message.content.trimEnd());
-      utools.showNotification(code + " successfully!");
+      if (showNotification) {
+        utools.showNotification(code + " successfully!");
+      }
     }
   } catch (error) {
     utools.showNotification("error: " + error);
@@ -302,10 +315,10 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
         }
         response = await handleTextOpenAI(code, payload, config);
 
-        handelReplyOpenAI(code, response, config.stream);
+        handelReplyOpenAI(code, response, config.stream, config.showNotification);
       } else if (type === "img") {
         response = await handleImageOpenAI(code, payload, config);
-        handelReplyOpenAI(code, response, config.stream);
+        handelReplyOpenAI(code, response, config.stream, config.showNotification);
       } else {
         utools.showNotification("Unsupported input type");
       }
@@ -315,10 +328,10 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
     else if (config.prompts[code].showMode === "window") {
       mouse_position = utools.getCursorScreenPoint();
       const displays = utools.getAllDisplays();
-      const currentDisplay = displays.find(display => 
-        mouse_position.x >= display.bounds.x && 
+      const currentDisplay = displays.find(display =>
+        mouse_position.x >= display.bounds.x &&
         mouse_position.x <= display.bounds.x + display.bounds.width &&
-        mouse_position.y >= display.bounds.y && 
+        mouse_position.y >= display.bounds.y &&
         mouse_position.y <= display.bounds.y + display.bounds.height
       );
       let windowX = Math.floor(mouse_position.x - (config.window_width / 2));
@@ -354,18 +367,18 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
           y: windowY,
           webPreferences: {
             preload: "show_page.js",
-            devTools: true,
+            devTools: true
           },
         },
         () => {
           window.preload.sendMsgTo(ubWindow.webContents.id, channel, msg);
           ubWindow.webContents.show(); // 显示窗口
-          ubWindow.setAlwaysOnTop(true); // 窗口置顶
+          ubWindow.setAlwaysOnTop(true, "floating"); // 窗口置顶
           ubWindow.setFullScreen(false); // 窗口全屏
         }
       );
       ubWindow.webContents.openDevTools({ mode: "detach" });
     }
-    // utools.outPlugin(); // 关闭插件窗口
+    utools.outPlugin(); // 关闭插件窗口
   }
 });
