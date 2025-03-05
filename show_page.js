@@ -25,6 +25,7 @@ const defaultConfig = {
     ModelsListByUser: [],
     modelSelect: "gpt-4o-mini",
     providers: {},
+    providerOrder: [],
     prompts: {
       Completion: {
         idex: 0, // 用于排序
@@ -201,7 +202,7 @@ async function handleTextOpenAI(code, text, config, signal) {
 }
 
 // 函数：处理图片
-async function handleImageOpenAI(code, imagePath, config) {
+async function handleImageOpenAI(code, imagePath, config, signal) {
   // 从 prompt 配置中获取模型信息
   const modelInfo = config.prompts[code].model;
   let apiUrl = config.apiUrl;

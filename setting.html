@@ -1,17 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings</title>
+    <title>Configuration Settings</title>
+    <!-- 移除外部字体库，使用本地字体或系统默认字体 -->
     <style>
-        /* Common Styles */
-        html, body {
+        /* 基础样式和布局 */
+        html,
+        body {
             width: 98%;
             height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            /* 使用系统默认字体 */
         }
+
         body {
-            font-family: 'Helvetica Neue', Arial, sans-serif;
             background-color: #f8f8f4;
             color: #323330;
             display: flex;
@@ -35,12 +40,11 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
-            font-family: Georgia, serif;
-            position: relative; /* For absolute positioning of reset button */
+            /* 使用更现代的字体 */
+            position: relative;
         }
 
         h2 {
-            font-family: Georgia, serif;
             font-weight: normal;
             text-align: center;
             margin-top: 0;
@@ -48,8 +52,6 @@
             color: #66645e;
             font-size: 2rem;
         }
-
-        
 
         label {
             display: block;
@@ -76,7 +78,7 @@
             font-size: 16px;
             cursor: pointer;
             transition: background-color 0.3s, transform 0.2s ease-in-out;
-            font-family: Georgia, serif;
+            /* 使用更现代的字体 */
             margin-right: 10px;
         }
 
@@ -84,11 +86,12 @@
             background-color: #6b6964;
         }
 
+        /* 模型选择相关样式 */
         .model-select-container {
             display: flex;
             align-items: center;
             gap: 10px;
-            flex-grow: 1; /* Allow select to grow */
+            flex-grow: 1;
         }
 
         .model-select {
@@ -100,6 +103,14 @@
             background: #f8f9fa;
             cursor: pointer;
             transition: all 0.3s ease;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23807d77'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            /* 使用本地 SVG 图标 */
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 1em;
         }
 
         .model-select:focus {
@@ -107,39 +118,38 @@
             box-shadow: 0 0 0 2px rgba(128, 125, 119, 0.1);
             background: #fff;
         }
-        
-       /* 调整表格列宽 */
+
+        /* 表格样式 */
         .prompts-table th:nth-child(1),
         .prompts-table td:nth-child(1) {
-            width: 140px; /* Key列宽度 */
+            width: 140px;
         }
 
         .prompts-table th:nth-child(2),
         .prompts-table td:nth-child(2) {
-            width: 100px; /* Type列宽度 */
+            width: 100px;
         }
 
         .prompts-table th:nth-child(3),
         .prompts-table td:nth-child(3) {
-            width: 100px; /* Show Mode列宽度 */
+            width: 100px;
         }
 
         .prompts-table th:nth-child(4),
         .prompts-table td:nth-child(4) {
-            width: 300px; /* Prompt列宽度 */
+            width: 300px;
         }
 
         .prompts-table th:nth-child(5),
         .prompts-table td:nth-child(5) {
-            width: 200px; /* Model列宽度从120px增加到200px */
+            width: 200px;
         }
 
         .prompts-table th:nth-child(6),
         .prompts-table td:nth-child(6) {
-            width: 100px; /* Action列宽度 */
+            width: 100px;
         }
 
-        /* 调整下拉框和输入框的宽度 */
         .model-provider-select-container {
             width: 100%;
             padding: 0 5px;
@@ -155,10 +165,9 @@
         }
 
         .model-provider-select {
-            width: 180px !important; /* 使用!important确保优先级 */
+            width: 180px !important;
         }
 
-        /* 所有选择框容器通用样式 */
         .type-select-container,
         .showMode-select-container,
         .model-provider-select-container {
@@ -167,7 +176,6 @@
             box-sizing: border-box;
         }
 
-        /* 所有选择框通用样式 */
         .type-select-container select,
         .showMode-select-container select,
         .model-provider-select-container select {
@@ -175,6 +183,14 @@
             min-width: unset;
             padding: 5px;
             box-sizing: border-box;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23807d77'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            /* 使用本地 SVG 图标 */
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 1em;
         }
 
         .prompts-table input[type="text"] {
@@ -182,7 +198,6 @@
             min-width: 90px;
         }
 
-        /* 确保表格内容溢出时显示省略号 */
         .prompts-table th,
         .prompts-table td {
             padding: 8px 5px;
@@ -191,26 +206,26 @@
             white-space: nowrap;
         }
 
-        /* 调整删除按钮样式 */
         .delete-btn {
             width: 100px;
             margin: 0 auto;
             display: block;
         }
 
-        /* 确保表格使用固定布局并水平滚动 */
         .prompts-table {
             table-layout: fixed;
             width: 100%;
-            min-width: 1040px; /* 总宽度约等于所有列宽之和 */
+            min-width: 1040px;
         }
 
         .section {
             width: 100%;
         }
-        .prompt-section{
+
+        .prompt-section {
             overflow-x: auto;
         }
+
         .prompts-table th {
             background-color: #e0dfdb;
         }
@@ -222,14 +237,17 @@
         }
 
         .prompts-table tbody tr .drag-handle {
-            cursor: move; /* Change cursor to move icon */
+            cursor: move;
             text-align: center;
         }
+
         .prompts-table tbody tr:first-child .drag-handle {
-            cursor: default; /* Change cursor to move icon */
+            cursor: default;
             text-align: center;
         }
-        .prompts-table tbody tr input, .prompts-table tbody tr select{
+
+        .prompts-table tbody tr input,
+        .prompts-table tbody tr select {
             pointer-events: auto;
         }
 
@@ -237,6 +255,8 @@
             background-color: #c82333;
             color: white;
         }
+
+        /* 获取模型按钮样式 */
         .fetch-models-btn {
             padding: 8px 16px;
             background: #807d77;
@@ -248,39 +268,49 @@
             transition: all 0.3s ease;
             min-width: 100px;
         }
+
         .fetch-models-btn:hover {
             background: #6b6964;
         }
-        .model-section{
+
+        /* 模型部分样式 */
+        .model-section {
             display: flex;
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
             gap: 10px;
         }
-        .model-label{
-          width: 60px;
-        }
-        /* 修改true false按钮的样式 */
-        .stream-true, .ctrl-enter-true {
-            background-color: #28a745; /* Green */
+
+        .model-label {
+            width: 60px;
         }
 
-        .stream-false, .ctrl-enter-false{
-            background-color: #6c757d; /* Gray */
+        /* 开关按钮样式 */
+        .stream-true,
+        .ctrl-enter-true {
+            background-color: #28a745;
         }
 
+        .stream-false,
+        .ctrl-enter-false {
+            background-color: #6c757d;
+        }
 
+        /* 提示按钮容器 */
         .prompt-buttons-container {
             display: flex;
-            justify-content: center; /* 水平居中 */
-            gap: 20px; /* 按钮之间的间距 */
-            margin: 20px 0; /* 上下外边距 */
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
         }
+
         .add-prompt-btn,
         .save-prompts-btn {
             margin: 0;
         }
+
+        /* 提示文本样式 */
         .tooltip {
             position: relative;
             display: inline-block;
@@ -302,11 +332,13 @@
             opacity: 0;
             transition: opacity 0.3s;
         }
+
         .tooltip:hover .tooltiptext {
             visibility: visible;
             opacity: 1;
         }
-        
+
+        /* 其他设置行样式 */
         .other-settings-row {
             display: flex;
             align-items: center;
@@ -315,32 +347,30 @@
             width: 100%;
         }
 
-        /* 滚动容器样式 */
         .scrollable-section {
             display: flex;
-            align-items: center; /* 垂直居中 */
-            overflow-x: auto; /* 允许水平滚动 */
-            width: 100%; /* 占据父容器的全部宽度 */
-            padding: 10px 0; /* 增加一些内边距 */
+            align-items: center;
+            overflow-x: auto;
+            width: 100%;
+            padding: 10px 0;
             gap: 10px;
             flex-wrap: nowrap;
         }
 
-        /* 调整按钮样式以适应滚动 */
         .scrollable-section .stream-button,
         .scrollable-section .ctrl-enter-button {
-            margin-right: 10px; /* 按钮间距 */
-            flex-shrink: 0; /* 防止按钮被压缩 */
-            white-space: nowrap;
-        }
-
-        /* 调整标签样式 */
-        .scrollable-section label {
-            margin-bottom: 0;
-            margin-right: 5px; /* 标签与按钮间距 */
+            margin-right: 10px;
             flex-shrink: 0;
             white-space: nowrap;
         }
+
+        .scrollable-section label {
+            margin-bottom: 0;
+            margin-right: 5px;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
         .stream-section {
             display: flex;
             align-items: center;
@@ -364,7 +394,7 @@
             margin-right: 20px;
         }
 
-        /* Toast Container */
+        /* 提示消息样式 */
         #toast-container {
             position: fixed;
             top: 20px;
@@ -372,7 +402,6 @@
             z-index: 1000;
         }
 
-        /* Toast Message */
         .toast-message {
             background-color: #4CAF50;
             color: white;
@@ -382,14 +411,16 @@
             opacity: 0;
             transition: opacity 0.5s ease-in-out;
         }
+
         .toast-message.error {
             background-color: #d9534f;
         }
+
         .toast-message.show {
             opacity: 1;
         }
 
-        /* Loading Spinner */
+        /* 加载动画样式 */
         .loading-spinner {
             display: none;
             position: absolute;
@@ -409,14 +440,20 @@
         }
 
         .fetch-models-btn.loading {
-          pointer-events: none; /* Disable the button when loading */
+            pointer-events: none;
         }
 
         @keyframes spin {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
+            0% {
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+
+            100% {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
         }
 
+        /* 自定义模型部分样式 */
         .custom-model-section {
             display: flex;
             align-items: center;
@@ -447,19 +484,21 @@
         .custom-model-button:hover {
             background: #e0e0e0;
         }
-        .custom-model-section label{
+
+        .custom-model-section label {
             margin-bottom: 0;
-             white-space: nowrap;
+            white-space: nowrap;
         }
 
-        .type-select-container, 
+        /* 下拉选择框样式 */
+        .type-select-container,
         .showMode-select-container,
         .model-provider-select-container {
             position: relative;
             width: 100px;
         }
 
-        .type-select-container select, 
+        .type-select-container select,
         .showMode-select-container select,
         .model-provider-select-container select {
             width: 100%;
@@ -474,12 +513,13 @@
             background-color: #fff;
             cursor: pointer;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23807d77'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            /* 使用本地 SVG 图标 */
             background-repeat: no-repeat;
             background-position: right 10px center;
             background-size: 1em;
         }
 
-        .type-select-container select:focus, 
+        .type-select-container select:focus,
         .showMode-select-container select:focus,
         .model-provider-select-container select:focus {
             outline: none;
@@ -487,19 +527,19 @@
             box-shadow: 0 0 0 2px rgba(128, 125, 119, 0.25);
         }
 
-        /* Reset Button Styles */
+        /* 重置按钮样式 */
         .reset-button {
             position: absolute;
             top: 20px;
             right: 20px;
-            background-color: #d9534f; /* Red color for reset */
+            background-color: #d9534f;
         }
 
         .reset-button:hover {
             background-color: #c9302c;
         }
 
-        /* Confirmation Modal Styles */
+        /* 模态框样式 */
         .modal {
             display: none;
             position: fixed;
@@ -521,7 +561,7 @@
             max-width: 1200px;
             border-radius: 20px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            font-family: Georgia, serif;
+            /* 使用更现代的字体 */
         }
 
         .modal-content p {
@@ -533,7 +573,7 @@
 
         .modal-buttons {
             display: flex;
-            justify-content: space-between; /* 按钮靠右对齐 */
+            justify-content: space-between;
             margin-top: 20px;
             gap: 10px;
         }
@@ -547,7 +587,7 @@
             font-size: 16px;
             cursor: pointer;
             transition: background-color 0.3s;
-            font-family: Georgia, serif;
+            /* 使用更现代的字体 */
         }
 
         .modal-buttons button:hover {
@@ -563,45 +603,50 @@
         }
 
         .save-provider-btn {
-            display: block; /* 将按钮设置为块级元素 */
-            margin: 20px auto; /* 上下间距20px，左右自动居中 */
+            display: block;
+            margin: 20px auto;
             position: relative;
         }
-        .save-provider-modal{
+
+        .save-provider-modal {
             z-index: 10;
         }
-        .confirm-save-provider{
+
+        .confirm-save-provider {
             justify-content: space-between;
         }
-        .cancel-save-provider{
+
+        .cancel-save-provider {
             justify-content: space-between;
         }
+
+        /* 提供者模态框样式 */
         .provider-modal {
             display: none;
             position: fixed;
             z-index: 2;
-            left: 0; 
-            top: 0; 
-            width: 100%; 
-            height: 100%; 
-            transform: translate(0, 0); 
-            background-color: rgba(0, 0, 0, 0.4); /* Optional: Add a semi-transparent background */
-            font-family: Georgia, serif;
-            overflow: auto; 
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            transform: translate(0, 0);
+            background-color: rgba(0, 0, 0, 0.4);
+            /* 使用更现代的字体 */
+            overflow: auto;
         }
 
         .provider-modal-content {
             padding: 20px;
-            background-color: #fefefe; 
+            background-color: #fefefe;
             border-radius: 20px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            margin: 2% auto; 
-            width: 80%; 
-            max-width: 1200px; 
+            margin: 2% auto;
+            width: 80%;
+            max-width: 1200px;
         }
 
         .provider-modal-content input[type="text"] {
-            width: calc(100% - 22px); /* 调整宽度以占据整行，并考虑 padding */
+            width: calc(100% - 22px);
             padding: 10px;
             margin-bottom: 10px;
             border: 1px solid #ccc;
@@ -610,7 +655,7 @@
             font-family: inherit;
         }
 
-        .provider-modal-content .custom-model-section .custom-model-button{
+        .provider-modal-content .custom-model-section .custom-model-button {
             margin-top: 10px;
         }
 
@@ -620,7 +665,8 @@
             align-items: center;
             gap: 10px;
         }
-        .provider-fetch-models-btn{
+
+        .provider-fetch-models-btn {
             padding: 8px 16px;
             background: #807d77;
             color: white;
@@ -631,6 +677,7 @@
             transition: all 0.3s ease;
             min-width: 100px;
         }
+
         .provider-modal-section label {
             margin-bottom: 15px;
             display: flex;
@@ -665,13 +712,14 @@
             font-size: 16px;
             cursor: pointer;
             transition: background-color 0.3s;
-            font-family: Georgia, serif;
+            /* 使用更现代的字体 */
         }
 
         .provider-modal-buttons button:hover {
             background-color: #6b6964;
         }
 
+        /* 提供者标签容器样式 */
         .provider-tabs-container {
             display: flex;
             align-items: center;
@@ -684,11 +732,11 @@
             color: #6b6964;
             border: 1px solid #ccc;
             padding: 5px 10px;
-            border-radius: 0; /* 移除原有的 border-radius */
+            border-radius: 0;
             font-size: 14px;
             cursor: pointer;
             transition: background-color 0.3s;
-            margin: 0 5px; /* 按钮与标签之间的间距 */
+            margin: 0 5px;
         }
 
         .config-item {
@@ -699,6 +747,7 @@
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         }
 
+        /* 配置项样式 */
         .section-content {
             display: flex;
             align-items: center;
@@ -706,7 +755,6 @@
             padding: 8px 0;
         }
 
-        /* 标签样式 */
         .section-content label {
             min-width: 100px;
             text-align: right;
@@ -715,7 +763,6 @@
             font-weight: 500;
         }
 
-        /* 输入框样式 */
         .section-content input[type="text"] {
             flex: 1;
             padding: 10px 12px;
@@ -732,7 +779,6 @@
             background: #fff;
         }
 
-        /* 下拉框容器样式 */
         .model-select-container {
             flex: 1;
             position: relative;
@@ -742,31 +788,29 @@
             background-color: #c8c6c3;
         }
 
+        /* 提供者标签样式 */
         .provider-tabs {
             display: flex;
-            overflow-x: hidden; /* 隐藏水平滚动条 */
-            scroll-behavior: smooth; /* 平滑滚动 */
-            flex-wrap: nowrap; /* 禁止换行 */
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            flex-wrap: nowrap;
             gap: 10px;
             width: calc(100% - 80px);
         }
-        .provider-tabs:not(:has(> .provider-tab.active)) .provider-tab {
-            opacity: 0.6;
-        }
 
         .provider-tab {
-            background-color: #f5f5f5; /* 更柔和的背景色 */
-            color: #333; /* 更深的文字颜色 */
-            border: none; /* 移除边框 */
-            padding: 8px 16px; /* 调整内边距 */
-            border-radius: 20px 20px 0 0; /* 上圆角 */
+            background-color: #f5f5f5;
+            color: #333;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px 20px 0 0;
             font-size: 14px;
             cursor: pointer;
             transition: background-color 0.3s;
-            white-space: nowrap; /* 强制不换行 */
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 添加阴影 */
-            position: relative; /* 为了底部伪元素的定位 */
-            z-index: 1; /* 确保在伪元素之上 */
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 1;
         }
 
         .provider-tab:before {
@@ -775,47 +819,48 @@
             bottom: 0;
             left: 0;
             width: 100%;
-            height: 2px; /* 底部线条高度 */
-            background-color: transparent; /* 初始为透明 */
+            height: 2px;
+            background-color: transparent;
             transition: background-color 0.3s;
         }
 
         .provider-tab:hover {
-            background-color: #e8e8e8; /* 悬停时更亮的背景色 */
+            background-color: #e8e8e8;
         }
 
         .provider-tab:hover:before {
-            background-color: #807d77; /* 悬停时底部线条颜色 */
+            background-color: #807d77;
         }
 
-        .provider-tab.active {
-            background-color: #807d77; /* 当前选中的标签背景颜色 */
-            color: white;              /* 当前选中的标签文字颜色 */
-            z-index: 2; /* 提高层级 */
-        }
-        .provider-tab.active:before {
-            background-color: #807d77; /* 选中标签底部线条颜色 */
+        .provider-tab.dragging {
+            opacity: 0.5;
         }
 
-        .provider-tab.active:hover:before {
-            background-color: #807d77; /* 选中标签底部线条颜色 */
+        .provider-tab.drag-over {
+            border-bottom: 2px solid #807d77;
         }
+
+        /* 提供者部分样式 */
         .provider-section {
             position: relative;
             text-align: center;
         }
-        .provider-modal .custom-model-section{
+
+        .provider-modal .custom-model-section {
             margin-bottom: 10px;
             align-items: flex-start;
         }
-        .provider-model-select-container{
+
+        .provider-model-select-container {
             flex: 1;
             position: relative;
         }
-        .provider-model-select-container label{
+
+        .provider-model-select-container label {
             gap: 10px;
         }
-        .provider-model-select{
+
+        .provider-model-select {
             width: 95%;
             padding: 10px 12px;
             border: 1px solid #e0e0e0;
@@ -824,13 +869,24 @@
             background: #f8f9fa;
             cursor: pointer;
             transition: all 0.3s ease;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23807d77'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            /* 使用本地 SVG 图标 */
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 1em;
         }
-        .provider-modal .model-section{
+
+        .provider-modal .model-section {
             margin-bottom: 10px;
         }
-        .provider-section .model-section{
+
+        .provider-section .model-section {
             margin-bottom: 0;
         }
+
         .provider-section .section-content {
             display: flex;
             align-items: center;
@@ -838,13 +894,13 @@
         }
 
         .provider-section .section-content label {
-            flex: 0 0 120px; /* Fixed width for labels */
+            flex: 0 0 120px;
             text-align: right;
         }
 
         .provider-section .section-content input[type="text"] {
             width: 100%;
-            flex: 1; /* Input fields take the remaining space */
+            flex: 1;
         }
 
         .provider-modal .section-content {
@@ -854,24 +910,26 @@
         }
 
         .provider-modal .section-content label {
-            flex: 0 0 120px; /* Fixed width for labels */
+            flex: 0 0 120px;
             text-align: right;
         }
 
         .provider-modal .section-content input[type="text"] {
             width: 100%;
-            flex: 1; /* Input fields take the remaining space */
+            flex: 1;
         }
 
-        .provider-modal .model-label{
-            flex: 0 0 120px; /* Fixed width for labels */
+        .provider-modal .model-label {
+            flex: 0 0 120px;
             text-align: right;
         }
 
-        .provider-modal .custom-model-section label{
-            flex: 0 0 120px; /* Fixed width for labels */
+        .provider-modal .custom-model-section label {
+            flex: 0 0 120px;
             text-align: right;
         }
+
+        /* Ctrl+Enter 按钮样式 */
         .ctrl-enter-button {
             width: 120px;
             padding: 5px 10px;
@@ -882,15 +940,16 @@
             transition: background-color 0.3s;
             color: white;
         }
-
     </style>
 </head>
+
 <body>
+    <!-- 主要内容容器 -->
     <div class="container">
         <button id="reset-button" class="reset-button">Reset</button>
         <h2>Configuration Settings</h2>
 
-        <!-- Confirmation Modal -->
+        <!-- 确认重置模态框 -->
         <div id="confirm-modal" class="modal">
             <div class="modal-content">
                 <p>Are you sure you want to reset all settings to default?</p>
@@ -901,23 +960,24 @@
             </div>
         </div>
 
-        <!-- Provider Tabs Container -->
+        <!-- 提供者标签和模态框 -->
         <div class="provider-tabs-container">
             <button id="scroll-left" class="scroll-button">
                 < </button>
-            <div class="provider-tabs" id="provider-tabs">
-                <!-- Provider tabs will be added here -->
-            </div>
-            <button id="scroll-right" class="scroll-button">></button>
+                    <div class="provider-tabs" id="provider-tabs">
+                        <!-- 提供者标签将在此动态生成 -->
+                    </div>
+                    <button id="scroll-right" class="scroll-button">></button>
         </div>
 
-        <!-- Provider Modal -->
+        <!-- 提供者设置模态框 -->
         <div id="provider-modal" class="modal">
             <div class="modal-content" id="provider-modal-content">
-                <!-- Content will be dynamically loaded here -->
+                <!-- 提供者设置内容将在此动态生成 -->
             </div>
         </div>
 
+        <!-- 默认提供者设置 -->
         <div class="section provider-section">
             <div class="config-item">
                 <div class="section-content">
@@ -948,7 +1008,7 @@
             <button id="save-provider-btn" class="save-provider-btn">Save Provider</button>
         </div>
 
-        <!-- Save Provider Modal -->
+        <!-- 保存提供者模态框 -->
         <div id="save-provider-modal" class="modal">
             <div class="modal-content">
                 <div class="provider-modal-section">
@@ -962,48 +1022,48 @@
             </div>
         </div>
 
+        <!-- 其他设置 -->
         <div class="section other-settings-row">
-          <!-- 滚动容器 -->
-          <div class="scrollable-section">
-              <label>Stream:</label>
-              <div class="tooltip">
-                  <button id="stream-btn" class="stream-button stream-true">True</button>
-                  <span class="tooltiptext">Enable or disable streaming</span>
-              </div>
-          
-              <label>Skip LineBreak:</label>
-              <div class="tooltip">
-                  <button id="skip-line-break-btn" class="stream-button stream-true">True</button>
-                  <span class="tooltiptext">Enable or disable skipping line breaks</span>
-              </div>
-          
-              <label>Auto CloseOnBlur:</label>
-              <div class="tooltip">
-                  <button id="auto-close-on-blur-btn" class="stream-button stream-true">True</button>
-                  <span class="tooltiptext">Enable or disable auto close on blur</span>
-              </div>
-          
-              <label>Ctrl+Enter to Send:</label>
-              <div class="tooltip">
-                  <button id="ctrl-enter-btn" class="stream-button stream-true">False</button>
-                  <span class="tooltiptext">Use Ctrl+Enter or Enter to send</span>
-              </div>
+            <div class="scrollable-section">
+                <label>Stream:</label>
+                <div class="tooltip">
+                    <button id="stream-btn" class="stream-button stream-true">True</button>
+                    <span class="tooltiptext">Enable or disable streaming</span>
+                </div>
 
-              <label>Success Notification:</label>
-              <div class="tooltip">
-                  <button id="show-notification-btn" class="stream-button stream-true">False</button>
-                  <span class="tooltiptext">Successfully replied then display notification</span>
-              </div>
-          </div>
-      </div>
+                <label>Skip LineBreak:</label>
+                <div class="tooltip">
+                    <button id="skip-line-break-btn" class="stream-button stream-true">True</button>
+                    <span class="tooltiptext">Enable or disable skipping line breaks</span>
+                </div>
 
+                <label>Auto CloseOnBlur:</label>
+                <div class="tooltip">
+                    <button id="auto-close-on-blur-btn" class="stream-button stream-true">True</button>
+                    <span class="tooltiptext">Enable or disable auto close on blur</span>
+                </div>
+
+                <label>Ctrl+Enter to Send:</label>
+                <div class="tooltip">
+                    <button id="ctrl-enter-btn" class="stream-button stream-true">False</button>
+                    <span class="tooltiptext">Use Ctrl+Enter or Enter to send</span>
+                </div>
+
+                <label>Success Notification:</label>
+                <div class="tooltip">
+                    <button id="show-notification-btn" class="stream-button stream-true">False</button>
+                    <span class="tooltiptext">Successfully replied then display notification</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prompts 设置 -->
         <div class="section">
             <label>Prompts:</label>
             <div class="prompt-section">
                 <table class="prompts-table" id="prompts-table">
                     <thead>
                         <tr>
-                            <!-- <th>Index</th> -->
                             <th>Key</th>
                             <th>Type</th>
                             <th>Show Mode</th>
@@ -1013,7 +1073,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Prompts will be loaded here -->
+                        <!-- Prompts 表格内容将在此动态生成 -->
                     </tbody>
                 </table>
             </div>
@@ -1024,44 +1084,46 @@
         </div>
     </div>
 
-    <!-- Toast Container -->
+    <!-- 提示消息容器 -->
     <div id="toast-container"></div>
 
+    <!-- JavaScript 代码 -->
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            const apiUrlInput = document.getElementById('api-url');
-            const apiKeyInput = document.getElementById('api-key');
-            const modelSelect = document.getElementById('model-select');
-            const streamBtn = document.getElementById('stream-btn');
-            const promptsTable = document.getElementById('prompts-table').getElementsByTagName('tbody')[0];
-            const addPromptBtn = document.getElementById('add-prompt-btn');
-            const savePromptsBtn = document.getElementById('save-prompts-btn');
-            const fetchModelsBtn = document.getElementById('fetch-models-btn');
-            const addModelInput = document.getElementById('add-model-input');
-            const addModelBtn = document.getElementById('add-model-btn');
-            const deleteModelBtn = document.getElementById('delete-model-btn');
-            const skipLineBreakBtn = document.getElementById('skip-line-break-btn');
-            const resetButton = document.getElementById('reset-button');
-            const confirmModal = document.getElementById('confirm-modal');
-            const confirmResetBtn = document.getElementById('confirm-reset');
-            const cancelResetBtn = document.getElementById('cancel-reset');
-            const saveProviderBtn = document.getElementById('save-provider-btn');
-            const saveProviderModal = document.getElementById('save-provider-modal');
-            const providerNameInput = document.getElementById('provider-name');
-            const confirmSaveProviderBtn = document.getElementById('confirm-save-provider');
-            const cancelSaveProviderBtn = document.getElementById('cancel-save-provider');
-            const providerTabsContainer = document.getElementById('provider-tabs');
-            const providerModal = document.getElementById('provider-modal');
-            const providerModalContent = document.getElementById('provider-modal-content');
-            const scrollLeftBtn = document.getElementById('scroll-left');
-            const scrollRightBtn = document.getElementById('scroll-right');
-            const autoCloseOnBlurBtn = document.getElementById('auto-close-on-blur-btn');
-            const ctrlEnterBtn = document.getElementById('ctrl-enter-btn');
-            const showNotificationBtn = document.getElementById('show-notification-btn');
+        (async () => {
+            // DOM 元素对象
+            const domElements = {
+                apiUrlInput: document.getElementById('api-url'),
+                apiKeyInput: document.getElementById('api-key'),
+                modelSelect: document.getElementById('model-select'),
+                streamBtn: document.getElementById('stream-btn'),
+                promptsTable: document.getElementById('prompts-table').getElementsByTagName('tbody')[0],
+                addPromptBtn: document.getElementById('add-prompt-btn'),
+                savePromptsBtn: document.getElementById('save-prompts-btn'),
+                fetchModelsBtn: document.getElementById('fetch-models-btn'),
+                addModelInput: document.getElementById('add-model-input'),
+                addModelBtn: document.getElementById('add-model-btn'),
+                deleteModelBtn: document.getElementById('delete-model-btn'),
+                skipLineBreakBtn: document.getElementById('skip-line-break-btn'),
+                resetButton: document.getElementById('reset-button'),
+                confirmModal: document.getElementById('confirm-modal'),
+                confirmResetBtn: document.getElementById('confirm-reset'),
+                cancelResetBtn: document.getElementById('cancel-reset'),
+                saveProviderBtn: document.getElementById('save-provider-btn'),
+                saveProviderModal: document.getElementById('save-provider-modal'),
+                providerNameInput: document.getElementById('provider-name'),
+                confirmSaveProviderBtn: document.getElementById('confirm-save-provider'),
+                cancelSaveProviderBtn: document.getElementById('cancel-save-provider'),
+                providerTabsContainer: document.getElementById('provider-tabs'),
+                providerModal: document.getElementById('provider-modal'),
+                providerModalContent: document.getElementById('provider-modal-content'),
+                scrollLeftBtn: document.getElementById('scroll-left'),
+                scrollRightBtn: document.getElementById('scroll-right'),
+                autoCloseOnBlurBtn: document.getElementById('auto-close-on-blur-btn'),
+                ctrlEnterBtn: document.getElementById('ctrl-enter-btn'),
+                showNotificationBtn: document.getElementById('show-notification-btn'),
+            };
 
-            let currentConfig = {};
-            let draggedRow = null;
-
+            // 默认配置
             const defaultConfig = {
                 config: {
                     apiUrl: "https://api.openai.com/v1",
@@ -1070,14 +1132,15 @@
                     ModelsListByUser: [],
                     modelSelect: "gpt-4o-mini",
                     providers: {},
+                    providerOrder: [],
                     prompts: {
-                    Completion: {
-                        idex: 0, // 用于排序
-                        type: "over",
-                        prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-                        showMode: "input", // input, window
-                        model: "", // providers_id|model
-                    },
+                        Completion: {
+                            idex: 0,
+                            type: "over",
+                            prompt: `你是一个文本续写模型...`,
+                            showMode: "input",
+                            model: "",
+                        },
                     },
                     stream: true,
                     skipLineBreak: true,
@@ -1085,37 +1148,37 @@
                     window_width: 400,
                     autoCloseOnBlur: false,
                     CtrlEnterToSend: false,
-                    showNotification:true
+                    showNotification: true
                 }
-            }
+            };
 
-            function showToast(message, type = 'success') {
+            let currentConfig = {}; // 当前配置
+            let draggedRow = null; // 当前拖动的行
+
+            // 显示提示消息
+            const showToast = (message, type = 'success') => {
                 const toastContainer = document.getElementById('toast-container');
                 const toastMessage = document.createElement('div');
                 toastMessage.classList.add('toast-message');
                 toastMessage.textContent = message;
                 if (type === 'error') {
-                  toastMessage.classList.add('error');
+                    toastMessage.classList.add('error');
                 }
                 toastContainer.appendChild(toastMessage);
 
-                setTimeout(() => {
-                    toastMessage.classList.add('show');
-                }, 100);
+                // 使用 Promise 链来控制动画
+                new Promise(resolve => setTimeout(resolve, 100))
+                    .then(() => toastMessage.classList.add('show'))
+                    .then(() => new Promise(resolve => setTimeout(resolve, 3000)))
+                    .then(() => toastMessage.classList.remove('show'))
+                    .then(() => new Promise(resolve => setTimeout(resolve, 500)))
+                    .then(() => toastContainer.removeChild(toastMessage))
+                    .catch(console.error);
+            };
 
-                setTimeout(() => {
-                    toastMessage.classList.remove('show');
-                    setTimeout(() => {
-                        toastContainer.removeChild(toastMessage);
-                    }, 500);
-                }, 3000);
-            }
-
-            async function fetchModels(apiUrl, apiKey, providerId = null) {
-                let fetchBtn = fetchModelsBtn;
-                if(providerId){
-                    fetchBtn = document.getElementById('provider-fetch-models-btn')
-                }
+            // 获取模型列表
+            const fetchModels = async (apiUrl, apiKey, providerId = null) => {
+                let fetchBtn = providerId ? document.getElementById('provider-fetch-models-btn') : domElements.fetchModelsBtn;
                 fetchBtn.classList.add('loading');
                 try {
                     const response = await fetch(`${apiUrl}/models`, {
@@ -1127,11 +1190,11 @@
                     });
 
                     if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                        throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`);
                     }
 
                     const data = await response.json();
-                    if (data.data && Array.isArray(data.data)) {
+                    if (data?.data && Array.isArray(data.data)) {
                         const modelList = data.data.map(model => model.id);
                         if (providerId && currentConfig.config.providers[providerId]) {
                             currentConfig.config.providers[providerId].modelList = modelList;
@@ -1141,27 +1204,28 @@
                         showToast('Models fetched successfully.');
                         return modelList;
                     } else {
-                        console.error('Invalid response format:', data);
-                        showToast(`Invalid response format: ${data}`,'error');
+                        const errorMsg = `Invalid response format: Expected an array of models. Received: ${JSON.stringify(data)}`;
+                        console.error(errorMsg);
+                        showToast(errorMsg, 'error');
                         return [];
                     }
                 } catch (error) {
                     console.error('Error fetching models:', error);
-                    showToast(`Error fetching models: ${error}`, 'error');
+                    showToast(`Error fetching models: ${error.message}`, 'error');
                     return [];
                 } finally {
                     fetchBtn.classList.remove('loading');
                 }
-            }
+            };
 
-            function populateModelDropdown(selectElement, providerId = null) {
-                const select = selectElement || modelSelect;
-                select.innerHTML = ''; // Clear existing options
-                
+            // 填充模型下拉菜单
+            const populateModelDropdown = (selectElement, providerId = null) => {
+                const select = selectElement || domElements.modelSelect;
+                select.innerHTML = '';
+
                 let userModels = [];
                 let fetchedModels = [];
-
-                if(providerId && currentConfig.config.providers[providerId]){
+                if (providerId && currentConfig.config.providers[providerId]) {
                     userModels = currentConfig.config.providers[providerId].modelListByUser || [];
                     fetchedModels = currentConfig.config.providers[providerId].modelList || [];
                 } else {
@@ -1169,15 +1233,13 @@
                     fetchedModels = currentConfig.config.modelList || [];
                 }
 
-                // Add user-added models first
                 userModels.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model;
-                    option.textContent = `${model}  (Custom)`;
+                    option.textContent = `${model} (Custom)`;
                     select.appendChild(option);
                 });
 
-                // Add fetched models after
                 fetchedModels.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model;
@@ -1185,60 +1247,73 @@
                     select.appendChild(option);
                 });
 
-                // Re-select the current model if it exists
-                if(!providerId){
-                    if (currentConfig.config.modelList.includes(currentConfig.config.modelSelect) || userModels.includes(currentConfig.config.modelSelect)) {
+                if (!providerId) {
+                    if (userModels.includes(currentConfig.config.modelSelect)) {
+                        select.value = currentConfig.config.modelSelect;
+                    } else if (fetchedModels.includes(currentConfig.config.modelSelect)) {
                         select.value = currentConfig.config.modelSelect;
                     } else if (userModels.length > 0) {
                         select.value = userModels[0];
                         saveCurrentModel();
-                    } else if (currentConfig.config.modelList.length > 0) {
-                        select.value = currentConfig.config.modelList[0];
+                    } else if (fetchedModels.length > 0) {
+                        select.value = fetchedModels[0];
                         saveCurrentModel();
                     }
                 }
-            }
+            };
 
-            async function loadConfig() {
-                currentConfig = await window.api.getConfig();
-                currentConfig.config.ModelsListByUser = currentConfig.config.ModelsListByUser || []; // Initialize if null/undefined
+            // 加载配置
+            const loadConfig = async () => {
+                try {
+                    currentConfig = await window.api.getConfig();
+                } catch (error) {
+                    console.error("Failed to load config from preload, use default config", error);
+                    currentConfig = defaultConfig;
+                }
+
+                currentConfig.config = currentConfig.config || {};
+                currentConfig.config.ModelsListByUser = currentConfig.config.ModelsListByUser || [];
                 currentConfig.config.providers = currentConfig.config.providers || {};
+                currentConfig.config.prompts = currentConfig.config.prompts || {};
 
-                apiUrlInput.value = currentConfig.config.apiUrl || '';
-                apiKeyInput.value = currentConfig.config.apiKey || '';
-                streamBtn.textContent = currentConfig.config.stream ? 'True' : 'False';
-                streamBtn.className = currentConfig.config.stream ? 'stream-button stream-true' : 'stream-button stream-false';
-                skipLineBreakBtn.textContent = currentConfig.config.skipLineBreak ? 'True' : 'False';
-                skipLineBreakBtn.className = currentConfig.config.skipLineBreak ? 'stream-button stream-true' : 'stream-button stream-false';
-                autoCloseOnBlurBtn.textContent = currentConfig.config.autoCloseOnBlur ? 'True' : 'False';
-                autoCloseOnBlurBtn.className = currentConfig.config.autoCloseOnBlur ? 'stream-button stream-true' : 'stream-button stream-false';
-                ctrlEnterBtn.textContent = currentConfig.config.CtrlEnterToSend ? 'True' : 'False';
-                ctrlEnterBtn.className = currentConfig.config.CtrlEnterToSend ? 'stream-button stream-true' : 'stream-button stream-false';
-                showNotificationBtn.textContent = currentConfig.config.showNotification ? 'True' : 'False';
-                showNotificationBtn.className = currentConfig.config.showNotification ? 'stream-button stream-true' : 'stream-button stream-false';
+                const { apiUrl, apiKey, stream, skipLineBreak, autoCloseOnBlur, CtrlEnterToSend, showNotification } = currentConfig.config;
+
+                domElements.apiUrlInput.value = apiUrl || '';
+                domElements.apiKeyInput.value = apiKey || '';
+
+                const updateButtonState = (button, value) => {
+                    button.textContent = value ? 'True' : 'False';
+                    button.className = value ? 'stream-button stream-true' : 'stream-button stream-false';
+                };
+
+                updateButtonState(domElements.streamBtn, !!stream);
+                updateButtonState(domElements.skipLineBreakBtn, !!skipLineBreak);
+                updateButtonState(domElements.autoCloseOnBlurBtn, !!autoCloseOnBlur);
+                updateButtonState(domElements.ctrlEnterBtn, !!CtrlEnterToSend);
+                updateButtonState(domElements.showNotificationBtn, !!showNotification);
 
                 populateModelDropdown();
                 loadPrompts(currentConfig.config.prompts);
                 createProviderTabs();
-            }
+            };
 
-            function loadPrompts(prompts) {
-                promptsTable.innerHTML = '';
+            // 加载 Prompts
+            const loadPrompts = (prompts) => {
+                domElements.promptsTable.innerHTML = '';
 
-                // Convert prompts object to array and sort by idex
                 let promptsArray = Object.entries(prompts).map(([key, value]) => ({ key, ...value }));
                 promptsArray.forEach(prompt => {
                     if (prompt.idex === undefined) {
                         prompt.idex = Number.MAX_SAFE_INTEGER;
                     }
                 });
+
                 promptsArray.sort((a, b) => a.idex - b.idex);
 
-                for (const prompt of promptsArray) {
-                    addPromptRow(prompt.key, prompt.type, prompt.showMode, prompt.prompt,prompt.model, prompt.key === 'Completion', prompt.idex);
-                }
+                promptsArray.forEach(prompt => {
+                    addPromptRow(prompt.key, prompt.type, prompt.showMode, prompt.prompt, prompt.model, prompt.key === 'Completion', prompt.idex);
+                });
 
-                // Update the original prompts object with sorted array
                 const sortedPrompts = {};
                 promptsArray.forEach((prompt, index) => {
                     prompt.idex = index;
@@ -1253,138 +1328,139 @@
 
                 currentConfig.config.prompts = sortedPrompts;
                 addDragAndDropListeners();
-            }
+            };
 
-            function addDragAndDropListeners() {
-                const rows = promptsTable.querySelectorAll('tr');
-
+            // 添加拖拽事件监听器
+            const addDragAndDropListeners = () => {
+                const rows = Array.from(domElements.promptsTable.rows);
                 rows.forEach((row, index) => {
                     if (index === 0) {
-                        row.setAttribute('draggable', 'false'); // 禁用第一行的拖拽
-                    } else {
-                        row.setAttribute('draggable', 'true');
-                        
-                        row.addEventListener('dragstart', (event) => {
-                            draggedRow = row;
-                            event.dataTransfer.setData('text', ''); // Firefox需要
-                            row.classList.add('dragging');
-                        });
-
-                        row.addEventListener('dragover', (event) => {
-                            event.preventDefault();
-                            if (draggedRow === null || row === draggedRow || row.rowIndex === 0) return;
-
-                            const targetRow = row;
-                            const targetRect = targetRow.getBoundingClientRect();
-                            const offset = event.clientY - targetRect.top;
-
-                            if (offset < targetRect.height / 2) {
-                                if (targetRow.previousElementSibling !== draggedRow) {
-                                    promptsTable.insertBefore(draggedRow, targetRow);
-                                }
-                            } else {
-                                if (targetRow.nextElementSibling !== draggedRow) {
-                                    promptsTable.insertBefore(draggedRow, targetRow.nextElementSibling);
-                                }
-                            }
-                        });
-
-                        row.addEventListener('dragend', () => {
-                            if (draggedRow !== null) {
-                                draggedRow.classList.remove('dragging');
-                                draggedRow = null;
-                            }
-                        });
+                        row.setAttribute('draggable', 'false');
+                        return;
                     }
+                    row.setAttribute('draggable', 'true');
+
+                    row.addEventListener('dragstart', (event) => {
+                        draggedRow = row;
+                        event.dataTransfer.setData('text', '');
+                        row.classList.add('dragging');
+                    });
+
+                    row.addEventListener('dragover', (event) => {
+                        event.preventDefault();
+                        if (!draggedRow || row === draggedRow || row.rowIndex === 0) return;
+
+                        const targetRow = row;
+                        const targetRect = targetRow.getBoundingClientRect();
+                        const offset = event.clientY - targetRect.top;
+
+                        if (offset < targetRect.height / 2) {
+                            if (targetRow.previousElementSibling !== draggedRow) {
+                                domElements.promptsTable.insertBefore(draggedRow, targetRow);
+                            }
+                        } else {
+                            if (targetRow.nextElementSibling !== draggedRow) {
+                                domElements.promptsTable.insertBefore(draggedRow, targetRow.nextElementSibling);
+                            }
+                        }
+                    });
+
+                    row.addEventListener('dragend', () => {
+                        if (draggedRow) {
+                            draggedRow.classList.remove('dragging');
+                            draggedRow = null;
+                        }
+                    });
                 });
-            }
+            };
 
-            function addPromptRow(key = '', type = 'over', showMode = 'input', prompt = '',model = '', readOnly = false, idex = 0) {
-                const row = promptsTable.insertRow();
-                // const indexCell = row.insertCell();
-                const keyCell = row.insertCell();
-                const typeCell = row.insertCell();
-                const showModeCell = row.insertCell();
-                const promptCell = row.insertCell();
-                const modelCell = row.insertCell();
-                const actionCell = row.insertCell();
-
-                // const indexLabel = document.createElement('div');
-                // indexLabel.className = 'drag-handle';
-                // indexLabel.textContent = idex;
-                // indexCell.appendChild(indexLabel)
+            // 添加 Prompt 行
+            const addPromptRow = (key = '', type = 'general', showMode = 'window', prompt = '', model = '', readOnly = false, idex = 0) => {
+                const row = domElements.promptsTable.insertRow();
                 row.setAttribute('data-idex', idex);
 
-                const keyInput = document.createElement('input');
-                keyInput.type = 'text';
-                keyInput.value = key;
-                keyInput.disabled = readOnly;
+                const createCell = (content, className = '') => {
+                    const cell = row.insertCell();
+                    if (className) {
+                        cell.className = className;
+                    }
+                    if (typeof content === 'string' || typeof content === 'number') {
+                        cell.textContent = content;
+                    } else if (content instanceof Node) {
+                        cell.appendChild(content);
+                    }
+                    return cell;
+                }
 
-                // Create a container for the type select element
-                const typeSelectContainer = document.createElement('div');
-                typeSelectContainer.className = 'type-select-container';
+                const createInput = (value, disabled) => {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = value;
+                    input.disabled = disabled;
+                    return input;
+                };
 
-                const typeSelect = document.createElement('select');
-                typeSelect.className = 'type-select';
-                // Create the options for the type select element
-                const optionOver = document.createElement('option');
-                optionOver.value = 'over';
-                optionOver.text = 'text';
-                const optionImg = document.createElement('option');
-                optionImg.value = 'img';
-                optionImg.text = 'image';
+                const createSelect = (options, selectedValue, disabled, className) => {
+                    const container = document.createElement('div');
+                    container.className = className;
 
-                const optionGeneral = document.createElement('option');
-                optionGeneral.value = 'general';
-                optionGeneral.text = 'general';
+                    const select = document.createElement('select');
+                    options.forEach(option => {
+                        const opt = document.createElement('option');
+                        opt.value = option.value;
+                        opt.text = option.text;
+                        select.add(opt);
+                    });
+                    select.value = selectedValue;
+                    select.disabled = disabled;
 
-                
-                typeSelect.add(optionGeneral);
-                typeSelect.add(optionOver);
-                typeSelect.add(optionImg);
-                typeSelect.value = type;
-                typeSelect.disabled = readOnly;
+                    container.appendChild(select);
+                    return container;
+                };
 
-                // Create a container for the showMode select element
-                const showModeSelectContainer = document.createElement('div');
-                showModeSelectContainer.className = 'showMode-select-container';
+                const createActionButton = (text, className, onClick) => {
+                    const button = document.createElement('button');
+                    button.textContent = text;
+                    button.className = className;
+                    button.onclick = onClick;
+                    return button;
+                };
 
-                const showModeSelect = document.createElement('select');
-                showModeSelect.className = 'showMode-select';
-                const optionInput = document.createElement('option');
-                optionInput.value = 'input';
-                optionInput.text = 'input';
-                const optionWindow = document.createElement('option');
-                optionWindow.value = 'window';
-                optionWindow.text = 'window';
-                showModeSelect.add(optionInput);
-                showModeSelect.add(optionWindow);
-                showModeSelect.value = showMode;
-                showModeSelect.disabled = readOnly;
+                createCell(createInput(key, readOnly), 'key-cell');
 
-                const promptInput = document.createElement('input');
-                promptInput.type = 'text';
-                promptInput.value = prompt;
-                promptInput.disabled = readOnly;
+                const typeSelectContainer = createSelect([
+                    { value: 'general', text: 'general' },
+                    { value: 'over', text: 'text' },
+                    { value: 'img', text: 'image' }
+                ], type, readOnly, 'type-select-container');
+                createCell(typeSelectContainer, 'type-cell');
 
-                // Model select
+
+                const showModeSelectContainer = createSelect([
+                    { value: 'input', text: 'input' },
+                    { value: 'window', text: 'window' }
+                ], showMode, readOnly, 'showMode-select-container');
+                createCell(showModeSelectContainer, 'show-mode-cell');
+
+                createCell(createInput(prompt, readOnly), 'prompt-cell');
+
                 const modelProviderSelectContainer = document.createElement('div');
                 modelProviderSelectContainer.className = 'model-provider-select-container';
 
                 const modelProviderSelect = document.createElement('select');
                 modelProviderSelect.className = 'model-provider-select';
-              
-                // Populate model select
+
                 const defaultOption = document.createElement('option');
                 defaultOption.value = '';
                 defaultOption.text = 'Default';
                 modelProviderSelect.add(defaultOption);
 
-                for (const providerId in currentConfig.config.providers) {
+                const providerIds = currentConfig.config.providerOrder || Object.keys(currentConfig.config.providers);
+                for (const providerId of providerIds) {
                     const provider = currentConfig.config.providers[providerId];
+                    if (!provider) continue;
                     const providerName = provider.name;
 
-                    // Add provider's modelList
                     provider.modelList.forEach(modelName => {
                         const option = document.createElement('option');
                         option.value = `${providerId}|${modelName}`;
@@ -1392,7 +1468,6 @@
                         modelProviderSelect.add(option);
                     });
 
-                    // Add provider's modelListByUser
                     if (provider.modelListByUser) {
                         provider.modelListByUser.forEach(modelName => {
                             const option = document.createElement('option');
@@ -1403,239 +1478,351 @@
                     }
                 }
                 modelProviderSelect.value = model;
+                modelProviderSelectContainer.appendChild(modelProviderSelect)
+                createCell(modelProviderSelectContainer, 'model-cell');
 
-                keyCell.appendChild(keyInput);
-                typeSelectContainer.appendChild(typeSelect); // Add select to container
-                typeCell.appendChild(typeSelectContainer); // Add container to cell
-
-                showModeSelectContainer.appendChild(showModeSelect);
-                showModeCell.appendChild(showModeSelectContainer);
-
-                promptCell.appendChild(promptInput);
-
-                modelProviderSelectContainer.appendChild(modelProviderSelect);
-                modelCell.appendChild(modelProviderSelectContainer)
 
                 if (!readOnly) {
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.textContent = 'Delete';
-                    deleteBtn.className = 'delete-btn';
-                    deleteBtn.onclick = () => {
-                        promptsTable.deleteRow(row.rowIndex - 1);
-                    }
-                    actionCell.appendChild(deleteBtn);
+                    createCell(createActionButton('Delete', 'delete-btn', () => {
+                        domElements.promptsTable.deleteRow(row.rowIndex - 1);
+                    }), 'action-cell');
                 }
+
                 addDragAndDropListeners();
-            }
+            };
 
-            function saveCurrentModel() {
-                currentConfig.config.modelSelect = modelSelect.value;
+
+            // 保存当前模型
+            const saveCurrentModel = () => {
+                currentConfig.config.modelSelect = domElements.modelSelect.value;
                 window.api.updateConfig(currentConfig);
-            }
+            };
 
-            modelSelect.addEventListener('change', saveCurrentModel);
+            domElements.modelSelect.addEventListener('change', saveCurrentModel);
 
-            apiUrlInput.addEventListener('change', () => {
-                currentConfig.config.apiUrl = apiUrlInput.value;
-                window.api.updateConfig(currentConfig);
-            });
-
-            apiKeyInput.addEventListener('change', () => {
-                currentConfig.config.apiKey = apiKeyInput.value;
+            domElements.apiUrlInput.addEventListener('change', () => {
+                currentConfig.config.apiUrl = domElements.apiUrlInput.value;
                 window.api.updateConfig(currentConfig);
             });
 
-            streamBtn.addEventListener('click', () => {
-                currentConfig.config.stream = !currentConfig.config.stream;
-                streamBtn.textContent = currentConfig.config.stream ? 'True' : 'False';
-                streamBtn.className = currentConfig.config.stream ? 'stream-button stream-true' : 'stream-button stream-false';
+            domElements.apiKeyInput.addEventListener('change', () => {
+                currentConfig.config.apiKey = domElements.apiKeyInput.value;
                 window.api.updateConfig(currentConfig);
             });
 
-            skipLineBreakBtn.addEventListener('click', () => {
-                currentConfig.config.skipLineBreak = !currentConfig.config.skipLineBreak;
-                skipLineBreakBtn.textContent = currentConfig.config.skipLineBreak ? 'True' : 'False';
-                skipLineBreakBtn.className = currentConfig.config.skipLineBreak ? 'stream-button stream-true' : 'stream-button stream-false';
+            // 切换配置值
+            const toggleConfigValue = (key, button) => {
+                currentConfig.config[key] = !currentConfig.config[key];
+                button.textContent = currentConfig.config[key] ? 'True' : 'False';
+                button.className = currentConfig.config[key] ? 'stream-button stream-true' : 'stream-button stream-false';
                 window.api.updateConfig(currentConfig);
-            });
+            };
 
-            autoCloseOnBlurBtn.addEventListener('click', () => {
-                currentConfig.config.autoCloseOnBlur = !currentConfig.config.autoCloseOnBlur;
-                autoCloseOnBlurBtn.textContent = currentConfig.config.autoCloseOnBlur ? 'True' : 'False';
-                autoCloseOnBlurBtn.className = currentConfig.config.autoCloseOnBlur ? 'stream-button stream-true' : 'stream-button stream-false';
-                window.api.updateConfig(currentConfig);
-            });
+            domElements.streamBtn.addEventListener('click', () => toggleConfigValue('stream', domElements.streamBtn));
+            domElements.skipLineBreakBtn.addEventListener('click', () => toggleConfigValue('skipLineBreak', domElements.skipLineBreakBtn));
+            domElements.autoCloseOnBlurBtn.addEventListener('click', () => toggleConfigValue('autoCloseOnBlur', domElements.autoCloseOnBlurBtn));
+            domElements.ctrlEnterBtn.addEventListener('click', () => toggleConfigValue('CtrlEnterToSend', domElements.ctrlEnterBtn));
+            domElements.showNotificationBtn.addEventListener('click', () => toggleConfigValue('showNotification', domElements.showNotificationBtn));
 
-            // 新增：Ctrl+Enter 按钮点击事件
-            ctrlEnterBtn.addEventListener('click', () => {
-                currentConfig.config.CtrlEnterToSend = !currentConfig.config.CtrlEnterToSend;
-                ctrlEnterBtn.textContent = currentConfig.config.CtrlEnterToSend ? 'True' : 'False';
-                ctrlEnterBtn.className = currentConfig.config.CtrlEnterToSend ? 'stream-button stream-true' : 'stream-button stream-false';
-                window.api.updateConfig(currentConfig);
-            });
-
-            showNotificationBtn.addEventListener('click', () => {
-                currentConfig.config.showNotification = !currentConfig.config.showNotification;
-                showNotificationBtn.textContent = currentConfig.config.showNotification ? 'True' : 'False';
-                showNotificationBtn.className = currentConfig.config.showNotification ? 'stream-button stream-true' : 'stream-button stream-false';
-                window.api.updateConfig(currentConfig);
-            })
-
-            function savePrompts() {
+            // 保存 Prompts
+            const savePrompts = () => {
                 const updatedPrompts = {};
-                const rows = Array.from(promptsTable.rows);
+                const rows = Array.from(domElements.promptsTable.rows);
                 rows.forEach((row, index) => {
                     const key = row.cells[0].querySelector('input').value;
-                    const type = row.cells[1].querySelector('.type-select').value;
-                    const showMode = row.cells[2].querySelector('.showMode-select').value;
+                    const type = row.cells[1].querySelector('select').value;
+                    const showMode = row.cells[2].querySelector('select').value;
                     const prompt = row.cells[3].querySelector('input').value;
-                    const model = row.cells[4].querySelector('.model-provider-select').value;
+                    const model = row.cells[4].querySelector('select').value;
                     updatedPrompts[key] = { idex: index, type, showMode, prompt, model };
                 });
                 currentConfig.config.prompts = updatedPrompts;
                 window.api.updateConfig(currentConfig);
                 loadPrompts(currentConfig.config.prompts);
-            }
+            };
 
-            addPromptBtn.addEventListener('click', () => {
+            domElements.addPromptBtn.addEventListener('click', () => {
                 addPromptRow();
             });
+            domElements.savePromptsBtn.addEventListener('click', savePrompts);
 
-            savePromptsBtn.addEventListener('click', savePrompts);
-
-            fetchModelsBtn.addEventListener('click', async () => {
-                const apiUrl = apiUrlInput.value;
-                const apiKey = apiKeyInput.value;
-                const modelList = await fetchModels(apiUrl, apiKey); // Pass null for providerId to update the default model list
-                currentConfig.config.modelList = modelList;
-                populateModelDropdown();
+            domElements.fetchModelsBtn.addEventListener('click', async () => {
+                const apiUrl = domElements.apiUrlInput.value;
+                const apiKey = domElements.apiKeyInput.value;
+                const modelList = await fetchModels(apiUrl, apiKey);
+                if (modelList.length > 0) {
+                    currentConfig.config.modelList = modelList;
+                    populateModelDropdown();
+                }
             });
-          
 
-            addModelBtn.addEventListener('click', () => {
-                const newModelName = addModelInput.value.trim();
+            domElements.addModelBtn.addEventListener('click', () => {
+                const newModelName = domElements.addModelInput.value.trim();
                 if (newModelName) {
                     if (!currentConfig.config.ModelsListByUser.includes(newModelName)) {
                         currentConfig.config.ModelsListByUser.push(newModelName);
-                        addModelInput.value = '';
+                        domElements.addModelInput.value = '';
                         populateModelDropdown();
                         window.api.updateConfig(currentConfig);
+                        showToast('Custom model added.');
                     } else {
-                        showToast('Model already exists in custom list.');
+                        showToast('Model already exists in custom list.', "error");
                     }
                 }
             });
 
-            deleteModelBtn.addEventListener('click', () => {
-                const modelToDelete = addModelInput.value.trim();
+            domElements.deleteModelBtn.addEventListener('click', () => {
+                const modelToDelete = domElements.addModelInput.value.trim();
                 if (modelToDelete) {
                     if (currentConfig.config.ModelsListByUser.includes(modelToDelete)) {
                         currentConfig.config.ModelsListByUser = currentConfig.config.ModelsListByUser.filter(m => m !== modelToDelete);
-                        addModelInput.value = '';
+                        domElements.addModelInput.value = '';
                         populateModelDropdown();
                         window.api.updateConfig(currentConfig);
+                        showToast('Custom model deleted.');
                     } else {
-                        showToast('Model not found in custom list.');
+                        showToast('Model not found in custom list.', "error");
                     }
                 }
             });
 
-            // Reset Button Logic
-            resetButton.addEventListener('click', () => {
-                confirmModal.style.display = 'block';
-            });
-
-            confirmResetBtn.addEventListener('click', async () => {
-                window.utools.db.remove("config")
-                currentConfig = defaultConfig;
-                await loadConfig(); // Reload the configuration from the reset default
+            // 重置配置
+            const resetConfig = async () => {
+                const newConfig = JSON.parse(JSON.stringify(defaultConfig));
+                try {
+                    window.utools.db.remove("config")
+                } catch (error) {
+                    console.error("Failed to remove config from uTools database", error);
+                }
+                currentConfig = newConfig;
+                await loadConfig();
                 window.api.updateConfig(currentConfig);
-                confirmModal.style.display = 'none';
                 showToast('Configuration reset to default.');
+            };
+
+            domElements.resetButton.addEventListener('click', () => {
+                domElements.confirmModal.style.display = 'block';
             });
 
-            cancelResetBtn.addEventListener('click', () => {
-                confirmModal.style.display = 'none';
+            domElements.confirmResetBtn.addEventListener('click', async () => {
+                await resetConfig();
+                domElements.confirmModal.style.display = 'none';
             });
-            // Close modal if clicked outside
+
+            domElements.cancelResetBtn.addEventListener('click', () => {
+                domElements.confirmModal.style.display = 'none';
+            });
+
             window.addEventListener('click', (event) => {
-                if (event.target === confirmModal) {
-                    confirmModal.style.display = 'none';
+                if (event.target === domElements.confirmModal) {
+                    domElements.confirmModal.style.display = 'none';
+                }
+                if (event.target === domElements.saveProviderModal) {
+                    domElements.saveProviderModal.style.display = 'none';
+                }
+                if (event.target === domElements.providerModal) {
+                    domElements.providerModal.style.display = 'none';
                 }
             });
 
-            // Save Provider Button Logic
-            saveProviderBtn.addEventListener('click', () => {
-                saveProviderModal.style.display = 'block';
+            domElements.saveProviderBtn.addEventListener('click', () => {
+                domElements.saveProviderModal.style.display = 'block';
             });
 
-            confirmSaveProviderBtn.addEventListener('click', async () => {
-                const providerName = providerNameInput.value.trim();
-                if (providerName) {
-                    const newProviderId = Date.now();
-                    const newProvider = {
-                        name: providerName,
-                        url: apiUrlInput.value,
-                        api_key: apiKeyInput.value,
-                        modelList: currentConfig.config.modelList,
-                        modelListByUser: currentConfig.config.ModelsListByUser
-                    };
-                    
-                    currentConfig.config.providers[newProviderId] = newProvider;
-                    // Fetch models for the new provider
-                    // const modelList = await fetchModels(newProvider.url, newProvider.api_key);
-                    // newProvider.modelList = modelList;
-                    // currentConfig.config.providers[newProviderId].modelList = modelList;
+            domElements.confirmSaveProviderBtn.addEventListener('click', async () => {
+                const providerName = domElements.providerNameInput.value.trim();
+                if (!providerName) {
+                    showToast('Please enter a provider name.', 'error');
+                    return;
+                }
 
-                    window.api.updateConfig(currentConfig);
-                    createProviderTabs();
-                    providerNameInput.value = '';
-                    saveProviderModal.style.display = 'none';
-                    loadPrompts(currentConfig.config.prompts);
-                    showToast(`Provider "${providerName}" saved.`);
+                const newProviderId = Date.now();
+                const newProvider = {
+                    name: providerName,
+                    url: domElements.apiUrlInput.value,
+                    api_key: domElements.apiKeyInput.value,
+                    modelList: currentConfig.config.modelList,
+                    modelListByUser: currentConfig.config.ModelsListByUser
+                };
+
+                currentConfig.config.providers[newProviderId] = newProvider;
+
+                if (!currentConfig.config.providerOrder) {
+                    currentConfig.config.providerOrder = [newProviderId];
                 } else {
-                    showToast('Please enter a provider name.','error');
+                    currentConfig.config.providerOrder.push(newProviderId);
                 }
+
+                window.api.updateConfig(currentConfig);
+                createProviderTabs();
+                domElements.providerNameInput.value = '';
+                domElements.saveProviderModal.style.display = 'none';
+                loadPrompts(currentConfig.config.prompts);
+
+                updatePromptModelDropdowns();
             });
 
-            cancelSaveProviderBtn.addEventListener('click', () => {
-                saveProviderModal.style.display = 'none';
+            domElements.cancelSaveProviderBtn.addEventListener('click', () => {
+                domElements.saveProviderModal.style.display = 'none';
             });
 
-            function createProviderTabs() {
-                providerTabsContainer.innerHTML = '';
-                let activeTabExists = false;
-                for (const providerId in currentConfig.config.providers) {
+            // 创建提供者标签
+            const createProviderTabs = () => {
+                domElements.providerTabsContainer.innerHTML = '';
+                let providerIds = Object.keys(currentConfig.config.providers);
+
+                if (currentConfig.config.activeProviderId && !currentConfig.config.providers[currentConfig.config.activeProviderId]) {
+                    currentConfig.config.activeProviderId = null;
+                }
+
+
+                if (currentConfig.config.providerOrder && Array.isArray(currentConfig.config.providerOrder)) {
+                    providerIds.sort((a, b) => {
+                        const indexA = currentConfig.config.providerOrder.indexOf(a);
+                        const indexB = currentConfig.config.providerOrder.indexOf(b);
+                        if (indexA === -1) return 1;
+                        if (indexB === -1) return -1;
+                        return indexA - indexB;
+                    });
+                }
+
+                for (const providerId of providerIds) {
                     const provider = currentConfig.config.providers[providerId];
+                    if (!provider) continue;
+
                     const tab = document.createElement('div');
                     tab.classList.add('provider-tab');
                     tab.textContent = provider.name;
-                    if(providerId === currentConfig.config.activeProviderId){
-                        tab.classList.add('active');
-                        activeTabExists = true;
-                    }
+                    tab.setAttribute('data-provider-id', providerId);
+                    tab.draggable = true;
+
                     tab.addEventListener('click', () => {
-                        // 移除所有标签的 active 类
-                        document.querySelectorAll('.provider-tab').forEach(t => t.classList.remove('active'));
-                        // 为当前点击的标签添加 active 类
-                        tab.classList.add('active');
+
                         currentConfig.config.activeProviderId = providerId;
                         showProviderModal(providerId);
                     });
-                    providerTabsContainer.appendChild(tab);
-                }
-                if(!activeTabExists && providerTabsContainer.firstElementChild){
-                    providerTabsContainer.firstElementChild.classList.add('active');
-                    currentConfig.config.activeProviderId = Object.keys(currentConfig.config.providers)[0];
-                }
-                window.api.updateConfig(currentConfig);
-            }
 
-            function showProviderModal(providerId) {
+                    addDragEvents(tab);
+
+                    domElements.providerTabsContainer.appendChild(tab);
+                }
+
+                window.api.updateConfig(currentConfig);
+            };
+
+            let draggedTab = null; // 当前拖动的标签
+
+            // 添加标签拖拽事件
+            const addDragEvents = (tab) => {
+                tab.addEventListener('dragstart', (event) => {
+                    draggedTab = tab;
+                    tab.classList.add('dragging');
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', tab.dataset.providerId);
+                });
+
+                tab.addEventListener('dragover', (event) => {
+                    event.preventDefault();
+                    if (tab === draggedTab) return;
+
+                    const targetRect = tab.getBoundingClientRect();
+                    const offset = event.clientX - targetRect.left;
+
+                    if (offset < targetRect.width / 2) {
+                        if (tab.previousElementSibling !== draggedTab) {
+                            domElements.providerTabsContainer.insertBefore(draggedTab, tab);
+                        }
+                    } else {
+                        if (tab.nextElementSibling !== draggedTab) {
+                            domElements.providerTabsContainer.insertBefore(draggedTab, tab.nextElementSibling);
+                        }
+                    }
+
+                });
+
+                tab.addEventListener('dragenter', (event) => {
+                    event.preventDefault();
+                    if (tab !== draggedTab) {
+                        tab.classList.add('drag-over');
+                    }
+                });
+
+                tab.addEventListener('dragleave', () => {
+                    tab.classList.remove('drag-over');
+                });
+
+                tab.addEventListener('drop', (event) => {
+                    event.preventDefault();
+                    tab.classList.remove('drag-over');
+                    updateProviderOrder();
+                });
+
+                tab.addEventListener('dragend', () => {
+                    if (draggedTab) {
+                        draggedTab.classList.remove('dragging');
+                        draggedTab = null;
+                    }
+                });
+            };
+
+            // 更新提供者顺序
+            const updateProviderOrder = () => {
+                const tabs = Array.from(domElements.providerTabsContainer.children);
+                const newProviderOrder = tabs.map(tab => tab.dataset.providerId);
+
+                currentConfig.config.providerOrder = newProviderOrder;
+                window.api.updateConfig(currentConfig);
+
+                updatePromptModelDropdowns();
+            };
+
+            // 更新 Prompt 模型下拉菜单
+            const updatePromptModelDropdowns = () => {
+                const rows = Array.from(domElements.promptsTable.rows);
+                rows.forEach(row => {
+                    const modelSelect = row.querySelector('.model-provider-select');
+                    if (modelSelect) {
+                        const currentValue = modelSelect.value;
+                        modelSelect.innerHTML = '';
+
+                        const defaultOption = document.createElement('option');
+                        defaultOption.value = '';
+                        defaultOption.text = 'Default';
+                        modelSelect.add(defaultOption);
+
+                        const providerIds = currentConfig.config.providerOrder || Object.keys(currentConfig.config.providers);
+                        for (const providerId of providerIds) {
+                            const provider = currentConfig.config.providers[providerId];
+                            if (!provider) continue;
+                            const providerName = provider.name;
+
+                            provider.modelList.forEach(modelName => {
+                                const option = document.createElement('option');
+                                option.value = `${providerId}|${modelName}`;
+                                option.text = `${providerName}|${modelName}`;
+                                modelSelect.add(option);
+                            });
+
+                            if (provider.modelListByUser) {
+                                provider.modelListByUser.forEach(modelName => {
+                                    const option = document.createElement('option');
+                                    option.value = `${providerId}|${modelName}`;
+                                    option.text = `${providerName}|${modelName} (Custom)`;
+                                    modelSelect.add(option);
+                                });
+                            }
+                        }
+                        modelSelect.value = currentValue;
+                    }
+                });
+            };
+
+            // 显示提供者模态框
+            const showProviderModal = (providerId) => {
                 const provider = currentConfig.config.providers[providerId];
                 if (!provider) return;
 
-                providerModalContent.innerHTML = `
+                domElements.providerModalContent.innerHTML = `
                     <h3>${provider.name}</h3>
                     <div class="provider-modal-section">
                         <label for="provider-url">API URL:</label>
@@ -1681,97 +1868,95 @@
                 const deleteProviderBtn = document.querySelector('.delete-provider-btn');
                 const cancelProviderBtn = document.querySelector('.cancel-provider-btn');
 
-                // Populate provider model select
                 populateModelDropdown(providerModelSelect, providerId);
 
-                // Fetch models for the provider
                 providerFetchModelsBtn.addEventListener('click', async () => {
                     const apiUrl = providerUrlInput.value;
                     const apiKey = providerKeyInput.value;
                     const modelList = await fetchModels(apiUrl, apiKey, providerId);
-                    provider.modelList = modelList;
-                    populateModelDropdown(providerModelSelect, providerId);
+                    if (modelList.length > 0) {
+                        provider.modelList = modelList
+                        populateModelDropdown(providerModelSelect, providerId);
+                    }
                 });
 
-                // Add custom model for the provider
                 providerAddModelBtn.addEventListener('click', () => {
                     const newModelName = providerAddModelInput.value.trim();
                     if (newModelName && !provider.modelListByUser.includes(newModelName)) {
+                        provider.modelListByUser = provider.modelListByUser || [];
                         provider.modelListByUser.push(newModelName);
                         providerAddModelInput.value = '';
                         populateModelDropdown(providerModelSelect, providerId);
                         window.api.updateConfig(currentConfig);
                         showToast('Custom model added.');
                     } else {
-                        showToast('Model already exists or input is empty.');
+                        showToast('Model already exists or input is empty.', "error");
                     }
                 });
 
-                // Delete custom model for the provider
                 providerDeleteModelBtn.addEventListener('click', () => {
                     const modelToDelete = providerAddModelInput.value.trim();
-                    if (modelToDelete && provider.modelListByUser.includes(modelToDelete)) {
+                    if (modelToDelete && provider.modelListByUser && provider.modelListByUser.includes(modelToDelete)) {
                         provider.modelListByUser = provider.modelListByUser.filter(m => m !== modelToDelete);
                         providerAddModelInput.value = '';
-                        // Remove the option from the select
-                       populateModelDropdown(providerModelSelect, providerId);
+                        populateModelDropdown(providerModelSelect, providerId);
                         window.api.updateConfig(currentConfig);
                         showToast('Custom model deleted.');
                     } else {
-                        showToast('Model not found or input is empty.');
+                        showToast('Model not found or input is empty.', "error");
                     }
                 });
 
-                // Update provider
                 updateProviderBtn.addEventListener('click', () => {
                     provider.url = providerUrlInput.value;
                     provider.api_key = providerKeyInput.value;
                     window.api.updateConfig(currentConfig);
                     createProviderTabs();
-                    providerModal.style.display = 'none';
+                    domElements.providerModal.style.display = 'none';
                     showToast(`Provider "${provider.name}" updated.`);
                     loadPrompts(currentConfig.config.prompts);
+
+                    updatePromptModelDropdowns();
                 });
 
-                // Delete provider
                 deleteProviderBtn.addEventListener('click', () => {
                     delete currentConfig.config.providers[providerId];
+                    if (currentConfig.config.activeProviderId === providerId) {
+                        currentConfig.config.activeProviderId = null;
+                    }
                     window.api.updateConfig(currentConfig);
                     createProviderTabs();
-                    providerModal.style.display = 'none';
+                    domElements.providerModal.style.display = 'none';
                     showToast(`Provider "${provider.name}" deleted.`);
                     loadPrompts(currentConfig.config.prompts);
                 });
 
                 cancelProviderBtn.addEventListener('click', () => {
-                    providerModal.style.display = 'none';
+                    domElements.providerModal.style.display = 'none';
                 });
 
-                providerModal.style.display = 'block';
-            }
+                domElements.providerModal.style.display = 'block';
+            };
 
-            window.addEventListener('click', (event) => {
-                if (event.target === providerModal) {
-                    providerModal.style.display = 'none';
-                }
-            });
-
-            scrollLeftBtn.addEventListener('click', () => {
-                providerTabsContainer.scrollBy({
-                    left: -100, // Adjust scroll distance as needed
+            // 标签容器滚动事件
+            domElements.scrollLeftBtn.addEventListener('click', () => {
+                domElements.providerTabsContainer.scrollBy({
+                    left: -100,
                     behavior: 'smooth'
                 });
             });
 
-            scrollRightBtn.addEventListener('click', () => {
-                providerTabsContainer.scrollBy({
-                    left: 100, // Adjust scroll distance as needed
+            domElements.scrollRightBtn.addEventListener('click', () => {
+                domElements.providerTabsContainer.scrollBy({
+                    left: 100,
                     behavior: 'smooth'
                 });
             });
 
+            // 加载配置
             await loadConfig();
-        });
+        })();
     </script>
 </body>
+
 </html>

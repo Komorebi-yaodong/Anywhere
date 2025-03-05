@@ -24,6 +24,7 @@ const defaultConfig = {
     ModelsListByUser: [],
     modelSelect: "gpt-4o-mini",
     providers: {},
+    providerOrder: [],
     prompts: {
       Completion: {
         idex: 0, // 用于排序
