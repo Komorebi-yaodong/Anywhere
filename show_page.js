@@ -58,15 +58,26 @@ function getConfig() {
 // 更新配置文件
 function updateConfig(newConfig) {
   const features = utools.getFeatures();
-  let featuresMap = new Map(features.map(feature => [feature.code, feature]));
+  let featuresMap = new Map(features.map((feature) => [feature.code, feature]));
   // 查找prompts中的key是否在features的元素的code中，如不在则添加
   for (let key in newConfig.config.prompts) {
-    utools.setFeature({
-      code: key,
-      explain: key,
-      mainHide: true,
-      cmds: [{ type: newConfig.config.prompts[key].type, label: key }]
-    });
+    if (newConfig.config.prompts[key].type === "general") {
+      utools.setFeature({
+        code: key,
+        explain: key,
+        mainHide: true,
+        cmds: [
+          { type: "over", label: key },
+          { type: "img", label: key },],
+      });
+    } else {
+      utools.setFeature({
+        code: key,
+        explain: key,
+        mainHide: true,
+        cmds: [{ type: newConfig.config.prompts[key].type, label: key }],
+      });
+    }
   }
   // 查找features的元素的code是否在prompts中的key中，如不在则删除
   for (let [key, feature] of featuresMap) {
@@ -74,19 +85,17 @@ function updateConfig(newConfig) {
       utools.removeFeature(key);
     }
   }
-  newConfig.config.prompts.Completion = defaultConfig.config.prompts.Completion
-  let configDoc = utools.db.get("config")
+  let configDoc = utools.db.get("config");
   if (configDoc) {
     // 更新已存在的配置
-    configDoc.data = { ...configDoc.data, ...newConfig }
-    return utools.db.put(configDoc)
-  }
-  else {
+    configDoc.data = { ...configDoc.data, ...newConfig };
+    return utools.db.put(configDoc);
+  } else {
     // 创建新的配置
     return utools.db.put({
       _id: "config",
       data: newConfig,
-    })
+    });
   }
 }
 

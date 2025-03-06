@@ -1,12 +1,13 @@
 # Anywhere
-随时随地，召唤AI
+随时随地，召唤AI，便捷调用AI实现划词翻译、变量名命名、OCR、AI高情商回复、AI绘图
+
+## 体验
+如果没有API，可以注册OpenRouter中申请密钥，选择免费模型进行体验(https://openrouter.ai)
 
 ## 页面展示
 ![image](/image/1.png)
 ![image](/image/2.png)
 ![image](/image/3.png)
-![image](/image/4.png)
-![image](/image/5.png)
 
 ## 功能：
 1. 选中文本后，在要输入的地方调用快捷方式“Completion”（没有选中文本不会显示快捷方式），搭配快捷键更好“食用”

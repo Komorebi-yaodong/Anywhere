@@ -111,8 +111,6 @@ function updateConfig(newConfig) {
       utools.removeFeature(key);
     }
   }
-  newConfig.config.prompts["Completion"] =
-    defaultConfig.config.prompts["Completion"];
   let configDoc = utools.db.get("config");
   if (configDoc) {
     // 更新已存在的配置
@@ -302,8 +300,8 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
   // 主逻辑
   if (code !== "Anywhere Settings") {
     // 获取配置文件，隐藏主窗口
-    config = getConfig().config;
     utools.hideMainWindow(true);
+    config = getConfig().config;
     checkConfig(config);
     // 非窗口运行
     if (config.prompts[code].showMode === "input") {

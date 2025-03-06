@@ -241,10 +241,10 @@
             text-align: center;
         }
 
-        .prompts-table tbody tr:first-child .drag-handle {
+        /* .prompts-table tbody tr:first-child .drag-handle {
             cursor: default;
             text-align: center;
-        }
+        } */
 
         .prompts-table tbody tr input,
         .prompts-table tbody tr select {
@@ -1134,13 +1134,13 @@
                     providers: {},
                     providerOrder: [],
                     prompts: {
-                        Completion: {
-                            idex: 0,
-                            type: "over",
-                            prompt: `你是一个文本续写模型...`,
-                            showMode: "input",
-                            model: "",
-                        },
+                        // Completion: {  // 移除 Completion 的特殊定义
+                        //     idex: 0,
+                        //     type: "over",
+                        //     prompt: `你是一个文本续写模型...`,
+                        //     showMode: "input",
+                        //     model: "",
+                        // },
                     },
                     stream: true,
                     skipLineBreak: true,
@@ -1311,7 +1311,8 @@
                 promptsArray.sort((a, b) => a.idex - b.idex);
 
                 promptsArray.forEach(prompt => {
-                    addPromptRow(prompt.key, prompt.type, prompt.showMode, prompt.prompt, prompt.model, prompt.key === 'Completion', prompt.idex);
+                    // 移除 readOnly 参数，所有 prompt 都可以编辑和删除
+                    addPromptRow(prompt.key, prompt.type, prompt.showMode, prompt.prompt, prompt.model, prompt.idex);
                 });
 
                 const sortedPrompts = {};
@@ -1334,10 +1335,11 @@
             const addDragAndDropListeners = () => {
                 const rows = Array.from(domElements.promptsTable.rows);
                 rows.forEach((row, index) => {
-                    if (index === 0) {
-                        row.setAttribute('draggable', 'false');
-                        return;
-                    }
+                    // 移除对第一行的特殊处理，所有行都可以拖动
+                    // if (index === 0) {
+                    //     row.setAttribute('draggable', 'false');
+                    //     return;
+                    // }
                     row.setAttribute('draggable', 'true');
 
                     row.addEventListener('dragstart', (event) => {
@@ -1375,7 +1377,7 @@
             };
 
             // 添加 Prompt 行
-            const addPromptRow = (key = '', type = 'general', showMode = 'window', prompt = '', model = '', readOnly = false, idex = 0) => {
+            const addPromptRow = (key = '', type = 'general', showMode = 'window', prompt = '', model = '', idex = 0) => { // 移除 readOnly 参数
                 const row = domElements.promptsTable.insertRow();
                 row.setAttribute('data-idex', idex);
 
@@ -1396,7 +1398,7 @@
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.value = value;
-                    input.disabled = disabled;
+                    input.disabled = disabled;  // 可以选择是否禁用
                     return input;
                 };
 
@@ -1412,7 +1414,7 @@
                         select.add(opt);
                     });
                     select.value = selectedValue;
-                    select.disabled = disabled;
+                    select.disabled = disabled; // 可以选择是否禁用
 
                     container.appendChild(select);
                     return container;
@@ -1426,23 +1428,24 @@
                     return button;
                 };
 
-                createCell(createInput(key, readOnly), 'key-cell');
+                createCell(createInput(key, false), 'key-cell'); // 不再固定 key
 
                 const typeSelectContainer = createSelect([
                     { value: 'general', text: 'general' },
                     { value: 'over', text: 'text' },
                     { value: 'img', text: 'image' }
-                ], type, readOnly, 'type-select-container');
+                ], type, false, 'type-select-container'); // 不再固定 type
                 createCell(typeSelectContainer, 'type-cell');
 
 
                 const showModeSelectContainer = createSelect([
                     { value: 'input', text: 'input' },
                     { value: 'window', text: 'window' }
-                ], showMode, readOnly, 'showMode-select-container');
+                ], showMode, false, 'showMode-select-container'); // 不再固定 showMode
                 createCell(showModeSelectContainer, 'show-mode-cell');
 
-                createCell(createInput(prompt, readOnly), 'prompt-cell');
+                createCell(createInput(prompt, false), 'prompt-cell'); // 不再固定 prompt
+
 
                 const modelProviderSelectContainer = document.createElement('div');
                 modelProviderSelectContainer.className = 'model-provider-select-container';
@@ -1482,11 +1485,11 @@
                 createCell(modelProviderSelectContainer, 'model-cell');
 
 
-                if (!readOnly) {
-                    createCell(createActionButton('Delete', 'delete-btn', () => {
-                        domElements.promptsTable.deleteRow(row.rowIndex - 1);
-                    }), 'action-cell');
-                }
+                // 所有行都添加删除按钮
+                createCell(createActionButton('Delete', 'delete-btn', () => {
+                    domElements.promptsTable.deleteRow(row.rowIndex - 1);
+                }), 'action-cell');
+
 
                 addDragAndDropListeners();
             };
