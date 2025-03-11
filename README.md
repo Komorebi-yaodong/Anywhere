@@ -1,8 +1,14 @@
 # Anywhere
 随时随地，召唤AI，便捷调用AI实现划词翻译、变量名命名、OCR、AI高情商回复、AI绘图
 
+[教程](https://github.com/Komorebi-yaodong/Anywhere/blob/main/Tutorial.md)
+
 ## 体验
-如果没有API，可以注册OpenRouter中申请密钥，选择免费模型进行体验(https://openrouter.ai)
+1. OpenRouter中选择免费模型进行体验（https://openrouter.ai），填入url:`https://openrouter.ai/api/v1`，需要申请密钥
+2. pollinations中选择openai模型进行体验，直接填入URL：`https://text.pollinations.ai/openai`，无需密钥
+
+
+
 
 ## 页面展示
 ![image](/image/1.png)
