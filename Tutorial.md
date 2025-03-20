@@ -8,7 +8,7 @@
 
 - 默认提供商设置是用户使用Anywhere时，如果提示词没有设置模型，则使用默认提供商选择的模型。填入`base_url`和`api_key`（注意`base_url`以`/v1`结尾，如以下截图）后点击`Get Models`后能够自动获取模型，下拉选择使用的默认模型。在`Default Custom`输入框中输入模型名称，点击Add后会在模型列表中添加自定义模型（如输入"gpt"，会添加自定义模型"gpt(Custom)"），点击`Delete`后删除自定义模型（删除时只需要输入模型名，不需要添加“(Custom)”后缀）
   - ![alt text](./image/t1.png)
-- 添加其他提供商，有助于使用任何其他Openai格式的Api（google提供Openai格式的api，填入`"https://generativelanguage.googleapis.com/v1beta`即可，但是目前不支持自动获取模型，可以自定义输入模型名称使用），使用方法和默认提供商设置相同，但是模型列表不必再提供商中选择，在prompts中选择对应提供商的模型就好
+- 点击`Save Provider`后添加更多服务提供商，有助于使用任何其他Openai格式的api（google提供Openai格式的api，填入`"https://generativelanguage.googleapis.com/v1beta`即可，但是目前不支持自动获取模型，可以自定义输入模型名称使用），使用方法和默认提供商设置相同，但是模型列表不必再提供商中选择，在prompts中选择对应提供商的模型就好
   - ![alt text](./image/t2.png)
 
 ### 使用设置
@@ -33,7 +33,9 @@
   
 ![alt text](./image/t5.png)
 - `Type`：调用方法，目前支持`general`、`text`和`image`
+  
   ![alt text](./image/t6.png)
+  
   - `general`：选择文本或者截图后，呼出utools菜单可以选择`Key`来调用工具
   - `text`：选择文本后，呼出utools菜单可以选择`Key`来调用工具，并自动将选择的文本作为输入发送给AI
   - `image`：选择截图后，呼出utools菜单可以选择`Key`来调用工具，并自动将选择的截图作为输入发送给AI
