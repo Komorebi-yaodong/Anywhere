@@ -1,25 +1,17 @@
 {
-	"main":"setting.html",
-	"logo": "favicon.png",
+	"main": "/main/index.html",
 	"preload": "preload.js",
-	"platform":["win32", "darwin", "linux"],
+	"logo": "favicon.png",
+	"platform": [
+		"win32",
+		"darwin",
+		"linux"
+	],
 	"features": [
 		{
-		  "code": "Completion",
-		  "explain": "AI智能补全文本",
-		  "mainHide": true,
-			"cmds":[
-				{	
-					"code":"over",
-					"label": "Completion",
-					"minLength": 1
-				}
-			]
-		},
-		{
 			"code":"Anywhere Settings",
-			"explain": "配置API",
-			"cmds":["Anywhere Settings","Settings"]
+			"explain": "设置页面",
+			"cmds":["Anywhere Settings"]
 		}
 	]
 }
