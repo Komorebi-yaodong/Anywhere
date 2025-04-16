@@ -4,7 +4,9 @@ const {
   getConfig,
   updateConfig,
   checkConfig,
-  getRandomItem
+  getRandomItem,
+  chatOpenAI,
+  copyText,
 } = require('./data.js');
 
 const {
@@ -13,10 +15,13 @@ const {
   handelReplyOpenAI
 } = require('./input.js');
 
+
 window.api = {
   getConfig, // 添加 getConfig 到 api
   updateConfig, // 添加 updateConfig 到 api
-  getRandomItem
+  getRandomItem,
+  chatOpenAI, // test, 结束后删除
+  copyText // test, 结束后删除
 };
 
 function sendMsgToChild(id, channel, msg) {
@@ -27,46 +32,17 @@ window.preload = {
   sendMsgToChild,
 };
 
-// 默认配置文件
-const defaultConfig = {
-  config: {
-    providers: {
-      "0": {
-        name: "default",
-        url: "https://api.openai.com/v1",
-        api_key: "",
-        modelList: [],
-        enable: true,
-      },
-    },
-    providerOrder: ["0",],
-    prompts: {
-      Completion: {
-        type: "over",
-        prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-        showMode: "input", // input, window
-        model: "", // providers_id|model
-      },
-    },
-    promptOrder: ["Completion"],
-    stream: true,
-    skipLineBreak: true,
-    window_height: 520,
-    window_width: 400,
-    autoCloseOnBlur: false,
-    CtrlEnterToSend: false,
-    showNotification: true
-  }
-};
-
 // 主逻辑
 utools.onPluginEnter(async ({ code, type, payload, option }) => {
-  
-  config = getConfig().config;
-  checkConfig(config);
-  if (code!=="Anywhere Settings"){
+  if (code === "Anywhere Settings"){
+    config = getConfig().config;
+    checkConfig(config);
+  }
+  else if (code !== "Anywhere Settings") {
     // 获取配置文件，隐藏主窗口
     utools.hideMainWindow(true);
+    config = getConfig().config;
+    checkConfig(config);
 
     // 非窗口运行
     if (config.prompts[code].showMode === "input") {
@@ -89,7 +65,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
     }
 
     // 窗口运行
-    else if(config.prompts[code].showMode === "window"){
+    else if (config.prompts[code].showMode === "window") {
       mouse_position = utools.getCursorScreenPoint();
       const displays = utools.getAllDisplays();
       const currentDisplay = displays.find(display =>
@@ -98,18 +74,27 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
         mouse_position.y >= display.bounds.y &&
         mouse_position.y <= display.bounds.y + display.bounds.height
       );
-      let windowX = Math.floor(mouse_position.x - (config.window_width / 2));
-      let windowY = Math.floor(mouse_position.y - (config.window_height / 2));
+
+      // 计算窗口位置，窗口顶端中间对准鼠标
+      let windowX = Math.floor(mouse_position.x - (config.window_width / 2)); // 水平居中
+      let windowY = Math.floor(mouse_position.y); // 窗口顶部与鼠标y坐标对齐
+
       if (currentDisplay) {
         // 左边界检查
         windowX = Math.max(windowX, currentDisplay.bounds.x);
         // 右边界检查
         windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - config.window_width);
-        // 上边界检查（预留标题栏高度，比如30像素）
-        windowY = Math.max(windowY, currentDisplay.bounds.y + 30);
+        // 上边界检查
+        windowY = Math.max(windowY, currentDisplay.bounds.y);
         // 下边界检查
         windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height);
+
+        // 额外的下边界调整，避免窗口顶部超出屏幕底部
+        if (windowY + config.window_height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
+          windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height;
+        }
       }
+
       let msg = {
         code: code,
         type: type,
@@ -127,6 +112,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
           width: config.window_width,
           height: config.window_height,
           alwaysOnTop: true,
+          shellOpenPath: true,
           x: windowX,
           y: windowY,
           webPreferences: {
@@ -143,7 +129,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
       );
       ubWindow.webContents.openDevTools({ mode: "detach" });
     }
-    else{
+    else {
       utools.showNotification("Unsupported Show Mode");
     }
     utools.outPlugin(); // 关闭插件窗口
