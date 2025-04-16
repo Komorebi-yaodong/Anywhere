@@ -43,8 +43,8 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (!config.version !== "1.4.0") {
-    config.version = "1.4.0";
+  if (!config.version !== "1.4.1") {
+    config.version = "1.4.1";
     flag = true;
   }
   else{
@@ -184,6 +184,12 @@ function checkConfig(config) {
     }
   }
 
+  // 检查config中是否有 isDarkMode
+  if (config.isDarkMode === undefined) {
+    config.isDarkMode = false;
+    flag = true;
+  }
+
   if (flag) {
     updateConfig({ "config": config });
   }
@@ -262,9 +268,46 @@ function getRandomItem(list){
   }
 }
 
+// 函数：请求chat
+async function chatOpenAI(history, config, modelInfo, signal) { // 添加 signal 参数
+  let apiUrl = "";
+  let apiKey = "";
+  let model = "";
+  if (modelInfo.includes("|")) {
+      const [providerId, modelName] = modelInfo.split("|");
+      const provider = config.providers[providerId];
+      if (provider) {
+          apiUrl = provider.url;
+          apiKey = provider.api_key;
+          model = modelName;
+      }
+  }
+  const response = await fetch(apiUrl + '/chat/completions', {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + getRandomItem(apiKey)
+      },
+      body: JSON.stringify({
+          model: model,
+          messages: history,
+          stream: config.stream
+      }),
+      signal: signal // 将 signal 传递给 fetch
+  });
+  return response;
+}
+
+// utools 插件调用 copyText 函数
+function copyText(content) {
+  utools.copyText(content);
+}
+
 module.exports = {
   getConfig,
   checkConfig,
   updateConfig,
-  getRandomItem
+  getRandomItem,
+  chatOpenAI,
+  copyText,
 };
