@@ -17,6 +17,8 @@ const defaultConfig = {
         prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
         showMode: "input", // input, window
         model: "", // providers_id|model
+        enable: true,
+        icon:"",
       },
     },
     stream: true,
@@ -43,11 +45,11 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (!config.version !== "1.5.0") {
-    config.version = "1.5.0";
+  if (!config.version !== "1.5.1") {
+    config.version = "1.5.1";
     flag = true;
   }
-  else{
+  else {
     return;
   }
   // 检查是否存在窗口大小配置
@@ -78,7 +80,7 @@ function checkConfig(config) {
       modelList: [config.modelSelect,].concat(config.ModelsListByUser),
       enable: true,
     };
-    
+
     delete config.apiUrl;
     delete config.apiKey;
     delete config.modelList;
@@ -87,6 +89,34 @@ function checkConfig(config) {
     delete config.activeProviderId;
     //插入order的第一个
     config.providerOrder.unshift("0");
+    flag = true;
+  }
+
+  // 检查prompt的enable属性是否存在
+  for (let key in config.prompts) {
+    if (config.prompts[key].enable === undefined) {
+      config.prompts[key].enable = true;
+      flag = true;
+    }
+  }
+
+  // 增加tags属性
+  if (!config.tags) {
+    config.tags = {};
+    flag = true;
+  }
+  if (!config.language) {
+    config.language = "en";
+    flag = true;
+  }
+
+  // 删除tool_list属性和ModelsListByUser属性
+  if (config.tool_list) {
+    delete config.tool_list;
+    flag = true;
+  }
+  if (config.ModelsListByUser) {
+    delete config.ModelsListByUser;
     flag = true;
   }
 
@@ -99,7 +129,7 @@ function checkConfig(config) {
     flag = true;
     // promptOrder排序
     config.promptOrder.sort((a, b) => config.prompts[a].idex - config.prompts[b].idex);
-    
+
   }
 
   // 如果config.prompts[key].idex存在，则删除
@@ -112,7 +142,7 @@ function checkConfig(config) {
 
   // 检查promptOrder中的属性是否一一对应且按照idex序号排序
   for (let i = 0; i < config.promptOrder.length; i++) {
-    if(!config.prompts[config.promptOrder[i]]){
+    if (!config.prompts[config.promptOrder[i]]) {
       config.promptOrder.splice(i, 1);
       flag = true;
     }
@@ -156,7 +186,7 @@ function checkConfig(config) {
     }
   }
 
-  
+
   for (let key in config.prompts) {
     // 检查prompts中的model是否存在
     if (config.prompts[key].model) {
@@ -168,7 +198,7 @@ function checkConfig(config) {
         }
       }
     }
-    else{
+    else {
       config.prompts[key].model = `${config.providerOrder[0]}|${config.providers[config.providerOrder[0]].modelList[0]}`;
       flag = true;
     }
@@ -202,27 +232,55 @@ function updateConfig(newConfig) {
   let featuresMap = new Map(features.map((feature) => [feature.code, feature]));
   // 查找prompts中的key是否在features的元素的code中，如不在则添加
   for (let key in newConfig.config.prompts) {
-    if (newConfig.config.prompts[key].type === "general") {
-      utools.setFeature({
-        code: key,
-        explain: key,
-        mainHide: true,
-        cmds: [
-          { type: "over", label: key },
-          { type: "img", label: key },],
-      });
-    } else {
-      utools.setFeature({
-        code: key,
-        explain: key,
-        mainHide: true,
-        cmds: [{ type: newConfig.config.prompts[key].type, label: key }],
-      });
+    if (newConfig.config.prompts[key].type === "general" && newConfig.config.prompts[key].enable) {
+      if (newConfig.config.prompts[key].icon) {
+        utools.setFeature({
+          code: key,
+          explain: key,
+          // mainHide: true,
+          icon: newConfig.config.prompts[key].icon,
+          cmds: [
+            { type: "over", label: key },
+            { type: "img", label: key },
+          ],
+        });
+      }
+      else {
+        utools.setFeature({
+          code: key,
+          explain: key,
+          mainHide: true,
+          cmds: [
+            { type: "over", label: key },
+            { type: "img", label: key },
+          ],
+        });
+      }
+    } else if (newConfig.config.prompts[key].enable) {
+      if (newConfig.config.prompts[key].icon) {
+        utools.setFeature({
+          code: key,
+          explain: key,
+          mainHide: true,
+          icon: newConfig.config.prompts[key].icon,
+          cmds: [{ type: newConfig.config.prompts[key].type, label: key }
+          ],
+        });
+      }
+      else {
+        utools.setFeature({
+          code: key,
+          explain: key,
+          mainHide: true,
+          cmds: [{ type: newConfig.config.prompts[key].type, label: key }
+          ],
+        });
+      }
     }
   }
   // 查找features的元素的code是否在prompts中的key中，如不在则删除
   for (let [key, feature] of featuresMap) {
-    if (!newConfig.config.prompts[key]) {
+    if (!newConfig.config.prompts[key] || !newConfig.config.prompts[key].enable) {
       utools.removeFeature(key);
     }
   }
@@ -240,7 +298,7 @@ function updateConfig(newConfig) {
   }
 }
 
-function getRandomItem(list){
+function getRandomItem(list) {
   // 检查list是不是字符串
   if (typeof list === "string") {
     // 如果字符串包含逗号
@@ -249,12 +307,12 @@ function getRandomItem(list){
       // 删除空白字符
       list = list.filter(item => item.trim() !== "");
     }
-    else if(list.includes("，")){
-      list = list.split(",");
+    else if (list.includes("，")) {
+      list = list.split("，");
       // 删除空白字符
       list = list.filter(item => item.trim() !== "");
     }
-    else{
+    else {
       return list;
     }
   }
@@ -262,7 +320,7 @@ function getRandomItem(list){
   if (list.length === 0) {
     return "";
   }
-  else{
+  else {
     const resault = list[Math.floor(Math.random() * list.length)];
     return resault;
   }
@@ -274,26 +332,26 @@ async function chatOpenAI(history, config, modelInfo, signal) { // 添加 signal
   let apiKey = "";
   let model = "";
   if (modelInfo.includes("|")) {
-      const [providerId, modelName] = modelInfo.split("|");
-      const provider = config.providers[providerId];
-      if (provider) {
-          apiUrl = provider.url;
-          apiKey = provider.api_key;
-          model = modelName;
-      }
+    const [providerId, modelName] = modelInfo.split("|");
+    const provider = config.providers[providerId];
+    if (provider) {
+      apiUrl = provider.url;
+      apiKey = provider.api_key;
+      model = modelName;
+    }
   }
   const response = await fetch(apiUrl + '/chat/completions', {
-      method: 'POST',
-      headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + getRandomItem(apiKey)
-      },
-      body: JSON.stringify({
-          model: model,
-          messages: history,
-          stream: config.stream
-      }),
-      signal: signal // 将 signal 传递给 fetch
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + getRandomItem(apiKey)
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: history,
+      stream: config.stream
+    }),
+    signal: signal // 将 signal 传递给 fetch
   });
   return response;
 }

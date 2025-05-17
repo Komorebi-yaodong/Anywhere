@@ -7,14 +7,14 @@
 		"darwin",
 		"linux"
 	],
+	"pluginSetting": {
+		"single": false
+	},
 	"features": [
 		{
 			"code":"Anywhere Settings",
 			"explain": "设置页面",
 			"cmds":["Anywhere Settings"]
 		}
-	],
-	"development":{
-		"main":"http://localhost:5173/index.html"
-	}
+	]
 }

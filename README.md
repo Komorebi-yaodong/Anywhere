@@ -8,6 +8,7 @@
 2. pollinations中选择openai模型进行体验，直接填入URL：`https://text.pollinations.ai/openai`，无需密钥
 
 ## 页面展示
+![image](/image/s0.png)
 ![image](/image/s1.png)
 ![image](/image/s2.png)
 ![image](/image/s3.png)

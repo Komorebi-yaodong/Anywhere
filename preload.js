@@ -17,11 +17,11 @@ const {
 
 
 window.api = {
-  getConfig, // 添加 getConfig 到 api
-  updateConfig, // 添加 updateConfig 到 api
+  getConfig,
+  updateConfig,
   getRandomItem,
-  chatOpenAI, // test, 结束后删除
-  copyText // test, 结束后删除
+  chatOpenAI,
+  copyText
 };
 
 function sendMsgToChild(id, channel, msg) {
@@ -40,11 +40,10 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
   }
   else if (code !== "Anywhere Settings") {
     // 获取配置文件，隐藏主窗口
-    utools.hideMainWindow(true);
+    utools.hideMainWindow();
     config = getConfig().config;
     checkConfig(config);
-
-    // 非窗口运行
+    // 直接输入到当前输入框
     if (config.prompts[code].showMode === "input") {
       if (type === "over") {
         // 将换行符替换为空格或空
@@ -62,6 +61,27 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
       } else {
         utools.showNotification("Unsupported input type");
       }
+    }
+    // 输入到剪贴板
+    else if (config.prompts[code].showMode === "clipboard") {
+      config2 = config;
+      config2.stream = false;
+      if (type === "over") {
+        // 将换行符替换为空格或空
+        if (config.skipLineBreak) {
+          payload = payload
+            .replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2")
+            .replace(/\s*\n\s*/g, "");
+        }
+        response = await requestTextOpenAI(code, payload, config2);
+      } else if (type === "img") {
+        response = await requestImageOpenAI(code, payload, config2);
+      } else {
+        utools.showNotification("Unsupported input type");
+      }
+      const data = await response.json();
+      utools.copyText(data.choices[0].message.content.trimEnd());
+      utools.showNotification(code + " successfully!");
     }
 
     // 窗口运行
@@ -117,7 +137,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
           y: windowY,
           webPreferences: {
             preload: "./window_preload.js",
-            devTools: true
+            // devTools: true
           },
         },
         () => {
@@ -127,7 +147,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
           ubWindow.setFullScreen(false); // 窗口全屏
         }
       );
-      ubWindow.webContents.openDevTools({ mode: "detach" });
+      // ubWindow.webContents.openDevTools({ mode: "detach" });
     }
     else {
       utools.showNotification("Unsupported Show Mode");
