@@ -109,6 +109,7 @@ async function handelReplyOpenAI(code, response, stream, showNotification) {
             const decoder = new TextDecoder("utf-8");
             let buffer = "";
             let output = "";
+            let is_think_flag = false;
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) {
@@ -139,7 +140,18 @@ async function handelReplyOpenAI(code, response, stream, showNotification) {
                         try {
                             const parsed = JSON.parse(message);
                             if (parsed.choices[0].delta.content) {
-                                utools.hideMainWindowTypeString(output);
+                                
+                                if(output.trim() === "<think>" && !is_think_flag) {  // 思考开始
+                                    is_think_flag = true;
+                                }
+                                else if (output.trim() === "</think>" && is_think_flag) {  // 思考中
+                                    is_think_flag = false;
+                                }
+                                else if (is_think_flag) {  // 思考结束
+                                }
+                                else{  // 非思考阶段
+                                    utools.hideMainWindowTypeString(output);
+                                }
                                 output = parsed.choices[0].delta.content;
                             }
                         } catch (error) {

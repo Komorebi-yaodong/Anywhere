@@ -1,0 +1,114 @@
+/* 将这段代码放入你的全局 CSS 文件或 App.vue 的 <style> (非 scoped) 中 */
+html.dark {
+    color-scheme: dark;
+
+    /* --- 背景色 --- */
+    --el-bg-color-page: #202123;  /* ChatGPT 最深背景 */
+    --el-bg-color: #292A2D;      /* ChatGPT 组件/元素背景 */
+    --el-bg-color-overlay: #414158; /* ChatGPT 弹窗等背景 (可能同上) */
+
+    /* --- 文字颜色 --- */
+    --el-text-color-primary: #ECECF1; /* ChatGPT 主要文字 (近白) */
+    --el-text-color-regular: #D1D5DB; /* ChatGPT 常规文字 (稍暗) */
+    --el-text-color-secondary: #8E8EA0; /* ChatGPT 次要文字 (更暗) */
+    --el-text-color-placeholder: #61626D;/* ChatGPT 占位符 */
+    --el-text-color-disabled: #4D4E57;  /* ChatGPT 禁用文字 */
+
+    /* --- 边框颜色 (ChatGPT 边框很弱) --- */
+    --el-border-color-darker: #494949; /* 比 bg 暗一点 */
+    --el-border-color-dark: #40414F;   /* 比 bg 亮一点 */
+    --el-border-color: #444654;
+    --el-border-color-light: #53545f;
+    --el-border-color-lighter: #61626d;
+    --el-border-color-extra-light: #6d6e78; /* 最亮的边框色 */
+
+    /* --- 填充颜色 --- */
+    --el-fill-color-darker: #424242;   /* 用于非常暗的区域 */
+    --el-fill-color-dark: #494949;    /* 暗填充 */
+    --el-fill-color: #3E3F4B;        /* 基础填充 (可能用于输入框等) */
+    --el-fill-color-light: #4A4B57;    /* 亮填充 (可能用于 Hover) */
+    --el-fill-color-lighter: #5a5c69;   /* 更亮填充 */
+    --el-fill-color-extra-light: #666875;/* 最亮填充 */
+    --el-fill-color-blank: transparent;
+
+    /* --- 主题色 (ChatGPT 不明显使用单一主色) --- */
+    /* 可能需要根据你的按钮等交互元素决定，这里用白色示例 */
+    --el-color-primary: #FFFFFF;
+    --el-color-primary-light-3: #f0f0f0;
+    --el-color-primary-light-5: #e0e0e0;
+    --el-color-primary-light-7: #d0d0d0;
+    --el-color-primary-light-8: #c0c0c0;
+    --el-color-primary-light-9: #b0b0b0; /* 非常浅的灰色 */
+    --el-color-primary-dark-2: #ffffff; /* 即使是 'dark' 变体，基色是白则还是白 */
+
+    /* --- 其他语义色 (可以保持不变或微调) --- */
+    --el-color-success: #10a37f; /* 尝试用 ChatGPT 类似的绿色 */
+    --el-color-success-light-9: rgb(21, 52, 45);
+    --el-color-success-dark-2: #13c89c;
+
+    --el-color-warning: #f7b500;
+    --el-color-warning-light-9: rgb(51, 39, 18);
+    --el-color-warning-dark-2: #f8c840;
+
+    --el-color-danger: #ef4146;
+    --el-color-danger-light-9: rgb(57, 29, 30);
+    --el-color-danger-dark-2: #f1666b;
+
+    --el-color-error: #ef4146;
+    --el-color-error-light-9: rgb(57, 29, 30);
+    --el-color-error-dark-2: #f1666b;
+
+    --el-color-info: var(--el-text-color-secondary); /* Info 颜色用次要文字颜色 */
+    --el-color-info-light-9: #3a3b43;
+    --el-color-info-dark-2: #aab0bb;
+
+
+    /* --- 阴影 (ChatGPT 阴影很弱) --- */
+    --el-box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.1);
+    --el-box-shadow-light: 0px 0px 6px rgba(0, 0, 0, 0.08);
+    --el-box-shadow-lighter: 0px 0px 4px rgba(0, 0, 0, 0.05);
+    --el-box-shadow-dark: 0px 6px 16px rgba(0, 0, 0, 0.12);
+
+    /* --- 其他 --- */
+    --el-mask-color: rgba(0, 0, 0, 0.6);
+    --el-mask-color-extra-light: rgba(0, 0, 0, 0.2);
+}
+
+/* 针对特定组件的微调可能仍需保留在原处或这里 */
+/* 例如，确保按钮在暗模式下样式正确 */
+html.dark .el-button {
+    /* --el-button-text-color */
+    /* --el-button-bg-color */
+    /* --el-button-border-color */
+    /* --el-button-hover-text-color */
+    /* --el-button-hover-bg-color */
+    /* --el-button-hover-border-color */
+    /* ... */
+    --el-button-disabled-text-color: var(--el-text-color-disabled);
+    --el-button-disabled-bg-color: var(--el-fill-color-darker);
+    --el-button-disabled-border-color: var(--el-border-color-darker);
+}
+html.dark .el-button--primary {
+    /* 如果主按钮需要特殊颜色 */
+    --el-button-text-color: #202123; /* 深色文字配亮背景 */
+    --el-button-bg-color: var(--el-color-primary); /* 使用上面定义的亮色主色 */
+    --el-button-border-color: var(--el-color-primary);
+    /* 定义 hover 和 active 状态 */
+    --el-button-hover-text-color: #202123;
+    --el-button-hover-bg-color: var(--el-color-primary-light-3);
+    --el-button-hover-border-color: var(--el-color-primary-light-3);
+    --el-button-active-text-color: #202123;
+    --el-button-active-bg-color: var(--el-color-primary-light-5);
+    --el-button-active-border-color: var(--el-color-primary-light-5);
+}
+
+html.dark .el-card {
+    --el-card-bg-color: var(--el-bg-color); /* 卡片背景用元素背景色 */
+}
+
+html.dark .el-empty {
+    /* Empty 状态的插画颜色，可以保持默认或从ChatGPT截图调整 */
+    --el-empty-fill-color-0: var(--el-color-black);
+    --el-empty-fill-color-1: #4b4b52;
+    --el-empty-fill-color-2: #36383d;
+}

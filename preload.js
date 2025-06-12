@@ -1,9 +1,8 @@
-const { ipcRenderer } = require('electron');
-
 const {
   getConfig,
   updateConfig,
   checkConfig,
+  getPosition,
   getRandomItem,
   chatOpenAI,
   copyText,
@@ -24,17 +23,9 @@ window.api = {
   copyText
 };
 
-function sendMsgToChild(id, channel, msg) {
-  ipcRenderer.sendTo(id, channel, msg);
-}
-
-window.preload = {
-  sendMsgToChild,
-};
-
 // 主逻辑
 utools.onPluginEnter(async ({ code, type, payload, option }) => {
-  if (code === "Anywhere Settings"){
+  if (code === "Anywhere Settings") {
     config = getConfig().config;
     checkConfig(config);
   }
@@ -80,42 +71,22 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
         utools.showNotification("Unsupported input type");
       }
       const data = await response.json();
-      utools.copyText(data.choices[0].message.content.trimEnd());
+      // utools.copyText(data.choices[0].message.content.trimEnd());
+      // 正则匹配，删除<think></think>标签
+      const result = data.choices[0].message.content.replace(/<think>.*?<\/think>/gs, '').trim();
+      utools.copyText(result);
       utools.showNotification(code + " successfully!");
     }
 
     // 窗口运行
     else if (config.prompts[code].showMode === "window") {
-      mouse_position = utools.getCursorScreenPoint();
-      const displays = utools.getAllDisplays();
-      const currentDisplay = displays.find(display =>
-        mouse_position.x >= display.bounds.x &&
-        mouse_position.x <= display.bounds.x + display.bounds.width &&
-        mouse_position.y >= display.bounds.y &&
-        mouse_position.y <= display.bounds.y + display.bounds.height
-      );
-
-      // 计算窗口位置，窗口顶端中间对准鼠标
-      let windowX = Math.floor(mouse_position.x - (config.window_width / 2)); // 水平居中
-      let windowY = Math.floor(mouse_position.y); // 窗口顶部与鼠标y坐标对齐
-
-      if (currentDisplay) {
-        // 左边界检查
-        windowX = Math.max(windowX, currentDisplay.bounds.x);
-        // 右边界检查
-        windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - config.window_width);
-        // 上边界检查
-        windowY = Math.max(windowY, currentDisplay.bounds.y);
-        // 下边界检查
-        windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height);
-
-        // 额外的下边界调整，避免窗口顶部超出屏幕底部
-        if (windowY + config.window_height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
-          windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height;
-        }
-      }
+      // 窗口位置
+      const window_position = getPosition(config);
+      let windowX = window_position.x;
+      let windowY = window_position.y;
 
       let msg = {
+        os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win": "linux",
         code: code,
         type: type,
         payload: payload,
@@ -141,7 +112,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
           },
         },
         () => {
-          window.preload.sendMsgToChild(ubWindow.webContents.id, channel, msg);
+          ubWindow.webContents.send(channel,msg);
           ubWindow.webContents.show(); // 显示窗口
           ubWindow.setAlwaysOnTop(true, "floating"); // 窗口置顶
           ubWindow.setFullScreen(false); // 窗口全屏

@@ -12,12 +12,12 @@ const channel = "window";
 
 window.preload = {
     receiveMsg: (callback) => {
-        ipcRenderer.on(channel, (event, res) => {
+        ipcRenderer.on(channel, (event, data) => {
             parentId = event.senderId;
-            if (res) {
-                callback(res);
+            if (data) {
+                callback(data);
             }
-        })
+        });
     }
 }
 

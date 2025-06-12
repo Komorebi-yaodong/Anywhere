@@ -18,7 +18,7 @@ const defaultConfig = {
         showMode: "input", // input, window
         model: "", // providers_id|model
         enable: true,
-        icon:"",
+        icon: "",
       },
     },
     stream: true,
@@ -45,8 +45,8 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (!config.version !== "1.5.1") {
-    config.version = "1.5.1";
+  if (!config.version !== "1.5.5") {
+    config.version = "1.5.5";
     flag = true;
   }
   else {
@@ -68,6 +68,13 @@ function checkConfig(config) {
   }
   if (!config.showNotification) {
     config.showNotification = false;
+    flag = true;
+  }
+
+  if (!config.position_x || !config.position_y) {
+    config.fix_position = false;
+    config.position_x = 0;
+    config.position_y = 0;
     flag = true;
   }
 
@@ -298,6 +305,72 @@ function updateConfig(newConfig) {
   }
 }
 
+function getPosition(config) {
+  let windowX = 0, windowY = 0;
+  if (config.fix_position) {
+    let set_position = {
+      x: config.position_x,
+      y: config.position_y
+    };
+    
+    const displays = utools.getAllDisplays();
+    const currentDisplay = displays.find(display =>
+      set_position.x >= display.bounds.x &&
+      set_position.x <= display.bounds.x + display.bounds.width &&
+      set_position.y >= display.bounds.y &&
+      set_position.y <= display.bounds.y + display.bounds.height
+    );
+    windowX = Math.floor(set_position.x);
+    windowY = Math.floor(set_position.y);
+    if (currentDisplay) {
+      // 左边界检查
+      windowX = Math.max(windowX, currentDisplay.bounds.x);
+      // 右边界检查
+      windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - config.window_width);
+      // 上边界检查
+      windowY = Math.max(windowY, currentDisplay.bounds.y);
+      // 下边界检查
+      windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height);
+
+      // 额外的下边界调整，避免窗口顶部超出屏幕底部
+      if (windowY + config.window_height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
+        windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height;
+      }
+    }
+  }
+  else {
+    mouse_position = utools.getCursorScreenPoint();
+    const displays = utools.getAllDisplays();
+    const currentDisplay = displays.find(display =>
+      mouse_position.x >= display.bounds.x &&
+      mouse_position.x <= display.bounds.x + display.bounds.width &&
+      mouse_position.y >= display.bounds.y &&
+      mouse_position.y <= display.bounds.y + display.bounds.height
+    );
+    // 计算窗口位置，窗口顶端中间对准鼠标
+    windowX = Math.floor(mouse_position.x - (config.window_width / 2)); // 水平居中
+    windowY = Math.floor(mouse_position.y); // 窗口顶部与鼠标y坐标对齐
+
+    if (currentDisplay) {
+      // 左边界检查
+      windowX = Math.max(windowX, currentDisplay.bounds.x);
+      // 右边界检查
+      windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - config.window_width);
+      // 上边界检查
+      windowY = Math.max(windowY, currentDisplay.bounds.y);
+      // 下边界检查
+      windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height);
+
+      // 额外的下边界调整，避免窗口顶部超出屏幕底部
+      if (windowY + config.window_height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
+        windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - config.window_height;
+      }
+    }
+    // utools.showNotification("windowX: " + windowX + " windowY: " + windowY);
+  }
+  return { x: windowX, y: windowY };
+}
+
 function getRandomItem(list) {
   // 检查list是不是字符串
   if (typeof list === "string") {
@@ -365,6 +438,7 @@ module.exports = {
   getConfig,
   checkConfig,
   updateConfig,
+  getPosition,
   getRandomItem,
   chatOpenAI,
   copyText,

@@ -1,0 +1,172 @@
+{
+  "app": {
+    "header": {
+      "prompts": "プロンプト 🚀",
+      "providers": "プロバイダー ☁️",
+      "settings": "設定 ⚙️"
+    },
+    "tabs": {
+      "prompts": "プロンプト",
+      "providers": "プロバイダー",
+      "settings": "設定"
+    }
+  },
+  "prompts": {
+    "allPrompts": "すべてのプロンプト",
+    "noPrompts": "まだプロンプトは定義されていません。",
+    "noPromptsInTag": "このタグにはプロンプトがありません。",
+    "addExistingPrompt": "既存のプロンプトを追加",
+    "addNewPrompt": "新しいプロンプトを追加",
+    "editPrompt": "プロンプトの編集",
+    "addNewTag": "新しいタグを追加",
+    "assignPromptsToTag": "'{tagName}' にプロンプトを割り当て",
+    "promptKeyLabel": "プロンプトキー (一意の識別子)",
+    "promptKeyPlaceholder": "例: CodeGeneration",
+    "typeLabel": "タイプ",
+    "iconLabel": "アイコン",
+    "iconUploadTip": "アイコンをアップロードします。png、jpg形式をサポートしています",
+    "dragIconHere": "ドラッグ",
+    "orClickToUpload": "クリック",
+    "typeOptions": {
+      "text": "テキスト",
+      "image": "画像",
+      "general": "一般"
+    },
+    "showModeLabel": "表示モード",
+    "showModeOptions": {
+      "input": "入力",
+      "clipboard": "クリップボード",
+      "window": "ウィンドウ"
+    },
+    "modelLabel": "モデル",
+    "promptContentLabel": "プロンプト内容",
+    "enabledLabel": "有効",
+    "addToTagLabel": "タグに追加 (オプション)",
+    "addToTagPlaceholder": "タグを選択 (オプション)",
+    "tagNameLabel": "タグ名",
+    "selectPromptsToAddLabel": "追加するプロンプトを選択",
+    "selectPromptsPlaceholder": "プロンプトを選択",
+    "alerts": {
+      "tagNameEmpty": "タグ名は空にできません。",
+      "tagExists": "タグ \"{tagName}\" はすでに存在します。",
+      "promptKeyEmpty": "プロンプトキーは空にできません。",
+      "promptKeyExists": "プロンプトキー \"{newKey}\" はすでに存在します。",
+      "targetTagNotFound": "対象のタグが見つかりません。",
+      "noPromptsToAssign": "このタグに割り当てる他のプロンプトはありません。",
+      "invalidImageFormat": "許可されていない画像形式",
+      "imageSizeTooLarge": "画像が大きすぎます。圧縮してから再度アップロードしてください"
+    },
+    "tooltips": {
+      "moveLeft": "左に移動",
+      "moveRight": "右に移動",
+      "removeFromTag": "タグからプロンプトを削除"
+    }
+  },
+  "providers": {
+    "addProviderBtn": "プロバイダーを追加",
+    "noProviders": "まだプロバイダーがありません。",
+    "statusOff": "オフ",
+    "unnamedProvider": "無名のプロバイダー",
+    "editNameTooltip": "名前を編集",
+    "moveUpTooltip": "上に移動",
+    "moveDownTooltip": "下に移動",
+    "deleteProviderTooltip": "プロバイダーを削除",
+    "apiKeyLabel": "APIキー",
+    "apiKeyPlaceholder": "APIキーを入力 (複数可、カンマ区切り)",
+    "apiKeyDescription": "複数のAPIキーをカンマで区切って入力できます。",
+    "apiUrlLabel": "API URL",
+    "apiUrlPlaceholder": "例: https://api.openai.com/v1",
+    "modelsLabel": "モデル",
+    "noModelsAdded": "モデルはまだ追加されていません。",
+    "getModelsFromApiBtn": "APIからモデルを取得",
+    "addManuallyBtn": "手動で追加",
+    "selectProviderOrAdd": "プロバイダーを選択または新規追加",
+    "addProviderDialogTitle": "新しいプロバイダーを追加",
+    "providerNameLabel": "プロバイダー名",
+    "providerNamePlaceholder": "例: OpenAIメイン",
+    "changeProviderNameDialogTitle": "プロバイダー名の変更",
+    "addModelDialogTitle": "モデルの手動追加",
+    "modelNameIdLabel": "モデル名/ID",
+    "modelNameIdPlaceholder": "例: gpt-4, text-davinci-003",
+    "availableModelsDialogTitle": "APIから利用可能なモデル",
+    "table": {
+      "modelId": "モデルID",
+      "ownedBy": "所有者",
+      "action": "操作"
+    },
+    "noModelsFoundError": "モデルが見つからないか、APIエラーです。",
+    "addModelTooltip": "モデルを追加",
+    "removeModelTooltip": "モデルを削除",
+    "alerts": {
+      "providerUrlNotSet": "プロバイダーURLが設定されていません。",
+      "fetchModelsError": "エラー {status}: {message}",
+      "fetchModelsFailedDefault": "モデルの取得に失敗しました",
+      "configSaveFailed": "設定の保存に失敗しました。"
+    }
+  },
+  "setting": {
+    "language": {
+      "label": "言語",
+      "english": "English",
+      "chinese": "中文",
+      "japanese": "日本語",
+      "russian": "Русский",
+      "selectPlaceholder": "言語を選択"
+    },
+    "title": "一般設定",
+    "stream": {
+      "label": "ストリーム応答",
+      "description": "プロバイダーからのストリーム応答を有効にします。"
+    },
+    "skipLineBreak": {
+      "label": "送信時に改行をスキップ",
+      "description": "メッセージ送信時に改行をスキップします。"
+    },
+    "autoClose": {
+      "label": "フォーカスが外れたらウィンドウを自動的に閉じる",
+      "description": "独立したウィンドウがフォーカスを失ったときに閉じます。"
+    },
+    "ctrlEnter": {
+      "label": "Ctrl+Enterで送信",
+      "description": "Ctrl+Enterを押してメッセージを送信できるようにします。"
+    },
+    "notification": {
+      "label": "成功通知を表示",
+      "description": "応答が成功したときに通知を表示します。"
+    },
+    "darkMode": {
+      "label": "ダークモード (独立ウィンドウ)",
+      "description": "独立した応答ウィンドウでダークモードテーマを使用します。"
+    },
+    "fixPosition":{
+      "label": "ウィンドウ位置の固定",
+      "description": "ダイアログウィンドウが表示される位置を固定するには、これを有効にします。"
+    },
+    "dataManagement": {
+      "title": "データ管理",
+      "exportLabel": "設定のエクスポート",
+      "exportDesc": "現在のすべての設定をJSONファイルにエクスポートします。構成ファイルには機密情報が含まれているため、共有しないでください。",
+      "exportButton": "エクスポート",
+      "importLabel": "設定のインポート",
+      "importDesc": "JSONファイルから設定をインポートします。これにより現在の設定が上書きされます。",
+      "importButton": "インポート"
+    },
+    "dimensions": {
+      "title": "ウィンドウサイズ",
+      "widthLabel": "ウィンドウ幅 (px)",
+      "heightLabel": "ウィンドウ高さ (px)"
+    }
+  },
+  "common": {
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "add": "追加",
+    "delete": "削除",
+    "edit": "編集",
+    "save": "保存",
+    "close": "閉じる",
+    "assignSelected": "選択を割り当て",
+    "addTag": "タグを追加",
+    "removeIcon": "削除"
+  }
+}

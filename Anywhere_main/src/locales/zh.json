@@ -1,0 +1,172 @@
+{
+  "app": {
+    "header": {
+      "prompts": "快捷助手 🚀",
+      "providers": "服务商 ☁️",
+      "settings": "设置 ⚙️"
+    },
+    "tabs": {
+      "prompts": "快捷助手",
+      "providers": "服务商",
+      "settings": "设置"
+    }
+  },
+  "prompts": {
+    "allPrompts": "所有快捷助手",
+    "noPrompts": "尚未定义任何快捷助手。",
+    "noPromptsInTag": "此标签下没有快捷助手。",
+    "addExistingPrompt": "添加已有快捷助手",
+    "addNewPrompt": "新增快捷助手",
+    "editPrompt": "编辑快捷助手",
+    "addNewTag": "新增标签",
+    "assignPromptsToTag": "添加快捷助手到 '{tagName}'",
+    "promptKeyLabel": "快捷助手名称 (唯一标识符)",
+    "promptKeyPlaceholder": "例如, CodeGeneration",
+    "typeLabel": "类型",
+    "iconLabel": "图标",
+    "iconUploadTip":"上传图标，支持 png、jpg 格式",
+    "dragIconHere":"拖拽",
+    "orClickToUpload":"点击",
+    "typeOptions": {
+      "text": "文本",
+      "image": "图片",
+      "general": "通用"
+    },
+    "showModeLabel": "显示模式",
+    "showModeOptions": {
+      "input": "输入框",
+      "clipboard": "剪贴板",
+      "window": "独立窗口"
+    },
+    "modelLabel": "模型",
+    "promptContentLabel": "快捷助手内容",
+    "enabledLabel": "启用",
+    "addToTagLabel": "添加到标签 (可选)",
+    "addToTagPlaceholder": "选择标签 (可选)",
+    "tagNameLabel": "标签名",
+    "selectPromptsToAddLabel": "选择要添加的快捷助手",
+    "selectPromptsPlaceholder": "选择快捷助手",
+    "alerts": {
+      "tagNameEmpty": "标签名不能为空。",
+      "tagExists": "标签 \"{tagName}\" 已存在。",
+      "promptKeyEmpty": "快捷助手名称不能为空。",
+      "promptKeyExists": "快捷助手名称 \"{newKey}\" 已存在。",
+      "targetTagNotFound": "目标标签未找到。",
+      "noPromptsToAssign": "没有其他可分配到此标签的快捷助手。",
+      "invalidImageFormat":"不允许的图片格式。",
+      "imageSizeTooLarge":"图片过大，请压缩后再上传。"
+    },
+    "tooltips": {
+      "moveLeft": "左移",
+      "moveRight": "右移",
+      "removeFromTag": "从此标签移除快捷助手"
+    }
+  },
+  "providers": {
+    "addProviderBtn": "添加服务商",
+    "noProviders": "暂无服务商。",
+    "statusOff": "关闭",
+    "unnamedProvider": "未命名服务商",
+    "editNameTooltip": "编辑名称",
+    "moveUpTooltip": "上移",
+    "moveDownTooltip": "下移",
+    "deleteProviderTooltip": "删除服务商",
+    "apiKeyLabel": "API 密钥",
+    "apiKeyPlaceholder": "输入 API 密钥 (可输入多个，用逗号分隔)",
+    "apiKeyDescription": "您可以输入多个 API 密钥，用逗号分隔。",
+    "apiUrlLabel": "API URL",
+    "apiUrlPlaceholder": "例如, https://api.openai.com/v1",
+    "modelsLabel": "模型",
+    "noModelsAdded": "尚未添加模型。",
+    "getModelsFromApiBtn": "从 API 获取模型",
+    "addManuallyBtn": "手动添加",
+    "selectProviderOrAdd": "选择一个服务商或添加新的",
+    "addProviderDialogTitle": "添加新服务商",
+    "providerNameLabel": "服务商名称",
+    "providerNamePlaceholder": "例如, OpenAI 主账户",
+    "changeProviderNameDialogTitle": "更改服务商名称",
+    "addModelDialogTitle": "手动添加模型",
+    "modelNameIdLabel": "模型名称/ID",
+    "modelNameIdPlaceholder": "例如, gpt-4, text-davinci-003",
+    "availableModelsDialogTitle": "API 可用模型",
+    "table": {
+      "modelId": "模型 ID",
+      "ownedBy": "所有者",
+      "action": "操作"
+    },
+    "noModelsFoundError": "未找到模型或 API 错误。",
+    "addModelTooltip": "添加模型",
+    "removeModelTooltip": "移除模型",
+    "alerts": {
+      "providerUrlNotSet": "服务商 URL 未设置。",
+      "fetchModelsError": "错误 {status}: {message}",
+      "fetchModelsFailedDefault": "获取模型失败",
+      "configSaveFailed": "保存配置失败。"
+    }
+  },
+  "setting": {
+    "language": {
+      "label": "语言",
+      "english": "English",
+      "chinese": "中文",
+      "japanese": "日本語",
+      "russian": "Русский",
+      "selectPlaceholder": "选择语言"
+    },
+    "title": "通用设置",
+    "stream": {
+      "label": "流式响应",
+      "description": "启用以使用来自提供商的流式响应。"
+    },
+    "skipLineBreak": {
+      "label": "发送时跳过换行符",
+      "description": "启用以在发送消息时跳过换行符。"
+    },
+    "autoClose": {
+      "label": "失焦时自动关闭窗口",
+      "description": "启用以在独立窗口失去焦点时将其关闭。"
+    },
+    "ctrlEnter": {
+      "label": "Ctrl+Enter 发送",
+      "description": "启用以通过按 Ctrl+Enter 发送消息。"
+    },
+    "notification": {
+      "label": "显示成功通知",
+      "description": "启用以在响应成功时显示通知。"
+    },
+    "darkMode": {
+      "label": "深色模式 (独立窗口)",
+      "description": "在独立的响应窗口中使用深色模式主题。"
+    },
+    "fixPosition":{
+      "label": "固定窗口位置",
+      "description": "启用以固定对话窗口出现的位置。"
+    },
+    "dataManagement": {
+      "title": "数据管理",
+      "exportLabel": "导出配置",
+      "exportDesc": "将当前所有设置导出为 JSON 文件， 注意配置文件包含敏感信息，切勿分享。",
+      "exportButton": "导出",
+      "importLabel": "导入配置",
+      "importDesc": "从 JSON 文件导入设置。这将覆盖当前设置。",
+      "importButton": "导入"
+    },
+    "dimensions": {
+      "title": "窗口尺寸",
+      "widthLabel": "窗口宽度 (px)",
+      "heightLabel": "窗口高度 (px)"
+    }
+  },
+  "common": {
+    "cancel": "取消",
+    "confirm": "确认",
+    "add": "添加",
+    "delete": "删除",
+    "edit": "编辑",
+    "save": "保存",
+    "close": "关闭",
+    "assignSelected": "分配选中",
+    "addTag": "添加标签",
+    "removeIcon": "移除"
+  }
+}
