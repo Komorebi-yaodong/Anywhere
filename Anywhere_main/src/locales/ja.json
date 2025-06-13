@@ -24,9 +24,9 @@
     "promptKeyPlaceholder": "例: CodeGeneration",
     "typeLabel": "タイプ",
     "iconLabel": "アイコン",
-    "iconUploadTip": "アイコンをアップロードします。png、jpg形式をサポートしています",
-    "dragIconHere": "ドラッグ",
-    "orClickToUpload": "クリック",
+    "iconUploadTip": "{formats} 形式をサポート、最大 {maxSize}。",
+    "dragIconHere": "ドラッグ ",
+    "orClickToUpload": "またはクリック",
     "typeOptions": {
       "text": "テキスト",
       "image": "画像",
@@ -39,6 +39,10 @@
       "window": "ウィンドウ"
     },
     "modelLabel": "モデル",
+    "llmParametersLabel": "モデルパラメータ（現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります）",
+    "streamLabel": "ストリーム応答",
+    "enableTemperatureLabel": "カスタム温度",
+    "temperatureLabel": "温度設定（モデルによって温度範囲が異なります。エラーが発生した場合は、カスタム温度を無効にできます）",
     "promptContentLabel": "プロンプト内容",
     "enabledLabel": "有効",
     "addToTagLabel": "タグに追加 (オプション)",
@@ -53,8 +57,8 @@
       "promptKeyExists": "プロンプトキー \"{newKey}\" はすでに存在します。",
       "targetTagNotFound": "対象のタグが見つかりません。",
       "noPromptsToAssign": "このタグに割り当てる他のプロンプトはありません。",
-      "invalidImageFormat": "許可されていない画像形式",
-      "imageSizeTooLarge": "画像が大きすぎます。圧縮してから再度アップロードしてください"
+      "invalidImageFormat": "無効な画像形式です。{formats} を使用してください。",
+      "imageSizeTooLarge": "画像サイズが {maxSize} を超えています。"
     },
     "tooltips": {
       "moveLeft": "左に移動",
@@ -167,6 +171,6 @@
     "close": "閉じる",
     "assignSelected": "選択を割り当て",
     "addTag": "タグを追加",
-    "removeIcon": "削除"
+    "removeIcon": "アイコンを削除"
   }
 }

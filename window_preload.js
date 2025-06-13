@@ -8,6 +8,10 @@ const {
     copyText,
 } = require('./data.js');
 
+const {
+    handleFilePath,
+} = require('./file.js');
+
 const channel = "window";
 
 window.preload = {
@@ -40,5 +44,6 @@ window.api = {
     getConfig,        // 添加 getConfig 到 api
     updateConfig,     // 添加 updateConfig 到 api
     chatOpenAI, // 添加 chatOpenAI 到 api
-    copyText // 添加 copyText 到 api
+    copyText, // 添加 copyText 到 api
+    handleFilePath, // 添加 handleFilePath 到 api
 };

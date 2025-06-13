@@ -24,9 +24,9 @@
     "promptKeyPlaceholder": "например, CodeGeneration",
     "typeLabel": "Тип",
     "iconLabel": "Иконка",
-    "iconUploadTip": "Загрузите иконку, поддерживаются форматы png, jpg",
-    "dragIconHere": "Перетащите",
-    "orClickToUpload": "Нажмите",
+    "iconUploadTip": "Поддерживает форматы {formats}, макс. размер {maxSize}.",
+    "dragIconHere": "Перетащите ",
+    "orClickToUpload": "или нажмите",
     "typeOptions": {
       "text": "Текст",
       "image": "Изображение",
@@ -39,6 +39,10 @@
       "window": "Отдельное окно"
     },
     "modelLabel": "Модель",
+    "llmParametersLabel": "Параметры модели (действительно только для текущей модели «Быстрый помощник»; перестает действовать при переключении на другие модели)",
+    "streamLabel": "Потоковые ответы",
+    "enableTemperatureLabel": "Пользовательская температура",
+    "temperatureLabel": "Настройки температуры (диапазоны температуры различаются для разных моделей; в случае ошибки можно отключить пользовательскую температуру)",
     "promptContentLabel": "Содержимое промпта",
     "enabledLabel": "Включено",
     "addToTagLabel": "Добавить к тегу (опционально)",
@@ -53,8 +57,8 @@
       "promptKeyExists": "Ключ промпта \"{newKey}\" уже существует.",
       "targetTagNotFound": "Целевой тег не найден.",
       "noPromptsToAssign": "Нет других промптов для назначения этому тегу.",
-      "invalidImageFormat": "Недопустимый формат изображения",
-      "imageSizeTooLarge": "Изображение слишком большое, пожалуйста, сожмите и загрузите снова"
+      "invalidImageFormat": "Неверный формат изображения. Используйте {formats}.",
+      "imageSizeTooLarge": "Размер изображения превышает {maxSize}."
     },
     "tooltips": {
       "moveLeft": "Переместить влево",
@@ -167,6 +171,6 @@
     "close": "Закрыть",
     "assignSelected": "Назначить выбранные",
     "addTag": "Добавить тег",
-    "removeIcon": "Удалить"
+    "removeIcon": "Удалить иконку"
   }
 }

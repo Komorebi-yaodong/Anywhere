@@ -9,9 +9,14 @@ const {
 } = require('./data.js');
 
 const {
+  handleFilePath,
+  sendfileDirect,
+} = require('./file.js');
+
+const {
   requestTextOpenAI,
   requestImageOpenAI,
-  handelReplyOpenAI
+  handelReplyOpenAI,
 } = require('./input.js');
 
 
@@ -20,7 +25,9 @@ window.api = {
   updateConfig,
   getRandomItem,
   chatOpenAI,
-  copyText
+  copyText,
+  handleFilePath,
+  sendfileDirect,
 };
 
 // 主逻辑
@@ -36,6 +43,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
     checkConfig(config);
     // 直接输入到当前输入框
     if (config.prompts[code].showMode === "input") {
+      let content = null;
       if (type === "over") {
         // 将换行符替换为空格或空
         if (config.skipLineBreak) {
@@ -43,14 +51,27 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
             .replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2")
             .replace(/\s*\n\s*/g, "");
         }
-        response = await requestTextOpenAI(code, payload, config);
-
-        handelReplyOpenAI(code, response, config.stream, config.showNotification);
+        content = payload;
       } else if (type === "img") {
-        response = await requestImageOpenAI(code, payload, config);
-        handelReplyOpenAI(code, response, config.stream, config.showNotification);
-      } else {
+        content = [
+          {
+            type: "image_url",
+            image_url: {
+              url: payload,
+            },
+          },
+        ]
+      } else if (type === "files") {
+        content = await sendfileDirect(payload);
+      }
+      else {
+        content = false;
         utools.showNotification("Unsupported input type");
+      }
+
+      if (content) {
+        response = await requestTextOpenAI(code, file_content, config);
+        handelReplyOpenAI(code, response, config.stream, config.showNotification);
       }
     }
     // 输入到剪贴板
@@ -67,7 +88,11 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
         response = await requestTextOpenAI(code, payload, config2);
       } else if (type === "img") {
         response = await requestImageOpenAI(code, payload, config2);
-      } else {
+      } else if (type === "files") {
+        file_content = await sendfileDirect(payload);
+        response = await requestTextOpenAI(code, file_content, config);
+      }
+      else {
         utools.showNotification("Unsupported input type");
       }
       const data = await response.json();
@@ -86,7 +111,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
       let windowY = window_position.y;
 
       let msg = {
-        os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win": "linux",
+        os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
         code: code,
         type: type,
         payload: payload,
@@ -112,7 +137,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
           },
         },
         () => {
-          ubWindow.webContents.send(channel,msg);
+          ubWindow.webContents.send(channel, msg);
           ubWindow.webContents.show(); // 显示窗口
           ubWindow.setAlwaysOnTop(true, "floating"); // 窗口置顶
           ubWindow.setFullScreen(false); // 窗口全屏

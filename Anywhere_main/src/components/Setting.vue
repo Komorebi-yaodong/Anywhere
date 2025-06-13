@@ -24,6 +24,9 @@ const defaultConfig = {
         model: "",
         enable: true,
         icon:"",
+        stream: true,
+        isTemperature: false,
+        temperature: 0.7,
       },
     },
     tags: {},
@@ -42,48 +45,23 @@ const defaultConfig = {
 const currentConfig = ref(JSON.parse(JSON.stringify(defaultConfig.config)));
 const selectedLanguage = ref(locale.value);
 
+// Setting.vue - onMounted
 onMounted(async () => {
   try {
     const result = await window.api.getConfig();
+
     if (result && result.config) {
-      // Start with a deep clone of defaults
-      let mergedConfig = JSON.parse(JSON.stringify(defaultConfig.config));
-      // Merge loaded config on top
-      mergedConfig = { ...mergedConfig, ...result.config };
-
-      // Ensure nested objects are correctly merged or defaulted
-      mergedConfig.providers = {
-        ...JSON.parse(JSON.stringify(defaultConfig.config.providers)),
-        ...(result.config.providers || {})
-      };
-      mergedConfig.prompts = {
-        ...JSON.parse(JSON.stringify(defaultConfig.config.prompts)),
-        ...(result.config.prompts || {})
-      };
-      mergedConfig.tags = {
-        ...JSON.parse(JSON.stringify(defaultConfig.config.tags)),
-        ...(result.config.tags || {})
-      };
-      // Ensure providerOrder uses loaded if available, else default
-      if (result.config.providerOrder) {
-        mergedConfig.providerOrder = result.config.providerOrder;
-      }
-
-
-      currentConfig.value = mergedConfig;
+      currentConfig.value = result.config;
     } else {
+      console.error("Failed to get valid config from API.");
       currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
     }
-    // Fallback for ensuring essential structures if they somehow got removed or are malformed
-    if (!currentConfig.value.providers) currentConfig.value.providers = JSON.parse(JSON.stringify(defaultConfig.config.providers));
-    if (!currentConfig.value.providerOrder) currentConfig.value.providerOrder = JSON.parse(JSON.stringify(defaultConfig.config.providerOrder));
-    if (!currentConfig.value.prompts) currentConfig.value.prompts = JSON.parse(JSON.stringify(defaultConfig.config.prompts));
-    if (!currentConfig.value.tags) currentConfig.value.tags = JSON.parse(JSON.stringify(defaultConfig.config.tags));
-
   } catch (error) {
-    console.error("Error fetching settings config:", error);
+    console.error("Error fetching config in Setting.vue:", error);
     currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
   }
+  
+  // 这部分是设置语言的逻辑，可以保留
   selectedLanguage.value = locale.value;
   await nextTick();
 });

@@ -19,7 +19,20 @@ async function requestTextOpenAI(code, text, config) {
             model = modelName;
         }
     }
-
+    console.log({
+            model: model,
+            messages: [
+                {
+                    role: "system",
+                    content: config.prompts[code].prompt,
+                },
+                {
+                    role: "user",
+                    content: text,
+                },
+            ],
+            stream: config.stream,
+        });
     const response = await fetch(apiUrl + "/chat/completions", {
         method: "POST",
         headers: {
@@ -78,10 +91,6 @@ async function requestImageOpenAI(code, imagePath, config) {
                 {
                     role: "user",
                     content: [
-                        {
-                            type: "text",
-                            text: config.prompts[code].prompt,
-                        },
                         {
                             type: "image_url",
                             image_url: {

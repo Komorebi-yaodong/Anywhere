@@ -24,9 +24,9 @@
     "promptKeyPlaceholder": "e.g., CodeGeneration",
     "typeLabel": "Type",
     "iconLabel": "Icon",
-    "iconUploadTip": "Upload icon, supports png, jpg formats",
-    "dragIconHere": "Drag",
-    "orClickToUpload": "Click",
+    "iconUploadTip": "Supports {formats}. Max size: {maxSize}.",
+    "dragIconHere": "Drag ",
+    "orClickToUpload": "or click",
     "typeOptions": {
       "text": "Text",
       "image": "Image",
@@ -39,6 +39,10 @@
       "window": "Window"
     },
     "modelLabel": "Model",
+    "llmParametersLabel": "Model Parameters (Only effective for the current Quick Assistant model; no longer effective after switching to other models)",
+    "streamLabel": "Stream Responses",
+    "enableTemperatureLabel": "Custom Temperature",
+    "temperatureLabel": "Temperature Settings (Temperature ranges vary for different models; if an error occurs, you can disable custom temperature)",
     "promptContentLabel": "Prompt Content",
     "enabledLabel": "Enabled",
     "addToTagLabel": "Add to Tag (Optional)",
@@ -53,8 +57,8 @@
       "promptKeyExists": "Prompt key \"{newKey}\" already exists.",
       "targetTagNotFound": "Target tag not found.",
       "noPromptsToAssign": "No other prompts available to assign to this tag.",
-      "invalidImageFormat": "Disallowed image format.",
-      "imageSizeTooLarge": "Image is too large, please compress and upload again."
+      "invalidImageFormat": "Invalid image format. Please use {formats}.",
+      "imageSizeTooLarge": "Image size exceeds {maxSize}."
     },
     "tooltips": {
       "moveLeft": "Move Left",
@@ -167,6 +171,6 @@
     "close": "Close",
     "assignSelected": "Assign Selected",
     "addTag": "Add Tag",
-    "removeIcon": "Remove"
+    "removeIcon": "Remove Icon"
   }
 }

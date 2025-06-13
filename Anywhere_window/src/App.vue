@@ -45,6 +45,95 @@ hljs.registerLanguage('php', php);
 hljs.registerLanguage('rust', rust);
 hljs.registerLanguage('markdown', markdown);
 
+// [NEW & IMPROVED] Helper functions for file parsing
+const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
+const parseWord = async (base64Data) => {
+  const mammoth = (await import('mammoth')).default;
+  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for Word file");
+  const r = await mammoth.convertToHtml({ arrayBuffer: base64ToBuffer(s) }); const d = document.createElement('div'); d.innerHTML = r.value;
+  return (d.textContent || d.innerText || "").replace(/\s+/g, ' ').trim();
+};
+const parseTextFile = async (base64Data) => {
+  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for text file");
+  const bs = atob(s); const ia = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i);
+  return new TextDecoder().decode(ia);
+};
+
+// [NEW & IMPROVED] Centralized file handling configuration
+const fileHandlers = {
+  text: {
+    extensions: [
+      // Common text files
+      '.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css', '.csv',
+      // Common code files
+      '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go',
+      '.php', '.rb', '.rs', '.sh', '.sql', '.vue'
+    ],
+    handler: async (file) => {
+      const textContent = await parseTextFile(file.url);
+      return { type: "text", text: `file name:${file.name}\nfile content:${textContent}\nfile end` };
+    }
+  },
+  docx: {
+    extensions: ['.docx'],
+    handler: async (file) => {
+      const textContent = await parseWord(file.url);
+      return { type: "text", text: `file name:${file.name}\nfile content:${textContent}\nfile end` };
+    }
+  },
+  image: {
+    extensions: ['.png', '.jpg', '.jpeg', '.webp'], // Strictly adhere to original types
+    handler: async (file) => {
+      return { type: "image_url", image_url: { url: file.url } };
+    }
+  },
+  audio: {
+    extensions: ['.mp3', '.wav'], // Strictly adhere to original types
+    handler: async (file) => {
+      const commaIndex = file.url.indexOf(',');
+      if (commaIndex > -1) {
+        return {
+          type: "input_audio",
+          input_audio: {
+            data: file.url.substring(commaIndex + 1),
+            format: file.name.split('.').pop().toLowerCase()
+          }
+        };
+      }
+      ElMessage.error(`音频文件 ${file.name} 格式不正确`);
+      return null;
+    }
+  },
+  pdf: {
+    extensions: ['.pdf'],
+    handler: async (file) => {
+      const commaIndex = file.url.indexOf(',');
+      if (commaIndex > -1) {
+        return {
+          type: "input_file",
+          filename: file.name,
+          file_data: file.url.substring(commaIndex + 1)
+        };
+      }
+      ElMessage.error(`PDF文件 ${file.name} 格式不正确`);
+      return null;
+    }
+  }
+};
+
+// [NEW & IMPROVED] Helper function to get the correct handler for a file
+const getFileHandler = (fileName) => {
+  if (!fileName) return null;
+  const extension = ('.' + fileName.split('.').pop()).toLowerCase();
+  for (const category in fileHandlers) {
+    if (fileHandlers[category].extensions.includes(extension)) {
+      return fileHandlers[category].handler;
+    }
+  }
+  return null;
+};
+
+
 const preprocessKatex = (text) => {
   if (!text) return '';
 
@@ -107,6 +196,11 @@ const defaultConfig = {
         prompt: `你是一个AI助手`,
         showMode: "window",
         model: "0|gpt-4o",
+        enable: true,
+        icon: "",
+        stream: true,
+        temperature: 0.7,
+        isTemperature: false,
       },
     },
     stream: false,
@@ -123,6 +217,7 @@ const defaultConfig = {
 let UserAvart = ref("user.png");
 let AIAvart = ref("ai.svg");
 let favicon = ref("favicon.png");
+let CODE = ref("");
 
 var isInit = ref(false);
 var basic_msg = ref({
@@ -288,6 +383,7 @@ onMounted(async () => {
     window.preload.receiveMsg(async (data) => {
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code;
+      CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
       modelList.value = [];
@@ -303,7 +399,7 @@ onMounted(async () => {
         }
       });
       if (!modelMap.value[model.value]) {
-        model.value = modelList.value[0]?.value || defaultConfig.config.prompts.AI.model;
+        model.value = modelList.value[0]?.value;
       }
       currentProviderID.value = model.value.split("|")[0];
       base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
@@ -323,14 +419,22 @@ onMounted(async () => {
         history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
         chat_show.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
         scrollToBottom(true); await askAI(true);
+      } else if (basic_msg.value.type === "files" && basic_msg.value.payload){
+        for (let i = 0; i < basic_msg.value.payload.length; i++) {
+          processFilePath(basic_msg.value.payload[i].path);
+        }
+        scrollToBottom(true);
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
     });
   } catch (err) {
+    basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
     document.title = basic_msg.value.code;
+    CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
     model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
-    modelList.value = []; modelMap.value = {};
+    modelList.value = [];
+    modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
       if (provider?.enable) {
@@ -342,17 +446,18 @@ onMounted(async () => {
       }
     });
     if (!modelMap.value[model.value]) {
-      model.value = modelList.value[0]?.value || defaultConfig.config.prompts.AI.model;
+      model.value = modelList.value[0]?.value;
     }
     currentProviderID.value = model.value.split("|")[0];
     base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
     api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
     if (currentPromptConfig?.prompt) {
-      history.value = [{ role: "system", content: currentPromptConfig?.prompt }];
-      chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt }];
+      history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }];
+      chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }];
     } else {
       history.value = []; chat_show.value = [];
     }
+    scrollToBottom(true);
     if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
   }
 
@@ -407,6 +512,11 @@ const formatMessageContent = (content) => {
     if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) { }
     // 图片文件（一定是列表）
     else if (part.type === 'image_url' && part.image_url?.url) markdownString += `\n\n![Image](${part.image_url.url})\n`;
+    // 音频文件
+    else if (part.type === 'input_audio' && part.input_audio?.data) {
+      let data_url = "";
+      markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
+    }
     // 文本内容
     else if (part.type === 'text' && part.text) markdownString += part.text;
   });
@@ -546,8 +656,7 @@ async function askAI(forceSend = false) {
 
   try {
     const messagesForAPI = JSON.parse(JSON.stringify(history.value.slice(0, aiMessageHistoryIndex)));
-    aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, signalController.value.signal);
-
+    aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, CODE.value, signalController.value.signal);
     if (!aiResponse?.ok && aiResponse?.status !== 200) {
       let errorMsg = `API 请求失败: ${aiResponse?.status} ${aiResponse?.statusText}`;
       try { const errorBody = await aiResponse?.text(); errorMsg += `\n${errorBody || '(No Response Body)'}`; } catch { }
@@ -648,7 +757,6 @@ async function askAI(forceSend = false) {
   } catch (error) {
     let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
     if (error.name === 'AbortError') errorDisplay = "请求已取消";
-
     if (history.value[aiMessageHistoryIndex]) {
       history.value[aiMessageHistoryIndex].content = `错误: ${errorDisplay}`;
     }
@@ -697,56 +805,81 @@ function clearHistory() {
 }
 function removeFile(index) { if (fileList.value.length === 0) return; fileList.value.splice(index, 1); }
 
+// [REVISED] sendFile function using the new handler system
 async function sendFile() {
-  let contentList = []; if (fileList.value.length === 0) return contentList;
+  let contentList = [];
+  if (fileList.value.length === 0) return contentList;
+
   for (const currentFile of fileList.value) {
-    try {
-      if (currentFile.type.includes('image')) contentList.push({ type: "image_url", image_url: { url: currentFile.url } });
-      else if (currentFile.name.toLowerCase().endsWith('.docx') || currentFile.type.startsWith('text/') || currentFile.name.toLowerCase().endsWith(".json") || currentFile.name.toLowerCase().endsWith('.md')) {
-        contentList.push({ type: "text", text: await extractTextFromFile(currentFile) });
-      } else if (currentFile.type.startsWith('audio/') && (currentFile.name.toLowerCase().endsWith('.mp3') || currentFile.name.toLowerCase().endsWith('.wav'))) {
-        const commaIndex = currentFile.url.indexOf(',');
-        if (commaIndex > -1) contentList.push({ type: "input_audio", input_audio: { data: currentFile.url.substring(commaIndex + 1), format: currentFile.name.toLowerCase().endsWith('.mp3') ? 'mp3' : 'wav' } });
-        else ElMessage.error(`音频文件 ${currentFile.name} 格式不正确`);
-      } else if (currentFile.type == "application/pdf") {
-        const commaIndex = currentFile.url.indexOf(',');
-        if (commaIndex > -1) contentList.push({ type: "input_file", filename: currentFile.name, file_data: currentFile.url.substring(commaIndex + 1) });
-        else ElMessage.error(`PDF文件 ${currentFile.name} 格式不正确`);
-      } else ElMessage.warning(`文件类型不支持: ${currentFile.name}`);
-    } catch (error) { ElMessage.error(`处理文件 ${currentFile.name} 失败: ${error.message}`); }
+    const handler = getFileHandler(currentFile.name);
+    if (handler) {
+      try {
+        const processedContent = await handler(currentFile);
+        if (processedContent) {
+          contentList.push(processedContent);
+        }
+      } catch (error) {
+        ElMessage.error(`处理文件 ${currentFile.name} 失败: ${error.message}`);
+      }
+    } else {
+      ElMessage.warning(`文件类型不支持: ${currentFile.name}`);
+    }
   }
-  fileList.value = []; return contentList;
+
+  fileList.value = [];
+  return contentList;
 }
-const extractTextFromFile = async (file) => {
-  const { name, type, url } = file; let fileContent = '';
-  if (name.toLowerCase().endsWith('.docx')) fileContent = await parseWord(url);
-  else if (name.toLowerCase().endsWith('.json') || name.toLowerCase().endsWith('.md') || type.startsWith('text/')) fileContent = await parseTextFile(url);
-  else throw new Error("不支持的文件类型");
-  return `file name:${name}\nfile content:${fileContent}\nfile end`;
-};
+
 function file2fileList(file, idx) {
-  let isSupported = file.type.includes('image') || file.name.toLowerCase().endsWith('.docx') || file.type.startsWith('text/') || file.name.toLowerCase().endsWith(".json") || file.name.toLowerCase().endsWith('.md') || (file.type.startsWith('audio/') && (file.name.toLowerCase().endsWith('.mp3') || file.name.toLowerCase().endsWith('.wav')) || file.type == "application/pdf");
-  if (!isSupported) { ElMessage.warning(`不支持的文件类型: ${file.name}`); return; }
+  const handler = getFileHandler(file.name);
+  if (!handler) {
+    ElMessage.warning(`不支持的文件类型: ${file.name}`);
+    return;
+  }
+
   const reader = new FileReader();
-  reader.onload = (e) => fileList.value.push({ uid: idx, name: file.name, size: file.size, type: file.type, url: e.target.result });
+  reader.onload = (e) => {
+    fileList.value.push({
+      uid: idx,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      url: e.target.result
+    });
+  };
   reader.onerror = () => ElMessage.error(`读取文件 ${file.name} 失败`);
   reader.readAsDataURL(file);
 }
+
 function uploadFiles(files) { file2fileList(files.file, fileList.value.length + 1); }
 const handleDrop = (event) => { event.preventDefault(); Array.from(event.dataTransfer.items).forEach((item, i) => { if (item.kind === 'file') file2fileList(item.getAsFile(), fileList.value.length + i + 1); }); };
 const handlePaste = (event) => { Array.from((event.clipboardData || event.originalEvent?.clipboardData || event.dataTransfer).items).forEach((item, i) => { if (item.kind === 'file') file2fileList(item.getAsFile(), fileList.value.length + i + 1); }); };
-const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
-const parseWord = async (base64Data) => {
-  const mammoth = (await import('mammoth')).default;
-  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for Word file");
-  const r = await mammoth.convertToHtml({ arrayBuffer: base64ToBuffer(s) }); const d = document.createElement('div'); d.innerHTML = r.value;
-  return (d.textContent || d.innerText || "").replace(/\s+/g, ' ').trim();
-};
-const parseTextFile = async (base64Data) => {
-  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for text file");
-  const bs = atob(s); const ia = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i);
-  return new TextDecoder().decode(ia);
-};
+
+// 选中文件转为文件列表（文件路径=>文件对象=>文件列表）
+async function processFilePath(filePath) {
+  if (!filePath || typeof filePath !== 'string') {
+    ElMessage.error('无效的文件路径');
+    return;
+  }
+
+  try {
+    // 调用通过 contextBridge 暴露的后端函数
+    const fileObject = await window.api.handleFilePath(filePath);
+    
+    // 检查后端是否成功处理并返回了 File 对象
+    if (fileObject) {
+      file2fileList(fileObject, fileList.value.length + 1);
+      ElMessage.success(`文件 ${fileObject.name} 已添加`);
+    } else {
+      // 如果 fileObject 为 null，说明后端处理失败
+      ElMessage.error('无法读取或访问该文件，请检查路径和权限');
+    }
+  } catch (error) {
+    console.error('调用 handleFilePath 时发生意外错误:', error);
+    ElMessage.error('处理文件路径时发生未知错误');
+  }
+}
+
 </script>
 <template>
   <main>
@@ -803,7 +936,7 @@ const parseTextFile = async (base64Data) => {
               <Thinking v-if="message.status && message.status.length > 0" maxWidth="90%"
                 :content="message.reasoning_content" :status="message.status" :modelValue="false">
                 <template #error v-if="message.status === 'error' && message.status">{{ message.reasoning_content
-                  }}</template>
+                }}</template>
               </Thinking>
             </template>
             <template #content>

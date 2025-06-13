@@ -1,3 +1,7 @@
+const fs = require('fs/promises');
+const path = require('path');
+
+
 // 默认配置
 const defaultConfig = {
   config: {
@@ -19,6 +23,9 @@ const defaultConfig = {
         model: "", // providers_id|model
         enable: true,
         icon: "",
+        stream: true,
+        isTemperature: false,
+        temperature: 0.7,
       },
     },
     stream: true,
@@ -27,7 +34,8 @@ const defaultConfig = {
     window_width: 400,
     autoCloseOnBlur: false,
     CtrlEnterToSend: false,
-    showNotification: true
+    showNotification: true,
+    isDarkMode: false,
   }
 };
 
@@ -45,8 +53,8 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (!config.version !== "1.5.5") {
-    config.version = "1.5.5";
+  if (!config.version !== "1.5.8") {
+    config.version = "1.5.8";
     flag = true;
   }
   else {
@@ -103,6 +111,16 @@ function checkConfig(config) {
   for (let key in config.prompts) {
     if (config.prompts[key].enable === undefined) {
       config.prompts[key].enable = true;
+      flag = true;
+    }
+    if (config.prompts[key].stream === undefined) {
+      config.prompts[key].stream = true;
+      config.prompts[key].isTemperature = false;
+      config.prompts[key].temperature = 0.7;
+      flag = true;
+    }
+    if (config.prompts[key].icon === undefined) {
+      config.prompts[key].icon = "";
       flag = true;
     }
   }
@@ -249,6 +267,7 @@ function updateConfig(newConfig) {
           cmds: [
             { type: "over", label: key },
             { type: "img", label: key },
+            { type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" },
           ],
         });
       }
@@ -260,6 +279,8 @@ function updateConfig(newConfig) {
           cmds: [
             { type: "over", label: key },
             { type: "img", label: key },
+            { type: "files", label: key },
+            { type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" },
           ],
         });
       }
@@ -371,6 +392,80 @@ function getPosition(config) {
   return { x: windowX, y: windowY };
 }
 
+const extensionToMimeType = {
+    // 文本和代码
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.markdown': 'text/markdown',
+    '.json': 'application/json',
+    '.xml': 'application/xml',
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.csv': 'text/csv',
+    '.py': 'text/plain', // 或 'application/x-python'
+    '.js': 'application/javascript',
+    '.ts': 'application/typescript',
+    '.java': 'text/x-java-source',
+    '.c': 'text/plain',
+    '.cpp': 'text/plain',
+    '.h': 'text/plain',
+    '.hpp': 'text/plain',
+    '.cs': 'text/plain',
+    '.go': 'text/plain',
+    '.php': 'application/x-httpd-php',
+    '.rb': 'application/x-ruby',
+    '.rs': 'text/rust',
+    '.sh': 'application/x-sh',
+    '.sql': 'application/sql',
+    '.vue': 'text/plain',
+
+    // 文档
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.pdf': 'application/pdf',
+
+    // 图片
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+
+    // 音频
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+};
+
+/**
+ * [新增] 核心函数：将文件路径转换为 File 对象。
+ * @param {string} filePath - 文件的绝对路径。
+ * @returns {Promise<File|null>} - 返回一个可供前端使用的 File 对象，如果失败则返回 null。
+ */
+const handleFilePath = async (filePath) => {
+  try {
+    // 1. 验证路径是否存在
+    await fs.access(filePath);
+
+    // 2. 读取文件内容到 Buffer
+    const fileBuffer = await fs.readFile(filePath);
+
+    // 3. 获取文件名
+    const fileName = path.basename(filePath);
+    
+    // 4. 获取文件后缀并查找对应的 MIME 类型
+    const extension = path.extname(fileName).toLowerCase();
+    const mimeType = extensionToMimeType[extension] || 'application/octet-stream'; // 提供一个安全的默认值
+
+    // 5. 创建一个前端可以识别的 File 对象
+    //    File 构造函数接受一个包含 [BlobPart] 的数组，Node.js 的 Buffer 可以直接作为 BlobPart 使用。
+    const fileObject = new File([fileBuffer], fileName, { type: mimeType });
+    
+    return fileObject;
+
+  } catch (error) {
+    console.error(`处理文件路径失败: ${filePath}`, error);
+    return null;
+  }
+};
+
 function getRandomItem(list) {
   // 检查list是不是字符串
   if (typeof list === "string") {
@@ -400,10 +495,12 @@ function getRandomItem(list) {
 }
 
 // 函数：请求chat
-async function chatOpenAI(history, config, modelInfo, signal) { // 添加 signal 参数
+async function chatOpenAI(history, config, modelInfo, CODE, signal) { // 添加 signal 参数
+
   let apiUrl = "";
   let apiKey = "";
   let model = "";
+
   if (modelInfo.includes("|")) {
     const [providerId, modelName] = modelInfo.split("|");
     const provider = config.providers[providerId];
@@ -413,17 +510,26 @@ async function chatOpenAI(history, config, modelInfo, signal) { // 添加 signal
       model = modelName;
     }
   }
+
+  let payload = {
+    model: model,
+    messages: history,
+    stream: config.stream,
+  }
+
+  if (config.prompts[CODE].model === modelInfo){
+    payload.stream = config.prompts[CODE].stream;
+    if (config.prompts[CODE].isTemperature) {
+      payload.temperature = config.prompts[CODE].temperature;
+    }
+  }
   const response = await fetch(apiUrl + '/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ' + getRandomItem(apiKey)
     },
-    body: JSON.stringify({
-      model: model,
-      messages: history,
-      stream: config.stream
-    }),
+    body: JSON.stringify(payload),
     signal: signal // 将 signal 传递给 fetch
   });
   return response;
@@ -442,4 +548,5 @@ module.exports = {
   getRandomItem,
   chatOpenAI,
   copyText,
+  handleFilePath, // 读取文件
 };

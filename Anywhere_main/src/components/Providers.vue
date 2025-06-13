@@ -26,6 +26,9 @@ const defaultConfig = {
         model: "",
         enable: true,
         icon:"",
+        stream: true,
+        isTemperature: false,
+        temperature: 0.7,
       },
     },
     tags:{
@@ -45,32 +48,35 @@ const defaultConfig = {
 const currentConfig = ref(JSON.parse(JSON.stringify(defaultConfig.config)));
 const provider_key = ref(null);
 
+// Providers.vue - onMounted
 onMounted(async () => {
   try {
+    // 1. 从后端API获取已经处理好的配置
     const result = await window.api.getConfig();
-    if (result && result.config) {
-      currentConfig.value = {
-        ...JSON.parse(JSON.stringify(defaultConfig.config)),
-        ...result.config
-      };
-      if (!currentConfig.value.providers) currentConfig.value.providers = {};
-      if (!currentConfig.value.providerOrder) currentConfig.value.providerOrder = [];
 
-      if (currentConfig.value.providerOrder.length > 0) {
-        provider_key.value = currentConfig.value.providerOrder[0];
-      } else if (Object.keys(currentConfig.value.providers).length > 0) {
-        provider_key.value = Object.keys(currentConfig.value.providers)[0];
-      }
+    if (result && result.config) {
+      currentConfig.value = result.config;
     } else {
-      if (currentConfig.value.providerOrder.length > 0) {
-        provider_key.value = currentConfig.value.providerOrder[0];
-      }
+      console.error("Failed to get valid config from API.");
+      currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
     }
+
+    // 3. 在获取到正确的配置后，设置当前选中的 provider
+    if (currentConfig.value.providerOrder && currentConfig.value.providerOrder.length > 0) {
+      provider_key.value = currentConfig.value.providerOrder[0];
+    } else if (currentConfig.value.providers && Object.keys(currentConfig.value.providers).length > 0) {
+      // 如果 order 为空但 providers 不为空，使用第一个 provider 作为备选
+      provider_key.value = Object.keys(currentConfig.value.providers)[0];
+    } else {
+      provider_key.value = null; // 或者一个表示“无”的默认值
+    }
+
   } catch (error) {
-    console.error("Error fetching config:", error);
-     if (currentConfig.value.providerOrder.length > 0) {
-        provider_key.value = currentConfig.value.providerOrder[0];
-      }
+    console.error("Error fetching config in Providers.vue:", error);
+    currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
+    if (currentConfig.value.providerOrder && currentConfig.value.providerOrder.length > 0) {
+      provider_key.value = currentConfig.value.providerOrder[0];
+    }
   }
 });
 

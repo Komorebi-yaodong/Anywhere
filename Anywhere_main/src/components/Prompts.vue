@@ -24,11 +24,14 @@ const defaultConfig = {
         prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
         showMode: "input",
         model: "",
-        enable:true,
-        icon:""
+        enable: true,
+        icon: "",
+        stream: true,
+        isTemperature: false,
+        temperature: 0.7,
       },
     },
-    tags:{},
+    tags: {},
     stream: true,
     skipLineBreak: true,
     window_height: 520,
@@ -53,7 +56,10 @@ const editingPrompt = reactive({
   model: "",
   enable: true,
   selectedTag: "",
-  icon: ""
+  icon: "",
+  stream: true,
+  isTemperature: false,
+  temperature: 0.7,
 });
 const isNewPrompt = ref(false);
 
@@ -62,8 +68,8 @@ const newTagName = ref("");
 
 const showAssignPromptDialog = ref(false);
 const assignPromptForm = reactive({
-    targetTagName: '',
-    selectedPromptKeys: [],
+  targetTagName: '',
+  selectedPromptKeys: [],
 });
 
 const availableModels = computed(() => {
@@ -127,34 +133,29 @@ const promptsInTag = computed(() => (tagName) => {
 });
 
 const promptsAvailableToAssign = computed(() => (tagName) => {
-    if (!tagName || !currentConfig.value.prompts) return [];
-    const promptsInCurrentTag = new Set(currentConfig.value.tags[tagName] || []);
-    return Object.keys(currentConfig.value.prompts)
-        .filter(key => !promptsInCurrentTag.has(key))
-        .map(key => ({ key, label: key, data: currentConfig.value.prompts[key] }));
+  if (!tagName || !currentConfig.value.prompts) return [];
+  const promptsInCurrentTag = new Set(currentConfig.value.tags[tagName] || []);
+  return Object.keys(currentConfig.value.prompts)
+    .filter(key => !promptsInCurrentTag.has(key))
+    .map(key => ({ key, label: key, data: currentConfig.value.prompts[key] }));
 });
 
+// Prompts.vue - onMounted
 onMounted(async () => {
   try {
     const result = await window.api.getConfig();
+
     if (result && result.config) {
-      currentConfig.value = {
-        ...JSON.parse(JSON.stringify(defaultConfig.config)),
-        ...result.config
-      };
-      if (currentConfig.value.prompts) {
-        Object.keys(currentConfig.value.prompts).forEach(key => {
-          if (typeof currentConfig.value.prompts[key].icon === 'undefined') {
-            currentConfig.value.prompts[key].icon = "";
-          }
-        });
-      }
+      currentConfig.value = result.config;
     } else {
-      // console.log("Using default config (no saved config found or error).");
+      console.error("Failed to get valid config from API.");
+      currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
     }
   } catch (error) {
-    console.error("Error fetching config:", error);
+    console.error("Error fetching config in Prompts.vue:", error);
+    currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
   } finally {
+    // nextTick 保证DOM更新后再执行后续操作，放在这里是好的实践
     await nextTick();
   }
 });
@@ -226,15 +227,20 @@ function areAllPromptsInTagEnabled(tagName) {
 
 function prepareAddPrompt() {
   isNewPrompt.value = true;
-  editingPrompt.originalKey = null;
-  editingPrompt.key = "";
-  editingPrompt.type = "general";
-  editingPrompt.prompt = "";
-  editingPrompt.showMode = "window";
-  editingPrompt.model = "";
-  editingPrompt.enable = true;
-  editingPrompt.selectedTag = "";
-  editingPrompt.icon = "";
+  Object.assign(editingPrompt, {
+    originalKey: null,
+    key: "",
+    type: "general",
+    prompt: "",
+    showMode: "window",
+    model: "",
+    enable: true,
+    selectedTag: "",
+    icon: "",
+    stream: true,
+    isTemperature: false,
+    temperature: 0.7,
+  });
   showPromptEditDialog.value = true;
 }
 
@@ -251,7 +257,10 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
     model: p.model,
     enable: p.enable,
     icon: p.icon || "",
-    selectedTag: currentTagName
+    selectedTag: currentTagName,
+    stream: p.stream ?? true,
+    isTemperature: p.isTemperature ?? false,
+    temperature: p.temperature ?? 0.7,
   });
   showPromptEditDialog.value = true;
 }
@@ -274,6 +283,9 @@ function savePrompt() {
     model: editingPrompt.model,
     enable: editingPrompt.enable,
     icon: editingPrompt.icon || "",
+    stream: editingPrompt.stream,
+    isTemperature: editingPrompt.isTemperature,
+    temperature: editingPrompt.temperature,
   };
 
   if (isNewPrompt.value) {
@@ -283,13 +295,13 @@ function savePrompt() {
       if (!currentConfig.value.tags[targetTag]) {
         currentConfig.value.tags[targetTag] = [];
       }
-      if (!currentConfig.value.tags[targetTag].includes(newKey)){
-          currentConfig.value.tags[targetTag].push(newKey);
+      if (!currentConfig.value.tags[targetTag].includes(newKey)) {
+        currentConfig.value.tags[targetTag].push(newKey);
       }
     }
   } else {
     if (newKey !== oldKey) {
-      currentConfig.value.prompts[newKey] = { ...(currentConfig.value.prompts[oldKey] || {}), ...promptData};
+      currentConfig.value.prompts[newKey] = { ...(currentConfig.value.prompts[oldKey] || {}), ...promptData };
       delete currentConfig.value.prompts[oldKey];
       Object.keys(currentConfig.value.tags).forEach(tagName => {
         const index = currentConfig.value.tags[tagName].indexOf(oldKey);
@@ -357,24 +369,24 @@ const isLastInTag = (tagName, promptKey) => {
 };
 
 function openAssignPromptDialog(tagName) {
-    assignPromptForm.targetTagName = tagName;
-    assignPromptForm.selectedPromptKeys = [];
-    showAssignPromptDialog.value = true;
+  assignPromptForm.targetTagName = tagName;
+  assignPromptForm.selectedPromptKeys = [];
+  showAssignPromptDialog.value = true;
 }
 
 function assignSelectedPromptsToTag() {
-    const tagName = assignPromptForm.targetTagName;
-    if (!tagName || !currentConfig.value.tags[tagName]) {
-        ElMessage.warning(t('prompts.alerts.targetTagNotFound'));
-        return;
+  const tagName = assignPromptForm.targetTagName;
+  if (!tagName || !currentConfig.value.tags[tagName]) {
+    ElMessage.warning(t('prompts.alerts.targetTagNotFound'));
+    return;
+  }
+  assignPromptForm.selectedPromptKeys.forEach(promptKey => {
+    if (!currentConfig.value.tags[tagName].includes(promptKey)) {
+      currentConfig.value.tags[tagName].push(promptKey);
     }
-    assignPromptForm.selectedPromptKeys.forEach(promptKey => {
-        if (!currentConfig.value.tags[tagName].includes(promptKey)) {
-            currentConfig.value.tags[tagName].push(promptKey);
-        }
-    });
-    saveConfig();
-    showAssignPromptDialog.value = false;
+  });
+  saveConfig();
+  showAssignPromptDialog.value = false;
 }
 
 function formatDescription(text) {
@@ -383,9 +395,9 @@ function formatDescription(text) {
   const displayedLines = lines.slice(0, 2);
   let formattedText = displayedLines.join('<br>');
   if (lines.length > 2 || (lines.length === 2 && lines[1].trim() === '' && text.endsWith('\n'))) {
-     formattedText += '...';
+    formattedText += '...';
   } else if (lines.length === 1 && text.length > 60) {
-      formattedText = text.substring(0, 60) + '...';
+    formattedText = text.substring(0, 60) + '...';
   }
   return formattedText;
 }
@@ -393,12 +405,12 @@ function formatDescription(text) {
 const handleIconUpload = (file) => {
   const isImage = file.type.startsWith('image/');
   if (!isImage) {
-    ElMessage.error(t('prompts.alerts.invalidImageFormat', {formats: 'JPG, PNG'}));
+    ElMessage.error(t('prompts.alerts.invalidImageFormat', { formats: 'JPG, PNG' }));
     return false;
   }
   const isLt = file.size < 102400;
   if (!isLt) {
-    ElMessage.error(t('prompts.alerts.imageSizeTooLarge', {maxSize: '100KB'}));
+    ElMessage.error(t('prompts.alerts.imageSizeTooLarge', { maxSize: '100KB' }));
     return false;
   }
 
@@ -420,74 +432,51 @@ const removeEditingIcon = () => {
   <div class="page-container">
     <el-scrollbar class="main-content-scrollbar">
       <el-collapse v-model="activeCollapseNames" accordion class="tags-collapse-container">
+        <!-- ... (此部分未作修改，保持原样) ... -->
         <el-collapse-item name="__ALL_PROMPTS__" class="tag-collapse-item">
           <template #title>
             <div class="tag-title-content">
-              <span class="tag-name-header">{{ t('prompts.allPrompts') }} ({{allEnabledPromptsCount}}|{{ allPromptsCount }})</span>
+              <span class="tag-name-header">{{ t('prompts.allPrompts') }} ({{ allEnabledPromptsCount }}|{{ allPromptsCount
+                }})</span>
             </div>
           </template>
           <div class="prompts-grid-container">
             <div v-if="allPromptsCount === 0" class="empty-tag-message">
               <el-text type="info" size="small">{{ t('prompts.noPrompts') }}</el-text>
             </div>
-            <div
-              v-for="(promptData, promptKey) in currentConfig.prompts"
-              :key="promptKey"
-              class="prompt-card"
-            >
+            <div v-for="(promptData, promptKey) in currentConfig.prompts" :key="promptKey" class="prompt-card">
               <div class="prompt-card-header">
-                <el-avatar
-                  v-if="promptData.icon"
-                  :src="promptData.icon"
-                  shape="square"
-                  :size="28"
-                  class="prompt-card-icon"
-                />
+                <el-avatar v-if="promptData.icon" :src="promptData.icon" shape="square" :size="28"
+                  class="prompt-card-icon" />
                 <el-tooltip :content="promptKey" placement="top">
                   <span class="prompt-name" @click="prepareEditPrompt(promptKey)">
-                      {{ promptKey }}
+                    {{ promptKey }}
                   </span>
                 </el-tooltip>
                 <div class="prompt-actions-header">
-                  <el-switch
-                    v-model="promptData.enable"
-                    @change="handlePromptEnableChange"
-                    size="small"
-                    class="prompt-enable-toggle"
-                  />
-                   <el-button
-                    type="danger" :icon="Delete" circle plain size="small"
-                    @click="deletePrompt(promptKey)"
-                  />
+                  <el-switch v-model="promptData.enable" @change="handlePromptEnableChange" size="small"
+                    class="prompt-enable-toggle" />
+                  <el-button type="danger" :icon="Delete" circle plain size="small" @click="deletePrompt(promptKey)" />
                 </div>
               </div>
-              <div class="prompt-description-container" @click="prepareEditPrompt(promptKey)" v-html="formatDescription(promptData.prompt)">
+              <div class="prompt-description-container" @click="prepareEditPrompt(promptKey)"
+                v-html="formatDescription(promptData.prompt)">
               </div>
             </div>
           </div>
         </el-collapse-item>
 
-        <el-collapse-item
-          v-for="tagName in sortedTagNames"
-          :key="tagName"
-          :name="tagName"
-          class="tag-collapse-item"
-        >
+        <el-collapse-item v-for="tagName in sortedTagNames" :key="tagName" :name="tagName" class="tag-collapse-item">
           <template #title>
             <div class="tag-title-content">
-              <span class="tag-name-header">{{ tagName }} ({{ tagEabledPromptsCount(tagName) }}|{{ currentConfig.tags[tagName]?.length || 0 }})</span>
+              <span class="tag-name-header">{{ tagName }} ({{ tagEabledPromptsCount(tagName) }}|{{
+                currentConfig.tags[tagName]?.length || 0 }})</span>
               <div class="tag-actions">
-                 <el-switch
-                  v-if="currentConfig.tags[tagName]?.length > 0"
+                <el-switch v-if="currentConfig.tags[tagName]?.length > 0"
                   :model-value="areAllPromptsInTagEnabled(tagName)"
-                  @change="(value) => toggleAllPromptsInTag(tagName, value)"
-                  size="small" class="tag-enable-toggle"
-                />
-                <el-button
-                  type="danger" :icon="Delete" circle plain size="small"
-                  @click.stop="deleteTag(tagName)"
-                  class="delete-tag-btn"
-                />
+                  @change="(value) => toggleAllPromptsInTag(tagName, value)" size="small" class="tag-enable-toggle" />
+                <el-button type="danger" :icon="Delete" circle plain size="small" @click.stop="deleteTag(tagName)"
+                  class="delete-tag-btn" />
               </div>
             </div>
           </template>
@@ -495,70 +484,36 @@ const removeEditingIcon = () => {
             <div v-if="!promptsInTag(tagName).length" class="empty-tag-message">
               <el-text type="info" size="small">{{ t('prompts.noPromptsInTag') }}</el-text>
             </div>
-            <div
-              v-for="prompt in promptsInTag(tagName)"
-              :key="prompt.key"
-              class="prompt-card"
-            >
-               <div class="prompt-card-header">
-                 <el-avatar
-                    v-if="prompt.icon"
-                    :src="prompt.icon"
-                    shape="square"
-                    :size="28"
-                    class="prompt-card-icon"
-                  />
-                 <el-tooltip :content="prompt.key" placement="top">
-                   <span class="prompt-name" @click="prepareEditPrompt(prompt.key, tagName)">
-                     {{ prompt.key }}
-                   </span>
-                 </el-tooltip>
-                 <div class="prompt-card-tag-actions">
-                   <el-button
-                     :icon="ArrowLeft"
-                     plain
-                     size="small"
-                     :disabled="isFirstInTag(tagName, prompt.key)"
-                     @click="changePromptOrderInTag(tagName, prompt.key, 'left')"
-                     :title="t('prompts.tooltips.moveLeft')"
-                   />
-                   <el-button
-                     :icon="ArrowRight"
-                     plain
-                     size="small"
-                     :disabled="isLastInTag(tagName, prompt.key)"
-                     @click="changePromptOrderInTag(tagName, prompt.key, 'right')"
-                     :title="t('prompts.tooltips.moveRight')"
-                   />
-                   <el-switch
-                     v-model="currentConfig.prompts[prompt.key].enable"
-                     @change="handlePromptEnableChange"
-                     size="small"
-                     class="prompt-enable-toggle"
-                   />
-                   <el-button
-                     type="danger"
-                     :icon="Close"
-                     circle
-                     plain
-                     size="small"
-                     @click="removePromptFromTag(tagName, prompt.key)"
-                     :title="t('prompts.tooltips.removeFromTag')"
-                   />
-                 </div>
-               </div>
-              <div class="prompt-description-container" @click="prepareEditPrompt(prompt.key, tagName)" v-html="formatDescription(prompt.prompt)">
+            <div v-for="prompt in promptsInTag(tagName)" :key="prompt.key" class="prompt-card">
+              <div class="prompt-card-header">
+                <el-avatar v-if="prompt.icon" :src="prompt.icon" shape="square" :size="28" class="prompt-card-icon" />
+                <el-tooltip :content="prompt.key" placement="top">
+                  <span class="prompt-name" @click="prepareEditPrompt(prompt.key, tagName)">
+                    {{ prompt.key }}
+                  </span>
+                </el-tooltip>
+                <div class="prompt-card-tag-actions">
+                  <el-button :icon="ArrowLeft" plain size="small" :disabled="isFirstInTag(tagName, prompt.key)"
+                    @click="changePromptOrderInTag(tagName, prompt.key, 'left')"
+                    :title="t('prompts.tooltips.moveLeft')" />
+                  <el-button :icon="ArrowRight" plain size="small" :disabled="isLastInTag(tagName, prompt.key)"
+                    @click="changePromptOrderInTag(tagName, prompt.key, 'right')"
+                    :title="t('prompts.tooltips.moveRight')" />
+                  <el-switch v-model="currentConfig.prompts[prompt.key].enable" @change="handlePromptEnableChange"
+                    size="small" class="prompt-enable-toggle" />
+                  <el-button type="danger" :icon="Close" circle plain size="small"
+                    @click="removePromptFromTag(tagName, prompt.key)" :title="t('prompts.tooltips.removeFromTag')" />
+                </div>
+              </div>
+              <div class="prompt-description-container" @click="prepareEditPrompt(prompt.key, tagName)"
+                v-html="formatDescription(prompt.prompt)">
               </div>
             </div>
           </div>
           <div class="add-existing-prompt-to-tag-container" v-if="promptsAvailableToAssign(tagName).length > 0">
-            <el-button
-                class="add-existing-prompt-btn"
-                plain
-                size="small"
-                :icon="Files"
-                @click="openAssignPromptDialog(tagName)">
-                {{ t('prompts.addExistingPrompt') }}
+            <el-button class="add-existing-prompt-btn" plain size="small" :icon="Files"
+              @click="openAssignPromptDialog(tagName)">
+              {{ t('prompts.addExistingPrompt') }}
             </el-button>
           </div>
         </el-collapse-item>
@@ -574,78 +529,103 @@ const removeEditingIcon = () => {
       </div>
     </el-scrollbar>
 
-    <el-dialog v-model="showPromptEditDialog" :title="isNewPrompt ? t('prompts.addNewPrompt') : t('prompts.editPrompt')" width="700px" :close-on-click-modal="false">
+    <!-- [MODIFIED] 编辑快捷助手对话框整体布局优化 -->
+    <el-dialog v-model="showPromptEditDialog" :title="isNewPrompt ? t('prompts.addNewPrompt') : t('prompts.editPrompt')"
+      width="700px" :close-on-click-modal="false">
       <el-form :model="editingPrompt" label-position="top" @submit.prevent="savePrompt">
-        <el-form-item :label="t('prompts.promptKeyLabel')" required>
-          <el-input v-model="editingPrompt.key" :placeholder="t('prompts.promptKeyPlaceholder')"/>
-        </el-form-item>
-
-        <el-form-item :label="t('prompts.iconLabel')">
-            <div class="icon-editor-area">
-              <el-upload
-                class="icon-uploader"
-                action="#"
-                :show-file-list="false"
-                :before-upload="handleIconUpload"
-                accept="image/png, image/jpeg, image/gif, image/webp, image/svg+xml"
-                drag
-              >
-                <template v-if="editingPrompt.icon">
-                  <el-avatar :src="editingPrompt.icon" shape="square" :size="80" class="uploaded-icon-avatar"/>
-                </template>
-                <template v-else>
-                  <el-icon class="icon-uploader-icon" :size="30"><UploadFilled /></el-icon>
-                  <div class="el-upload__text">
-                    {{ t('prompts.dragIconHere') }}<em>{{ t('prompts.orClickToUpload') }}</em>
-                  </div>
-                </template>
-                <template #tip>
-                  <div class="el-upload__tip">
-                    {{ t('prompts.iconUploadTip', {formats: 'JPG, PNG', maxSize: '100KB'}) }}
-                  </div>
-                </template>
-              </el-upload>
-              <el-button
-                v-if="editingPrompt.icon"
-                class="remove-icon-button"
-                type="danger" plain size="small"
-                @click="removeEditingIcon"
-              >
+        <el-row :gutter="20">
+          <!-- 左侧：图标上传 -->
+          <el-col :span="8">
+            <el-form-item :label="t('prompts.iconLabel')">
+              <div class="icon-editor-area">
+                <el-upload class="icon-uploader" action="#" :show-file-list="false" :before-upload="handleIconUpload"
+                  accept="image/png, image/jpeg, image/gif, image/webp, image/svg+xml" drag>
+                  <template v-if="editingPrompt.icon">
+                    <el-avatar :src="editingPrompt.icon" shape="square" :size="120" class="uploaded-icon-avatar" />
+                  </template>
+                  <template v-else>
+                    <el-icon class="icon-uploader-icon" :size="40">
+                      <UploadFilled />
+                    </el-icon>
+                    <div class="el-upload__text">
+                      {{ t('prompts.dragIconHere') }}<em>{{ t('prompts.orClickToUpload') }}</em>
+                    </div>
+                  </template>
+                </el-upload>
+              </div>
+              <div class="el-upload__tip">
+                {{ t('prompts.iconUploadTip', { formats: 'JPG, PNG', maxSize: '100KB' }) }}
+              </div>
+              <el-button v-if="editingPrompt.icon" class="remove-icon-button" type="danger" plain size="small"
+                @click="removeEditingIcon">
                 {{ t('common.removeIcon') }}
               </el-button>
-            </div>
-          </el-form-item>
+            </el-form-item>
+          </el-col>
 
-        <el-row :gutter="20">
-          <el-col :span="12"><el-form-item :label="t('prompts.typeLabel')">
-            <el-select v-model="editingPrompt.type" style="width: 100%;">
-              <el-option :label="t('prompts.typeOptions.text')" value="over"/>
-              <el-option :label="t('prompts.typeOptions.image')" value="img"/>
-              <el-option :label="t('prompts.typeOptions.general')" value="general"/>
-            </el-select>
-          </el-form-item></el-col>
-          <el-col :span="12"><el-form-item :label="t('prompts.showModeLabel')">
-            <el-select v-model="editingPrompt.showMode" style="width: 100%;">
-              <el-option :label="t('prompts.showModeOptions.input')" value="input"/>
-              <el-option :label="t('prompts.showModeOptions.clipboard')" value="clipboard"/>
-              <el-option :label="t('prompts.showModeOptions.window')" value="window"/>
-            </el-select>
-          </el-form-item></el-col>
+          <!-- 右侧：核心设置 -->
+          <el-col :span="16">
+            <el-row :gutter="20">
+              <el-col :span="20"><el-form-item :label="t('prompts.promptKeyLabel')" required>
+                  <el-input v-model="editingPrompt.key" :placeholder="t('prompts.promptKeyPlaceholder')" />
+                </el-form-item></el-col>
+              <el-col :span="4"><el-form-item :label="t('prompts.enabledLabel')">
+                  <el-switch v-model="editingPrompt.enable" />
+                </el-form-item></el-col>
+            </el-row>
+
+            <el-row :gutter="20">
+              <el-col :span="12"><el-form-item :label="t('prompts.typeLabel')">
+                  <el-select v-model="editingPrompt.type" style="width: 100%;">
+                    <el-option :label="t('prompts.typeOptions.text')" value="over" />
+                    <el-option :label="t('prompts.typeOptions.image')" value="img" />
+                    <el-option :label="t('prompts.typeOptions.general')" value="general" />
+                  </el-select>
+                </el-form-item></el-col>
+              <el-col :span="12"><el-form-item :label="t('prompts.showModeLabel')">
+                  <el-select v-model="editingPrompt.showMode" style="width: 100%;">
+                    <el-option :label="t('prompts.showModeOptions.input')" value="input" />
+                    <el-option :label="t('prompts.showModeOptions.clipboard')" value="clipboard" />
+                    <el-option :label="t('prompts.showModeOptions.window')" value="window" />
+                  </el-select>
+                </el-form-item></el-col>
+            </el-row>
+          </el-col>
         </el-row>
+
         <el-form-item :label="t('prompts.modelLabel')">
           <el-select v-model="editingPrompt.model" filterable clearable style="width: 100%;">
-            <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value"/>
+            <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
+
+        <!-- [NEW] 新增模型参数设置区域 -->
+        <el-form-item :label="t('prompts.llmParametersLabel')">
+          <div class="llm-params-container">
+            <div class="param-item">
+              <span class="param-label">{{ t('prompts.streamLabel') }}</span>
+              <el-switch v-model="editingPrompt.stream" />
+            </div>
+            <div class="param-item">
+              <span class="param-label">{{ t('prompts.enableTemperatureLabel') }}</span>
+              <el-switch v-model="editingPrompt.isTemperature" />
+            </div>
+          </div>
+        </el-form-item>
+
+        <el-form-item v-if="editingPrompt.isTemperature" :label="t('prompts.temperatureLabel')">
+          <el-slider v-model="editingPrompt.temperature" :min="0" :max="2" :step="0.1" show-input />
+        </el-form-item>
+
         <el-form-item :label="t('prompts.promptContentLabel')">
-          <el-input v-model="editingPrompt.prompt" type="textarea" :rows="6"/>
+          <el-input v-model="editingPrompt.prompt" type="textarea" :rows="6" />
         </el-form-item>
-        <el-form-item :label="t('prompts.enabledLabel')">
-          <el-switch v-model="editingPrompt.enable" />
-        </el-form-item>
+
         <el-form-item v-if="isNewPrompt" :label="t('prompts.addToTagLabel')">
-          <el-select v-model="editingPrompt.selectedTag" :placeholder="t('prompts.addToTagPlaceholder')" style="width: 100%;" clearable>
-            <el-option v-for="tagNameItem in sortedTagNames" :key="tagNameItem" :label="tagNameItem" :value="tagNameItem"/>
+          <el-select v-model="editingPrompt.selectedTag" :placeholder="t('prompts.addToTagPlaceholder')"
+            style="width: 100%;" clearable>
+            <el-option v-for="tagNameItem in sortedTagNames" :key="tagNameItem" :label="tagNameItem"
+              :value="tagNameItem" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -658,7 +638,7 @@ const removeEditingIcon = () => {
     <el-dialog v-model="showAddTagDialog" :title="t('prompts.addNewTag')" width="400px" :close-on-click-modal="false">
       <el-form @submit.prevent="addTag">
         <el-form-item :label="t('prompts.tagNameLabel')" required>
-          <el-input v-model="newTagName"/>
+          <el-input v-model="newTagName" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -667,33 +647,27 @@ const removeEditingIcon = () => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showAssignPromptDialog" :title="t('prompts.assignPromptsToTag', { tagName: assignPromptForm.targetTagName } )" width="600px" :close-on-click-modal="false">
-        <el-form :model="assignPromptForm" label-position="top">
-            <el-form-item :label="t('prompts.selectPromptsToAddLabel')">
-                 <el-alert v-if="!promptsAvailableToAssign(assignPromptForm.targetTagName).length" :title="t('prompts.alerts.noPromptsToAssign')" type="info" :closable="false" show-icon />
-                <el-select
-                    v-else
-                    v-model="assignPromptForm.selectedPromptKeys"
-                    multiple
-                    filterable
-                    :placeholder="t('prompts.selectPromptsPlaceholder')"
-                    style="width: 100%;"
-                >
-                    <el-option
-                        v-for="item in promptsAvailableToAssign(assignPromptForm.targetTagName)"
-                        :key="item.key"
-                        :label="item.label"
-                        :value="item.key"
-                    />
-                </el-select>
-            </el-form-item>
-        </el-form>
-        <template #footer>
-            <el-button @click="showAssignPromptDialog = false">{{ t('common.cancel') }}</el-button>
-            <el-button type="primary" @click="assignSelectedPromptsToTag" :disabled="!assignPromptForm.selectedPromptKeys.length">
-                {{ t('common.assignSelected') }}
-            </el-button>
-        </template>
+    <el-dialog v-model="showAssignPromptDialog"
+      :title="t('prompts.assignPromptsToTag', { tagName: assignPromptForm.targetTagName })" width="600px"
+      :close-on-click-modal="false">
+      <el-form :model="assignPromptForm" label-position="top">
+        <el-form-item :label="t('prompts.selectPromptsToAddLabel')">
+          <el-alert v-if="!promptsAvailableToAssign(assignPromptForm.targetTagName).length"
+            :title="t('prompts.alerts.noPromptsToAssign')" type="info" :closable="false" show-icon />
+          <el-select v-else v-model="assignPromptForm.selectedPromptKeys" multiple filterable
+            :placeholder="t('prompts.selectPromptsPlaceholder')" style="width: 100%;">
+            <el-option v-for="item in promptsAvailableToAssign(assignPromptForm.targetTagName)" :key="item.key"
+              :label="item.label" :value="item.key" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAssignPromptDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="assignSelectedPromptsToTag"
+          :disabled="!assignPromptForm.selectedPromptKeys.length">
+          {{ t('common.assignSelected') }}
+        </el-button>
+      </template>
     </el-dialog>
 
   </div>
@@ -785,7 +759,7 @@ const removeEditingIcon = () => {
   border: 1px solid #ebeef5;
   border-radius: 6px;
   padding: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all 0.2s;
   display: flex;
   flex-direction: column;
@@ -793,7 +767,7 @@ const removeEditingIcon = () => {
 
 .prompt-card:hover {
   border-color: #b3c0d8;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .prompt-card-header {
@@ -831,8 +805,8 @@ const removeEditingIcon = () => {
   display: flex;
   align-items: center;
   gap: 6px;
-   flex-shrink: 0;
-   margin-left: auto;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .prompt-card-tag-actions {
@@ -903,7 +877,7 @@ const removeEditingIcon = () => {
   background-color: #ffffff;
   border-top: 1px solid #ebeef5;
   z-index: 10;
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 }
 
 .action-btn {
@@ -961,15 +935,19 @@ const removeEditingIcon = () => {
   --el-switch-on-color: #0070f3;
 }
 
+/* [MODIFIED] 样式优化和新增 */
 .icon-editor-area {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   gap: 10px;
+  width: 100%;
 }
 
 .icon-uploader :deep(.el-upload-dragger) {
-  width: 80px;
-  height: 80px;
+  width: 120px;
+  /* 增大尺寸以适应布局 */
+  height: 120px;
   padding: 0;
   border: 1px dashed var(--el-border-color-darker);
   border-radius: 6px;
@@ -978,8 +956,8 @@ const removeEditingIcon = () => {
   justify-content: center;
   align-items: center;
   box-sizing: border-box;
-  background-color: #fff; /* Ensures it has a background */
-  overflow: hidden; /* Crucial for avatar display */
+  background-color: #fafafa;
+  overflow: hidden;
 }
 
 .icon-uploader :deep(.el-upload-dragger:hover) {
@@ -990,13 +968,13 @@ const removeEditingIcon = () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block; /* Ensures it behaves predictably */
+  display: block;
 }
 
 .icon-uploader-icon {
-  font-size: 28px;
+  font-size: 32px;
   color: #8c939d;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .el-upload__text {
@@ -1005,6 +983,7 @@ const removeEditingIcon = () => {
   line-height: 1.2;
   text-align: center;
 }
+
 .el-upload__text em {
   color: var(--el-color-primary);
   font-style: normal;
@@ -1015,8 +994,35 @@ const removeEditingIcon = () => {
   color: #909399;
   margin-top: 7px;
   line-height: 1.2;
+  text-align: center;
+  width: 100%;
 }
 
-/* .remove-icon-button {
-} */
+.remove-icon-button {
+  width: 120px;
+  margin-top: 8px;
+}
+
+/* [NEW] 新增模型参数容器样式 */
+.llm-params-container {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background-color: #f7f9fc;
+  border-radius: 4px;
+  padding: 8px 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.param-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.param-label {
+  font-size: 14px;
+  color: #606266;
+}
 </style>
