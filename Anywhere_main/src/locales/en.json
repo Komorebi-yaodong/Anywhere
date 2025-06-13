@@ -28,9 +28,10 @@
     "dragIconHere": "Drag ",
     "orClickToUpload": "or click",
     "typeOptions": {
+      "general": "General",
       "text": "Text",
       "image": "Image",
-      "general": "General"
+      "files": "Files"
     },
     "showModeLabel": "Show Mode",
     "showModeOptions": {
@@ -40,6 +41,7 @@
     },
     "modelLabel": "Model",
     "llmParametersLabel": "Model Parameters (Only effective for the current Quick Assistant model; no longer effective after switching to other models)",
+    "sendFileLabel": "Direct file sending",
     "streamLabel": "Stream Responses",
     "enableTemperatureLabel": "Custom Temperature",
     "temperatureLabel": "Temperature Settings (Temperature ranges vary for different models; if an error occurs, you can disable custom temperature)",
@@ -80,6 +82,7 @@
     "apiKeyDescription": "You can enter multiple API keys separated by commas.",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "e.g., https://api.openai.com/v1",
+    "searchModelsPlaceholder":"Search model",
     "modelsLabel": "Models",
     "noModelsAdded": "No models added yet.",
     "getModelsFromApiBtn": "Get Models from API",

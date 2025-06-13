@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove } from '@element-plus/icons-vue';
+// [MODIFIED] 引入 Search 图标用于搜索框
+import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 
@@ -165,6 +166,21 @@ function add_model_function() {
 
 const getModel_page = ref(false);
 const getModel_form = reactive({ modelList: [], isLoading: false, error: null });
+// [NEW] 新增一个 ref 用于存储搜索框的输入值
+const searchQuery = ref('');
+
+// [NEW] 新增一个计算属性，用于根据 searchQuery 的值过滤模型列表
+const filteredModels = computed(() => {
+  if (!searchQuery.value) {
+    return getModel_form.modelList;
+  }
+  const lowerCaseQuery = searchQuery.value.toLowerCase();
+  return getModel_form.modelList.filter(model =>
+    (model.id && model.id.toLowerCase().includes(lowerCaseQuery)) ||
+    (model.owned_by && model.owned_by.toLowerCase().includes(lowerCaseQuery))
+  );
+});
+
 
 async function activate_get_model_function() {
   if (!selectedProvider.value || !selectedProvider.value.url) {
@@ -175,6 +191,7 @@ async function activate_get_model_function() {
   getModel_form.isLoading = true;
   getModel_form.error = null;
   getModel_form.modelList = [];
+  searchQuery.value = ''; // [MODIFIED] 每次打开弹窗时重置搜索关键词
 
   const url = selectedProvider.value.url;
   const apiKey = selectedProvider.value.api_key;
@@ -403,11 +420,31 @@ async function saveConfig() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="getModel_page" :title="t('providers.availableModelsDialogTitle')" width="600px" :close-on-click-modal="false">
-      <el-alert v-if="getModel_form.error" :title="getModel_form.error" type="error" show-icon :closable="false" style="margin-bottom: 15px;"/>
-      <el-table :data="getModel_form.modelList" v-loading="getModel_form.isLoading" style="width: 100%" max-height="400px" :empty-text="t('providers.noModelsFoundError')">
-        <el-table-column prop="id" :label="t('providers.table.modelId')" />
-        <el-table-column prop="owned_by" :label="t('providers.table.ownedBy')" width="150"/>
+    <!-- [MODIFIED] 优化后的“可用模型”弹窗 -->
+    <el-dialog v-model="getModel_page" :title="t('providers.availableModelsDialogTitle')" width="700px" :close-on-click-modal="false">
+      <!-- [NEW] 搜索输入框 -->
+      <el-input
+          v-model="searchQuery"
+          :placeholder="t('providers.searchModelsPlaceholder', { default: '通过模型ID或所有者搜索...' })"
+          clearable
+          :prefix-icon="Search"
+          style="margin-bottom: 20px;"
+      />
+
+      <el-alert v-if="getModel_form.error" :title="getModel_form.error" type="error" show-icon :closable="false" style="margin-bottom: 20px;"/>
+
+      <!-- [MODIFIED] 表格数据源改为 filteredModels，并优化 empty-text -->
+      <el-table
+        :data="filteredModels"
+        v-loading="getModel_form.isLoading"
+        style="width: 100%"
+        max-height="450px"
+        :empty-text="searchQuery ? t('providers.noModelsMatchSearch', { default: '未找到匹配的模型' }) : t('providers.noModelsFoundError')"
+        stripe
+        border
+      >
+        <el-table-column prop="id" :label="t('providers.table.modelId')" sortable />
+        <el-table-column prop="owned_by" :label="t('providers.table.ownedBy')" width="180" sortable />
         <el-table-column :label="t('providers.table.action')" width="100" align="center">
           <template #default="scope">
             <el-tooltip
@@ -426,8 +463,11 @@ async function saveConfig() {
           </template>
         </el-table-column>
       </el-table>
+
       <template #footer>
-        <el-button @click="getModel_page = false">{{ t('common.close') }}</el-button>
+        <div class="dialog-footer">
+            <el-button @click="getModel_page = false">{{ t('common.close') }}</el-button>
+        </div>
       </template>
     </el-dialog>
 
@@ -656,8 +696,7 @@ async function saveConfig() {
   background-color: #f9fafb;
   padding: 16px 24px;
   border-bottom: 1px solid #e5e7eb;
-  border-top-left-radius: 6px;
-  border-top-right-radius: 6px;
+  margin-right: 0; /* 修正 el-dialog header 在有滚动条时的样式问题 */
 }
 :deep(.el-dialog__title) {
   font-size: 16px;
@@ -665,14 +704,21 @@ async function saveConfig() {
   color: #111827;
 }
 :deep(.el-dialog__body) {
-  padding: 24px;
+  padding: 20px 24px;
 }
 :deep(.el-dialog__footer) {
   padding: 16px 24px;
   border-top: 1px solid #e5e7eb;
+  background-color: #f9fafb;
 }
 :deep(.el-switch.is-checked .el-switch__core) {
     background-color: #0070f3;
     border-color: #0070f3;
+}
+/* [NEW] 对话框表格的样式优化 */
+:deep(.el-table__header-wrapper th) {
+    background-color: #fafafa !important;
+    font-weight: 500;
+    color: #333;
 }
 </style>

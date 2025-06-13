@@ -29,6 +29,7 @@ const defaultConfig = {
         stream: true,
         isTemperature: false,
         temperature: 0.7,
+        isDirectSend: false,
       },
     },
     tags: {},
@@ -60,6 +61,7 @@ const editingPrompt = reactive({
   stream: true,
   isTemperature: false,
   temperature: 0.7,
+  isDirectSend: false,
 });
 const isNewPrompt = ref(false);
 
@@ -240,6 +242,7 @@ function prepareAddPrompt() {
     stream: true,
     isTemperature: false,
     temperature: 0.7,
+    isDirectSend: false,
   });
   showPromptEditDialog.value = true;
 }
@@ -261,6 +264,7 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
     stream: p.stream ?? true,
     isTemperature: p.isTemperature ?? false,
     temperature: p.temperature ?? 0.7,
+    isDirectSend: p.isDirectSend ?? false,
   });
   showPromptEditDialog.value = true;
 }
@@ -286,6 +290,7 @@ function savePrompt() {
     stream: editingPrompt.stream,
     isTemperature: editingPrompt.isTemperature,
     temperature: editingPrompt.temperature,
+    isDirectSend: editingPrompt.isDirectSend
   };
 
   if (isNewPrompt.value) {
@@ -432,7 +437,6 @@ const removeEditingIcon = () => {
   <div class="page-container">
     <el-scrollbar class="main-content-scrollbar">
       <el-collapse v-model="activeCollapseNames" accordion class="tags-collapse-container">
-        <!-- ... (此部分未作修改，保持原样) ... -->
         <el-collapse-item name="__ALL_PROMPTS__" class="tag-collapse-item">
           <template #title>
             <div class="tag-title-content">
@@ -577,9 +581,10 @@ const removeEditingIcon = () => {
             <el-row :gutter="20">
               <el-col :span="12"><el-form-item :label="t('prompts.typeLabel')">
                   <el-select v-model="editingPrompt.type" style="width: 100%;">
+                    <el-option :label="t('prompts.typeOptions.general')" value="general" />
                     <el-option :label="t('prompts.typeOptions.text')" value="over" />
                     <el-option :label="t('prompts.typeOptions.image')" value="img" />
-                    <el-option :label="t('prompts.typeOptions.general')" value="general" />
+                    <el-option :label="t('prompts.typeOptions.files')" value="files" />
                   </el-select>
                 </el-form-item></el-col>
               <el-col :span="12"><el-form-item :label="t('prompts.showModeLabel')">
@@ -602,6 +607,10 @@ const removeEditingIcon = () => {
         <!-- [NEW] 新增模型参数设置区域 -->
         <el-form-item :label="t('prompts.llmParametersLabel')">
           <div class="llm-params-container">
+            <div class="param-item">
+              <span class="param-label">{{ t('prompts.sendFileLabel') }}</span>
+              <el-switch v-model="editingPrompt.isDirectSend" />
+            </div>
             <div class="param-item">
               <span class="param-label">{{ t('prompts.streamLabel') }}</span>
               <el-switch v-model="editingPrompt.stream" />

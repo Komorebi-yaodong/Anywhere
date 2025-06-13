@@ -28,9 +28,10 @@
     "dragIconHere": "拖拽",
     "orClickToUpload": "或点击",
     "typeOptions": {
+      "general": "通用",
       "text": "文本",
       "image": "图片",
-      "general": "通用"
+      "files":"文件"
     },
     "showModeLabel": "显示模式",
     "showModeOptions": {
@@ -40,6 +41,7 @@
     },
     "modelLabel": "模型",
     "llmParametersLabel": "模型参数（仅当前 快捷助手 模型生效，更换其他模型后不再生效）",
+    "sendFileLabel": "文件直接发送",
     "streamLabel": "流式响应",
     "enableTemperatureLabel": "自定义温度",
     "temperatureLabel": "温度设置（不同模型温度范围不同，如果报错可以关闭自定义温度）",
@@ -81,6 +83,7 @@
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "例如, https://api.openai.com/v1",
     "modelsLabel": "模型",
+    "searchModelsPlaceholder":"搜索模型",
     "noModelsAdded": "尚未添加模型。",
     "getModelsFromApiBtn": "从 API 获取模型",
     "addManuallyBtn": "手动添加",

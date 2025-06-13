@@ -28,9 +28,10 @@
     "dragIconHere": "Перетащите ",
     "orClickToUpload": "или нажмите",
     "typeOptions": {
+      "general": "Общий",
       "text": "Текст",
       "image": "Изображение",
-      "general": "Общий"
+      "files":"Файлы"
     },
     "showModeLabel": "Режим отображения",
     "showModeOptions": {
@@ -40,6 +41,7 @@
     },
     "modelLabel": "Модель",
     "llmParametersLabel": "Параметры модели (действительно только для текущей модели «Быстрый помощник»; перестает действовать при переключении на другие модели)",
+    "sendFileLabel": "Прямая отправка файла",
     "streamLabel": "Потоковые ответы",
     "enableTemperatureLabel": "Пользовательская температура",
     "temperatureLabel": "Настройки температуры (диапазоны температуры различаются для разных моделей; в случае ошибки можно отключить пользовательскую температуру)",
@@ -80,6 +82,7 @@
     "apiKeyDescription": "Вы можете ввести несколько ключей API, разделенных запятыми.",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "например, https://api.openai.com/v1",
+    "searchModelsPlaceholder":"Модель поиска",
     "modelsLabel": "Модели",
     "noModelsAdded": "Модели пока не добавлены.",
     "getModelsFromApiBtn": "Получить модели из API",

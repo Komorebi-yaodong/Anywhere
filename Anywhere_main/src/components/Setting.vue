@@ -118,44 +118,31 @@ function importConfig() {
         try {
           const importedData = JSON.parse(e.target.result);
           
+          // 获取一份干净的默认配置作为基础/回退
           const baseConfig = JSON.parse(JSON.stringify(defaultConfig.config));
           
-          let newMergedConfig = {
-            ...baseConfig,
-            ...importedData
-          };
-
-          newMergedConfig.providers = {
-            ...baseConfig.providers,
-            ...(importedData.providers || {})
-          };
-          newMergedConfig.prompts = {
-            ...baseConfig.prompts,
-            ...(importedData.prompts || {})
-          };
-          newMergedConfig.tags = {
-            ...baseConfig.tags,
-            ...(importedData.tags || {})
-          };
+          // 将导入的数据作为主目标，用默认配置去补充它可能缺失的顶级键
+          const newConfig = deepMerge(baseConfig, importedData);
           
-          if (importedData.providerOrder) {
-            newMergedConfig.providerOrder = importedData.providerOrder;
-          } else {
-            newMergedConfig.providerOrder = baseConfig.providerOrder;
-          }
+          const finalConfig = deepMerge(baseConfig, importedData); // 先进行深度合并，保证所有键存在
 
-          currentConfig.value = newMergedConfig;
+          // 然后，强制用导入的数据替换掉集合类型的属性
+          // 如果导入数据中没有这些键，就用一个空的默认值，而不是 baseConfig 的内容
+          finalConfig.providers = importedData.providers || {};
+          finalConfig.prompts = importedData.prompts || {};
+          finalConfig.tags = importedData.tags || {};
+          finalConfig.providerOrder = importedData.providerOrder || [];
+
+          currentConfig.value = finalConfig;
 
           await saveConfig();
           await nextTick();
-          console.log("Configuration imported successfully.");
-          // Here you might want to inform the user to reload or refresh parts of the UI if needed
-          // For example, if language was part of the config and changed.
-          // For now, selectedLanguage is updated based on locale.value from i18n, which is separate.
-          selectedLanguage.value = locale.value; // Re-align if needed, though language is mostly separate
+          console.log("Configuration imported and replaced successfully.");
+          ElMessage.success(t('setting.alerts.importSuccess'));
+
         } catch (err) {
           console.error("Error importing configuration:", err);
-          // Inform user about the error, e.g., invalid file format
+          ElMessage.error(t('setting.alerts.importFailed'));
         }
       };
       reader.readAsText(file);

@@ -419,11 +419,25 @@ onMounted(async () => {
         history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
         chat_show.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
         scrollToBottom(true); await askAI(true);
-      } else if (basic_msg.value.type === "files" && basic_msg.value.payload){
-        for (let i = 0; i < basic_msg.value.payload.length; i++) {
-          processFilePath(basic_msg.value.payload[i].path);
+      } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
+        try {
+          // 创建一个包含所有文件处理 Promise 的数组
+          const fileProcessingPromises = basic_msg.value.payload.map((fileInfo, index) =>
+            processFilePath(fileInfo.path)
+          );
+          // 等待所有文件都处理完毕
+          await Promise.all(fileProcessingPromises);
+          if (currentPromptConfig.isDirectSend) {
+            scrollToBottom(true); await askAI(false);
+          }
+          else {
+            scrollToBottom(true);
+          }
+        } catch (err) {
+          console.error("Error during file processing in test block:", error);
+          ElMessage.error("测试块中的文件处理失败: " + error.message);
         }
-        scrollToBottom(true);
+
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
     });
@@ -457,6 +471,19 @@ onMounted(async () => {
     } else {
       history.value = []; chat_show.value = [];
     }
+
+    // // 可以在这里测试
+    // basic_msg.value.payload = [{ type: "file", path: "D:\\PC\\Downloads\\test.sql" }];
+    // for (let i = 0; i < basic_msg.value.payload.length; i++) {
+    //   await processFilePath(basic_msg.value.payload[i].path);
+    // }
+    // if (!currentPromptConfig.isDirectSend) {
+    //   scrollToBottom(true); await askAI(false);
+    // }
+    // else {
+    //   scrollToBottom(true);
+    // }
+    // 
     scrollToBottom(true);
     if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
   }
@@ -601,7 +628,6 @@ async function askAI(forceSend = false) {
   senderFocus();
   if (loading.value) return;
   let is_think_flag = false;  // 是否是<think>...</think>块
-
   if (!forceSend) {
     let file_content = await sendFile();
     const promptText = prompt.value.trim();
@@ -621,7 +647,6 @@ async function askAI(forceSend = false) {
     } else return;
     prompt.value = "";
   }
-
   if (temporary.value && history.value.length > 1) {
     const lastUserMessage = history.value[history.value.length - 1];
     const systemMessage = history.value[0].role === "system" ? history.value[0] : null;
@@ -831,24 +856,38 @@ async function sendFile() {
 }
 
 function file2fileList(file, idx) {
-  const handler = getFileHandler(file.name);
-  if (!handler) {
-    ElMessage.warning(`不支持的文件类型: ${file.name}`);
-    return;
-  }
+  return new Promise((resolve, reject) => {
+    const handler = getFileHandler(file.name);
+    if (!handler) {
+      const errorMsg = `不支持的文件类型: ${file.name}`;
+      ElMessage.warning(errorMsg);
+      reject(new Error(errorMsg)); // Promise 失败
+      return;
+    }
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    fileList.value.push({
-      uid: idx,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      url: e.target.result
-    });
-  };
-  reader.onerror = () => ElMessage.error(`读取文件 ${file.name} 失败`);
-  reader.readAsDataURL(file);
+    const reader = new FileReader();
+
+    // 当读取成功时
+    reader.onload = (e) => {
+      fileList.value.push({
+        uid: idx,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: e.target.result
+      });
+      resolve(); // Promise 成功
+    };
+
+    // 当读取失败时
+    reader.onerror = () => {
+      const errorMsg = `读取文件 ${file.name} 失败`;
+      ElMessage.error(errorMsg);
+      reject(new Error(errorMsg)); // Promise 失败
+    }
+
+    reader.readAsDataURL(file);
+  });
 }
 
 function uploadFiles(files) { file2fileList(files.file, fileList.value.length + 1); }
@@ -863,12 +902,10 @@ async function processFilePath(filePath) {
   }
 
   try {
-    // 调用通过 contextBridge 暴露的后端函数
+
     const fileObject = await window.api.handleFilePath(filePath);
-    
-    // 检查后端是否成功处理并返回了 File 对象
     if (fileObject) {
-      file2fileList(fileObject, fileList.value.length + 1);
+      await file2fileList(fileObject, fileList.value.length + 1);
       ElMessage.success(`文件 ${fileObject.name} 已添加`);
     } else {
       // 如果 fileObject 为 null，说明后端处理失败
@@ -936,7 +973,7 @@ async function processFilePath(filePath) {
               <Thinking v-if="message.status && message.status.length > 0" maxWidth="90%"
                 :content="message.reasoning_content" :status="message.status" :modelValue="false">
                 <template #error v-if="message.status === 'error' && message.status">{{ message.reasoning_content
-                }}</template>
+                  }}</template>
               </Thinking>
             </template>
             <template #content>

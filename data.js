@@ -26,6 +26,7 @@ const defaultConfig = {
         stream: true,
         isTemperature: false,
         temperature: 0.7,
+        isDirectSend: false, // 是否直接发送文件
       },
     },
     stream: true,
@@ -53,8 +54,8 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (!config.version !== "1.5.8") {
-    config.version = "1.5.8";
+  if (!config.version !== "1.5.9") {
+    config.version = "1.5.9";
     flag = true;
   }
   else {
@@ -121,6 +122,10 @@ function checkConfig(config) {
     }
     if (config.prompts[key].icon === undefined) {
       config.prompts[key].icon = "";
+      flag = true;
+    }
+    if (config.prompts[key].isDirectSend === undefined) {
+      config.prompts[key].isDirectSend = false;
       flag = true;
     }
   }
@@ -257,53 +262,34 @@ function updateConfig(newConfig) {
   let featuresMap = new Map(features.map((feature) => [feature.code, feature]));
   // 查找prompts中的key是否在features的元素的code中，如不在则添加
   for (let key in newConfig.config.prompts) {
-    if (newConfig.config.prompts[key].type === "general" && newConfig.config.prompts[key].enable) {
-      if (newConfig.config.prompts[key].icon) {
-        utools.setFeature({
-          code: key,
-          explain: key,
-          // mainHide: true,
-          icon: newConfig.config.prompts[key].icon,
-          cmds: [
-            { type: "over", label: key },
-            { type: "img", label: key },
-            { type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" },
-          ],
-        });
-      }
-      else {
-        utools.setFeature({
-          code: key,
-          explain: key,
-          mainHide: true,
-          cmds: [
-            { type: "over", label: key },
-            { type: "img", label: key },
-            { type: "files", label: key },
-            { type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" },
-          ],
-        });
-      }
-    } else if (newConfig.config.prompts[key].enable) {
-      if (newConfig.config.prompts[key].icon) {
-        utools.setFeature({
-          code: key,
-          explain: key,
-          mainHide: true,
-          icon: newConfig.config.prompts[key].icon,
-          cmds: [{ type: newConfig.config.prompts[key].type, label: key }
-          ],
-        });
-      }
-      else {
-        utools.setFeature({
-          code: key,
-          explain: key,
-          mainHide: true,
-          cmds: [{ type: newConfig.config.prompts[key].type, label: key }
-          ],
-        });
-      }
+    let feature = {
+      code: key,
+      explain: key,
+      mainHide: true,
+      cmds: []
+    }
+
+    if (newConfig.config.prompts[key].type === "general") {
+      feature.cmds.push({ type: "over", label: key });
+      feature.cmds.push({ type: "img", label: key });
+      feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+    }
+    else if (newConfig.config.prompts[key].type === "files") {
+      feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+    }
+    else if (newConfig.config.prompts[key].type === "img") {
+      feature.cmds.push({ type: "img", label: key });
+    }
+    else if (newConfig.config.prompts[key].type === "over") {
+      feature.cmds.push({ type: "over", label: key });
+    }
+
+    if (newConfig.config.prompts[key].icon){
+      feature.icon = newConfig.config.prompts[key].icon;
+    }
+
+    if (newConfig.config.prompts[key].enable) {
+      utools.setFeature(feature);
     }
   }
   // 查找features的元素的code是否在prompts中的key中，如不在则删除
@@ -333,7 +319,7 @@ function getPosition(config) {
       x: config.position_x,
       y: config.position_y
     };
-    
+
     const displays = utools.getAllDisplays();
     const currentDisplay = displays.find(display =>
       set_position.x >= display.bounds.x &&
@@ -393,45 +379,45 @@ function getPosition(config) {
 }
 
 const extensionToMimeType = {
-    // 文本和代码
-    '.txt': 'text/plain',
-    '.md': 'text/markdown',
-    '.markdown': 'text/markdown',
-    '.json': 'application/json',
-    '.xml': 'application/xml',
-    '.html': 'text/html',
-    '.css': 'text/css',
-    '.csv': 'text/csv',
-    '.py': 'text/plain', // 或 'application/x-python'
-    '.js': 'application/javascript',
-    '.ts': 'application/typescript',
-    '.java': 'text/x-java-source',
-    '.c': 'text/plain',
-    '.cpp': 'text/plain',
-    '.h': 'text/plain',
-    '.hpp': 'text/plain',
-    '.cs': 'text/plain',
-    '.go': 'text/plain',
-    '.php': 'application/x-httpd-php',
-    '.rb': 'application/x-ruby',
-    '.rs': 'text/rust',
-    '.sh': 'application/x-sh',
-    '.sql': 'application/sql',
-    '.vue': 'text/plain',
+  // 文本和代码
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.markdown': 'text/markdown',
+  '.json': 'application/json',
+  '.xml': 'application/xml',
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.csv': 'text/csv',
+  '.py': 'text/plain', // 或 'application/x-python'
+  '.js': 'application/javascript',
+  '.ts': 'application/typescript',
+  '.java': 'text/x-java-source',
+  '.c': 'text/plain',
+  '.cpp': 'text/plain',
+  '.h': 'text/plain',
+  '.hpp': 'text/plain',
+  '.cs': 'text/plain',
+  '.go': 'text/plain',
+  '.php': 'application/x-httpd-php',
+  '.rb': 'application/x-ruby',
+  '.rs': 'text/rust',
+  '.sh': 'application/x-sh',
+  '.sql': 'application/sql',
+  '.vue': 'text/plain',
 
-    // 文档
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.pdf': 'application/pdf',
+  // 文档
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.pdf': 'application/pdf',
 
-    // 图片
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.webp': 'image/webp',
+  // 图片
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
 
-    // 音频
-    '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav',
+  // 音频
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
 };
 
 /**
@@ -449,7 +435,7 @@ const handleFilePath = async (filePath) => {
 
     // 3. 获取文件名
     const fileName = path.basename(filePath);
-    
+
     // 4. 获取文件后缀并查找对应的 MIME 类型
     const extension = path.extname(fileName).toLowerCase();
     const mimeType = extensionToMimeType[extension] || 'application/octet-stream'; // 提供一个安全的默认值
@@ -457,7 +443,7 @@ const handleFilePath = async (filePath) => {
     // 5. 创建一个前端可以识别的 File 对象
     //    File 构造函数接受一个包含 [BlobPart] 的数组，Node.js 的 Buffer 可以直接作为 BlobPart 使用。
     const fileObject = new File([fileBuffer], fileName, { type: mimeType });
-    
+
     return fileObject;
 
   } catch (error) {
@@ -517,7 +503,7 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal) { // 添加 
     stream: config.stream,
   }
 
-  if (config.prompts[CODE].model === modelInfo){
+  if (config.prompts[CODE].model === modelInfo) {
     payload.stream = config.prompts[CODE].stream;
     if (config.prompts[CODE].isTemperature) {
       payload.temperature = config.prompts[CODE].temperature;

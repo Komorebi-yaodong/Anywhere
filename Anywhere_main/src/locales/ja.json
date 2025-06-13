@@ -28,9 +28,10 @@
     "dragIconHere": "ドラッグ ",
     "orClickToUpload": "またはクリック",
     "typeOptions": {
+      "general": "汎用",
       "text": "テキスト",
       "image": "画像",
-      "general": "一般"
+      "files": "ファイル"
     },
     "showModeLabel": "表示モード",
     "showModeOptions": {
@@ -40,6 +41,7 @@
     },
     "modelLabel": "モデル",
     "llmParametersLabel": "モデルパラメータ（現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります）",
+    "sendFileLabel": "ファイルの直接送信",
     "streamLabel": "ストリーム応答",
     "enableTemperatureLabel": "カスタム温度",
     "temperatureLabel": "温度設定（モデルによって温度範囲が異なります。エラーが発生した場合は、カスタム温度を無効にできます）",
@@ -80,7 +82,8 @@
     "apiKeyDescription": "複数のAPIキーをカンマで区切って入力できます。",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "例: https://api.openai.com/v1",
-    "modelsLabel": "モデル",
+    "searchModelsPlaceholder":"Модель поиска",
+    "modelsLabel": "検索モデル",
     "noModelsAdded": "モデルはまだ追加されていません。",
     "getModelsFromApiBtn": "APIからモデルを取得",
     "addManuallyBtn": "手動で追加",
