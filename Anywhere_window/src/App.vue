@@ -447,6 +447,7 @@ onMounted(async () => {
             scrollToBottom(true); await askAI(false);
           }
           else {
+            senderFocus();
             scrollToBottom(true);
           }
         } catch (err) {
