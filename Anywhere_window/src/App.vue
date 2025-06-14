@@ -249,6 +249,16 @@ var signalController = ref(null);
 var changeModel_page = ref(false);
 var fileList = ref([]);
 
+// [NEW] Refs for system prompt dialog
+const systemPromptDialogVisible = ref(false);
+const systemPromptContent = ref('');
+
+// [NEW] Function to show system prompt dialog
+function showFullSystemPrompt(content) {
+  systemPromptContent.value = content;
+  systemPromptDialogVisible.value = true;
+}
+
 const customContent = ref(true);
 const attachmentsNode = computed(() => h(Attachments, {
   beforeUpload: () => false,
@@ -378,6 +388,12 @@ onMounted(async () => {
     document.documentElement.classList.add('dark');
     favicon.value = "favicon-b.png";
   }
+  try {
+    const userInfo = await window.api.getUser();
+    UserAvart.value = userInfo.avatar;
+  } catch (err) {
+    UserAvart.value = "user.png";
+  }
   autoCloseOnBlur.value = currentConfig.value.autoCloseOnBlur;
   try {
     window.preload.receiveMsg(async (data) => {
@@ -466,8 +482,8 @@ onMounted(async () => {
     base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
     api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
     if (currentPromptConfig?.prompt) {
-      history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }];
-      chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }];
+      history.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手" }];
+      chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手" }];
     } else {
       history.value = []; chat_show.value = [];
     }
@@ -944,8 +960,10 @@ async function processFilePath(filePath) {
       </el-header>
       <el-main class="chat-main custom-scrollbar">
         <div class="chat-message" v-for="(message, index) in chat_show" :key="index">
-          <Bubble v-if="message.role === 'system'" class="system-bubble" placement="start" maxWidth="2000px"
-            shape="round" variant="outlined" :content="String(message.content)"></Bubble>
+          <div v-if="message.role === 'system'" class="system-prompt-container"
+            @click="showFullSystemPrompt(message.content)">
+            <p class="system-prompt-preview">{{ String(message.content) }}</p>
+          </div>
 
           <Bubble v-if="message.role === 'user'" class="user-bubble" placement="end" shape="corner" maxWidth="2000px"
             variant="shadow" :avatar="UserAvart" avatar-size="40px">
@@ -973,7 +991,7 @@ async function processFilePath(filePath) {
               <Thinking v-if="message.status && message.status.length > 0" maxWidth="90%"
                 :content="message.reasoning_content" :status="message.status" :modelValue="false">
                 <template #error v-if="message.status === 'error' && message.status">{{ message.reasoning_content
-                  }}</template>
+                }}</template>
               </Thinking>
             </template>
             <template #content>
@@ -1008,6 +1026,11 @@ async function processFilePath(filePath) {
       </el-footer>
     </el-container>
   </main>
+  <!-- [NEW] System prompt dialog -->
+  <el-dialog v-model="systemPromptDialogVisible" custom-class="system-prompt-dialog" width="60%" :show-close="true"
+    :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true" :close-on-press-escape="true">
+    <pre class="system-prompt-full-content">{{ systemPromptContent }}</pre>
+  </el-dialog>
   <el-image-viewer v-if="imageViewerVisible" :url-list="imageViewerSrcList" :initial-index="imageViewerInitialIndex"
     @close="imageViewerVisible = false" :hide-on-click-modal="true" teleported />
   <el-dialog title="Models" v-model="changeModel_page" width="70%" custom-class="model-dialog">
@@ -1299,6 +1322,82 @@ html.dark pre.hljs::-webkit-scrollbar-corner {
   background-color: #212327;
   /* Fixes corner artifact */
 }
+
+/* [NEW] System Prompt Dialog Style */
+.system-prompt-dialog .el-dialog__header {
+  display: none;
+}
+
+.system-prompt-dialog .el-dialog__body {
+  padding: 25px 30px;
+}
+
+.system-prompt-dialog {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12px !important;
+  box-shadow: var(--el-box-shadow-light);
+}
+
+.system-prompt-dialog .el-dialog__headerbtn .el-icon {
+  color: var(--el-text-color-regular);
+}
+
+.system-prompt-dialog .el-dialog__headerbtn .el-icon:hover {
+  color: var(--el-color-primary);
+}
+
+html.dark .system-prompt-dialog {
+  background-color: rgba(40, 42, 48, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.system-prompt-full-content {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--el-text-color-primary);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+html.dark .system-prompt-full-content {
+  color: var(--el-text-color-regular);
+}
+
+/* [IMPROVED] System Prompt Dialog Scrollbar Style */
+.system-prompt-full-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.system-prompt-full-content::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.system-prompt-full-content::-webkit-scrollbar-thumb {
+  background: var(--el-text-color-disabled, #c0c4cc);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.system-prompt-full-content::-webkit-scrollbar-thumb:hover {
+  background: var(--el-text-color-secondary, #909399);
+  background-clip: content-box;
+}
+
+html.dark .system-prompt-full-content::-webkit-scrollbar-thumb {
+  background: #6b6b6b;
+}
+
+html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
 </style>
 
 <style scoped lang="less">
@@ -1427,13 +1526,43 @@ html.dark .chat-message .ai-bubble {
   }
 }
 
-.chat-message .system-bubble {
+/* [MODIFIED] System Prompt Preview Styles */
+.system-prompt-container {
   width: auto;
   max-width: 90%;
   margin: 8px auto 18px auto;
   align-self: center;
+  padding: 8px 15px;
+  border-radius: var(--el-border-radius-round);
+  border: 1px solid var(--el-border-color-light);
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.system-prompt-container:hover {
+  background-color: var(--el-fill-color-lighter);
+  border-color: var(--el-color-primary-light-7);
+}
+
+html.dark .system-prompt-container {
+  border-color: var(--el-border-color-dark);
+}
+
+html.dark .system-prompt-container:hover {
+  background-color: var(--el-fill-color-darker);
+  border-color: var(--el-color-primary-dark-2);
+}
+
+.system-prompt-preview {
   font-size: var(--el-font-size-small);
   color: var(--el-text-color-secondary);
+  margin: 0;
+  line-height: 1.5;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-message :deep(.markdown-body) {
@@ -1844,11 +1973,6 @@ html.dark .chat-message :deep(.markdown-body p > code:not(.hljs)),
 html.dark .chat-message :deep(.markdown-body li > code:not(.hljs)) {
   background-color: var(--el-fill-color-darker);
   color: var(--el-color-info-light-3);
-}
-
-html.dark .chat-message .system-bubble {
-  font-size: var(--el-font-size-small);
-  color: var(--el-text-color-secondary);
 }
 
 html.dark .ai-bubble :deep(.el-thinking .trigger) {

@@ -2,7 +2,6 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 // [MODIFIED] 引入 Search 图标用于搜索框
 import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove, Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();

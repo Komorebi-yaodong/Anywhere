@@ -54,8 +54,8 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (!config.version !== "1.5.9") {
-    config.version = "1.5.9";
+  if (!config.version !== "1.6.0") {
+    config.version = "1.6.0";
     flag = true;
   }
   else {
@@ -150,30 +150,16 @@ function checkConfig(config) {
     flag = true;
   }
 
-  // 增加promptOrder的属性
-  if (!config.promptOrder) {
-    config.promptOrder = [];
-    for (let key in config.prompts) {
-      config.promptOrder.push(key);
-    }
+  // 删除promptOrder的属性
+  if (config.promptOrder) {
+    delete config.promptOrder;
     flag = true;
-    // promptOrder排序
-    config.promptOrder.sort((a, b) => config.prompts[a].idex - config.prompts[b].idex);
-
   }
 
   // 如果config.prompts[key].idex存在，则删除
   for (let key in config.prompts) {
     if (config.prompts[key].idex || config.prompts[key].idex === 0) {
       delete config.prompts[key].idex;
-      flag = true;
-    }
-  }
-
-  // 检查promptOrder中的属性是否一一对应且按照idex序号排序
-  for (let i = 0; i < config.promptOrder.length; i++) {
-    if (!config.prompts[config.promptOrder[i]]) {
-      config.promptOrder.splice(i, 1);
       flag = true;
     }
   }
@@ -234,12 +220,6 @@ function checkConfig(config) {
     }
     if (config.prompts[key].model === "") {
       config.prompts[key].model = `${config.providerOrder[0]}|${config.providers[config.providerOrder[0]].modelList[0]}`;
-      flag = true;
-    }
-
-    // 检查prompts的key是否在promptOrder中
-    if (config.promptOrder.indexOf(key) === -1) {
-      config.promptOrder.push(key);
       flag = true;
     }
   }
@@ -312,6 +292,10 @@ function updateConfig(newConfig) {
   }
 }
 
+function getUser(){
+  return utools.getUser();
+}
+
 function getPosition(config) {
   let windowX = 0, windowY = 0;
   if (config.fix_position) {
@@ -377,80 +361,6 @@ function getPosition(config) {
   }
   return { x: windowX, y: windowY };
 }
-
-const extensionToMimeType = {
-  // 文本和代码
-  '.txt': 'text/plain',
-  '.md': 'text/markdown',
-  '.markdown': 'text/markdown',
-  '.json': 'application/json',
-  '.xml': 'application/xml',
-  '.html': 'text/html',
-  '.css': 'text/css',
-  '.csv': 'text/csv',
-  '.py': 'text/plain', // 或 'application/x-python'
-  '.js': 'application/javascript',
-  '.ts': 'application/typescript',
-  '.java': 'text/x-java-source',
-  '.c': 'text/plain',
-  '.cpp': 'text/plain',
-  '.h': 'text/plain',
-  '.hpp': 'text/plain',
-  '.cs': 'text/plain',
-  '.go': 'text/plain',
-  '.php': 'application/x-httpd-php',
-  '.rb': 'application/x-ruby',
-  '.rs': 'text/rust',
-  '.sh': 'application/x-sh',
-  '.sql': 'application/sql',
-  '.vue': 'text/plain',
-
-  // 文档
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  '.pdf': 'application/pdf',
-
-  // 图片
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-
-  // 音频
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-};
-
-/**
- * [新增] 核心函数：将文件路径转换为 File 对象。
- * @param {string} filePath - 文件的绝对路径。
- * @returns {Promise<File|null>} - 返回一个可供前端使用的 File 对象，如果失败则返回 null。
- */
-const handleFilePath = async (filePath) => {
-  try {
-    // 1. 验证路径是否存在
-    await fs.access(filePath);
-
-    // 2. 读取文件内容到 Buffer
-    const fileBuffer = await fs.readFile(filePath);
-
-    // 3. 获取文件名
-    const fileName = path.basename(filePath);
-
-    // 4. 获取文件后缀并查找对应的 MIME 类型
-    const extension = path.extname(fileName).toLowerCase();
-    const mimeType = extensionToMimeType[extension] || 'application/octet-stream'; // 提供一个安全的默认值
-
-    // 5. 创建一个前端可以识别的 File 对象
-    //    File 构造函数接受一个包含 [BlobPart] 的数组，Node.js 的 Buffer 可以直接作为 BlobPart 使用。
-    const fileObject = new File([fileBuffer], fileName, { type: mimeType });
-
-    return fileObject;
-
-  } catch (error) {
-    console.error(`处理文件路径失败: ${filePath}`, error);
-    return null;
-  }
-};
 
 function getRandomItem(list) {
   // 检查list是不是字符串
@@ -530,9 +440,9 @@ module.exports = {
   getConfig,
   checkConfig,
   updateConfig,
+  getUser,
   getPosition,
   getRandomItem,
   chatOpenAI,
-  copyText,
-  handleFilePath, // 读取文件
+  copyText
 };

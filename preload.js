@@ -3,6 +3,7 @@ const {
   updateConfig,
   checkConfig,
   getPosition,
+  getUser,
   getRandomItem,
   chatOpenAI,
   copyText,
@@ -23,6 +24,7 @@ const {
 window.api = {
   getConfig,
   updateConfig,
+  getUser,
   getRandomItem,
   chatOpenAI,
   copyText,

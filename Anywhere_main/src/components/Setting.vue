@@ -2,6 +2,9 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+// 假设 ElMessage 是全局可用的，或者您需要从 'element-plus' 导入
+// import { ElMessage } from 'element-plus'
+
 const { t, locale } = useI18n()
 
 const defaultConfig = {
@@ -51,7 +54,12 @@ onMounted(async () => {
     const result = await window.api.getConfig();
 
     if (result && result.config) {
-      currentConfig.value = result.config;
+      // 安全合并：确保从API获取的配置包含所有默认键
+      currentConfig.value = Object.assign(
+        {}, 
+        JSON.parse(JSON.stringify(defaultConfig.config)), 
+        result.config
+      );
     } else {
       console.error("Failed to get valid config from API.");
       currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
@@ -61,7 +69,6 @@ onMounted(async () => {
     currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
   }
   
-  // 这部分是设置语言的逻辑，可以保留
   selectedLanguage.value = locale.value;
   await nextTick();
 });
@@ -106,6 +113,13 @@ async function exportConfig() {
   }
 }
 
+/**
+ * [MODIFIED] 导入配置函数
+ * 逻辑：以默认配置为基础，用导入的配置数据进行完全覆盖。
+ * 这样可以确保：
+ * 1. 导入的配置能完整替换现有配置（如 providers, prompts 列表）。
+ * 2. 如果导入的配置来自旧版本，缺少新功能字段，程序不会因缺少键而出错。
+ */
 function importConfig() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -118,31 +132,34 @@ function importConfig() {
         try {
           const importedData = JSON.parse(e.target.result);
           
-          // 获取一份干净的默认配置作为基础/回退
+          // 验证导入的是一个有效的对象
+          if (typeof importedData !== 'object' || importedData === null) {
+            throw new Error("Imported file is not a valid configuration object.");
+          }
+          
+          // 1. 获取一份干净的默认配置作为“安全底座”
           const baseConfig = JSON.parse(JSON.stringify(defaultConfig.config));
           
-          // 将导入的数据作为主目标，用默认配置去补充它可能缺失的顶级键
-          const newConfig = deepMerge(baseConfig, importedData);
+          // 2. 使用 Object.assign 将导入的数据覆盖到基础配置上。
+          //    这会用 importedData 的顶级属性（如 providers）完整替换 baseConfig 的同名属性。
+          const finalConfig = Object.assign({}, baseConfig, importedData);
           
-          const finalConfig = deepMerge(baseConfig, importedData); // 先进行深度合并，保证所有键存在
-
-          // 然后，强制用导入的数据替换掉集合类型的属性
-          // 如果导入数据中没有这些键，就用一个空的默认值，而不是 baseConfig 的内容
-          finalConfig.providers = importedData.providers || {};
-          finalConfig.prompts = importedData.prompts || {};
-          finalConfig.tags = importedData.tags || {};
-          finalConfig.providerOrder = importedData.providerOrder || [];
-
+          // 3. 更新当前配置并保存
           currentConfig.value = finalConfig;
-
           await saveConfig();
           await nextTick();
+          
           console.log("Configuration imported and replaced successfully.");
-          ElMessage.success(t('setting.alerts.importSuccess'));
+          // 确保 ElMessage 可用
+          if (window.ElMessage) {
+            ElMessage.success(t('setting.alerts.importSuccess'));
+          }
 
         } catch (err) {
           console.error("Error importing configuration:", err);
-          ElMessage.error(t('setting.alerts.importFailed'));
+          if (window.ElMessage) {
+            ElMessage.error(t('setting.alerts.importFailed'));
+          }
         }
       };
       reader.readAsText(file);

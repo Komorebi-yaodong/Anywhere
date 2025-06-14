@@ -2,7 +2,6 @@
 import { ref, reactive, onMounted, computed, nextTick } from 'vue';
 import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
-import { ElMessage } from 'element-plus';
 
 const { t } = useI18n();
 
