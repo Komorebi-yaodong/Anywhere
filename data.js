@@ -391,8 +391,8 @@ function getRandomItem(list) {
 }
 
 // 函数：请求chat
-async function chatOpenAI(history, config, modelInfo, CODE, signal) { // 添加 signal 参数
-
+async function chatOpenAI(history, config, modelInfo, CODE, signal) {
+  
   let apiUrl = "";
   let apiKey = "";
   let model = "";
@@ -413,7 +413,7 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal) { // 添加 
     stream: config.stream,
   }
 
-  if (config.prompts[CODE].model === modelInfo) {
+  if (config.prompts[CODE] && config.prompts[CODE].model === modelInfo) {
     payload.stream = config.prompts[CODE].stream;
     if (config.prompts[CODE].isTemperature) {
       payload.temperature = config.prompts[CODE].temperature;

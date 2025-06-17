@@ -1,3 +1,5 @@
+const { ipcMain, dialog } = require('electron');
+
 const {
   getConfig,
   updateConfig,
@@ -12,6 +14,7 @@ const {
 const {
   handleFilePath,
   sendfileDirect,
+  saveFile,
 } = require('./file.js');
 
 const {
@@ -30,6 +33,7 @@ window.api = {
   copyText,
   handleFilePath,
   sendfileDirect,
+  saveFile,
 };
 
 // 主逻辑
@@ -37,6 +41,53 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
   if (code === "Anywhere Settings") {
     config = getConfig().config;
     checkConfig(config);
+  }
+  else if (code === "Resume Conversation") {
+    // 获取配置文件，隐藏主窗口
+    utools.hideMainWindow();
+    config = getConfig().config;
+    checkConfig(config);
+    if (type == "files") {
+      // 窗口位置
+      const window_position = getPosition(config);
+      let windowX = window_position.x;
+      let windowY = window_position.y;
+
+      let msg = {
+        os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+        code: code,
+        type: type,
+        payload: payload,
+      };
+      let channel = "window"
+      // 创建运行窗口
+      const ubWindow = utools.createBrowserWindow(
+        "./window/index.html",
+        {
+          show: true,
+          title: "Anywhere",
+          useContentSize: true,
+          frame: true,
+          width: config.window_width,
+          height: config.window_height,
+          alwaysOnTop: true,
+          shellOpenPath: true,
+          x: windowX,
+          y: windowY,
+          webPreferences: {
+            preload: "./window_preload.js",
+            // devTools: true
+          },
+        },
+        () => {
+          ubWindow.webContents.send(channel, msg);
+          ubWindow.webContents.show(); // 显示窗口
+          ubWindow.setAlwaysOnTop(true, "floating"); // 窗口置顶
+          ubWindow.setFullScreen(false); // 窗口全屏
+        }
+      );
+      // ubWindow.webContents.openDevTools({ mode: "detach" });
+    }
   }
   else if (code !== "Anywhere Settings") {
     // 获取配置文件，隐藏主窗口

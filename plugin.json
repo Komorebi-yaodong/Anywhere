@@ -15,6 +15,20 @@
 			"code":"Anywhere Settings",
 			"explain": "设置页面",
 			"cmds":["Anywhere Settings"]
+		},
+		{
+			"code":"Resume Conversation",
+			"explain": "恢复聊天",
+			"cmds":[
+				{
+					"type": "files",
+					"label": "恢复聊天",
+					"fileType": "file",
+					"match": "/\\.(json)$/i"
+				}
+			],
+			"mainHide": true,
+			"icon":"history.png"
 		}
 	]
 }

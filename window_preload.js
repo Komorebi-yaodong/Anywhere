@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, ipcMain, fs  } = require('electron');
 
 const {
     getConfig,
@@ -11,6 +11,7 @@ const {
 
 const {
     handleFilePath,
+    saveFile,
 } = require('./file.js');
 
 const channel = "window";
@@ -48,4 +49,5 @@ window.api = {
     chatOpenAI, // 添加 chatOpenAI 到 api
     copyText, // 添加 copyText 到 api
     handleFilePath, // 添加 handleFilePath 到 api
+    saveFile,
 };

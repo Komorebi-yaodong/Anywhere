@@ -2,8 +2,8 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, computed, h, watch } from 'vue';
 import { Bubble, Sender, Thinking } from 'vue-element-plus-x';
 import { Attachments } from 'ant-design-x-vue';
-import { ElContainer, ElHeader, ElMain, ElFooter, ElButton, ElDialog, ElTable, ElTableColumn, ElTooltip, ElRow, ElCol, ElMessage, ElImageViewer, ElInput } from 'element-plus';
-import { DocumentCopy, Refresh, Delete, CoffeeCup, Lollipop, Link, Document, Download } from '@element-plus/icons-vue'
+import { ElContainer, ElHeader, ElMain, ElFooter, ElButton, ElDialog, ElTable, ElTableColumn, ElTooltip, ElRow, ElCol, ElMessage, ElImageViewer } from 'element-plus';
+import { DocumentCopy, Refresh, Delete, CoffeeCup, Lollipop, Link, Document } from '@element-plus/icons-vue'
 
 // import TitleBar from './TitleBar.vue'
 // import mammoth from 'mammoth';
@@ -260,191 +260,11 @@ function showFullSystemPrompt(content) {
   systemPromptDialogVisible.value = true;
 }
 
-// [NEW] Refs and functions for saving the session
-const saveSessionDialogVisible = ref(false);
-const saveFilename = ref('');
-
-function openSaveDialog() {
-  const now = new Date(); // 获取当前日期和时间
-  const year = String(now.getFullYear()).slice(-2); // 获取年份的后两位 (YY)
-  const month = String(now.getMonth() + 1).padStart(2, '0'); // 获取月份 (MM)，并确保是两位数
-  const day = String(now.getDate()).padStart(2, '0'); // 获取日期 (DD)，并确保是两位数
-  const hours = String(now.getHours()).padStart(2, '0'); // 获取小时 (HH)，并确保是两位数
-  const minutes = String(now.getMinutes()).padStart(2, '0'); // 获取分钟 (MM)，并确保是两位数
-  const seconds = String(now.getSeconds()).padStart(2, '0'); // 获取秒数 (SS)，并确保是两位数
-  saveFilename.value = `chat-session-${year}${month}${day}-${hours}${minutes}${seconds}.json`;
-
-  saveSessionDialogVisible.value = true;
-}
-
-
-// [NEW] 会话保存功能
-async function handleSaveSession() {
-  if (!saveFilename.value.trim()) {
-    ElMessage.error('文件名不能为空。');
-    return;
-  }
-
-  const finalFilename = saveFilename.value.endsWith('.json') ? saveFilename.value : `${saveFilename.value}.json`;
-
-  const currentPromptConfig = currentConfig.value.prompts[CODE.value] || {};
-
-  const sessionData = {
-    anywhere_history: true,
-    UserAvart: UserAvart.value,
-    CODE: CODE.value,
-    basic_msg: basic_msg.value,
-    isInit: isInit.value,
-    autoCloseOnBlur: autoCloseOnBlur.value,
-    temporary: temporary.value,
-    model: model.value,
-    currentPromptConfig: currentPromptConfig,
-    history: history.value,
-    chat_show: chat_show.value,
-  };
-
-  try {
-    const jsonString = JSON.stringify(sessionData, null, 2);
-
-    // 调用 window.api.saveFile，这是我们通过 preload 脚本暴露的函数
-    // 主进程将处理这一切，并显示一个原生的保存对话框
-    await window.api.saveFile({
-      title: '保存聊天会话',
-      defaultPath: finalFilename,
-      buttonLabel: '保存',
-      filters: [
-        { name: 'JSON 文件', extensions: ['json'] },
-        { name: '所有文件', extensions: ['*'] }
-      ],
-      fileContent: jsonString // 将文件内容直接传递给主进程
-    });
-
-    ElMessage.success('会话已成功保存！');
-    saveSessionDialogVisible.value = false;
-
-  } catch (error) {
-    // 如果主进程抛出错误（例如用户取消了对话框），我们在这里捕获它
-    // 我们可以检查错误信息来决定是否向用户显示消息
-    if (error.message.includes('canceled by the user')) {
-      console.log('用户取消了保存操作。');
-    } else {
-      console.error('保存会话失败:', error);
-      ElMessage.error(`保存失败: ${error.message}`);
-    }
-  }
-}
-
-// [NEW] Function to load a session from JSON data
-async function loadSession(jsonData) {
-  // 关键：在加载开始时，设置一个加载状态，这可以用来临时禁用发送按钮
-  loading.value = true;
-  // ElMessage.info('正在从文件加载会话...');
-
-  try {
-    // 步骤 1: 恢复所有不依赖于外部配置的简单状态
-    UserAvart.value = jsonData.UserAvart;
-    CODE.value = jsonData.CODE;
-    document.title = CODE.value;
-    basic_msg.value = jsonData.basic_msg;
-    isInit.value = jsonData.isInit;
-    autoCloseOnBlur.value = jsonData.autoCloseOnBlur;
-    temporary.value = jsonData.temporary;
-    history.value = jsonData.history;
-    chat_show.value = jsonData.chat_show;
-
-    // 步骤 2: 重新加载最新的主配置
-    const configData = await window.api.getConfig();
-    currentConfig.value = configData.config;
-    if (currentConfig.value.isDarkMode) {
-      document.documentElement.classList.add('dark');
-      favicon.value = "favicon-b.png";
-    } else {
-      document.documentElement.classList.remove('dark');
-      favicon.value = "favicon.png";
-    }
-
-    // 步骤 3: 根据最新的主配置，重建当前所有可用的模型列表
-    modelList.value = [];
-    modelMap.value = {};
-    currentConfig.value.providerOrder.forEach(id => {
-      const provider = currentConfig.value.providers[id];
-      if (provider?.enable) {
-        provider.modelList.forEach(m => {
-          const key = `${id}|${m}`;
-          modelList.value.push({ key, value: key, label: `${provider.name}|${m}` });
-          modelMap.value[key] = `${provider.name}|${m}`;
-        });
-      }
-    });
-
-    // 步骤 4: 使用健壮的逻辑恢复模型选择
-    let restoredModel = '';
-    if (jsonData.model && modelMap.value[jsonData.model]) {
-      restoredModel = jsonData.model;
-    }
-    else if (jsonData.currentPromptConfig?.model && modelMap.value[jsonData.currentPromptConfig.model]) {
-      restoredModel = jsonData.currentPromptConfig.model;
-    }
-    else {
-      const currentPromptConfig = currentConfig.value.prompts[CODE.value];
-      restoredModel = (currentPromptConfig?.model && modelMap.value[currentPromptConfig.model])
-        ? currentPromptConfig.model
-        : (modelList.value[0]?.value || '');
-      // ElMessage.warning('加载的会话模型已失效，已回退至默认模型。');
-    }
-
-    model.value = restoredModel;
-
-    // 步骤 5: 更新与模型相关的其他状态
-    if (model.value) {
-      currentProviderID.value = model.value.split("|")[0];
-      const provider = currentConfig.value.providers[currentProviderID.value];
-      base_url.value = provider?.url;
-      api_key.value = provider?.api_key;
-    } else {
-      ElMessage.error("没有可用的模型。请检查您的服务商配置。");
-      loading.value = false; // 解除加载状态
-      return; // 提前退出函数
-    }
-
-    // 步骤 6: 刷新UI并滚动到底部
-    await nextTick();
-    scrollToBottom(true);
-    // ElMessage.success('会话加载成功！');
-
-  } catch (error) {
-    console.error("加载会话失败:", error);
-    ElMessage.error(`加载会话失败: ${error.message}`);
-  } finally {
-    loading.value = false;
-  }
-}
-
-// [NEW] Function to check if a file is a session file and load it
-async function checkAndLoadSessionFromFile(file) {
-  if (file && file.name.toLowerCase().endsWith('.json')) {
-    try {
-      const fileContent = await file.text();
-      const jsonData = JSON.parse(fileContent);
-      if (jsonData && jsonData.anywhere_history === true) {
-        await loadSession(jsonData);
-        return true; // Indicates session was loaded
-      }
-    } catch (e) {
-      console.warn("一个JSON文件被检测到，但它不是一个有效的会话文件:", e.message);
-    }
-  }
-  return false; // Not a session file
-}
-
-
 const customContent = ref(true);
-const getDropContainer = () => (document.body);
 const attachmentsNode = computed(() => h(Attachments, {
   beforeUpload: () => false,
   onChange: uploadFiles,
   children: customContent.value && h(ElButton, { type: 'default', icon: h(Link), circle: true }),
-  getDropContainer,
 }));
 
 const imageViewerVisible = ref(false);
@@ -618,33 +438,24 @@ onMounted(async () => {
         scrollToBottom(true); await askAI(true);
       } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
         try {
-          let sessionLoaded = false;
-          if (basic_msg.value.payload.length === 1 && basic_msg.value.payload[0].path.toLowerCase().endsWith('.json')) {
-            const fileObject = await window.api.handleFilePath(basic_msg.value.payload[0].path);
-            if (fileObject) {
-              sessionLoaded = await checkAndLoadSessionFromFile(fileObject);
-              senderFocus();
-            }
+          // 创建一个包含所有文件处理 Promise 的数组
+          const fileProcessingPromises = basic_msg.value.payload.map((fileInfo, index) =>
+            processFilePath(fileInfo.path)
+          );
+          // 等待所有文件都处理完毕
+          await Promise.all(fileProcessingPromises);
+          if (currentPromptConfig.isDirectSend) {
+            scrollToBottom(true); await askAI(false);
           }
-
-          if (!sessionLoaded) {
-            const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) =>
-              processFilePath(fileInfo.path)
-            );
-            await Promise.all(fileProcessingPromises);
-
-            if (currentPromptConfig?.isDirectSend) {
-              scrollToBottom(true);
-              await askAI(false);
-            } else {
-              senderFocus();
-              scrollToBottom(true);
-            }
+          else {
+            senderFocus();
+            scrollToBottom(true);
           }
-        } catch (error) {
-          console.error("Error during initial file processing:", error);
-          ElMessage.error("文件处理失败: " + error.message);
+        } catch (err) {
+          console.error("Error during file processing in test block:", error);
+          ElMessage.error("测试块中的文件处理失败: " + error.message);
         }
+
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
     });
@@ -679,6 +490,18 @@ onMounted(async () => {
       history.value = []; chat_show.value = [];
     }
 
+    // // 可以在这里测试
+    // basic_msg.value.payload = [{ type: "file", path: "D:\\PC\\Downloads\\test.sql" }];
+    // for (let i = 0; i < basic_msg.value.payload.length; i++) {
+    //   await processFilePath(basic_msg.value.payload[i].path);
+    // }
+    // if (!currentPromptConfig.isDirectSend) {
+    //   scrollToBottom(true); await askAI(false);
+    // }
+    // else {
+    //   scrollToBottom(true);
+    // }
+    // 
     scrollToBottom(true);
     if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
   }
@@ -719,18 +542,27 @@ const scrollToBottom = async (force = false) => {
 
 const formatMessageContent = (content) => {
   if (!content) return "";
+  // 非列表
   if (!Array.isArray(content)) {
+    // 文本文件
     if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) { return ""; }
+    // 文本内容
     else return String(content);
   }
 
   let markdownString = "";
+  // 列表
   content.forEach(part => {
+    // 文本文件
     if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) { }
+    // 图片文件（一定是列表）
     else if (part.type === 'image_url' && part.image_url?.url) markdownString += `\n\n![Image](${part.image_url.url})\n`;
+    // 音频文件
     else if (part.type === 'input_audio' && part.input_audio?.data) {
+      let data_url = "";
       markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
     }
+    // 文本内容
     else if (part.type === 'text' && part.text) markdownString += part.text;
   });
   return markdownString;
@@ -738,17 +570,23 @@ const formatMessageContent = (content) => {
 
 const formatMessageFile = (content) => {
   let files = [];
+  // 非列表
   if (!Array.isArray(content)) {
+    // 文本文件
     if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) {
       files.push(String(content).split('\n')[0].replace('file name:', '').trim());
     }
+    // 其他
     else return [];
   }
+  // 列表
   else {
     content.forEach(part => {
+      // 文本文件 
       if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) {
         files.push(part.text.split('\n')[0].replace('file name:', '').trim());
       }
+      // PDF文件（一定是列表）
       else if (part.type === "input_file" && part.filename) {
         files.push(part.filename);
       }
@@ -808,7 +646,7 @@ function saveWindowSize() {
 async function askAI(forceSend = false) {
   senderFocus();
   if (loading.value) return;
-  let is_think_flag = false;
+  let is_think_flag = false;  // 是否是<think>...</think>块
   if (!forceSend) {
     let file_content = await sendFile();
     const promptText = prompt.value.trim();
@@ -1037,23 +875,19 @@ async function sendFile() {
   return contentList;
 }
 
-async function file2fileList(file, idx) {
-  const isSessionFile = await checkAndLoadSessionFromFile(file);
-  if (isSessionFile) {
-    senderFocus();
-    return;
-  }
-
+function file2fileList(file, idx) {
   return new Promise((resolve, reject) => {
     const handler = getFileHandler(file.name);
     if (!handler) {
       const errorMsg = `不支持的文件类型: ${file.name}`;
       ElMessage.warning(errorMsg);
-      reject(new Error(errorMsg));
+      reject(new Error(errorMsg)); // Promise 失败
       return;
     }
 
     const reader = new FileReader();
+
+    // 当读取成功时
     reader.onload = (e) => {
       fileList.value.push({
         uid: idx,
@@ -1062,36 +896,25 @@ async function file2fileList(file, idx) {
         type: file.type,
         url: e.target.result
       });
-      resolve();
+      resolve(); // Promise 成功
     };
+
+    // 当读取失败时
     reader.onerror = () => {
       const errorMsg = `读取文件 ${file.name} 失败`;
       ElMessage.error(errorMsg);
-      reject(new Error(errorMsg));
+      reject(new Error(errorMsg)); // Promise 失败
     }
+
     reader.readAsDataURL(file);
   });
 }
 
-async function uploadFiles(files) { await file2fileList(files.file, fileList.value.length + 1); senderFocus(); }
-const handleDrop = async (event) => {
-  event.preventDefault();
-  for (const item of Array.from(event.dataTransfer.items)) {
-    if (item.kind === 'file') {
-      await file2fileList(item.getAsFile(), fileList.value.length + 1);
-    }
-  }
-  senderFocus();
-};
-const handlePaste = async (event) => {
-  for (const item of Array.from((event.clipboardData || event.originalEvent?.clipboardData || event.dataTransfer).items)) {
-    if (item.kind === 'file') {
-      await file2fileList(item.getAsFile(), fileList.value.length + 1);
-    }
-  }
-  senderFocus();
-};
+function uploadFiles(files) { file2fileList(files.file, fileList.value.length + 1); senderFocus();}
+const handleDrop = (event) => { event.preventDefault(); Array.from(event.dataTransfer.items).forEach((item, i) => { if (item.kind === 'file') file2fileList(item.getAsFile(), fileList.value.length + i + 1); }); senderFocus();};
+const handlePaste = (event) => { Array.from((event.clipboardData || event.originalEvent?.clipboardData || event.dataTransfer).items).forEach((item, i) => { if (item.kind === 'file') file2fileList(item.getAsFile(), fileList.value.length + i + 1); }); senderFocus();};
 
+// 选中文件转为文件列表（文件路径=>文件对象=>文件列表）
 async function processFilePath(filePath) {
   if (!filePath || typeof filePath !== 'string') {
     ElMessage.error('无效的文件路径');
@@ -1103,7 +926,9 @@ async function processFilePath(filePath) {
     const fileObject = await window.api.handleFilePath(filePath);
     if (fileObject) {
       await file2fileList(fileObject, fileList.value.length + 1);
+      ElMessage.success(`文件 ${fileObject.name} 已添加`);
     } else {
+      // 如果 fileObject 为 null，说明后端处理失败
       ElMessage.error('无法读取或访问该文件，请检查路径和权限');
     }
   } catch (error) {
@@ -1118,29 +943,17 @@ async function processFilePath(filePath) {
     <el-container>
 
       <!-- <TitleBar :isDarkMode="currentConfig.isDarkMode" :os="basic_msg.os" :title="basic_msg.code"/> -->
-
-      <!-- [MODIFIED] 优化后的头部 -->
+      
       <el-header class="header">
-        <div class="header-content-wrapper">
-          <!-- 左侧：图标按钮 -->
-          <div class="header-left">
-            <el-tooltip content="保存窗口大小和位置" placement="bottom">
-              <el-button @click="saveWindowSize">
-                <img :src="favicon" class="windows-logo" alt="App logo">
-              </el-button>
-            </el-tooltip>
-          </div>
-
-          <!-- 中间：模型选择器（可伸缩） -->
-          <div class="header-center">
-            <el-button class="model-selector-btn" @click="changeModel_page = true">
-              {{ modelMap[model] || '选择模型' }}
-            </el-button>
-          </div>
-
-          <!-- 右侧：功能按钮组 -->
-          <div class="header-right">
-            <el-tooltip :content="autoCloseOnBlur ? '保持窗口开启' : '失焦时自动关闭窗口'" placement="bottom">
+        <el-row>
+          <el-col :span="1"></el-col>
+          <el-col :span="2"><el-tooltip content="Save window size and position" placement="bottom"><el-button
+                @click="saveWindowSize"><img :src="favicon" class="windows-logo"
+                  alt="App logo"></el-button></el-tooltip></el-col>
+          <el-col :span="18"><el-button class="model-selector-btn" @click="changeModel_page = true">{{ modelMap[model]
+            || 'Choose Model' }}</el-button></el-col>
+          <el-col :span="1"><el-tooltip :content="autoCloseOnBlur ? 'Keep opening window' : 'focus off to close window'"
+              placement="bottom">
               <el-button @click="changeAutoCloseOnBlur">
                 <svg v-show="autoCloseOnBlur" viewBox="0 0 24 24" width="16" height="16">
                   <path fill="currentColor"
@@ -1152,16 +965,11 @@ async function processFilePath(filePath) {
                 </svg>
               </el-button>
             </el-tooltip>
-            <el-tooltip :content="temporary ? '无记忆模式' : '记忆模式'" placement="bottom">
-              <el-button @click="temporary = !temporary" :icon="temporary ? Lollipop : CoffeeCup" />
-            </el-tooltip>
-            <el-tooltip content="保存会话" placement="bottom">
-              <el-button @click="openSaveDialog" :icon="Download" />
-            </el-tooltip>
-          </div>
-        </div>
+          </el-col>
+          <el-col :span="2"><el-tooltip :content="temporary ? 'No memory' : 'Memory'" placement="bottom"><el-button
+                @click="temporary = !temporary" :icon="temporary ? Lollipop : CoffeeCup" /></el-tooltip></el-col>
+        </el-row>
       </el-header>
-
       <el-main class="chat-main custom-scrollbar">
         <div class="chat-message" v-for="(message, index) in chat_show" :key="index">
           <div v-if="message.role === 'system'" class="system-prompt-container"
@@ -1195,7 +1003,7 @@ async function processFilePath(filePath) {
               <Thinking v-if="message.status && message.status.length > 0" maxWidth="90%"
                 :content="message.reasoning_content" :status="message.status" :modelValue="false">
                 <template #error v-if="message.status === 'error' && message.status">{{ message.reasoning_content
-                  }}</template>
+                }}</template>
               </Thinking>
             </template>
             <template #content>
@@ -1217,8 +1025,8 @@ async function processFilePath(filePath) {
               v-on:remove="removeFile(index)" :style="{ 'display': 'flex', 'float': 'left' }" />
           </el-col><el-col :span="1" /></el-row>
         <el-row><el-col :span="1" /><el-col :span="22">
-            <Sender class="chat-sender" ref="senderRef" v-model="prompt" placeholder="在此输入，或拖拽会话文件以加载"
-              :loading="loading" @submit="askAI(false)" @cancel="cancelAskAI()"
+            <Sender class="chat-sender" ref="senderRef" v-model="prompt" placeholder="Ask Anything!" :loading="loading"
+              @submit="askAI(false)" @cancel="cancelAskAI()"
               :submit-type="currentConfig.CtrlEnterToSend ? 'shiftEnter' : 'enter'"
               @keyup.ctrl.enter="currentConfig.CtrlEnterToSend ? askAI(false) : ''" @drop="handleDrop"
               @paste="handlePaste" :submitBtnDisabled="false">
@@ -1230,44 +1038,28 @@ async function processFilePath(filePath) {
       </el-footer>
     </el-container>
   </main>
-  <!-- System prompt dialog -->
+  <!-- [NEW] System prompt dialog -->
   <el-dialog v-model="systemPromptDialogVisible" custom-class="system-prompt-dialog" width="60%" :show-close="true"
     :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true" :close-on-press-escape="true">
     <pre class="system-prompt-full-content">{{ systemPromptContent }}</pre>
   </el-dialog>
   <el-image-viewer v-if="imageViewerVisible" :url-list="imageViewerSrcList" :initial-index="imageViewerInitialIndex"
     @close="imageViewerVisible = false" :hide-on-click-modal="true" teleported />
-  <el-dialog title="选择模型" v-model="changeModel_page" width="70%" custom-class="model-dialog">
+  <el-dialog title="Models" v-model="changeModel_page" width="70%" custom-class="model-dialog">
     <el-table :data="modelList" stripe style="width: 100%; height: 400px;" :max-height="400" :border="true"
       :span-method="tableSpanMethod" width="100%">
-      <el-table-column label="服务商" align="center" prop="provider" width="100"><template #default="scope"><strong>{{
+      <el-table-column label="Provider" align="center" prop="provider" width="100"><template #default="scope"><strong>{{
         scope.row.label.split("|")[0] }}</strong></template></el-table-column>
-      <el-table-column label="模型" align="center" prop="modelName"><template #default="scope"><el-button link
+      <el-table-column label="Model" align="center" prop="modelName"><template #default="scope"><el-button link
             size="large" @click="changeModel_function(scope.row.value)" :disabled="scope.row.value === model">{{
               scope.row.label.split("|")[1] }}</el-button></template></el-table-column>
     </el-table>
     <template #footer><el-button @click="changeModel_page = false">关闭</el-button></template>
   </el-dialog>
-  <!-- Save Session Dialog -->
-  <el-dialog v-model="saveSessionDialogVisible" title="保存聊天会话" width="400px" center>
-    <el-input v-model="saveFilename" placeholder="输入文件名" @keyup.enter="handleSaveSession" />
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="saveSessionDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveSession">保存</el-button>
-      </span>
-    </template>
-  </el-dialog>
 </template>
 
 <style>
-/* ... 此处省略所有未改动的全局样式 ... */
 /* 1. KaTeX 公式样式 (Unchanged) */
-/* 2. Highlight.js Light Theme (Unchanged) */
-/* 3. Highlight.js Dark Theme (Optimized with a new color palette) */
-/* 4. Code Block Scrollbar Style (Completely Redesigned) */
-/* [NEW] System Prompt Dialog Style */
-/* [IMPROVED] System Prompt Dialog Scrollbar Style */
 html.dark .katex {
   color: var(--el-text-color-regular) !important;
 }
@@ -1306,6 +1098,8 @@ html.dark .katex-display::-webkit-scrollbar-thumb:hover {
   background-color: #999;
 }
 
+
+/* 2. Highlight.js Light Theme (Unchanged) */
 .hljs {
   color: #24292e;
   background: #FFFFFF
@@ -1398,6 +1192,7 @@ html.dark .katex-display::-webkit-scrollbar-thumb:hover {
   background-color: #ffeef0
 }
 
+/* 3. Highlight.js Dark Theme (Optimized with a new color palette) */
 html.dark .hljs {
   background: #212327;
   color: #d4d4d4;
@@ -1490,6 +1285,8 @@ html.dark .hljs-deletion {
   background-color: #67060c;
 }
 
+
+/* 4. Code Block Scrollbar Style (Completely Redesigned) */
 pre.hljs::-webkit-scrollbar {
   width: 12px;
   height: 12px;
@@ -1497,12 +1294,14 @@ pre.hljs::-webkit-scrollbar {
 
 pre.hljs::-webkit-scrollbar-track {
   background: #FFFFFF;
+  /* Match light theme bg */
 }
 
 pre.hljs::-webkit-scrollbar-thumb {
   background-color: #d0d7de;
   border-radius: 6px;
   border: 3px solid #FFFFFF;
+  /* Padding effect */
 }
 
 pre.hljs::-webkit-scrollbar-thumb:hover {
@@ -1511,16 +1310,20 @@ pre.hljs::-webkit-scrollbar-thumb:hover {
 
 pre.hljs::-webkit-scrollbar-corner {
   background-color: #FFFFFF;
+  /* Fixes corner artifact */
 }
 
+/* Dark mode scrollbar styles */
 html.dark pre.hljs::-webkit-scrollbar-track {
   background: #212327;
+  /* Match new dark theme bg */
 }
 
 html.dark pre.hljs::-webkit-scrollbar-thumb {
   background-color: #4f4f4f;
   border-radius: 6px;
   border: 3px solid #212327;
+  /* Padding effect */
 }
 
 html.dark pre.hljs::-webkit-scrollbar-thumb:hover {
@@ -1529,8 +1332,10 @@ html.dark pre.hljs::-webkit-scrollbar-thumb:hover {
 
 html.dark pre.hljs::-webkit-scrollbar-corner {
   background-color: #212327;
+  /* Fixes corner artifact */
 }
 
+/* [NEW] System Prompt Dialog Style */
 .system-prompt-dialog .el-dialog__header {
   display: none;
 }
@@ -1575,6 +1380,7 @@ html.dark .system-prompt-full-content {
   color: var(--el-text-color-regular);
 }
 
+/* [IMPROVED] System Prompt Dialog Scrollbar Style */
 .system-prompt-full-content::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1617,89 +1423,65 @@ html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
   color: var(--el-text-color-primary);
 }
 
-/* [MODIFIED] 优化后的头部样式 */
 .header {
   height: 40px;
   width: 100%;
-  padding: 0;
+  padding: 0 5px;
   flex-shrink: 0;
   z-index: 10;
   background-color: var(--el-bg-color);
-  display: flex;
-  align-items: center;
 }
 
-.header-content-wrapper {
-  width: 100%;
+.header .el-row,
+.header .el-col {
   height: 100%;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-}
-
-.header-left,
-.header-right {
-  flex-shrink: 0;
-}
-
-.header-center {
-  flex-grow: 1;
-  min-width: 0;
-  /* 允许中间部分在空间不足时收缩 */
-  text-align: center;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  /* 为右侧按钮组提供一致的间距 */
-}
-
-.header .el-button {
-  height: 30px;
-  /* 统一按钮高度 */
-  width: 30px;
-  /* 统一按钮宽度 */
+  width: 100%;
   padding: 0;
   margin: 0;
-  border: none;
-  background-color: transparent;
-  color: var(--el-text-color-regular);
-  border-radius: var(--el-border-radius-base);
-  transition: background-color .2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.header .el-button:hover:not(:disabled) {
+.header .el-col .el-button {
+  height: 100%;
+  width: auto;
+  min-width: 30px;
+  padding: 0 8px;
+  margin: 0 2px;
+  border: none;
+  background-color: transparent;
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--el-text-color-regular);
+  border-radius: var(--el-border-radius-base);
+  transition: background-color .2s ease;
+}
+
+.header .el-col .el-button:hover:not(:disabled) {
   background-color: var(--el-fill-color-light);
 }
 
-.header .windows-logo {
+.header .el-col .el-button .windows-logo {
   width: 18px;
   height: 18px;
   cursor: pointer;
   vertical-align: middle;
 }
 
-.header .model-selector-btn {
+.header .el-col .model-selector-btn {
   max-width: 100%;
-  width: auto;
-  /* 允许按钮根据内容调整宽度 */
-  height: 100%;
-  padding: 0 10px;
-  margin: 0 auto;
+  padding: 0;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  justify-content: center;
+  width: 100%;
   font-family: 'Microsoft YaHei', sans-serif;
   font-size: var(--el-font-size-normal);
   color: var(--el-text-color-primary);
 }
-
 
 .chat-main {
   flex-grow: 1;
@@ -1724,11 +1506,13 @@ html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
   align-self: flex-end;
   max-width: 80%;
 
+  // 修改用户气泡在浅色模式下的背景色
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
     background-color: #F4F4F4;
   }
 }
 
+// 修改用户气泡在深色模式下的背景色
 html.dark .chat-message .user-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
     background: #414158;
@@ -1741,11 +1525,13 @@ html.dark .chat-message .user-bubble {
   margin: 0;
   align-self: left;
 
+  // 修改AI气泡在浅色模式下的背景色
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
     background-color: #F0F2F5;
   }
 }
 
+// 修改AI气泡在深色模式下的背景色
 html.dark .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
     background: #404045;
@@ -1818,30 +1604,37 @@ html.dark .system-prompt-container:hover {
   p>code:not(.hljs),
   li>code:not(.hljs) {
 
+    // [修改] 将所有代码相关的字体设置集中到这里
     &,
     * {
       font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
     }
   }
 
+  /* START: MODIFIED CODE BLOCK */
   pre.hljs {
     display: block;
     overflow: auto;
+    /* Handles vertical scroll for max-height and prevents horizontal scroll if wrapping works. */
     padding: 1em;
     border-radius: var(--el-border-radius-base);
     max-height: 400px;
     margin: .5em 0 1em 0;
     line-height: 1.5;
     white-space: pre-wrap;
+    /* Allow content to wrap. */
     word-break: break-all;
+    /* Break long words to prevent overflow. */
 
     code.hljs {
       font-size: 0.9em;
+      /* Wrapping is now handled by the parent 'pre' element. */
       padding: 0;
       background-color: transparent !important;
     }
   }
 
+  /* END: MODIFIED CODE BLOCK */
 }
 
 .chat-message :deep(.markdown-body strong),

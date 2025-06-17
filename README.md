@@ -12,12 +12,21 @@ Anywhere 是一款功能强大、高效实用的AI助手，旨在为您提供卓
 
 通过以下方式，您可以立即免费体验Anywhere的强大功能：
 
-1.  **OpenRouter（推荐免费体验）**：
+
+1. **AI Studio（Google免费提供Gemini，推荐）**
+    *   访问[https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)申请您的API密钥
+    *   在Anywhere应用中填入URL，使用gemini官方url`https://generativelanguage.googleapis.com/v1beta/openai`或者使用作者提供的中转接口`https://gemini-oai.001412.xyz/v1`
+    *   在Anywhere应用中填入KEY：`您的密钥`
+    *   **搜索模式使用**：复制一个存在的模型名称（从API获取模型，选择一个对话模型，如gemini-2.5-flash-preview-05-20），点击手动添加，将模型名称粘贴并增加":search"后缀，例如（gemini-2.5-flash-preview-05-20:search）
+    *   **中转平台使用项目**：https://github.com/Komorebi-yaodong/openai-gemini （直接连接仓库，未进行代码更改，可以通过分析仓库代码进行安全分析，**安全提示**：当你使用他人的中转API时，他人有能力更改中转API代码实现读取你使用的密钥的，请鉴别使用）
+
+
+2.  **OpenRouter（推荐免费体验）**：
     *   访问 [https://openrouter.ai](https://openrouter.ai) 申请您的API密钥。
     *   在Anywhere应用中填入URL：`https://openrouter.ai/api/v1`。
     *   在Anywhere应用中填入KEY：`您的密钥`。
 
-2.  **Pollinations（无需密钥）**：
+3.  **Pollinations（无需密钥）**：
     *   直接在Anywhere应用中填入URL：`https://text.pollinations.ai/openai`，即可轻松体验OpenAI模型，无需额外配置密钥。
 
 **作者常用提示词库**：
@@ -39,6 +48,7 @@ Anywhere 是一款功能强大、高效实用的AI助手，旨在为您提供卓
     *   支持所有文本文件（如txt、markdown、json等）及docx文档上传。
     *   支持图片、音频、PDF文件上传（请确保所选模型支持多模态输入，否则可能报错）。
 4.  **智能文本处理**：支持划词时自动跳过输入文本中的换行符，提升输入效率。
+5.  **便捷保存/加载对话**：支持保存对话内容，方便您随时继续之前的对话。
 
 ### 二、沉浸式对话与显示
 
@@ -56,6 +66,7 @@ Anywhere 是一款功能强大、高效实用的AI助手，旨在为您提供卓
 3.  **多密钥轮询**：支持设置多个API密钥（英文逗号分隔），Anywhere将自动轮询调用，提高请求的稳定性和可用性。
 4.  **数据导入导出**：支持用户数据的导出与导入，方便您进行数据备份与迁移。
 5.  **自定义UI外观**：支持自定义快捷助手图标及快捷助手分类标签，打造专属的操作界面。
+6.  **对话导出与加载**：支持对话内容的导出与加载，方便您保存和分享对话记录（用窗口模式加载对话文件即可进入保存的对话，注意继续对话不会更改已保存的对话）。
 
 ### 四、个性化窗口设置
 
@@ -99,6 +110,7 @@ Anywhere 是一款功能强大、高效实用的AI助手，旨在为您提供卓
 ![窗口模式示例1](image/1.png)
 ![窗口模式示例2](image/2.png)
 ![窗口模式示例3](image/3.png)
+![窗口模式示例3](image/4.png)
 ![主界面](image/s0.png)
 ![Completion模式](image/s1.png)
 ![自定义提示词](image/s2.png)

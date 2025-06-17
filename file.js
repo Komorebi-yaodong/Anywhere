@@ -1,4 +1,5 @@
 const fs = require('fs/promises');
+const fs_node = require('node:fs');
 const path = require('path');
 
 
@@ -236,9 +237,24 @@ async function sendfileDirect(filePathList) {
     return contentList;
 }
 
-
+function saveFile(options) {
+  return new Promise((resolve, reject) => {
+    try {
+      const { fileContent, ...dialogOptions } = options;
+      const savePath = utools.showSaveDialog(dialogOptions);
+      if (!savePath) {
+        return reject(new Error('用户取消了保存操作'));
+      }
+      fs_node.writeFileSync(savePath, fileContent, 'utf-8');
+      resolve({ success: true, path: savePath });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
 
 module.exports = {
     handleFilePath, // (文件路径=>文件对象)
     sendfileDirect, //（文件路径=>文件对象=>文件列表=>对话格式）
+    saveFile,
 };
