@@ -2,7 +2,8 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, computed, h, watch } from 'vue';
 import { Bubble, Sender, Thinking } from 'vue-element-plus-x';
 import { Attachments } from 'ant-design-x-vue';
-import { ElContainer, ElHeader, ElMain, ElFooter, ElButton, ElDialog, ElTable, ElTableColumn, ElTooltip, ElRow, ElCol, ElMessage, ElImageViewer, ElInput } from 'element-plus';
+// [MODIFIED] Added ElMessageBox for the new save dialog
+import { ElContainer, ElHeader, ElMain, ElFooter, ElButton, ElDialog, ElTable, ElTableColumn, ElTooltip, ElRow, ElCol, ElMessage, ElImageViewer, ElInput, ElMessageBox } from 'element-plus';
 import { DocumentCopy, Refresh, Delete, CoffeeCup, Lollipop, Link, Document, Download } from '@element-plus/icons-vue'
 
 // import TitleBar from './TitleBar.vue'
@@ -260,35 +261,117 @@ function showFullSystemPrompt(content) {
   systemPromptDialogVisible.value = true;
 }
 
-// [NEW] Refs and functions for saving the session
-const saveSessionDialogVisible = ref(false);
-const saveFilename = ref('');
-
-function openSaveDialog() {
-  const now = new Date(); // 获取当前日期和时间
-  const year = String(now.getFullYear()).slice(-2); // 获取年份的后两位 (YY)
-  const month = String(now.getMonth() + 1).padStart(2, '0'); // 获取月份 (MM)，并确保是两位数
-  const day = String(now.getDate()).padStart(2, '0'); // 获取日期 (DD)，并确保是两位数
-  const hours = String(now.getHours()).padStart(2, '0'); // 获取小时 (HH)，并确保是两位数
-  const minutes = String(now.getMinutes()).padStart(2, '0'); // 获取分钟 (MM)，并确保是两位数
-  const seconds = String(now.getSeconds()).padStart(2, '0'); // 获取秒数 (SS)，并确保是两位数
-  saveFilename.value = `chat-session-${year}${month}${day}-${hours}${minutes}${seconds}.json`;
-
-  saveSessionDialogVisible.value = true;
+// [MODIFIED] New save functions
+async function handleSaveAction() {
+  if (autoCloseOnBlur.value) {
+    changeAutoCloseOnBlur();
+  }
+  try {
+    await ElMessageBox.confirm(
+      'JSON格式用于保存完整会话，方便下次加载和继续；Markdown格式则更适合阅读和分享。',
+      '选择保存格式',
+      {
+        confirmButtonText: '保存为 Markdown',
+        cancelButtonText: '保存为 JSON',
+        distinguishCancelAndClose: true,
+        type: 'info',
+        center: true,
+      }
+    );
+    // User clicked "Save as Markdown"
+    await saveSessionAsMarkdown();
+  } catch (action) {
+    if (action === 'cancel') {
+      // User clicked "Save as JSON"
+      await saveSessionAsJson();
+    }
+    // If action is 'close' or 'error', do nothing. The user has cancelled.
+  }
 }
 
+async function saveSessionAsMarkdown() {
+  let markdownContent = '';
 
-// [NEW] 会话保存功能
-async function handleSaveSession() {
-  if (!saveFilename.value.trim()) {
-    ElMessage.error('文件名不能为空。');
-    return;
+  // 1. Generate timestamp and create a more descriptive title and default filename
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+  const defaultFilename = `Chat-${CODE.value || 'AI'}-${fileTimestamp}.md`;
+
+  markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n`;
+  markdownContent += `### 模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
+
+  // 2. Handle System Prompt
+  const systemPromptMessage = chat_show.value.find(m => m.role === 'system');
+  if (systemPromptMessage && systemPromptMessage.content) {
+    markdownContent += `### 系统提示词\n\n`;
+    markdownContent += `${String(systemPromptMessage.content).trim()}\n\n`;
   }
 
-  const finalFilename = saveFilename.value.endsWith('.json') ? saveFilename.value : `${saveFilename.value}.json`;
+  markdownContent += '---\n\n';
 
+  // 3. Loop through displayed messages and format them correctly
+  for (const message of chat_show.value) {
+    if (message.role === 'system') continue; // Already handled
+
+    if (message.role === 'user') {
+      markdownContent += `### 👤 用户\n\n`;
+      // CORRECTED: Pass message.content to the formatters
+      const mainContent = formatMessageContent(message.content).trim();
+      const files = formatMessageFile(message.content);
+
+      if (mainContent) {
+        markdownContent += `${mainContent}\n\n`;
+      }
+
+      if (files.length > 0) {
+        markdownContent += `**附件列表:**\n`;
+        files.forEach(f => {
+          markdownContent += `- \`${f}\`\n`;
+        });
+        markdownContent += `\n`;
+      }
+      markdownContent += '---\n\n';
+    } else if (message.role === 'assistant') {
+      markdownContent += `### 🤖 ${CODE.value || 'AI'}\n\n`;
+      // CORRECTED: Pass message.content to the formatter
+      const reasoning_content = "\n" + formatMessageContent(message.reasoning_content).trim();
+      // rfeasoning_content中每一行的开始增加“> ”前缀
+      markdownContent += reasoning_content.replace(/\n/g, '\n> ') + '\n\n';
+      const mainContent = formatMessageContent(message.content).trim();
+      if (mainContent) {
+        markdownContent += `${mainContent}\n\n`;
+      } else if (message.status) {
+        // If the AI was thinking but didn't produce text, indicate that.
+        markdownContent += `*(AI正在思考...)*\n\n`;
+      }
+      markdownContent += '---\n\n';
+    }
+  }
+
+  // 4. Trigger the native save dialog via the main process
+  try {
+    await window.api.saveFile({
+      title: '保存为 Markdown',
+      defaultPath: defaultFilename,
+      buttonLabel: '保存',
+      filters: [
+        { name: 'Markdown 文件', extensions: ['md'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      fileContent: markdownContent
+    });
+    ElMessage.success('会话已成功保存为 Markdown！');
+  } catch (error) {
+    if (!error.message.includes('canceled by the user')) {
+      console.error('保存 Markdown 失败:', error);
+      ElMessage.error(`保存失败: ${error.message}`);
+    }
+  }
+}
+
+async function saveSessionAsJson() {
   const currentPromptConfig = currentConfig.value.prompts[CODE.value] || {};
-
   const sessionData = {
     anywhere_history: true,
     UserAvart: UserAvart.value,
@@ -303,31 +386,32 @@ async function handleSaveSession() {
     chat_show: chat_show.value,
   };
 
-  try {
-    const jsonString = JSON.stringify(sessionData, null, 2);
+  const jsonString = JSON.stringify(sessionData, null, 2);
 
-    // 调用 window.api.saveFile，这是我们通过 preload 脚本暴露的函数
-    // 主进程将处理这一切，并显示一个原生的保存对话框
+  const now = new Date();
+  const year = String(now.getFullYear()).slice(-2);
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const defaultFilename = `Session-${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}${seconds}.json`;
+
+  try {
     await window.api.saveFile({
       title: '保存聊天会话',
-      defaultPath: finalFilename,
+      defaultPath: defaultFilename,
       buttonLabel: '保存',
       filters: [
         { name: 'JSON 文件', extensions: ['json'] },
         { name: '所有文件', extensions: ['*'] }
       ],
-      fileContent: jsonString // 将文件内容直接传递给主进程
+      fileContent: jsonString
     });
 
     ElMessage.success('会话已成功保存！');
-    saveSessionDialogVisible.value = false;
-
   } catch (error) {
-    // 如果主进程抛出错误（例如用户取消了对话框），我们在这里捕获它
-    // 我们可以检查错误信息来决定是否向用户显示消息
-    if (error.message.includes('canceled by the user')) {
-      console.log('用户取消了保存操作。');
-    } else {
+    if (!error.message.includes('canceled by the user')) {
       console.error('保存会话失败:', error);
       ElMessage.error(`保存失败: ${error.message}`);
     }
@@ -1155,8 +1239,9 @@ async function processFilePath(filePath) {
             <el-tooltip :content="temporary ? '无记忆模式' : '记忆模式'" placement="bottom">
               <el-button @click="temporary = !temporary" :icon="temporary ? Lollipop : CoffeeCup" />
             </el-tooltip>
+            <!-- [MODIFIED] Save button now calls the new action handler -->
             <el-tooltip content="保存会话" placement="bottom">
-              <el-button @click="openSaveDialog" :icon="Download" />
+              <el-button @click="handleSaveAction" :icon="Download" />
             </el-tooltip>
           </div>
         </div>
@@ -1195,7 +1280,7 @@ async function processFilePath(filePath) {
               <Thinking v-if="message.status && message.status.length > 0" maxWidth="90%"
                 :content="message.reasoning_content" :status="message.status" :modelValue="false">
                 <template #error v-if="message.status === 'error' && message.status">{{ message.reasoning_content
-                  }}</template>
+                }}</template>
               </Thinking>
             </template>
             <template #content>
@@ -1248,26 +1333,11 @@ async function processFilePath(filePath) {
     </el-table>
     <template #footer><el-button @click="changeModel_page = false">关闭</el-button></template>
   </el-dialog>
-  <!-- Save Session Dialog -->
-  <el-dialog v-model="saveSessionDialogVisible" title="保存聊天会话" width="400px" center>
-    <el-input v-model="saveFilename" placeholder="输入文件名" @keyup.enter="handleSaveSession" />
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="saveSessionDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveSession">保存</el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- [REMOVED] Old Save Session Dialog -->
 </template>
 
 <style>
-/* ... 此处省略所有未改动的全局样式 ... */
-/* 1. KaTeX 公式样式 (Unchanged) */
-/* 2. Highlight.js Light Theme (Unchanged) */
-/* 3. Highlight.js Dark Theme (Optimized with a new color palette) */
-/* 4. Code Block Scrollbar Style (Completely Redesigned) */
-/* [NEW] System Prompt Dialog Style */
-/* [IMPROVED] System Prompt Dialog Scrollbar Style */
+/* ... All previous global styles remain unchanged ... */
 html.dark .katex {
   color: var(--el-text-color-regular) !important;
 }
