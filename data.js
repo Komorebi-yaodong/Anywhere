@@ -16,27 +16,37 @@ const defaultConfig = {
     },
     providerOrder: ["0",],
     prompts: {
-      Completion: {
+      AI: {
         type: "over",
-        prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-        showMode: "input", // input, window
-        model: "", // providers_id|model
+        prompt: `你是一个AI助手`,
+        showMode: "window",
+        model: "0|gpt-4o",
         enable: true,
         icon: "",
         stream: true,
-        isTemperature: false,
         temperature: 0.7,
-        isDirectSend: false, // 是否直接发送文件
+        isTemperature: false,
+        isDirectSend: false,
+        ifTextNecessary: false,
       },
     },
+    tags: {},
     stream: true,
-    skipLineBreak: true,
+    skipLineBreak: false,
     window_height: 520,
     window_width: 400,
     autoCloseOnBlur: false,
     CtrlEnterToSend: false,
+    isAlwaysOnTop: false,
     showNotification: true,
     isDarkMode: false,
+    fix_position: false,
+    webdav: {
+      url: "",
+      username: "",
+      password: "",
+      path: "/anywhere",
+    },
   }
 };
 
@@ -54,8 +64,8 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (!config.version !== "1.6.0") {
-    config.version = "1.6.0";
+  if (!config.version !== "1.6.7") {
+    config.version = "1.6.7";
     flag = true;
   }
   else {
@@ -67,15 +77,19 @@ function checkConfig(config) {
     config.window_height = 520;
     flag = true;
   }
-  if (!config.autoCloseOnBlur) {
+  if (config.autoCloseOnBlur == undefined) {
     config.autoCloseOnBlur = false;
     flag = true;
   }
-  if (!config.CtrlEnterToSend) {
+  if (config.CtrlEnterToSend == undefined) {
     config.CtrlEnterToSend = false;
     flag = true;
   }
-  if (!config.showNotification) {
+  if (config.isAlwaysOnTop == undefined) {
+    config.isAlwaysOnTop = false;
+    flag = true;
+  }
+  if (config.showNotification == undefined) {
     config.showNotification = false;
     flag = true;
   }
@@ -87,6 +101,15 @@ function checkConfig(config) {
     flag = true;
   }
 
+  if (config.webdav == undefined) {
+    config.webdav = {
+      url: "",
+      username: "",
+      password: "",
+      path: "/anywhere",
+    };
+    flag = true;
+  }
   // 更新默认配置的存储方式
   if (config.apiUrl) {
     config.providers["0"] = {
@@ -126,6 +149,10 @@ function checkConfig(config) {
     }
     if (config.prompts[key].isDirectSend === undefined) {
       config.prompts[key].isDirectSend = false;
+      flag = true;
+    }
+    if (config.prompts[key].ifTextNecessary === undefined) {
+      config.prompts[key].ifTextNecessary = false;
       flag = true;
     }
   }
@@ -239,23 +266,48 @@ function checkConfig(config) {
 // 更新配置文件
 function updateConfig(newConfig) {
   const features = utools.getFeatures();
+  const feature_suffix = "助手"
   let featuresMap = new Map(features.map((feature) => [feature.code, feature]));
   // 查找prompts中的key是否在features的元素的code中，如不在则添加
   for (let key in newConfig.config.prompts) {
+    // 功能指令
+    if (newConfig.config.prompts[key].showMode === "window" && newConfig.config.prompts[key].enable) {
+      let feature_ai = {
+        code: key + feature_suffix,
+        explain: key,
+        mainHide: true,
+        cmds: [key + feature_suffix]
+      };
+      if (newConfig.config.prompts[key].icon) {
+        feature_ai.icon = newConfig.config.prompts[key].icon;
+      }
+      utools.setFeature(feature_ai);
+    }
+
+    // 匹配指令
     let feature = {
       code: key,
       explain: key,
       mainHide: true,
       cmds: []
     }
-
     if (newConfig.config.prompts[key].type === "general") {
       feature.cmds.push({ type: "over", label: key });
       feature.cmds.push({ type: "img", label: key });
-      feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+      if (newConfig.config.prompts[key].showMode === "window") {
+        feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+      }
+      else {
+        feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+      }
     }
     else if (newConfig.config.prompts[key].type === "files") {
-      feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+      if (newConfig.config.prompts[key].showMode === "window") {
+        feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+      }
+      else {
+        feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+      }
     }
     else if (newConfig.config.prompts[key].type === "img") {
       feature.cmds.push({ type: "img", label: key });
@@ -264,7 +316,7 @@ function updateConfig(newConfig) {
       feature.cmds.push({ type: "over", label: key });
     }
 
-    if (newConfig.config.prompts[key].icon){
+    if (newConfig.config.prompts[key].icon) {
       feature.icon = newConfig.config.prompts[key].icon;
     }
 
@@ -274,7 +326,7 @@ function updateConfig(newConfig) {
   }
   // 查找features的元素的code是否在prompts中的key中，如不在则删除
   for (let [key, feature] of featuresMap) {
-    if (!newConfig.config.prompts[key] || !newConfig.config.prompts[key].enable) {
+    if (!newConfig.config.prompts[feature.explain] || !newConfig.config.prompts[feature.explain].enable) {
       utools.removeFeature(key);
     }
   }
@@ -292,7 +344,7 @@ function updateConfig(newConfig) {
   }
 }
 
-function getUser(){
+function getUser() {
   return utools.getUser();
 }
 
@@ -392,7 +444,7 @@ function getRandomItem(list) {
 
 // 函数：请求chat
 async function chatOpenAI(history, config, modelInfo, CODE, signal) {
-  
+
   let apiUrl = "";
   let apiKey = "";
   let model = "";
@@ -404,6 +456,34 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal) {
       apiUrl = provider.url;
       apiKey = provider.api_key;
       model = modelName;
+    }
+  }
+
+  if (config.prompts[CODE] && config.prompts[CODE].ifTextNecessary) {
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    content = history[history.length - 1].content;
+    // 如果是字符串
+    if (typeof content === "string") {
+      history[history.length - 1].content = timestamp + "\n\n" + content;
+    }
+    else if (Array.isArray(content)) {
+      let flag = false;
+      for (let i = 0; i < content.length; i++) {
+        // 是文本类型，且不是文本文件
+        if (content[i].type === "text" && content[i].text && !(content[i].text.toLowerCase().startsWith('file name:') && content[i].text.toLowerCase().endsWith('file end'))) {
+          content[i].text = timestamp + "\n\n" + content[i].text;
+          flag = true;
+          break;
+        }
+      }
+      if (!flag) {
+        history[history.length - 1].content.push({
+          type: "text",
+          text: timestamp
+        });
+      }
     }
   }
 

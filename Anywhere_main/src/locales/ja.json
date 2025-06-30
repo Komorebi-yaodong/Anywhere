@@ -30,7 +30,7 @@
     "typeOptions": {
       "general": "汎用",
       "text": "テキスト",
-      "image": "画像",
+      "image": "スクリーンショット",
       "files": "ファイル"
     },
     "showModeLabel": "表示モード",
@@ -42,6 +42,7 @@
     "modelLabel": "モデル",
     "llmParametersLabel": "モデルパラメータ（現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります）",
     "sendFileLabel": "ファイルの直接送信",
+    "ifTextNecessary": "テキスト＆自動日時",
     "streamLabel": "ストリーム応答",
     "enableTemperatureLabel": "カスタム温度",
     "temperatureLabel": "温度設定（モデルによって温度範囲が異なります。エラーが発生した場合は、カスタム温度を無効にできます）",
@@ -122,46 +123,98 @@
     },
     "title": "一般設定",
     "stream": {
-      "label": "ストリーム応答",
-      "description": "プロバイダーからのストリーム応答を有効にします。"
+      "label": "ストリーミング応答",
+      "description": "プロバイダーからのストリーミング応答を有効にします。"
     },
     "skipLineBreak": {
       "label": "送信時に改行をスキップ",
-      "description": "メッセージ送信時に改行をスキップします。"
+      "description": "テキスト選択時に改行をスキップするようにします。"
     },
     "autoClose": {
-      "label": "フォーカスが外れたらウィンドウを自動的に閉じる",
-      "description": "独立したウィンドウがフォーカスを失ったときに閉じます。"
+      "label": "フォーカスが外れたら自動で閉じる",
+      "description": "独立したウィンドウがフォーカスを失ったときに自動的に閉じるようにします。"
+    },
+    "isAlwaysOnTop": {
+      "label": "常に最前面に表示",
+      "description": "ウィンドウを常に他のウィンドウより手前に表示します。"
     },
     "ctrlEnter": {
       "label": "Ctrl+Enterで送信",
-      "description": "Ctrl+Enterを押してメッセージを送信できるようにします。"
+      "description": "Ctrl+Enterを押してメッセージを送信するようにします。"
     },
     "notification": {
       "label": "成功通知を表示",
       "description": "応答が成功したときに通知を表示します。"
     },
     "darkMode": {
-      "label": "ダークモード (独立ウィンドウ)",
-      "description": "独立した応答ウィンドウでダークモードテーマを使用します。"
+      "label": "ダークモード（独立ウィンドウ）",
+      "description": "独立した応答ウィンドウでダークモードのテーマを使用します。"
     },
-    "fixPosition":{
-      "label": "ウィンドウ位置の固定",
-      "description": "ダイアログウィンドウが表示される位置を固定するには、これを有効にします。"
+    "fixPosition": {
+      "label": "ウィンドウ位置を固定",
+      "description": "ダイアログウィンドウが表示される位置を固定します。"
     },
     "dataManagement": {
       "title": "データ管理",
       "exportLabel": "設定のエクスポート",
-      "exportDesc": "現在のすべての設定をJSONファイルにエクスポートします。構成ファイルには機密情報が含まれているため、共有しないでください。",
+      "exportDesc": "現在のすべての設定をJSONファイルにエクスポートします。注意：設定ファイルには機密情報が含まれているため、共有しないでください。",
       "exportButton": "エクスポート",
       "importLabel": "設定のインポート",
-      "importDesc": "JSONファイルから設定をインポートします。これにより現在の設定が上書きされます。",
+      "importDesc": "JSONファイルから設定をインポートします。これにより、現在の設定が上書きされます。",
       "importButton": "インポート"
     },
     "dimensions": {
-      "title": "ウィンドウサイズ",
-      "widthLabel": "ウィンドウ幅 (px)",
-      "heightLabel": "ウィンドウ高さ (px)"
+      "title": "ウィンドウのサイズ",
+      "widthLabel": "ウィンドウの幅 (px)",
+      "heightLabel": "ウィンドウの高さ (px)"
+    },
+    "webdav": {
+      "url": "WebDAV URL",
+      "urlPlaceholder": "http://localhost:8080",
+      "username": "WebDAV ユーザー名",
+      "usernamePlaceholder": "WebDAV ユーザー名",
+      "password": "WebDAV パスワード",
+      "passwordPlaceholder": "WebDAV パスワード",
+      "path": "WebDAV パス",
+      "pathPlaceholder": "/anywhere",
+      "backupRestoreTitle": "データのバックアップと復元",
+      "backupButton": "WebDAVへバックアップ",
+      "restoreButton": "バックアップ管理",
+      "backup": {
+        "confirmTitle": "バックアップファイル名の確認",
+        "confirmMessage": "バックアップファイル名を入力してください。タイムスタンプを保持するために、デフォルト名の使用をお勧めします。",
+        "invalidFilename": "無効なファイル名です。末尾は .json である必要があります。",
+        "cancelled": "バックアップはキャンセルされました。"
+      },
+      "manager": {
+        "title": "バックアップデータ管理",
+        "pathNotFound": "指定されたWebDAVパスが存在しません。",
+        "fetchFailed": "バックアップリストの取得に失敗しました",
+        "filename": "ファイル名",
+        "modifiedTime": "更新日時",
+        "size": "サイズ",
+        "actions": "操作",
+        "restore": "復元",
+        "delete": "削除",
+        "confirmRestore": "本当にこのバックアップファイル '{filename}' を復元しますか？この操作は現在の設定を上書きします。",
+        "confirmDelete": "本当にファイル '{filename}' を完全に削除しますか？",
+        "confirmDeleteMultiple": "選択した {count} 個のファイルを本当に完全に削除しますか？",
+        "noFileSelected": "ファイルが選択されていません。",
+        "deleteSuccess": "ファイルの削除に成功しました。",
+        "deleteFailed": "ファイルの削除に失敗しました",
+        "deleteSuccessMultiple": "選択したファイルを削除しました。",
+        "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました"
+      },
+      "alerts": {
+        "urlRequired": "WebDAV URLは空にできません。",
+        "backupInProgress": "バックアップ中...",
+        "backupSuccess": "バックアップに成功しました",
+        "backupFailed": "バックアップに失敗しました",
+        "fileNotFound": "バックアップファイルが見つかりません",
+        "restoreInProgress": "復元中...",
+        "restoreSuccess": "復元に成功しました",
+        "restoreFailed": "復元に失敗しました"
+      }
     }
   },
   "common": {

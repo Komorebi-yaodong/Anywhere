@@ -30,7 +30,7 @@
     "typeOptions": {
       "general": "General",
       "text": "Text",
-      "image": "Image",
+      "image": "Screenshot",
       "files": "Files"
     },
     "showModeLabel": "Show Mode",
@@ -42,6 +42,7 @@
     "modelLabel": "Model",
     "llmParametersLabel": "Model Parameters (Only effective for the current Quick Assistant model; no longer effective after switching to other models)",
     "sendFileLabel": "Direct file sending",
+    "ifTextNecessary": "Add Text / Auto-Timestamp",
     "streamLabel": "Stream Responses",
     "enableTemperatureLabel": "Custom Temperature",
     "temperatureLabel": "Temperature Settings (Temperature ranges vary for different models; if an error occurs, you can disable custom temperature)",
@@ -122,16 +123,20 @@
     },
     "title": "General Settings",
     "stream": {
-      "label": "Stream Responses",
-      "description": "Enable to use streaming responses from providers."
+      "label": "Stream Response",
+      "description": "Enable to use streaming responses from the provider."
     },
     "skipLineBreak": {
-      "label": "Skip Linebreak on Send",
-      "description": "Enable to skip linebreaks when sending messages."
+      "label": "Skip Line Breaks on Send",
+      "description": "Enable to skip line breaks when selecting text."
     },
     "autoClose": {
-      "label": "Auto Close Window on Blur",
-      "description": "Enable to close the separate window when it loses focus."
+      "label": "Auto-close on Blur",
+      "description": "Enable to close the standalone window when it loses focus."
+    },
+    "isAlwaysOnTop": {
+      "label": "Always on Top",
+      "description": "Enable to keep the window always on top of other windows."
     },
     "ctrlEnter": {
       "label": "Ctrl+Enter to Send",
@@ -139,20 +144,20 @@
     },
     "notification": {
       "label": "Show Success Notification",
-      "description": "Enable to show a notification when a response is successful."
+      "description": "Enable to show a notification on successful response."
     },
     "darkMode": {
-      "label": "Dark Mode (Separate Window)",
-      "description": "Use dark mode theme in the separate response window."
+      "label": "Dark Mode (Standalone Window)",
+      "description": "Use dark mode theme in the standalone response window."
     },
-    "fixPosition":{
-      "label": "Fixed Window Position",
+    "fixPosition": {
+      "label": "Fix Window Position",
       "description": "Enable to fix the position where the dialog window appears."
     },
     "dataManagement": {
       "title": "Data Management",
       "exportLabel": "Export Configuration",
-      "exportDesc": "Export all current settings to a JSON file. Note that the configuration file contains sensitive information, so please do not share it.",
+      "exportDesc": "Export all current settings to a JSON file. Note: The configuration file contains sensitive information, do not share it.",
       "exportButton": "Export",
       "importLabel": "Import Configuration",
       "importDesc": "Import settings from a JSON file. This will overwrite current settings.",
@@ -162,6 +167,54 @@
       "title": "Window Dimensions",
       "widthLabel": "Window Width (px)",
       "heightLabel": "Window Height (px)"
+    },
+    "webdav": {
+      "url": "WebDAV URL",
+      "urlPlaceholder": "http://localhost:8080",
+      "username": "WebDAV Username",
+      "usernamePlaceholder": "WebDAV Username",
+      "password": "WebDAV Password",
+      "passwordPlaceholder": "WebDAV Password",
+      "path": "WebDAV Path",
+      "pathPlaceholder": "/anywhere",
+      "backupRestoreTitle": "Data Backup & Restore",
+      "backupButton": "Backup to WebDAV",
+      "restoreButton": "Manage Backups",
+      "backup": {
+        "confirmTitle": "Confirm Backup Filename",
+        "confirmMessage": "Please enter the backup filename. It is recommended to use the default name to keep the timestamp.",
+        "invalidFilename": "Invalid filename, must end with .json.",
+        "cancelled": "Backup cancelled."
+      },
+      "manager": {
+        "title": "Backup Data Management",
+        "pathNotFound": "The specified WebDAV path does not exist.",
+        "fetchFailed": "Failed to fetch backup list",
+        "filename": "Filename",
+        "modifiedTime": "Modified Time",
+        "size": "Size",
+        "actions": "Actions",
+        "restore": "Restore",
+        "delete": "Delete",
+        "confirmRestore": "Are you sure you want to restore this backup file '{filename}'? This will overwrite your current configuration.",
+        "confirmDelete": "Are you sure you want to permanently delete the file '{filename}'?",
+        "confirmDeleteMultiple": "Are you sure you want to permanently delete the {count} selected files?",
+        "noFileSelected": "No files selected.",
+        "deleteSuccess": "File deleted successfully.",
+        "deleteFailed": "Failed to delete file",
+        "deleteSuccessMultiple": "Selected files deleted successfully.",
+        "deleteFailedMultiple": "Error deleting selected files"
+      },
+      "alerts": {
+        "urlRequired": "WebDAV URL cannot be empty.",
+        "backupInProgress": "Backing up...",
+        "backupSuccess": "Backup successful",
+        "backupFailed": "Backup failed",
+        "fileNotFound": "Backup file not found",
+        "restoreInProgress": "Restoring...",
+        "restoreSuccess": "Restore successful",
+        "restoreFailed": "Restore failed"
+      }
     }
   },
   "common": {

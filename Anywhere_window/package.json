@@ -12,6 +12,7 @@
     "@crazydos/vue-markdown": "^1.0.2",
     "@element-plus/icons-vue": "^2.3.1",
     "@iktakahiro/markdown-it-katex": "^4.0.1",
+    "@tanstack/vue-virtual": "^3.13.12",
     "ant-design-x-vue": "^1.1.0",
     "dompurify": "^3.2.5",
     "element-plus": "^2.9.7",
@@ -20,9 +21,11 @@
     "mammoth": "^1.9.0",
     "markdown-it": "^14.1.0",
     "markdown-it-katex": "^2.0.3",
+    "mermaid": "^11.7.0",
     "officeparser": "^5.1.1",
     "vue": "^3.5.13",
-    "vue-element-plus-x": "^1.2.0"
+    "vue-element-plus-x": "^1.2.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

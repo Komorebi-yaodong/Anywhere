@@ -30,8 +30,8 @@
     "typeOptions": {
       "general": "通用",
       "text": "文本",
-      "image": "图片",
-      "files":"文件"
+      "image": "截图",
+      "files": "文件"
     },
     "showModeLabel": "显示模式",
     "showModeOptions": {
@@ -41,7 +41,9 @@
     },
     "modelLabel": "模型",
     "llmParametersLabel": "模型参数（仅当前 快捷助手 模型生效，更换其他模型后不再生效）",
+    "AssistantParametersLabel": "快捷助手参数",
     "sendFileLabel": "文件直接发送",
+    "ifTextNecessary": "补充文本信息/自动添加时间",
     "streamLabel": "流式响应",
     "enableTemperatureLabel": "自定义温度",
     "temperatureLabel": "温度设置（不同模型温度范围不同，如果报错可以关闭自定义温度）",
@@ -83,7 +85,7 @@
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "例如, https://api.openai.com/v1",
     "modelsLabel": "模型",
-    "searchModelsPlaceholder":"搜索模型",
+    "searchModelsPlaceholder": "搜索模型",
     "noModelsAdded": "尚未添加模型。",
     "getModelsFromApiBtn": "从 API 获取模型",
     "addManuallyBtn": "手动添加",
@@ -127,11 +129,15 @@
     },
     "skipLineBreak": {
       "label": "发送时跳过换行符",
-      "description": "启用以在发送消息时跳过换行符。"
+      "description": "启用以在划词时跳过换行符。"
     },
     "autoClose": {
       "label": "失焦时自动关闭窗口",
       "description": "启用以在独立窗口失去焦点时将其关闭。"
+    },
+    "isAlwaysOnTop": {
+      "label": "始终在最上层",
+      "description": "启用以使窗口始终保持在最上层。"
     },
     "ctrlEnter": {
       "label": "Ctrl+Enter 发送",
@@ -145,7 +151,7 @@
       "label": "深色模式 (独立窗口)",
       "description": "在独立的响应窗口中使用深色模式主题。"
     },
-    "fixPosition":{
+    "fixPosition": {
       "label": "固定窗口位置",
       "description": "启用以固定对话窗口出现的位置。"
     },
@@ -162,6 +168,54 @@
       "title": "窗口尺寸",
       "widthLabel": "窗口宽度 (px)",
       "heightLabel": "窗口高度 (px)"
+    },
+    "webdav": {
+      "url": "WebDAV 地址",
+      "urlPlaceholder": "http://localhost:8080",
+      "username": "WebDAV 用户名",
+      "usernamePlaceholder": "WebDAV 用户名",
+      "password": "WebDAV 密码",
+      "passwordPlaceholder": "WebDAV 密码",
+      "path": "WebDAV 路径",
+      "pathPlaceholder": "/anywhere",
+      "backupRestoreTitle": "数据备份与恢复",
+      "backupButton": "备份到 WebDAV",
+      "restoreButton": "管理备份",
+      "backup": {
+        "confirmTitle": "确认备份文件名",
+        "confirmMessage": "请输入备份文件名。建议使用默认文件名以保留时间戳。",
+        "invalidFilename": "文件名无效，必须以 .json 结尾。",
+        "cancelled": "备份已取消。"
+      },
+      "manager": {
+        "title": "备份数据管理",
+        "pathNotFound": "指定的 WebDAV 路径不存在。",
+        "fetchFailed": "获取备份列表失败",
+        "filename": "文件名",
+        "modifiedTime": "修改时间",
+        "size": "大小",
+        "actions": "操作",
+        "restore": "恢复",
+        "delete": "删除",
+        "confirmRestore": "您确定要恢复此备份文件 '{filename}' 吗？此操作将覆盖您当前的配置。",
+        "confirmDelete": "您确定要永久删除文件 '{filename}' 吗？",
+        "confirmDeleteMultiple": "您确定要永久删除选中的 {count} 个文件吗？",
+        "noFileSelected": "未选择任何文件。",
+        "deleteSuccess": "文件删除成功。",
+        "deleteFailed": "文件删除失败",
+        "deleteSuccessMultiple": "选中的文件已成功删除。",
+        "deleteFailedMultiple": "删除选中的文件时出错"
+      },
+      "alerts": {
+        "urlRequired": "WebDAV 地址不能为空。",
+        "backupInProgress": "正在备份...",
+        "backupSuccess": "备份成功",
+        "backupFailed": "备份失败",
+        "fileNotFound": "未找到备份文件",
+        "restoreInProgress": "正在恢复...",
+        "restoreSuccess": "恢复成功",
+        "restoreFailed": "恢复失败"
+      }
     }
   },
   "common": {
@@ -174,6 +228,9 @@
     "close": "关闭",
     "assignSelected": "分配选中",
     "addTag": "添加标签",
-    "removeIcon": "移除图标"
+    "removeIcon": "移除图标",
+    "warningTitle": "警告",
+    "refresh": "刷新",
+    "deleteSelected": "删除选中"
   }
 }

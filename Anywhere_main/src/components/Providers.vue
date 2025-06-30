@@ -19,29 +19,37 @@ const defaultConfig = {
     },
     providerOrder: ["0",],
     prompts: {
-      Completion: {
+      AI: {
         type: "over",
-        prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-        showMode: "input",
-        model: "",
+        prompt: `你是一个AI助手`,
+        showMode: "window",
+        model: "0|gpt-4o",
         enable: true,
-        icon:"",
+        icon: "",
         stream: true,
-        isTemperature: false,
         temperature: 0.7,
+        isTemperature: false,
+        isDirectSend: false,
+        ifTextNecessary: false,
       },
     },
-    tags:{
-
-    },
+    tags: {},
     stream: true,
-    skipLineBreak: true,
+    skipLineBreak: false,
     window_height: 520,
     window_width: 400,
     autoCloseOnBlur: false,
     CtrlEnterToSend: false,
+    isAlwaysOnTop: false,
     showNotification: true,
     isDarkMode: false,
+    fix_position: false,
+    webdav: {
+      url: "",
+      username: "",
+      password: "",
+      path: "/anywhere",
+    },
   }
 };
 

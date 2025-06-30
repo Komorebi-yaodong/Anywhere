@@ -36,6 +36,42 @@ window.api = {
   saveFile,
 };
 
+const feature_suffix = "助手"
+
+async function openWindow(config, msg) {
+  const window_position = getPosition(config);
+  let windowX = window_position.x;
+  let windowY = window_position.y;
+  let channel = "window"
+  // 创建运行窗口
+  const ubWindow = utools.createBrowserWindow(
+    "./window/index.html",
+    {
+      show: true,
+      title: "Anywhere",
+      useContentSize: true,
+      frame: true,
+      width: config.window_width,
+      height: config.window_height,
+      alwaysOnTop: config.isAlwaysOnTop,
+      shellOpenPath: true,
+      x: windowX,
+      y: windowY,
+      webPreferences: {
+        preload: "./window_preload.js",
+        // devTools: true,
+      },
+    },
+    () => {
+      ubWindow.webContents.send(channel, msg);
+      ubWindow.webContents.show(); // 显示窗口
+      ubWindow.setAlwaysOnTop(config.isAlwaysOnTop, "floating"); // 窗口置顶
+      ubWindow.setFullScreen(false); // 窗口全屏
+    }
+  );
+  // ubWindow.webContents.openDevTools({ mode: "detach" });
+}
+
 // 主逻辑
 utools.onPluginEnter(async ({ code, type, payload, option }) => {
   if (code === "Anywhere Settings") {
@@ -48,55 +84,38 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
     config = getConfig().config;
     checkConfig(config);
     if (type == "files") {
-      // 窗口位置
-      const window_position = getPosition(config);
-      let windowX = window_position.x;
-      let windowY = window_position.y;
-
       let msg = {
         os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
         code: code,
         type: type,
         payload: payload,
       };
-      let channel = "window"
-      // 创建运行窗口
-      const ubWindow = utools.createBrowserWindow(
-        "./window/index.html",
-        {
-          show: true,
-          title: "Anywhere",
-          useContentSize: true,
-          frame: true,
-          width: config.window_width,
-          height: config.window_height,
-          alwaysOnTop: true,
-          shellOpenPath: true,
-          x: windowX,
-          y: windowY,
-          webPreferences: {
-            preload: "./window_preload.js",
-            // devTools: true
-          },
-        },
-        () => {
-          ubWindow.webContents.send(channel, msg);
-          ubWindow.webContents.show(); // 显示窗口
-          ubWindow.setAlwaysOnTop(true, "floating"); // 窗口置顶
-          ubWindow.setFullScreen(false); // 窗口全屏
-        }
-      );
-      // ubWindow.webContents.openDevTools({ mode: "detach" });
+      await openWindow(config, msg);
     }
   }
-  else if (code !== "Anywhere Settings") {
+  else if (code.endsWith(feature_suffix)) { // 助手功能
+    // 获取配置文件，隐藏主窗口
+    utools.hideMainWindow();
+    config = getConfig().config;
+    checkConfig(config);
+    let msg = {
+      os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+      code: code.replace(feature_suffix, ""), // 去除" 助手"后缀
+      type: "over",
+      payload: code.replace(feature_suffix, ""),
+    };
+    
+    await openWindow(config, msg);
+    utools.outPlugin(); // 关闭插件窗口
+  }
+  else {
     // 获取配置文件，隐藏主窗口
     utools.hideMainWindow();
     config = getConfig().config;
     checkConfig(config);
     // 直接输入到当前输入框
+    let content = null;
     if (config.prompts[code].showMode === "input") {
-      let content = null;
       if (type === "over") {
         // 将换行符替换为空格或空
         if (config.skipLineBreak) {
@@ -121,9 +140,8 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
         content = false;
         utools.showNotification("Unsupported input type");
       }
-
       if (content) {
-        response = await requestTextOpenAI(code, file_content, config);
+        response = await requestTextOpenAI(code, content, config);
         handelReplyOpenAI(code, response, config.stream, config.showNotification);
       }
     }
@@ -158,48 +176,13 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
 
     // 窗口运行
     else if (config.prompts[code].showMode === "window") {
-      // 窗口位置
-      const window_position = getPosition(config);
-      let windowX = window_position.x;
-      let windowY = window_position.y;
-
       let msg = {
         os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
         code: code,
         type: type,
         payload: payload,
       };
-      let channel = "window"
-      // 创建运行窗口
-      const ubWindow = utools.createBrowserWindow(
-        "./window/index.html",
-        {
-          show: true,
-          title: "Anywhere",
-          useContentSize: true,
-          frame: true,
-          width: config.window_width,
-          height: config.window_height,
-          alwaysOnTop: true,
-          shellOpenPath: true,
-          x: windowX,
-          y: windowY,
-          webPreferences: {
-            preload: "./window_preload.js",
-            // devTools: true
-          },
-        },
-        () => {
-          ubWindow.webContents.send(channel, msg);
-          ubWindow.webContents.show(); // 显示窗口
-          ubWindow.setAlwaysOnTop(true, "floating"); // 窗口置顶
-          ubWindow.setFullScreen(false); // 窗口全屏
-        }
-      );
-      // ubWindow.webContents.openDevTools({ mode: "detach" });
-    }
-    else {
-      utools.showNotification("Unsupported Show Mode");
+      await openWindow(config, msg);
     }
     utools.outPlugin(); // 关闭插件窗口
   }

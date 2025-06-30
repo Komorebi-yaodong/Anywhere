@@ -18,28 +18,37 @@ const defaultConfig = {
     },
     providerOrder: ["0",],
     prompts: {
-      Completion: {
+      AI: {
         type: "over",
-        prompt: `你是一个文本续写模型，用户会输入内容，请你根据用户提供的内容完成续写。续写的内容要求符合语境语义，与前文连贯。注意续写不要重复已经提供的内容，只执行续写操作，不要有任何多余的解释。`,
-        showMode: "input",
-        model: "",
+        prompt: `你是一个AI助手`,
+        showMode: "window",
+        model: "0|gpt-4o",
         enable: true,
         icon: "",
         stream: true,
-        isTemperature: false,
         temperature: 0.7,
+        isTemperature: false,
         isDirectSend: false,
+        ifTextNecessary: false,
       },
     },
     tags: {},
     stream: true,
-    skipLineBreak: true,
+    skipLineBreak: false,
     window_height: 520,
     window_width: 400,
     autoCloseOnBlur: false,
     CtrlEnterToSend: false,
+    isAlwaysOnTop: false,
     showNotification: true,
     isDarkMode: false,
+    fix_position: false,
+    webdav: {
+      url: "",
+      username: "",
+      password: "",
+      path: "/anywhere",
+    },
   }
 };
 
@@ -242,6 +251,7 @@ function prepareAddPrompt() {
     isTemperature: false,
     temperature: 0.7,
     isDirectSend: false,
+    ifTextNecessary: false,
   });
   showPromptEditDialog.value = true;
 }
@@ -264,6 +274,7 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
     isTemperature: p.isTemperature ?? false,
     temperature: p.temperature ?? 0.7,
     isDirectSend: p.isDirectSend ?? false,
+    ifTextNecessary: p.ifTextNecessary ?? false,
   });
   showPromptEditDialog.value = true;
 }
@@ -289,7 +300,8 @@ function savePrompt() {
     stream: editingPrompt.stream,
     isTemperature: editingPrompt.isTemperature,
     temperature: editingPrompt.temperature,
-    isDirectSend: editingPrompt.isDirectSend
+    isDirectSend: editingPrompt.isDirectSend,
+    ifTextNecessary: editingPrompt.ifTextNecessary,
   };
 
   if (isNewPrompt.value) {
@@ -439,7 +451,8 @@ const removeEditingIcon = () => {
         <el-collapse-item name="__ALL_PROMPTS__" class="tag-collapse-item">
           <template #title>
             <div class="tag-title-content">
-              <span class="tag-name-header">{{ t('prompts.allPrompts') }} ({{ allEnabledPromptsCount }}|{{ allPromptsCount
+              <span class="tag-name-header">{{ t('prompts.allPrompts') }} ({{ allEnabledPromptsCount }}|{{
+                allPromptsCount
                 }})</span>
             </div>
           </template>
@@ -603,13 +616,9 @@ const removeEditingIcon = () => {
           </el-select>
         </el-form-item>
 
-        <!-- [NEW] 新增模型参数设置区域 -->
+        <!-- 模型参数设置区域 -->
         <el-form-item :label="t('prompts.llmParametersLabel')">
           <div class="llm-params-container">
-            <div class="param-item">
-              <span class="param-label">{{ t('prompts.sendFileLabel') }}</span>
-              <el-switch v-model="editingPrompt.isDirectSend" />
-            </div>
             <div class="param-item">
               <span class="param-label">{{ t('prompts.streamLabel') }}</span>
               <el-switch v-model="editingPrompt.stream" />
@@ -623,6 +632,20 @@ const removeEditingIcon = () => {
 
         <el-form-item v-if="editingPrompt.isTemperature" :label="t('prompts.temperatureLabel')">
           <el-slider v-model="editingPrompt.temperature" :min="0" :max="2" :step="0.1" show-input />
+        </el-form-item>
+
+        <!-- 助手参数设置区域 -->
+        <el-form-item :label="t('prompts.AssistantParametersLabel')">
+          <div class="llm-params-container">
+            <div class="param-item">
+              <span class="param-label">{{ t('prompts.sendFileLabel') }}</span>
+              <el-switch v-model="editingPrompt.isDirectSend" />
+            </div>
+            <div class="param-item">
+              <span class="param-label">{{ t('prompts.ifTextNecessary') }}</span>
+              <el-switch v-model="editingPrompt.ifTextNecessary" />
+            </div>
+          </div>
         </el-form-item>
 
         <el-form-item :label="t('prompts.promptContentLabel')">

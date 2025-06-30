@@ -205,8 +205,8 @@ const defaultConfig = {
       "0": {
         name: "default",
         url: "https://api.openai.com/v1",
-        api_key: "",
-        modelList: [],
+        api_key: "sk-xxx",
+        modelList: ["gpt-4o", "gpt-4o-mini"],
         enable: true,
       },
     },
@@ -226,23 +226,14 @@ const defaultConfig = {
         ifTextNecessary: false,
       },
     },
-    tags: {},
-    stream: true,
-    skipLineBreak: false,
+    stream: false,
+    skipLineBreak: true,
     window_height: 520,
     window_width: 400,
     autoCloseOnBlur: false,
     CtrlEnterToSend: false,
-    isAlwaysOnTop: false,
     showNotification: true,
-    isDarkMode: false,
-    fix_position: false,
-    webdav: {
-      url: "",
-      username: "",
-      password: "",
-      path: "/anywhere",
-    },
+    isDarkMode: true,
   }
 };
 

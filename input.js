@@ -1,6 +1,6 @@
 const {
     getRandomItem
-  } = require('./data.js');
+} = require('./data.js');
 
 // 函数：处理文本
 async function requestTextOpenAI(code, text, config) {
@@ -19,20 +19,34 @@ async function requestTextOpenAI(code, text, config) {
             model = modelName;
         }
     }
-    console.log({
-            model: model,
-            messages: [
-                {
-                    role: "system",
-                    content: config.prompts[code].prompt,
-                },
-                {
-                    role: "user",
-                    content: text,
-                },
-            ],
-            stream: config.stream,
-        });
+    if (config.prompts[code] && config.prompts[code].ifTextNecessary) {
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        // 如果是字符串
+        if (typeof text === "string") {
+            text = timestamp + "\n\n" + text;
+        }
+        else if (Array.isArray(text)) {
+            let flag = false;
+            for (let i = 0; i < text.length; i++) {
+                // 是文本类型，且不是文本文件
+                if (text[i].type === "text" && text[i].text && !(text[i].text.toLowerCase().startsWith('file name:') && text[i].text.toLowerCase().endsWith('file end'))) {
+                    text[i].text = timestamp + "\n\n" + text[i].text;
+                    flag = true;
+                    break;
+                }
+            }
+            if (!flag) {
+                text.push({
+                    type: "text",
+                    text: timestamp
+                });
+            }
+        }
+    }
+    
+
+
     const response = await fetch(apiUrl + "/chat/completions", {
         method: "POST",
         headers: {
@@ -149,8 +163,8 @@ async function handelReplyOpenAI(code, response, stream, showNotification) {
                         try {
                             const parsed = JSON.parse(message);
                             if (parsed.choices[0].delta.content) {
-                                
-                                if(output.trim() === "<think>" && !is_think_flag) {  // 思考开始
+
+                                if (output.trim() === "<think>" && !is_think_flag) {  // 思考开始
                                     is_think_flag = true;
                                 }
                                 else if (output.trim() === "</think>" && is_think_flag) {  // 思考中
@@ -158,7 +172,7 @@ async function handelReplyOpenAI(code, response, stream, showNotification) {
                                 }
                                 else if (is_think_flag) {  // 思考结束
                                 }
-                                else{  // 非思考阶段
+                                else {  // 非思考阶段
                                     utools.hideMainWindowTypeString(output);
                                 }
                                 output = parsed.choices[0].delta.content;
