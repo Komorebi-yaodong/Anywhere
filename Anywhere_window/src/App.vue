@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, nextTick, computed, h, watch } from 'v
 import { Bubble, Sender, Thinking } from 'vue-element-plus-x';
 import { Attachments } from 'ant-design-x-vue';
 import { ElContainer, ElHeader, ElMain, ElFooter, ElButton, ElDialog, ElTable, ElTableColumn, ElTooltip, ElRow, ElCol, ElMessage, ElImageViewer, ElInput, ElMessageBox } from 'element-plus';
-import { DocumentCopy, Refresh, Delete, CoffeeCup, Lollipop, Link, Document, Download } from '@element-plus/icons-vue'
+import { DocumentCopy, Refresh, Delete, CoffeeCup, Lollipop, Link, Document, Download, CaretTop, CaretBottom } from '@element-plus/icons-vue'
 import { createClient } from "webdav/web"; // Import for WebDAV functionality
 
 // import TitleBar from './TitleBar.vue'
@@ -158,7 +158,7 @@ const preprocessKatex = (text) => {
 
   let processedText = text;
   processedText = processedText.replace(/(\S)\s*(\$\$[\s\S]+?\$\$)\s*(\S)/g, '$1\n\n$2\n\n$3');
-  
+
   processedText = processedText.replace(/(\$\$[\s\S]+?\$\$)/g, '\n\n$1\n\n');
 
   processedText = processedText.replace(/\$([^$].*?)\$/g, (match, content) => {
@@ -233,9 +233,115 @@ const systemPromptDialogVisible = ref(false);
 const systemPromptContent = ref('');
 function showFullSystemPrompt(content) { systemPromptContent.value = content; systemPromptDialogVisible.value = true; }
 
-// --- [REFACTORED & NEW] SAVE FUNCTIONALITY ---
+const collapsedMessages = ref(new Set());
+const isCollapsed = (index) => collapsedMessages.value.has(index);
 
-// [NEW] Helper to package session data, preventing code duplication.
+const toggleCollapse = (index) => {
+  if (isCollapsed(index)) {
+    collapsedMessages.value.delete(index);
+  } else {
+    collapsedMessages.value.add(index);
+  }
+};
+
+const shouldShowCollapseButton = (index) => {
+  if (index < chat_show.value.length - 1) {
+    return true;
+  }
+  if (index === chat_show.value.length - 1) {
+    return !loading.value;
+  }
+  return false;
+};
+
+const toggleCollapseByRole = (role) => {
+  const roleMessageIndices = chat_show.value
+    .map((msg, index) => (msg.role === role ? index : -1))
+    .filter(index => index !== -1);
+
+  if (roleMessageIndices.length === 0) return;
+
+  const anyExpanded = roleMessageIndices.some(index => !collapsedMessages.value.has(index));
+
+  if (anyExpanded) {
+    roleMessageIndices.forEach(index => collapsedMessages.value.add(index));
+  } else {
+    roleMessageIndices.forEach(index => collapsedMessages.value.delete(index));
+  }
+};
+
+
+async function handleAvatarClick(role, event) {
+  const chatContainer = document.querySelector('.chat-main');
+  const messageElement = event.currentTarget.closest('.chat-message');
+  if (!chatContainer || !messageElement) return;
+
+  const originalScrollTop = chatContainer.scrollTop;
+  const originalElementTop = messageElement.offsetTop;
+  const originalVisualPosition = originalElementTop - originalScrollTop;
+
+  const roleMessageIndices = chat_show.value
+    .map((msg, index) => (msg.role === role ? index : -1))
+    .filter(index => index !== -1);
+  if (roleMessageIndices.length === 0) return;
+  const anyExpanded = roleMessageIndices.some(index => !collapsedMessages.value.has(index));
+  if (anyExpanded) {
+    roleMessageIndices.forEach(index => collapsedMessages.value.add(index));
+  } else {
+    roleMessageIndices.forEach(index => collapsedMessages.value.delete(index));
+  }
+
+  await nextTick();
+
+  const newElementTop = messageElement.offsetTop;
+  const newScrollTop = newElementTop - originalVisualPosition;
+
+  chatContainer.style.scrollBehavior = 'auto';
+  chatContainer.scrollTop = newScrollTop;
+  chatContainer.style.scrollBehavior = '';
+}
+
+// [IMPROVED] Anchor function for the individual collapse BUTTON click.
+async function handleCollapseButtonClick(index, event) {
+  const chatContainer = document.querySelector('.chat-main');
+  const buttonElement = event.currentTarget;
+  const messageElement = buttonElement.closest('.chat-message');
+  if (!chatContainer || !buttonElement || !messageElement) return;
+
+  const originalScrollTop = chatContainer.scrollTop;
+  const isExpanding = isCollapsed(index);
+
+  if (isExpanding) {
+    const originalElementTop = messageElement.offsetTop;
+    const originalVisualPosition = originalElementTop - originalScrollTop;
+
+    collapsedMessages.value.delete(index);
+    
+    await nextTick();
+    
+    const newElementTop = messageElement.offsetTop;
+    const newScrollTop = newElementTop - originalVisualPosition;
+    
+    chatContainer.style.scrollBehavior = 'auto';
+    chatContainer.scrollTop = newScrollTop;
+    chatContainer.style.scrollBehavior = '';
+
+  } else {
+    const originalButtonTop = buttonElement.getBoundingClientRect().top;
+
+    collapsedMessages.value.add(index);
+    
+    await nextTick();
+    
+    const newButtonTop = buttonElement.getBoundingClientRect().top;
+    const visualShift = newButtonTop - originalButtonTop;
+    
+    chatContainer.style.scrollBehavior = 'auto';
+    chatContainer.scrollTop = originalScrollTop + visualShift;
+    chatContainer.style.scrollBehavior = '';
+  }
+}
+
 function getSessionDataAsObject() {
   const currentPromptConfig = currentConfig.value.prompts[CODE.value] || {};
   return {
@@ -436,6 +542,7 @@ async function handleSaveAction() {
 
 async function loadSession(jsonData) {
   loading.value = true;
+  collapsedMessages.value.clear(); // Reset collapse state on new session load
   try {
     UserAvart.value = jsonData.UserAvart;
     CODE.value = jsonData.CODE;
@@ -912,6 +1019,7 @@ function clearHistory() {
   if (loading.value || history.value.length === 0) return;
   if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
   else { history.value = []; chat_show.value = []; }
+  collapsedMessages.value.clear(); // Reset collapse state on clear
   senderFocus(); ElMessage.success('历史记录已清除');
 }
 function removeFile(index) { if (fileList.value.length === 0) return; fileList.value.splice(index, 1); }
@@ -1002,9 +1110,15 @@ async function processFilePath(filePath) {
             <p class="system-prompt-preview">{{ String(message.content) }}</p>
           </div>
           <Bubble v-if="message.role === 'user'" class="user-bubble" placement="end" shape="corner" variant="shadow"
-            maxWidth="2000px" :avatar="UserAvart" avatar-size="40px">
+            maxWidth="2000px" avatar-size="40px">
+            <template #avatar>
+              <div @click="handleAvatarClick('user', $event)" class="clickable-avatar">
+                <img :src="UserAvart" alt="User Avatar">
+              </div>
+            </template>
             <template #content>
-              <div class="markdown-body" v-html="renderMarkdown(message)"></div>
+              <div class="markdown-body" :class="{ 'collapsed': isCollapsed(index) }" v-html="renderMarkdown(message)">
+              </div>
             </template>
             <template #footer>
               <div class="file-list-container" v-if="formatMessageFile(message.content).length > 0">
@@ -1014,6 +1128,8 @@ async function processFilePath(filePath) {
               </div>
               <el-button :icon="DocumentCopy" @click="copyText(formatMessageText(message.content), index);" size="small"
                 circle />
+              <el-button v-if="shouldShowCollapseButton(index)" :icon="isCollapsed(index) ? CaretBottom : CaretTop"
+                @click="handleCollapseButtonClick(index, $event)" size="small" circle />
               <el-button v-if="message === chat_show[chat_show.length - 1]" :icon="Refresh" @click="reaskAI()"
                 size="small" circle />
               <el-button v-if="message === chat_show[chat_show.length - 1]" :icon="Delete" size="small"
@@ -1021,7 +1137,12 @@ async function processFilePath(filePath) {
             </template>
           </Bubble>
           <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner"
-            variant="shadow" maxWidth="2000px" :avatar="AIAvart" avatar-size="40px">
+            variant="shadow" maxWidth="2000px" avatar-size="40px">
+            <template #avatar>
+              <div @click="handleAvatarClick('assistant', $event)" class="clickable-avatar">
+                <img :src="AIAvart" alt="AI Avatar">
+              </div>
+            </template>
             <template #header>
               <Thinking v-if="message.status && message.status.length > 0" maxWidth="90%"
                 :content="message.reasoning_content" :modelValue="false">
@@ -1040,11 +1161,14 @@ async function processFilePath(filePath) {
               </Thinking>
             </template>
             <template #content>
-              <div class="markdown-body" v-html="renderMarkdown(message)"></div>
+              <div class="markdown-body" :class="{ 'collapsed': isCollapsed(index) }" v-html="renderMarkdown(message)">
+              </div>
             </template>
             <template #footer>
               <el-button :icon="DocumentCopy" @click="copyText(formatMessageText(message.content), index);" size="small"
                 circle />
+              <el-button v-if="shouldShowCollapseButton(index)" :icon="isCollapsed(index) ? CaretBottom : CaretTop"
+                @click="handleCollapseButtonClick(index, $event)" size="small" circle />
               <el-button v-if="index === chat_show.length - 1" :icon="Refresh" @click="reaskAI()" size="small" circle />
               <el-button v-if="index === chat_show.length - 1" :icon="Delete" size="small" @click="deleteMessage()"
                 circle />
@@ -1635,6 +1759,28 @@ html.dark .chat-message .ai-bubble {
   }
 }
 
+// [NEW] Styles for clickable avatar
+.clickable-avatar {
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  transition: transform 0.2s ease-out, box-shadow 0.2s;
+  border-radius: 50%;
+
+  img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    display: block;
+  }
+
+  &:hover {
+    transform: scale(1.1);
+    box-shadow: 0px 0px 8px rgba(0, 0, 0, 0.2);
+  }
+}
+
+
 .system-prompt-container {
   width: auto;
   max-width: 90%;
@@ -1682,6 +1828,7 @@ html.dark .system-prompt-container:hover {
   color: var(--el-text-color-primary);
   max-width: 80vw;
   overflow-x: auto;
+  transition: max-height 0.3s ease-in-out;
 
   p {
     margin-top: 0;
@@ -1720,6 +1867,16 @@ html.dark .system-prompt-container:hover {
     }
   }
 }
+
+// Style for collapsed messages
+.chat-message :deep(.markdown-body.collapsed) {
+  max-height: 3.4em; // Approx 2 lines, since line-height is 1.7
+  position: relative;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}
+
 
 .chat-message :deep(.markdown-body strong),
 .chat-message :deep(.markdown-body b) {
