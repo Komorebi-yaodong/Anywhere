@@ -11,11 +11,50 @@ const { t, locale } = useI18n()
 // --- 默认配置 ---
 const defaultConfig = {
   config: {
-    providers: { "0": { name: "default", url: "https://api.openai.com/v1", api_key: "", modelList: [], enable: true, }, },
+    providers: {
+      "0": {
+        name: "default",
+        url: "https://api.openai.com/v1",
+        api_key: "",
+        modelList: [],
+        enable: true,
+      },
+    },
     providerOrder: ["0",],
-    prompts: { AI: { type: "over", prompt: `你是一个AI助手`, showMode: "window", model: "0|gpt-4o", enable: true, icon: "", stream: true, temperature: 0.7, isTemperature: false, isDirectSend: false, ifTextNecessary: false, }, },
-    tags: {}, stream: true, skipLineBreak: false, window_height: 520, window_width: 400, autoCloseOnBlur: false, CtrlEnterToSend: false, isAlwaysOnTop: false, showNotification: true, isDarkMode: false, fix_position: false,
-    webdav: { url: "", username: "", password: "", path: "/anywhere", },
+    prompts: {
+      AI: {
+        type: "over",
+        prompt: `你是一个AI助手`,
+        showMode: "window",
+        model: "0|gpt-4o",
+        enable: true,
+        icon: "",
+        stream: true,
+        temperature: 0.7,
+        isTemperature: false,
+        isDirectSend_file: false,
+        isDirectSend_normal: true,
+        ifTextNecessary: false,
+      },
+    },
+    tags: {},
+    stream: true,
+    skipLineBreak: false,
+    window_height: 520,
+    window_width: 400,
+    autoCloseOnBlur: false,
+    CtrlEnterToSend: false,
+    isAlwaysOnTop: false,
+    showNotification: true,
+    isDarkMode: false,
+    fix_position: false,
+    webdav: {
+      url: "",
+      username: "",
+      password: "",
+      path: "/anywhere",
+      data_path: "/anywhere_data",
+    },
   }
 };
 
@@ -381,11 +420,12 @@ const handleSelectionChange = (val) => {
         <!-- WebDAV 部分 -->
         <h2 class="settings-card-title section-divider">WebDAV</h2>
         <div class="webdav-form-container">
-          <el-form label-width="120px" label-position="left" size="default">
+          <el-form label-width="200px" label-position="left" size="default">
             <el-form-item :label="t('setting.webdav.url')"><el-input v-model="currentConfig.webdav.url" @change="saveConfig" :placeholder="t('setting.webdav.urlPlaceholder')" /></el-form-item>
             <el-form-item :label="t('setting.webdav.username')"><el-input v-model="currentConfig.webdav.username" @change="saveConfig" :placeholder="t('setting.webdav.usernamePlaceholder')" /></el-form-item>
             <el-form-item :label="t('setting.webdav.password')"><el-input v-model="currentConfig.webdav.password" @change="saveConfig" type="password" show-password :placeholder="t('setting.webdav.passwordPlaceholder')" /></el-form-item>
             <el-form-item :label="t('setting.webdav.path')"><el-input v-model="currentConfig.webdav.path" @change="saveConfig" :placeholder="t('setting.webdav.pathPlaceholder')" /></el-form-item>
+            <el-form-item :label="t('setting.webdav.dataPath')"><el-input v-model="currentConfig.webdav.data_path" @change="saveConfig" :placeholder="t('setting.webdav.dataPathPlaceholder')" /></el-form-item>
             <el-form-item :label="t('setting.webdav.backupRestoreTitle')">
               <el-button @click="backupToWebdav" :icon="Upload">{{ t('setting.webdav.backupButton') }}</el-button>
               <el-button @click="openBackupManager" :icon="FolderOpened">{{ t('setting.webdav.restoreButton') }}</el-button>
@@ -430,7 +470,7 @@ const handleSelectionChange = (val) => {
           min-width="200"
         />
         
-        <el-table-column prop="lastmod" :label="t('setting.webdav.manager.modifiedTime')" width="150" sortable>
+        <el-table-column prop="lastmod" :label="t('setting.webdav.manager.modifiedTime')" width="140" sortable>
           <template #default="scope">{{ formatDate(scope.row.lastmod) }}</template>
         </el-table-column>
         
@@ -438,7 +478,7 @@ const handleSelectionChange = (val) => {
           <template #default="scope">{{ formatBytes(scope.row.size) }}</template>
         </el-table-column>
         
-        <el-table-column :label="t('setting.webdav.manager.actions')" width="130" align="center">
+        <el-table-column :label="t('setting.webdav.manager.actions')" width="140" align="center">
           <template #default="scope">
             <div class="action-buttons-container">
               <el-button link type="primary" @click="restoreFromWebdav(scope.row)">{{ t('setting.webdav.manager.restore') }}</el-button>

@@ -1,14 +1,49 @@
 {
   "app": {
     "header": {
-      "prompts": "Prompts 🚀",
+      "chats": "Cloud Chats 💬",
+      "prompts": "Quick Prompts 🚀",
       "providers": "Providers ☁️",
-      "settings": "Settings ⚙️"
+      "settings": "Settings ⚙"
     },
     "tabs": {
-      "prompts": "Prompts",
+      "chats": "Cloud Chats",
+      "prompts": "Quick Prompts",
       "providers": "Providers",
       "settings": "Settings"
+    }
+  },
+  "chats": {
+    "configRequired": {
+      "title": "Cloud Chats",
+      "description": "Please configure WebDAV URL and data path (data_path) in 'Settings' to use this feature."
+    },
+    "table": {
+      "filename": "Chat Name",
+      "modifiedTime": "Modified Time",
+      "size": "Size",
+      "actions": "Actions"
+    },
+    "actions": {
+      "chat": "Chat",
+      "rename": "Rename",
+      "delete": "Delete"
+    },
+    "rename": {
+      "promptTitle": "Rename Chat",
+      "promptMessage": "Please enter the new chat filename.",
+      "invalidFilename": "Invalid filename, must end with .json."
+    },
+    "confirmDelete": "Are you sure you want to permanently delete chat '{filename}'?",
+    "alerts": {
+      "configError": "Failed to get configuration.",
+      "pathNotFound": "Specified WebDAV data path not found.",
+      "fetchFailed": "Failed to fetch chat list.",
+      "loadingChat": "Loading chat...",
+      "restoreInitiated": "Chat restoration initiated.",
+      "restoreFailed": "Failed to restore chat.",
+      "renameSuccess": "Rename successful.",
+      "renameFailed": "Rename failed."
     }
   },
   "prompts": {
@@ -41,6 +76,7 @@
     },
     "modelLabel": "Model",
     "llmParametersLabel": "Model Parameters (Only effective for the current Quick Assistant model; no longer effective after switching to other models)",
+    "sendDirectLabel": "Direct Text/Screenshot Sending",
     "sendFileLabel": "Direct file sending",
     "ifTextNecessary": "Add Text / Auto-Timestamp",
     "streamLabel": "Stream Responses",
@@ -175,9 +211,11 @@
       "usernamePlaceholder": "WebDAV Username",
       "password": "WebDAV Password",
       "passwordPlaceholder": "WebDAV Password",
-      "path": "WebDAV Path",
+      "path": "WebDAV configuration path",
       "pathPlaceholder": "/anywhere",
-      "backupRestoreTitle": "Data Backup & Restore",
+      "dataPath": "WebDAV data path",
+      "dataPathPlaceholder": "/anywhere_data",
+      "backupRestoreTitle": "Configuration backup and recovery",
       "backupButton": "Backup to WebDAV",
       "restoreButton": "Manage Backups",
       "backup": {
@@ -206,6 +244,7 @@
         "deleteFailedMultiple": "Error deleting selected files"
       },
       "alerts": {
+        "importSuccess": "Configuration imported successfully.",
         "urlRequired": "WebDAV URL cannot be empty.",
         "backupInProgress": "Backing up...",
         "backupSuccess": "Backup successful",

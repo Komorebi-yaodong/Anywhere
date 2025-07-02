@@ -9,10 +9,14 @@ const {
   getRandomItem,
   chatOpenAI,
   copyText,
+  sethotkey,
+  openWindow,
+  coderedirect,
 } = require('./data.js');
 
 const {
   handleFilePath,
+  handleJsonContent,
   sendfileDirect,
   saveFile,
 } = require('./file.js');
@@ -34,43 +38,11 @@ window.api = {
   handleFilePath,
   sendfileDirect,
   saveFile,
+  sethotkey,
+  coderedirect,
 };
 
 const feature_suffix = "助手"
-
-async function openWindow(config, msg) {
-  const window_position = getPosition(config);
-  let windowX = window_position.x;
-  let windowY = window_position.y;
-  let channel = "window"
-  // 创建运行窗口
-  const ubWindow = utools.createBrowserWindow(
-    "./window/index.html",
-    {
-      show: true,
-      title: "Anywhere",
-      useContentSize: true,
-      frame: true,
-      width: config.window_width,
-      height: config.window_height,
-      alwaysOnTop: config.isAlwaysOnTop,
-      shellOpenPath: true,
-      x: windowX,
-      y: windowY,
-      webPreferences: {
-        preload: "./window_preload.js",
-        // devTools: true,
-      },
-    },
-    () => {
-      ubWindow.webContents.send(channel, msg);
-      ubWindow.webContents.show(); // 显示窗口
-      ubWindow.setAlwaysOnTop(config.isAlwaysOnTop, "floating"); // 窗口置顶
-      ubWindow.setFullScreen(false); // 窗口全屏
-    }
-  );
-  // ubWindow.webContents.openDevTools({ mode: "detach" });
-}
 
 // 主逻辑
 utools.onPluginEnter(async ({ code, type, payload, option }) => {
@@ -83,7 +55,7 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
     utools.hideMainWindow();
     config = getConfig().config;
     checkConfig(config);
-    if (type == "files") {
+    if (type == "files" || type == "over") {
       let msg = {
         os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
         code: code,
@@ -173,7 +145,6 @@ utools.onPluginEnter(async ({ code, type, payload, option }) => {
       utools.copyText(result);
       utools.showNotification(code + " successfully!");
     }
-
     // 窗口运行
     else if (config.prompts[code].showMode === "window") {
       let msg = {

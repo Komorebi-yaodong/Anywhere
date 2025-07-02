@@ -29,7 +29,8 @@ const defaultConfig = {
         stream: true,
         temperature: 0.7,
         isTemperature: false,
-        isDirectSend: false,
+        isDirectSend_file: false,
+        isDirectSend_normal: true,
         ifTextNecessary: false,
       },
     },
@@ -49,6 +50,7 @@ const defaultConfig = {
       username: "",
       password: "",
       path: "/anywhere",
+      data_path: "/anywhere_data",
     },
   }
 };

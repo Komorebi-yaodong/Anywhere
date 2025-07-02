@@ -1,38 +1,35 @@
 <script setup>
-import { ref, watch } from 'vue' // 引入 watch
+import { ref, watch } from 'vue'
+import Chats from './components/Chats.vue' // Import the new component
 import Prompts from './components/Prompts.vue'
 import Setting from './components/Setting.vue'
 import Providers from './components/Providers.vue'
 import { useI18n } from 'vue-i18n'
 
-const { t, locale } = useI18n() // locale 是一个 ref
-const tab = ref(0);
-const header_text = ref(t('app.header.prompts')); // 初始化时使用 t()
+const { t, locale } = useI18n()
+const tab = ref(0); // Default to the new Chats tab
+const header_text = ref(t('app.header.chats')); // Initial header text
 
 function changeTab(newTab) {
-  if (newTab === 0) {
+  tab.value = newTab;
+  updateHeaderText();
+}
+
+function updateHeaderText() {
+  if (tab.value === 0) {
+    header_text.value = t('app.header.chats');
+  } else if (tab.value === 1) {
     header_text.value = t('app.header.prompts');
-    tab.value = 0;
-  } else if (newTab === 1) {
+  } else if (tab.value === 2) {
     header_text.value = t('app.header.providers');
-    tab.value = 1;
-  } else if (newTab === 2) {
+  } else if (tab.value === 3) {
     header_text.value = t('app.header.settings');
-    tab.value = 2;
   }
 }
 
-// 使用 watch 来监听 locale 的变化
-watch(locale, (newLocaleValue) => {
-  // 当语言切换时，重新获取翻译后的 header_text
-  // 注意：此时 t 函数会自动使用新的 newLocaleValue
-  if (tab.value === 0) {
-    header_text.value = t('app.header.prompts');
-  } else if (tab.value === 1) {
-    header_text.value = t('app.header.providers');
-  } else if (tab.value === 2) {
-    header_text.value = t('app.header.settings');
-  }
+// Watch for language changes to update the header
+watch(locale, () => {
+  updateHeaderText();
 });
 </script>
 
@@ -48,11 +45,22 @@ watch(locale, (newLocaleValue) => {
           </el-col>
           <el-col :span="6" class="tabs-col">
             <div class="tabs-container">
+              <!-- New Chats Tab -->
               <el-button
                 class="tab-button"
                 text
                 @click="changeTab(0)"
                 :class="{ 'active-tab': tab === 0 }"
+                :title="t('app.tabs.chats')"
+              >
+                <span class="icon">💬</span>
+              </el-button>
+              <!-- Existing Tabs (indices updated) -->
+              <el-button
+                class="tab-button"
+                text
+                @click="changeTab(1)"
+                :class="{ 'active-tab': tab === 1 }"
                 :title="t('app.tabs.prompts')"
               >
                 <span class="icon">🚀</span>
@@ -60,8 +68,8 @@ watch(locale, (newLocaleValue) => {
               <el-button
                 class="tab-button"
                 text
-                @click="changeTab(1)"
-                :class="{ 'active-tab': tab === 1 }"
+                @click="changeTab(2)"
+                :class="{ 'active-tab': tab === 2 }"
                 :title="t('app.tabs.providers')"
               >
                 <span class="icon">☁️</span>
@@ -69,8 +77,8 @@ watch(locale, (newLocaleValue) => {
               <el-button
                 class="tab-button"
                 text
-                @click="changeTab(2)"
-                :class="{ 'active-tab': tab === 2 }"
+                @click="changeTab(3)"
+                :class="{ 'active-tab': tab === 3 }"
                 :title="t('app.tabs.settings')"
               >
                 <span class="icon">⚙️</span>
@@ -81,9 +89,11 @@ watch(locale, (newLocaleValue) => {
       </el-header>
 
       <el-main>
-        <Prompts v-if="tab === 0" />
-        <Providers v-if="tab === 1" />
-        <Setting v-if="tab === 2" />
+        <!-- Conditional rendering updated for 4 tabs -->
+        <Chats v-if="tab === 0" />
+        <Prompts v-if="tab === 1" />
+        <Providers v-if="tab === 2" />
+        <Setting v-if="tab === 3" />
       </el-main>
     </el-container>
   </div>
@@ -172,7 +182,7 @@ watch(locale, (newLocaleValue) => {
   background-color: #f7f7f8;
   width: 100%;
   height: calc(100% - 50px);
-  overflow-y: hidden;
+  overflow-y: auto; /* Changed to auto to allow scrolling */
   overflow-x: hidden;
 }
 

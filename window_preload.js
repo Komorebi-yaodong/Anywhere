@@ -7,6 +7,7 @@ const {
     getRandomItem,
     chatOpenAI,
     copyText,
+    sethotkey,
 } = require('./data.js');
 
 const {
@@ -50,4 +51,5 @@ window.api = {
     copyText, // 添加 copyText 到 api
     handleFilePath, // 添加 handleFilePath 到 api
     saveFile,
+    sethotkey,
 };

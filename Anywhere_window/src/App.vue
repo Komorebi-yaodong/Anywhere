@@ -2,9 +2,9 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, computed, h, watch } from 'vue';
 import { Bubble, Sender, Thinking } from 'vue-element-plus-x';
 import { Attachments } from 'ant-design-x-vue';
-// [MODIFIED] Added ElMessageBox for the new save dialog
 import { ElContainer, ElHeader, ElMain, ElFooter, ElButton, ElDialog, ElTable, ElTableColumn, ElTooltip, ElRow, ElCol, ElMessage, ElImageViewer, ElInput, ElMessageBox } from 'element-plus';
 import { DocumentCopy, Refresh, Delete, CoffeeCup, Lollipop, Link, Document, Download } from '@element-plus/icons-vue'
+import { createClient } from "webdav/web"; // Import for WebDAV functionality
 
 // import TitleBar from './TitleBar.vue'
 // import mammoth from 'mammoth';
@@ -141,7 +141,6 @@ const fileHandlers = {
   }
 };
 
-// [NEW & IMPROVED] Helper function to get the correct handler for a file
 const getFileHandler = (fileName) => {
   if (!fileName) return null;
   const extension = ('.' + fileName.split('.').pop()).toLowerCase();
@@ -157,10 +156,14 @@ const getFileHandler = (fileName) => {
 const preprocessKatex = (text) => {
   if (!text) return '';
 
-  let processedText = text.replace(/\$([^$].*?)\$/g, (match, content) => {
+  let processedText = text;
+  processedText = processedText.replace(/(\S)\s*(\$\$[\s\S]+?\$\$)\s*(\S)/g, '$1\n\n$2\n\n$3');
+  
+  processedText = processedText.replace(/(\$\$[\s\S]+?\$\$)/g, '\n\n$1\n\n');
+
+  processedText = processedText.replace(/\$([^$].*?)\$/g, (match, content) => {
     return `$${content.trim()}$`;
   });
-
   processedText = processedText
     .replace(/\\\((.*?)\\\)/g, '$$$1$$')
     .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
@@ -169,17 +172,10 @@ const preprocessKatex = (text) => {
 };
 
 const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: false,
-  breaks: true,
+  html: true, linkify: true, typographer: false, breaks: true,
   highlight: function (str, lang) {
     if (lang && hljs.getLanguage(lang)) {
-      try {
-        return '<pre class="hljs"><code>' +
-          hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
-          '</code></pre>';
-      } catch (__) { }
+      try { return '<pre class="hljs"><code>' + hljs.highlight(str, { language: lang, ignoreIllegals: true }).value + '</code></pre>'; } catch (__) { }
     }
     return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
   }
@@ -189,60 +185,19 @@ const md = new MarkdownIt({
 const renderMarkdown = (message) => {
   const content = message.role ? message.content : message;
   let formattedContent = formatMessageContent(content);
-
   formattedContent = preprocessKatex(formattedContent);
-
-  if (!formattedContent && message.role === 'assistant') {
-    return '...';
-  }
+  if (!formattedContent && message.role === 'assistant') return '...';
   return md.render(formattedContent || ' ');
 };
 
 
 const defaultConfig = {
   config: {
-    providers: {
-      "0": {
-        name: "default",
-        url: "https://api.openai.com/v1",
-        api_key: "",
-        modelList: [],
-        enable: true,
-      },
-    },
+    providers: { "0": { name: "default", url: "https://api.openai.com/v1", api_key: "", modelList: [], enable: true, }, },
     providerOrder: ["0",],
-    prompts: {
-      AI: {
-        type: "over",
-        prompt: `你是一个AI助手`,
-        showMode: "window",
-        model: "0|gpt-4o",
-        enable: true,
-        icon: "",
-        stream: true,
-        temperature: 0.7,
-        isTemperature: false,
-        isDirectSend: false,
-        ifTextNecessary: false,
-      },
-    },
-    tags: {},
-    stream: true,
-    skipLineBreak: false,
-    window_height: 520,
-    window_width: 400,
-    autoCloseOnBlur: false,
-    CtrlEnterToSend: false,
-    isAlwaysOnTop: false,
-    showNotification: true,
-    isDarkMode: false,
-    fix_position: false,
-    webdav: {
-      url: "",
-      username: "",
-      password: "",
-      path: "/anywhere",
-    },
+    prompts: { AI: { type: "over", prompt: `你是一个AI助手`, showMode: "window", model: "0|gpt-4o", enable: true, icon: "", stream: true, temperature: 0.7, isTemperature: false, isDirectSend_file: false, isDirectSend_normal: true, ifTextNecessary: false, }, },
+    tags: {}, stream: true, skipLineBreak: false, window_height: 520, window_width: 400, autoCloseOnBlur: false, CtrlEnterToSend: false, isAlwaysOnTop: false, showNotification: true, isDarkMode: false, fix_position: false,
+    webdav: { url: "", username: "", password: "", path: "/anywhere", data_path: "/anywhere_data", },
   }
 };
 
@@ -252,21 +207,14 @@ let favicon = ref("favicon.png");
 let CODE = ref("");
 
 var isInit = ref(false);
-var basic_msg = ref({
-  os: "macos",
-  code: "AI",
-  type: "over",
-  payload: "请简洁地介绍一下你自己"
-});
+var basic_msg = ref({ os: "macos", code: "AI", type: "over", payload: "请简洁地介绍一下你自己" });
 var currentConfig = ref(defaultConfig.config);
 var autoCloseOnBlur = ref(false);
 var modelList = ref([]);
 var modelMap = ref({});
 var model = ref("");
 var temporary = ref(false);
-const closePage = () => {
-  window.close();
-}
+const closePage = () => { window.close(); }
 
 var currentProviderID = ref(defaultConfig.config.providerOrder[0]);
 var base_url = ref("");
@@ -281,128 +229,16 @@ var signalController = ref(null);
 var changeModel_page = ref(false);
 var fileList = ref([]);
 
-// [NEW] Refs for system prompt dialog
 const systemPromptDialogVisible = ref(false);
 const systemPromptContent = ref('');
+function showFullSystemPrompt(content) { systemPromptContent.value = content; systemPromptDialogVisible.value = true; }
 
-// [NEW] Function to show system prompt dialog
-function showFullSystemPrompt(content) {
-  systemPromptContent.value = content;
-  systemPromptDialogVisible.value = true;
-}
+// --- [REFACTORED & NEW] SAVE FUNCTIONALITY ---
 
-// [MODIFIED] New save functions
-async function handleSaveAction() {
-  if (autoCloseOnBlur.value) {
-    changeAutoCloseOnBlur();
-  }
-  try {
-    await ElMessageBox.confirm(
-      'JSON格式用于保存完整会话，方便下次加载和继续；Markdown格式则更适合阅读和分享。',
-      '选择保存格式',
-      {
-        confirmButtonText: '保存为 Markdown',
-        cancelButtonText: '保存为 JSON',
-        distinguishCancelAndClose: true,
-        type: 'info',
-        center: true,
-      }
-    );
-    // User clicked "Save as Markdown"
-    await saveSessionAsMarkdown();
-  } catch (action) {
-    if (action === 'cancel') {
-      // User clicked "Save as JSON"
-      await saveSessionAsJson();
-    }
-    // If action is 'close' or 'error', do nothing. The user has cancelled.
-  }
-}
-
-async function saveSessionAsMarkdown() {
-  let markdownContent = '';
-
-  // 1. Generate timestamp and create a more descriptive title and default filename
-  const now = new Date();
-  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-  const defaultFilename = `Chat-${CODE.value || 'AI'}-${fileTimestamp}.md`;
-
-  markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n`;
-  markdownContent += `### 模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
-
-  // 2. Handle System Prompt
-  const systemPromptMessage = chat_show.value.find(m => m.role === 'system');
-  if (systemPromptMessage && systemPromptMessage.content) {
-    markdownContent += `### 系统提示词\n\n`;
-    markdownContent += `${String(systemPromptMessage.content).trim()}\n\n`;
-  }
-
-  markdownContent += '---\n\n';
-
-  // 3. Loop through displayed messages and format them correctly
-  for (const message of chat_show.value) {
-    if (message.role === 'system') continue; // Already handled
-
-    if (message.role === 'user') {
-      markdownContent += `### 👤 用户\n\n`;
-      // CORRECTED: Pass message.content to the formatters
-      const mainContent = formatMessageContent(message.content).trim();
-      const files = formatMessageFile(message.content);
-
-      if (mainContent) {
-        markdownContent += `${mainContent}\n\n`;
-      }
-
-      if (files.length > 0) {
-        markdownContent += `**附件列表:**\n`;
-        files.forEach(f => {
-          markdownContent += `- \`${f}\`\n`;
-        });
-        markdownContent += `\n`;
-      }
-      markdownContent += '---\n\n';
-    } else if (message.role === 'assistant') {
-      markdownContent += `### 🤖 ${CODE.value || 'AI'}\n\n`;
-      // CORRECTED: Pass message.content to the formatter
-      const reasoning_content = "\n" + formatMessageContent(message.reasoning_content).trim();
-      // rfeasoning_content中每一行的开始增加“> ”前缀
-      markdownContent += reasoning_content.replace(/\n/g, '\n> ') + '\n\n';
-      const mainContent = formatMessageContent(message.content).trim();
-      if (mainContent) {
-        markdownContent += `${mainContent}\n\n`;
-      } else if (message.status) {
-        // If the AI was thinking but didn't produce text, indicate that.
-        markdownContent += `*(AI正在思考...)*\n\n`;
-      }
-      markdownContent += '---\n\n';
-    }
-  }
-
-  // 4. Trigger the native save dialog via the main process
-  try {
-    await window.api.saveFile({
-      title: '保存为 Markdown',
-      defaultPath: defaultFilename,
-      buttonLabel: '保存',
-      filters: [
-        { name: 'Markdown 文件', extensions: ['md'] },
-        { name: '所有文件', extensions: ['*'] }
-      ],
-      fileContent: markdownContent
-    });
-    ElMessage.success('会话已成功保存为 Markdown！');
-  } catch (error) {
-    if (!error.message.includes('canceled by the user')) {
-      console.error('保存 Markdown 失败:', error);
-      ElMessage.error(`保存失败: ${error.message}`);
-    }
-  }
-}
-
-async function saveSessionAsJson() {
+// [NEW] Helper to package session data, preventing code duplication.
+function getSessionDataAsObject() {
   const currentPromptConfig = currentConfig.value.prompts[CODE.value] || {};
-  const sessionData = {
+  return {
     anywhere_history: true,
     UserAvart: UserAvart.value,
     CODE: CODE.value,
@@ -415,9 +251,108 @@ async function saveSessionAsJson() {
     history: history.value,
     chat_show: chat_show.value,
   };
+}
 
+// [NEW] Handles saving the session to the cloud via WebDAV.
+async function saveSessionToCloud() {
+  const now = new Date();
+  const year = String(now.getFullYear()).slice(-2);
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const defaultFilename = `Session-${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}.json`;
+
+  try {
+    const { value: filename } = await ElMessageBox.prompt(
+      '请输入要保存到云端的会话文件名。', '保存到云端', {
+      confirmButtonText: '确认', cancelButtonText: '取消', inputValue: defaultFilename,
+      inputValidator: (val) => val && val.endsWith('.json'),
+      inputErrorMessage: '文件名无效，必须以 .json 结尾。',
+    });
+
+    if (filename) {
+      ElMessage.info('正在保存到云端...');
+      const sessionData = getSessionDataAsObject();
+      const jsonString = JSON.stringify(sessionData, null, 2);
+
+      const { url, username, password, data_path } = currentConfig.value.webdav;
+      const client = createClient(url, { username, password });
+      const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
+      const remoteFilePath = `${remoteDir}/${filename}`;
+
+      if (!(await client.exists(remoteDir))) {
+        await client.createDirectory(remoteDir, { recursive: true });
+      }
+
+      await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
+      ElMessage.success('会话已成功保存到云端！');
+    }
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      console.error("WebDAV save failed:", error);
+      ElMessage.error(`保存到云端失败: ${error.message}`);
+    }
+  }
+}
+
+// [MODIFIED] Saves session as a local Markdown file.
+async function saveSessionAsMarkdown() {
+  let markdownContent = '';
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+  const defaultFilename = `Chat-${CODE.value || 'AI'}-${fileTimestamp}.md`;
+
+  markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n### 模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
+
+  const systemPromptMessage = chat_show.value.find(m => m.role === 'system');
+  if (systemPromptMessage && systemPromptMessage.content) {
+    markdownContent += `### 系统提示词\n\n${String(systemPromptMessage.content).trim()}\n\n`;
+  }
+  markdownContent += '---\n\n';
+
+  for (const message of chat_show.value) {
+    if (message.role === 'system') continue;
+    if (message.role === 'user') {
+      markdownContent += `### 👤 用户\n\n`;
+      const mainContent = formatMessageContent(message.content).trim();
+      const files = formatMessageFile(message.content);
+      if (mainContent) markdownContent += `${mainContent}\n\n`;
+      if (files.length > 0) {
+        markdownContent += `**附件列表:**\n`;
+        files.forEach(f => { markdownContent += `- \`${f}\`\n`; });
+        markdownContent += `\n`;
+      }
+    } else if (message.role === 'assistant') {
+      markdownContent += `### 🤖 ${CODE.value || 'AI'}\n\n`;
+      const reasoning_content = "\n" + formatMessageContent(message.reasoning_content).trim();
+      markdownContent += reasoning_content.replace(/\n/g, '\n> ') + '\n\n';
+      const mainContent = formatMessageContent(message.content).trim();
+      if (mainContent) markdownContent += `${mainContent}\n\n`;
+      else if (message.status) markdownContent += `*(AI正在思考...)*\n\n`;
+    }
+    markdownContent += '---\n\n';
+  }
+
+  try {
+    await window.api.saveFile({
+      title: '保存为 Markdown', defaultPath: defaultFilename, buttonLabel: '保存',
+      filters: [{ name: 'Markdown 文件', extensions: ['md'] }, { name: '所有文件', extensions: ['*'] }],
+      fileContent: markdownContent
+    });
+    ElMessage.success('会话已成功保存为 Markdown！');
+  } catch (error) {
+    if (!error.message.includes('canceled by the user')) {
+      console.error('保存 Markdown 失败:', error); ElMessage.error(`保存失败: ${error.message}`);
+    }
+  }
+}
+
+// [MODIFIED] Saves session as a local JSON file.
+async function saveSessionAsJson() {
+  const sessionData = getSessionDataAsObject();
   const jsonString = JSON.stringify(sessionData, null, 2);
-
   const now = new Date();
   const year = String(now.getFullYear()).slice(-2);
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -429,33 +364,79 @@ async function saveSessionAsJson() {
 
   try {
     await window.api.saveFile({
-      title: '保存聊天会话',
-      defaultPath: defaultFilename,
-      buttonLabel: '保存',
-      filters: [
-        { name: 'JSON 文件', extensions: ['json'] },
-        { name: '所有文件', extensions: ['*'] }
-      ],
+      title: '保存聊天会话', defaultPath: defaultFilename, buttonLabel: '保存',
+      filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }],
       fileContent: jsonString
     });
-
     ElMessage.success('会话已成功保存！');
   } catch (error) {
     if (!error.message.includes('canceled by the user')) {
-      console.error('保存会话失败:', error);
-      ElMessage.error(`保存失败: ${error.message}`);
+      console.error('保存会话失败:', error); ElMessage.error(`保存失败: ${error.message}`);
     }
   }
 }
 
-// [NEW] Function to load a session from JSON data
-async function loadSession(jsonData) {
-  // 关键：在加载开始时，设置一个加载状态，这可以用来临时禁用发送按钮
-  loading.value = true;
-  // ElMessage.info('正在从文件加载会话...');
+// [COMPLETELY REWRITTEN] The main entry point for the save button.
+async function handleSaveAction() {
+  if (autoCloseOnBlur.value) {
+    changeAutoCloseOnBlur();
+  }
 
+  const isCloudEnabled = currentConfig.value.webdav?.url && currentConfig.value.webdav?.data_path;
+
+  const saveOptions = [];
+
+  // Conditionally add the cloud save option
+  if (isCloudEnabled) {
+    saveOptions.push({
+      title: '保存到云端',
+      description: '同步到 WebDAV 服务器，支持跨设备访问。',
+      buttonType: 'success',
+      action: saveSessionToCloud
+    });
+  }
+
+  // Add local save options
+  saveOptions.push({
+    title: '保存为 JSON',
+    description: '保存为可恢复的会话文件，便于下次继续。',
+    buttonType: 'primary',
+    action: saveSessionAsJson
+  });
+
+  saveOptions.push({
+    title: '保存为 Markdown',
+    description: '导出为人类可读的 .md 文件，适合分享。',
+    buttonType: '',
+    action: saveSessionAsMarkdown
+  });
+
+  // Dynamically generate VNodes for the message body
+  const messageVNode = h('div', { class: 'save-options-list' }, saveOptions.map(opt => {
+    return h('div', { class: 'save-option-item', onClick: () => { ElMessageBox.close(); opt.action(); } }, [
+      h('div', { class: 'save-option-text' }, [
+        h('h4', null, opt.title),
+        h('p', null, opt.description)
+      ]),
+      h(ElButton, { type: opt.buttonType, plain: true }, { default: () => '选择' })
+    ]);
+  }));
+
+  ElMessageBox({
+    title: '选择保存方式',
+    message: messageVNode,
+    showConfirmButton: false,
+    showCancelButton: false, // Remove the cancel button
+    customClass: 'save-options-dialog',
+    width: '450px',
+  }).catch(() => { /* User clicked the 'X' button */ });
+}
+
+// --- END OF SAVE FUNCTIONALITY ---
+
+async function loadSession(jsonData) {
+  loading.value = true;
   try {
-    // 步骤 1: 恢复所有不依赖于外部配置的简单状态
     UserAvart.value = jsonData.UserAvart;
     CODE.value = jsonData.CODE;
     document.title = CODE.value;
@@ -466,20 +447,12 @@ async function loadSession(jsonData) {
     history.value = jsonData.history;
     chat_show.value = jsonData.chat_show;
 
-    // 步骤 2: 重新加载最新的主配置
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
-    if (currentConfig.value.isDarkMode) {
-      document.documentElement.classList.add('dark');
-      favicon.value = "favicon-b.png";
-    } else {
-      document.documentElement.classList.remove('dark');
-      favicon.value = "favicon.png";
-    }
+    if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); favicon.value = "favicon-b.png"; }
+    else { document.documentElement.classList.remove('dark'); favicon.value = "favicon.png"; }
 
-    // 步骤 3: 根据最新的主配置，重建当前所有可用的模型列表
-    modelList.value = [];
-    modelMap.value = {};
+    modelList.value = []; modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
       if (provider?.enable) {
@@ -491,72 +464,53 @@ async function loadSession(jsonData) {
       }
     });
 
-    // 步骤 4: 使用健壮的逻辑恢复模型选择
     let restoredModel = '';
-    if (jsonData.model && modelMap.value[jsonData.model]) {
-      restoredModel = jsonData.model;
-    }
-    else if (jsonData.currentPromptConfig?.model && modelMap.value[jsonData.currentPromptConfig.model]) {
-      restoredModel = jsonData.currentPromptConfig.model;
-    }
+    if (jsonData.model && modelMap.value[jsonData.model]) restoredModel = jsonData.model;
+    else if (jsonData.currentPromptConfig?.model && modelMap.value[jsonData.currentPromptConfig.model]) restoredModel = jsonData.currentPromptConfig.model;
     else {
       const currentPromptConfig = currentConfig.value.prompts[CODE.value];
-      restoredModel = (currentPromptConfig?.model && modelMap.value[currentPromptConfig.model])
-        ? currentPromptConfig.model
-        : (modelList.value[0]?.value || '');
-      // ElMessage.warning('加载的会话模型已失效，已回退至默认模型。');
+      restoredModel = (currentPromptConfig?.model && modelMap.value[currentPromptConfig.model]) ? currentPromptConfig.model : (modelList.value[0]?.value || '');
     }
-
     model.value = restoredModel;
 
-    // 步骤 5: 更新与模型相关的其他状态
+    if (jsonData.currentPromptConfig?.icon) AIAvart.value = jsonData.currentPromptConfig.icon;
+    else AIAvart.value = currentConfig.value.prompts[CODE.value].icon || "ai.svg";
+
     if (model.value) {
       currentProviderID.value = model.value.split("|")[0];
       const provider = currentConfig.value.providers[currentProviderID.value];
       base_url.value = provider?.url;
       api_key.value = provider?.api_key;
     } else {
-      ElMessage.error("没有可用的模型。请检查您的服务商配置。");
-      loading.value = false; // 解除加载状态
-      return; // 提前退出函数
+      ElMessage.error("没有可用的模型。请检查您的服务商配置。"); loading.value = false; return;
     }
 
-    // 步骤 6: 刷新UI并滚动到底部
-    await nextTick();
-    scrollToBottom(true);
-    // ElMessage.success('会话加载成功！');
-
+    await nextTick(); scrollToBottom(true);
   } catch (error) {
-    console.error("加载会话失败:", error);
-    ElMessage.error(`加载会话失败: ${error.message}`);
+    console.error("加载会话失败:", error); ElMessage.error(`加载会话失败: ${error.message}`);
   } finally {
     loading.value = false;
   }
 }
 
-// [NEW] Function to check if a file is a session file and load it
 async function checkAndLoadSessionFromFile(file) {
   if (file && file.name.toLowerCase().endsWith('.json')) {
     try {
       const fileContent = await file.text();
       const jsonData = JSON.parse(fileContent);
-      if (jsonData && jsonData.anywhere_history === true) {
-        await loadSession(jsonData);
-        return true; // Indicates session was loaded
-      }
+      if (jsonData && jsonData.anywhere_history === true) { await loadSession(jsonData); return true; }
     } catch (e) {
       console.warn("一个JSON文件被检测到，但它不是一个有效的会话文件:", e.message);
     }
   }
-  return false; // Not a session file
+  return false;
 }
 
 
 const customContent = ref(true);
 const getDropContainer = () => (document.body);
 const attachmentsNode = computed(() => h(Attachments, {
-  beforeUpload: () => false,
-  onChange: uploadFiles,
+  beforeUpload: () => false, onChange: uploadFiles,
   children: customContent.value && h(ElButton, { type: 'default', icon: h(Link), circle: true }),
   getDropContainer,
 }));
@@ -566,9 +520,7 @@ const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
 
 const handleMarkdownImageClick = (event) => {
-  if (event.target.closest('.image-error-container') || event.target.closest('.code-block-wrapper')) {
-    return;
-  }
+  if (event.target.closest('.image-error-container') || event.target.closest('.code-block-wrapper')) return;
   const imgElement = event.target.closest('.markdown-body img');
   if (imgElement && imgElement.src) {
     imageViewerSrcList.value = [imgElement.src];
@@ -583,32 +535,18 @@ const attachImageErrorHandlers = async () => {
     if (img.hasAttribute('data-error-handler-attached')) return;
     img.setAttribute('data-error-handler-attached', 'true');
     const originalSrc = img.src;
-
     const handleError = () => {
-      if (!img.parentNode || img.parentNode.classList.contains('image-error-container')) {
-        return;
-      }
-      const container = document.createElement('div');
-      container.className = 'image-error-container';
-      const retryButton = document.createElement('button');
-      retryButton.className = 'image-retry-button';
-      retryButton.textContent = '图片加载失败，点击重试';
-      container.appendChild(retryButton);
-      img.parentNode.replaceChild(container, img);
+      if (!img.parentNode || img.parentNode.classList.contains('image-error-container')) return;
+      const container = document.createElement('div'); container.className = 'image-error-container';
+      const retryButton = document.createElement('button'); retryButton.className = 'image-retry-button'; retryButton.textContent = '图片加载失败，点击重试';
+      container.appendChild(retryButton); img.parentNode.replaceChild(container, img);
       retryButton.onclick = (e) => {
-        e.stopPropagation();
-        const newImg = document.createElement('img');
-        newImg.src = `${originalSrc}?t=${new Date().getTime()}`;
-        processImage(newImg);
-        container.parentNode.replaceChild(newImg, container);
+        e.stopPropagation(); const newImg = document.createElement('img'); newImg.src = `${originalSrc}?t=${new Date().getTime()}`;
+        processImage(newImg); container.parentNode.replaceChild(newImg, container);
       };
     };
     img.onerror = handleError;
-    if (img.complete && img.naturalHeight === 0 && img.src) {
-      setTimeout(() => {
-        if (img.naturalHeight === 0) handleError();
-      }, 50);
-    }
+    if (img.complete && img.naturalHeight === 0 && img.src) { setTimeout(() => { if (img.naturalHeight === 0) handleError(); }, 50); }
   };
   document.querySelectorAll('.markdown-body img:not([data-error-handler-attached])').forEach(processImage);
 };
@@ -616,89 +554,42 @@ const attachImageErrorHandlers = async () => {
 const addCopyButtonsToCodeBlocks = async () => {
   await nextTick();
   document.querySelectorAll('.markdown-body pre.hljs').forEach(pre => {
-    if (pre.querySelector('.code-block-copy-button')) {
-      return;
-    }
-
-    const codeElement = pre.querySelector('code');
-    if (!codeElement) return;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'code-block-wrapper';
-    pre.parentNode.insertBefore(wrapper, pre);
-    wrapper.appendChild(pre);
-
-    const codeText = codeElement.textContent || '';
-    const lines = codeText.trimEnd().split('\n');
-    const lineCount = lines.length;
-
-    const copyButtonSVG = `<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-  <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-  <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-</svg>`;
-
+    if (pre.querySelector('.code-block-copy-button')) return;
+    const codeElement = pre.querySelector('code'); if (!codeElement) return;
+    const wrapper = document.createElement('div'); wrapper.className = 'code-block-wrapper'; pre.parentNode.insertBefore(wrapper, pre); wrapper.appendChild(pre);
+    const codeText = codeElement.textContent || ''; const lines = codeText.trimEnd().split('\n'); const lineCount = lines.length;
+    const copyButtonSVG = `<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>`;
     const createButton = (positionClass) => {
-      const button = document.createElement('button');
-      button.className = `code-block-copy-button ${positionClass}`;
-      button.innerHTML = copyButtonSVG;
-      button.title = 'Copy code';
+      const button = document.createElement('button'); button.className = `code-block-copy-button ${positionClass}`; button.innerHTML = copyButtonSVG; button.title = 'Copy code';
       button.addEventListener('click', async (event) => {
         event.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(codeText);
-          ElMessage.success('Code copied to clipboard!');
-        } catch (err) {
-          console.error('Failed to copy code:', err);
-          ElMessage.error('Failed to copy code.');
-        }
+        try { await navigator.clipboard.writeText(codeText); ElMessage.success('Code copied to clipboard!'); }
+        catch (err) { console.error('Failed to copy code:', err); ElMessage.error('Failed to copy code.'); }
       });
       wrapper.appendChild(button);
     };
-
     createButton('code-block-copy-button-bottom');
-
-    if (lineCount > 3) {
-      createButton('code-block-copy-button-top');
-    }
+    if (lineCount > 3) createButton('code-block-copy-button-top');
   });
 };
 
-function senderFocus(focus_type = 'end') {
-  senderRef.value?.focus(focus_type);
-}
+function senderFocus(focus_type = 'end') { senderRef.value?.focus(focus_type); }
 
 onMounted(async () => {
-  if (isInit.value) {
-    return;
-  }
-  isInit.value = true;
-  try {
-    const configData = await window.api.getConfig();
-    currentConfig.value = configData.config;
-  } catch (err) {
-    currentConfig.value = defaultConfig.config;
-    ElMessage.error('加载配置失败，使用默认配置');
-  }
-  if (currentConfig.value.isDarkMode) {
-    document.documentElement.classList.add('dark');
-    favicon.value = "favicon-b.png";
-  }
-  try {
-    const userInfo = await window.api.getUser();
-    UserAvart.value = userInfo.avatar;
-  } catch (err) {
-    UserAvart.value = "user.png";
-  }
+  if (isInit.value) return; isInit.value = true;
+  try { const configData = await window.api.getConfig(); currentConfig.value = configData.config; }
+  catch (err) { currentConfig.value = defaultConfig.config; ElMessage.error('加载配置失败，使用默认配置'); }
+  if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); favicon.value = "favicon-b.png"; }
+  try { const userInfo = await window.api.getUser(); UserAvart.value = userInfo.avatar; }
+  catch (err) { UserAvart.value = "user.png"; }
   autoCloseOnBlur.value = currentConfig.value.autoCloseOnBlur;
   try {
     window.preload.receiveMsg(async (data) => {
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
-      document.title = basic_msg.value.code;
-      CODE.value = basic_msg.value.code;
+      document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
-      modelList.value = [];
-      modelMap.value = {};
+      modelList.value = []; modelMap.value = {};
       currentConfig.value.providerOrder.forEach(id => {
         const provider = currentConfig.value.providers[id];
         if (provider?.enable) {
@@ -709,75 +600,64 @@ onMounted(async () => {
           });
         }
       });
-      if (!modelMap.value[model.value]) {
-        model.value = modelList.value[0]?.value;
-      }
+      if (!modelMap.value[model.value]) model.value = modelList.value[0]?.value;
       currentProviderID.value = model.value.split("|")[0];
       base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
       api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
-      if (currentPromptConfig?.prompt) {
-        history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }];
-        chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }];
-      } else {
-        history.value = []; chat_show.value = [];
-      }
+      if (currentPromptConfig?.prompt) { history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }]; chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }]; }
+      else { history.value = []; chat_show.value = []; }
+      if (currentPromptConfig?.icon) AIAvart.value = currentPromptConfig.icon;
+      else AIAvart.value = "ai.svg";
 
       if (basic_msg.value.type === "over" && basic_msg.value.payload) {
-        // 如果 basic_msg.value.payload.trim().toLowerCase() 是 CODE.value.trim().toLowerCase() 的子字符串
-        if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) {
-          if (autoCloseOnBlur.value) {
-            changeAutoCloseOnBlur();
+        let sessionLoaded = false;
+        try {
+          let old_session = JSON.parse(basic_msg.value.payload);
+          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); senderFocus(); }
+        } catch (error) { }
+        if (!sessionLoaded) {
+          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) changeAutoCloseOnBlur(); scrollToBottom(true); senderFocus(); }
+          else {
+            if (currentPromptConfig?.isDirectSend_normal) {
+              history.value.push({ role: "user", content: basic_msg.value.payload });
+              chat_show.value.push({ role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
+              scrollToBottom(true); await askAI(true);
+            } else { prompt.value = basic_msg.value.payload; scrollToBottom(true); senderFocus(); }
           }
-          scrollToBottom(true); senderFocus();
-        } else {
-          history.value.push({ role: "user", content: basic_msg.value.payload });
-          chat_show.value.push({ role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
-          scrollToBottom(true); await askAI(true);
         }
       } else if (basic_msg.value.type === "img" && basic_msg.value.payload) {
-        history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
-        chat_show.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
-        scrollToBottom(true); await askAI(true);
+        if (currentPromptConfig?.isDirectSend_normal) {
+          history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
+          chat_show.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
+          scrollToBottom(true); await askAI(true);
+        } else {
+          fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(basic_msg.value.payload) });
+          scrollToBottom(true); senderFocus();
+        }
+        console.log("处理图片消息:", fileList.value);
       } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
         try {
           let sessionLoaded = false;
           if (basic_msg.value.payload.length === 1 && basic_msg.value.payload[0].path.toLowerCase().endsWith('.json')) {
             const fileObject = await window.api.handleFilePath(basic_msg.value.payload[0].path);
-            if (fileObject) {
-              sessionLoaded = await checkAndLoadSessionFromFile(fileObject);
-              senderFocus();
-            }
+            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); senderFocus(); }
           }
-
           if (!sessionLoaded) {
-            const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) =>
-              processFilePath(fileInfo.path)
-            );
+            const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
             await Promise.all(fileProcessingPromises);
-
-            if (currentPromptConfig?.isDirectSend) {
-              scrollToBottom(true);
-              await askAI(false);
-            } else {
-              senderFocus();
-              scrollToBottom(true);
-            }
+            if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(true); await askAI(false); }
+            else { senderFocus(); scrollToBottom(true); }
           }
-        } catch (error) {
-          console.error("Error during initial file processing:", error);
-          ElMessage.error("文件处理失败: " + error.message);
-        }
+        } catch (error) { console.error("Error during initial file processing:", error); ElMessage.error("文件处理失败: " + error.message); }
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
     });
   } catch (err) {
     basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
-    document.title = basic_msg.value.code;
-    CODE.value = basic_msg.value.code;
+    document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
     model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
-    modelList.value = [];
-    modelMap.value = {};
+    modelList.value = []; modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
       if (provider?.enable) {
@@ -788,18 +668,14 @@ onMounted(async () => {
         });
       }
     });
-    if (!modelMap.value[model.value]) {
-      model.value = modelList.value[0]?.value;
-    }
+    if (!modelMap.value[model.value]) model.value = modelList.value[0]?.value;
     currentProviderID.value = model.value.split("|")[0];
     base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
     api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
     if (currentPromptConfig?.prompt) {
       history.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手" }];
       chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手" }];
-    } else {
-      history.value = []; chat_show.value = [];
-    }
+    } else { history.value = []; chat_show.value = []; }
 
     scrollToBottom(true);
     if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
@@ -807,8 +683,7 @@ onMounted(async () => {
 
   const chatMainElement = document.querySelector('.chat-main');
   if (chatMainElement) chatMainElement.addEventListener('click', handleMarkdownImageClick);
-  await addCopyButtonsToCodeBlocks();
-  await attachImageErrorHandlers();
+  await addCopyButtonsToCodeBlocks(); await attachImageErrorHandlers();
 });
 
 onBeforeUnmount(() => {
@@ -817,20 +692,14 @@ onBeforeUnmount(() => {
   if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
 });
 
-watch(chat_show, async () => {
-  await addCopyButtonsToCodeBlocks();
-  await attachImageErrorHandlers();
-}, { deep: true, flush: 'post' });
+watch(chat_show, async () => { await addCopyButtonsToCodeBlocks(); await attachImageErrorHandlers(); }, { deep: true, flush: 'post' });
 
 let lastHeight = 0;
 const scrollToBottom = async (force = false) => {
   await nextTick();
-  const container = document.querySelector('.chat-main');
-  if (!container) return;
-  let nowHeight = container.scrollHeight;
-  let Speed = nowHeight - lastHeight;
-  if (Speed < 0) Speed = 100;
-  lastHeight = nowHeight;
+  const container = document.querySelector('.chat-main'); if (!container) return;
+  let nowHeight = container.scrollHeight; let Speed = nowHeight - lastHeight;
+  if (Speed < 0) Speed = 100; lastHeight = nowHeight;
   if (force) container.scrollTop = container.scrollHeight;
   else {
     const scrollThreshold = 2 * Speed;
@@ -841,18 +710,12 @@ const scrollToBottom = async (force = false) => {
 
 const formatMessageContent = (content) => {
   if (!content) return "";
-  if (!Array.isArray(content)) {
-    if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) { return ""; }
-    else return String(content);
-  }
-
+  if (!Array.isArray(content)) { if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) return ""; else return String(content); }
   let markdownString = "";
   content.forEach(part => {
     if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) { }
     else if (part.type === 'image_url' && part.image_url?.url) markdownString += `\n\n![Image](${part.image_url.url})\n`;
-    else if (part.type === 'input_audio' && part.input_audio?.data) {
-      markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
-    }
+    else if (part.type === 'input_audio' && part.input_audio?.data) markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
     else if (part.type === 'text' && part.text) markdownString += part.text;
   });
   return markdownString;
@@ -861,19 +724,12 @@ const formatMessageContent = (content) => {
 const formatMessageFile = (content) => {
   let files = [];
   if (!Array.isArray(content)) {
-    if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) {
-      files.push(String(content).split('\n')[0].replace('file name:', '').trim());
-    }
+    if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) files.push(String(content).split('\n')[0].replace('file name:', '').trim());
     else return [];
-  }
-  else {
+  } else {
     content.forEach(part => {
-      if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) {
-        files.push(part.text.split('\n')[0].replace('file name:', '').trim());
-      }
-      else if (part.type === "input_file" && part.filename) {
-        files.push(part.filename);
-      }
+      if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) files.push(part.text.split('\n')[0].replace('file name:', '').trim());
+      else if (part.type === "input_file" && part.filename) files.push(part.filename);
     });
   }
   return files;
@@ -882,11 +738,7 @@ const formatMessageFile = (content) => {
 const formatMessageText = (content) => {
   if (!Array.isArray(content)) return String(content);
   let textString = "";
-  content.forEach(part => {
-    if (!(part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
-      if (part.type === 'text' && part.text) textString += part.text;
-    }
-  });
+  content.forEach(part => { if (!(part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) { if (part.type === 'text' && part.text) textString += part.text; } });
   return textString.trim().trimEnd();
 }
 
@@ -895,8 +747,7 @@ function changeModel_function(choosedModel) {
   currentProviderID.value = choosedModel.split("|")[0];
   base_url.value = currentConfig.value.providers[currentProviderID.value].url;
   api_key.value = currentConfig.value.providers[currentProviderID.value].api_key;
-  changeModel_page.value = false;
-  senderFocus();
+  changeModel_page.value = false; senderFocus();
   ElMessage.success(`模型已切换为: ${modelMap.value[choosedModel]}`);
 }
 
@@ -905,30 +756,17 @@ const tableSpanMethod = ({ row, column, rowIndex, columnIndex }) => {
     const currentProvider = row.label.split("|")[0];
     if (rowIndex > 0 && modelList.value[rowIndex - 1].label.split("|")[0] === currentProvider) return { rowspan: 0, colspan: 0 };
     let rowspan = 1;
-    for (let i = rowIndex + 1; i < modelList.value.length; i++) {
-      if (modelList.value[i].label.split("|")[0] === currentProvider) rowspan++; else break;
-    }
+    for (let i = rowIndex + 1; i < modelList.value.length; i++) { if (modelList.value[i].label.split("|")[0] === currentProvider) rowspan++; else break; }
     return { rowspan: rowspan, colspan: 1 };
   }
 };
 
-async function saveConfig() {
-  try { await window.api.updateConfig({ config: JSON.parse(JSON.stringify(currentConfig.value)) }); }
-  catch (error) { ElMessage.error('保存配置失败'); }
-}
-function changeAutoCloseOnBlur() {
-  autoCloseOnBlur.value = !autoCloseOnBlur.value;
-  if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage); else window.addEventListener('blur', closePage);
-}
+async function saveConfig() { try { await window.api.updateConfig({ config: JSON.parse(JSON.stringify(currentConfig.value)) }); } catch (error) { ElMessage.error('保存配置失败'); } }
+function changeAutoCloseOnBlur() { autoCloseOnBlur.value = !autoCloseOnBlur.value; if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage); else window.addEventListener('blur', closePage); }
 async function saveWindowSize() {
-  try {
-    const configData = await window.api.getConfig();
-    currentConfig.value = configData.config;
-  } catch (err) {
-  }
+  try { const configData = await window.api.getConfig(); currentConfig.value = configData.config; } catch (err) { }
   currentConfig.value.window_height = window.innerHeight; currentConfig.value.window_width = window.innerWidth;
-  currentConfig.value.position_x = window.screenX;
-  currentConfig.value.position_y = window.screenY;
+  currentConfig.value.position_x = window.screenX; currentConfig.value.position_y = window.screenY;
   saveConfig(); ElMessage.success('窗口大小位置已保存');
 }
 
@@ -936,24 +774,17 @@ async function askAI(forceSend = false) {
   if (loading.value) return;
   let is_think_flag = false;
 
-  // 非强制发送（强制发送则不会追加记录，而是直接发送）
   if (!forceSend) {
     let file_content = await sendFile();
     const promptText = prompt.value.trim();
-    // 有文件内容或者有提示词文本
     if ((file_content && file_content.length > 0) || promptText) {
       const userContentList = [];
-      // 有提示词文本
       if (promptText) userContentList.push({ type: "text", text: promptText });
-      // 有文件内容
       if (file_content && file_content.length > 0) userContentList.push(...file_content);
-      // 只有一个提示词文本 || 只有一个文件内容且类型为文本
       if (userContentList.length == 1 && userContentList[0].type === "text") {
         history.value.push({ role: "user", content: userContentList[0]["text"] });
         chat_show.value.push({ role: "user", content: [{ type: "text", text: userContentList[0]["text"] }] });
-      }
-      // 有一个非文本内容 或者 多个内容
-      else if (userContentList.length > 0) {
+      } else if (userContentList.length > 0) {
         history.value.push({ role: "user", content: userContentList });
         chat_show.value.push({ role: "user", content: userContentList });
       }
@@ -964,32 +795,20 @@ async function askAI(forceSend = false) {
   if (temporary.value && history.value.length > 1) {
     const lastUserMessage = history.value[history.value.length - 1];
     const systemMessage = history.value[0].role === "system" ? history.value[0] : null;
-
-    const messagesToKeepInHistory = [];
-    const messagesToKeepInChatShow = [];
-
-    if (systemMessage) {
-      messagesToKeepInHistory.push(systemMessage);
-      messagesToKeepInChatShow.push(chat_show.value.find(m => m.role === "system") || systemMessage);
-    }
+    const messagesToKeepInHistory = []; const messagesToKeepInChatShow = [];
+    if (systemMessage) { messagesToKeepInHistory.push(systemMessage); messagesToKeepInChatShow.push(chat_show.value.find(m => m.role === "system") || systemMessage); }
     if (lastUserMessage && lastUserMessage.role === "user") {
       messagesToKeepInHistory.push(lastUserMessage);
       const correspondingUserChatShow = chat_show.value.filter(m => m.role === 'user').pop();
-      if (correspondingUserChatShow) messagesToKeepInChatShow.push(correspondingUserChatShow);
-      else messagesToKeepInChatShow.push(lastUserMessage);
+      if (correspondingUserChatShow) messagesToKeepInChatShow.push(correspondingUserChatShow); else messagesToKeepInChatShow.push(lastUserMessage);
     }
-
-    history.value = messagesToKeepInHistory;
-    chat_show.value = messagesToKeepInChatShow;
+    history.value = messagesToKeepInHistory; chat_show.value = messagesToKeepInChatShow;
   }
-
 
   loading.value = true; signalController.value = new AbortController();
   let aiResponse = null; scrollToBottom(true);
 
-  const aiMessageHistoryIndex = history.value.length;
-  const aiMessageChatShowIndex = chat_show.value.length;
-
+  const aiMessageHistoryIndex = history.value.length; const aiMessageChatShowIndex = chat_show.value.length;
   history.value.push({ role: "assistant", content: "" });
   chat_show.value.push({ role: "assistant", content: [{ type: "text", text: "" }], reasoning_content: "", status: "" });
 
@@ -1002,7 +821,6 @@ async function askAI(forceSend = false) {
       try { const errorBody = await aiResponse?.text(); errorMsg += `\n${errorBody || '(No Response Body)'}`; } catch { }
       throw new Error(errorMsg);
     }
-
     if (!currentConfig.value.stream) {
       const data = await aiResponse.json();
       const reasoning_content = data.choices?.[0]?.message?.reasoning_content || '';
@@ -1015,63 +833,32 @@ async function askAI(forceSend = false) {
       }
     } else {
       scrollToBottom(true);
-      const reader = aiResponse.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
+      const reader = aiResponse.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
       while (true) {
         try {
           const { value, done } = await reader.read();
-          if (done) {
-            if (thinking.value && chat_show.value[aiMessageChatShowIndex]) {
-              chat_show.value[aiMessageChatShowIndex].status = "end";
-              thinking.value = false;
-            } break;
-          }
+          if (done) { if (thinking.value && chat_show.value[aiMessageChatShowIndex]) { chat_show.value[aiMessageChatShowIndex].status = "end"; thinking.value = false; } break; }
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
-
+          const lines = buffer.split('\n\n'); buffer = lines.pop() || '';
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const jsonString = line.substring(6).trim();
-              if (jsonString === '[DONE]') {
-                if (thinking.value && chat_show.value[aiMessageChatShowIndex]) {
-                  chat_show.value[aiMessageChatShowIndex].status = "end";
-                  thinking.value = false;
-                } continue;
-              }
+              if (jsonString === '[DONE]') { if (thinking.value && chat_show.value[aiMessageChatShowIndex]) { chat_show.value[aiMessageChatShowIndex].status = "end"; thinking.value = false; } continue; }
               try {
                 const parsedData = JSON.parse(jsonString);
                 const reasoning_delta = parsedData.choices?.[0]?.delta?.reasoning_content;
                 const deltaContent = parsedData.choices?.[0]?.delta?.content;
-
                 if (chat_show.value[aiMessageChatShowIndex]) {
                   if (reasoning_delta !== undefined && reasoning_delta !== null && reasoning_delta) {
-                    if (!thinking.value) {
-                      chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta;
-                      chat_show.value[aiMessageChatShowIndex].status = "start"; thinking.value = true;
-                    } else {
-                      chat_show.value[aiMessageChatShowIndex].status = "thinking";
-                      chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta;
-                    }
+                    if (!thinking.value) { chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta; chat_show.value[aiMessageChatShowIndex].status = "start"; thinking.value = true; }
+                    else { chat_show.value[aiMessageChatShowIndex].status = "thinking"; chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta; }
                   }
                   if (deltaContent !== undefined && deltaContent !== null && deltaContent) {
-                    if (!is_think_flag && thinking.value) {
-                      thinking.value = false;
-                      chat_show.value[aiMessageChatShowIndex].status = "end";
-                    }
-                    if (!thinking.value && deltaContent.trimEnd() === "<think>") {
-                      is_think_flag = true; thinking.value = true;
-                      chat_show.value[aiMessageChatShowIndex].status = "start";
-                      chat_show.value[aiMessageChatShowIndex].reasoning_content = "";
-                    } else if (thinking.value && is_think_flag && deltaContent.trimEnd() === "</think>") {
-                      thinking.value = false; is_think_flag = false;
-                      chat_show.value[aiMessageChatShowIndex].status = "end";
-                    } else if (thinking.value && is_think_flag) {
-                      chat_show.value[aiMessageChatShowIndex].status = "thinking";
-                      chat_show.value[aiMessageChatShowIndex].reasoning_content += deltaContent;
-                    } else {
+                    if (!is_think_flag && thinking.value) { thinking.value = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
+                    if (!thinking.value && deltaContent.trimEnd() === "<think>") { is_think_flag = true; thinking.value = true; chat_show.value[aiMessageChatShowIndex].status = "start"; chat_show.value[aiMessageChatShowIndex].reasoning_content = ""; }
+                    else if (thinking.value && is_think_flag && deltaContent.trimEnd() === "</think>") { thinking.value = false; is_think_flag = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
+                    else if (thinking.value && is_think_flag) { chat_show.value[aiMessageChatShowIndex].status = "thinking"; chat_show.value[aiMessageChatShowIndex].reasoning_content += deltaContent; }
+                    else {
                       history.value[aiMessageHistoryIndex].content += deltaContent;
                       if (chat_show.value[aiMessageChatShowIndex].content[0]) chat_show.value[aiMessageChatShowIndex].content[0].text += deltaContent;
                       else chat_show.value[aiMessageChatShowIndex].content = [{ type: 'text', text: deltaContent }];
@@ -1083,11 +870,8 @@ async function askAI(forceSend = false) {
           }
         } catch (readError) {
           if (chat_show.value[aiMessageChatShowIndex]) {
-            if (readError.name === 'AbortError') {
-              if (chat_show.value[aiMessageChatShowIndex].content[0]) chat_show.value[aiMessageChatShowIndex].content[0].text += '\n(已取消)';
-            } else {
-              if (chat_show.value[aiMessageChatShowIndex].content[0]) chat_show.value[aiMessageChatShowIndex].content[0].text += `\n(读取流时出错: ${readError.message})`;
-            }
+            if (readError.name === 'AbortError') { if (chat_show.value[aiMessageChatShowIndex].content[0]) chat_show.value[aiMessageChatShowIndex].content[0].text += '\n(已取消)'; }
+            else { if (chat_show.value[aiMessageChatShowIndex].content[0]) chat_show.value[aiMessageChatShowIndex].content[0].text += `\n(读取流时出错: ${readError.message})`; }
             if (thinking.value) chat_show.value[aiMessageChatShowIndex].status = "error";
           }
           thinking.value = false; is_think_flag = false; break;
@@ -1097,21 +881,13 @@ async function askAI(forceSend = false) {
   } catch (error) {
     let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
     if (error.name === 'AbortError') errorDisplay = "请求已取消";
-    if (history.value[aiMessageHistoryIndex]) {
-      history.value[aiMessageHistoryIndex].content = `错误: ${errorDisplay}`;
-    }
-    if (chat_show.value[aiMessageChatShowIndex]) {
-      chat_show.value[aiMessageChatShowIndex] = { role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" };
-    } else {
-      chat_show.value.push({ role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" });
-    }
-
+    if (history.value[aiMessageHistoryIndex]) history.value[aiMessageHistoryIndex].content = `错误: ${errorDisplay}`;
+    if (chat_show.value[aiMessageChatShowIndex]) chat_show.value[aiMessageChatShowIndex] = { role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" };
+    else chat_show.value.push({ role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" });
   } finally {
     loading.value = false; signalController.value = null;
     const lastChatMsg = chat_show.value[chat_show.value.length - 1];
-    if (lastChatMsg && lastChatMsg.role === 'assistant' && thinking.value && !is_think_flag) {
-      lastChatMsg.status = "end"; thinking.value = false;
-    }
+    if (lastChatMsg && lastChatMsg.role === 'assistant' && thinking.value && !is_think_flag) { lastChatMsg.status = "end"; thinking.value = false; }
     is_think_flag = false; scrollToBottom();
   }
 }
@@ -1122,12 +898,8 @@ async function reaskAI() {
   if (loading.value || history.value.length === 0) return;
   const lastHistoryMessage = history.value[history.value.length - 1];
   if (lastHistoryMessage.role === "system") return;
-
-  if (lastHistoryMessage.role === "assistant") {
-    history.value.pop();
-    chat_show.value.pop();
-  } else if (lastHistoryMessage.role === "user") {
-  }
+  if (lastHistoryMessage.role === "assistant") { history.value.pop(); chat_show.value.pop(); }
+  else if (lastHistoryMessage.role === "user") { }
   prompt.value = ""; await askAI(true);
 }
 function deleteMessage() {
@@ -1138,125 +910,56 @@ function deleteMessage() {
 }
 function clearHistory() {
   if (loading.value || history.value.length === 0) return;
-  if (history.value[0].role === "system") {
-    history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]];
-  } else { history.value = []; chat_show.value = []; }
-  senderFocus();
-  ElMessage.success('历史记录已清除');
+  if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
+  else { history.value = []; chat_show.value = []; }
+  senderFocus(); ElMessage.success('历史记录已清除');
 }
 function removeFile(index) { if (fileList.value.length === 0) return; fileList.value.splice(index, 1); }
 
-// [REVISED] sendFile function using the new handler system
 async function sendFile() {
-  let contentList = [];
-  if (fileList.value.length === 0) return contentList;
-
+  let contentList = []; if (fileList.value.length === 0) return contentList;
   for (const currentFile of fileList.value) {
     const handler = getFileHandler(currentFile.name);
     if (handler) {
-      try {
-        const processedContent = await handler(currentFile);
-        if (processedContent) {
-          contentList.push(processedContent);
-        }
-      } catch (error) {
-        ElMessage.error(`处理文件 ${currentFile.name} 失败: ${error.message}`);
-      }
-    } else {
-      ElMessage.warning(`文件类型不支持: ${currentFile.name}`);
-    }
+      try { const processedContent = await handler(currentFile); if (processedContent) contentList.push(processedContent); }
+      catch (error) { ElMessage.error(`处理文件 ${currentFile.name} 失败: ${error.message}`); }
+    } else ElMessage.warning(`文件类型不支持: ${currentFile.name}`);
   }
-
-  fileList.value = [];
-  return contentList;
+  fileList.value = []; return contentList;
 }
 
 async function file2fileList(file, idx) {
   const isSessionFile = await checkAndLoadSessionFromFile(file);
-  if (isSessionFile) {
-    senderFocus();
-    return;
-  }
-
+  if (isSessionFile) { senderFocus(); return; }
   return new Promise((resolve, reject) => {
     const handler = getFileHandler(file.name);
-    if (!handler) {
-      const errorMsg = `不支持的文件类型: ${file.name}`;
-      ElMessage.warning(errorMsg);
-      reject(new Error(errorMsg));
-      return;
-    }
-
+    if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; ElMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }
     const reader = new FileReader();
-    reader.onload = (e) => {
-      fileList.value.push({
-        uid: idx,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: e.target.result
-      });
-      resolve();
-    };
-    reader.onerror = () => {
-      const errorMsg = `读取文件 ${file.name} 失败`;
-      ElMessage.error(errorMsg);
-      reject(new Error(errorMsg));
-    }
+    reader.onload = (e) => { fileList.value.push({ uid: idx, name: file.name, size: file.size, type: file.type, url: e.target.result }); resolve(); };
+    reader.onerror = () => { const errorMsg = `读取文件 ${file.name} 失败`; ElMessage.error(errorMsg); reject(new Error(errorMsg)); }
     reader.readAsDataURL(file);
   });
 }
 
 async function uploadFiles(files) { await file2fileList(files.file, fileList.value.length + 1); senderFocus(); }
-const handleDrop = async (event) => {
-  event.preventDefault();
-  for (const item of Array.from(event.dataTransfer.items)) {
-    if (item.kind === 'file') {
-      await file2fileList(item.getAsFile(), fileList.value.length + 1);
-    }
-  }
-  senderFocus();
-};
-const handlePaste = async (event) => {
-  for (const item of Array.from((event.clipboardData || event.originalEvent?.clipboardData || event.dataTransfer).items)) {
-    if (item.kind === 'file') {
-      await file2fileList(item.getAsFile(), fileList.value.length + 1);
-      senderFocus();
-    }
-  }
-};
+const handleDrop = async (event) => { event.preventDefault(); for (const item of Array.from(event.dataTransfer.items)) { if (item.kind === 'file') await file2fileList(item.getAsFile(), fileList.value.length + 1); } senderFocus(); };
+const handlePaste = async (event) => { for (const item of Array.from((event.clipboardData || event.originalEvent?.clipboardData || event.dataTransfer).items)) { if (item.kind === 'file') { await file2fileList(item.getAsFile(), fileList.value.length + 1); senderFocus(); } } };
 
 async function processFilePath(filePath) {
-  if (!filePath || typeof filePath !== 'string') {
-    ElMessage.error('无效的文件路径');
-    return;
-  }
-
+  if (!filePath || typeof filePath !== 'string') { ElMessage.error('无效的文件路径'); return; }
   try {
-
     const fileObject = await window.api.handleFilePath(filePath);
-    if (fileObject) {
-      await file2fileList(fileObject, fileList.value.length + 1);
-    } else {
-      ElMessage.error('无法读取或访问该文件，请检查路径和权限');
-    }
-  } catch (error) {
-    console.error('调用 handleFilePath 时发生意外错误:', error);
-    ElMessage.error('处理文件路径时发生未知错误');
-  }
+    if (fileObject) await file2fileList(fileObject, fileList.value.length + 1);
+    else ElMessage.error('无法读取或访问该文件，请检查路径和权限');
+  } catch (error) { console.error('调用 handleFilePath 时发生意外错误:', error); ElMessage.error('处理文件路径时发生未知错误'); }
 }
 
 </script>
 <template>
   <main>
     <el-container>
-
-      <!-- <TitleBar :isDarkMode="currentConfig.isDarkMode" :os="basic_msg.os" :title="basic_msg.code"/> -->
-
-      <!-- [MODIFIED] 优化后的头部 -->
       <el-header class="header">
         <div class="header-content-wrapper">
-          <!-- 左侧：图标按钮 -->
           <div class="header-left">
             <el-tooltip content="保存窗口大小和位置" placement="bottom">
               <el-button @click="saveWindowSize">
@@ -1264,15 +967,11 @@ async function processFilePath(filePath) {
               </el-button>
             </el-tooltip>
           </div>
-
-          <!-- 中间：模型选择器（可伸缩） -->
           <div class="header-center">
             <el-button class="model-selector-btn" @click="changeModel_page = true">
               {{ modelMap[model] || '选择模型' }}
             </el-button>
           </div>
-
-          <!-- 右侧：功能按钮组 -->
           <div class="header-right">
             <el-tooltip :content="autoCloseOnBlur ? '保持窗口开启' : '失焦时自动关闭窗口'" placement="bottom">
               <el-button @click="changeAutoCloseOnBlur">
@@ -1289,7 +988,6 @@ async function processFilePath(filePath) {
             <el-tooltip :content="temporary ? '无记忆模式' : '记忆模式'" placement="bottom">
               <el-button @click="temporary = !temporary" :icon="temporary ? Lollipop : CoffeeCup" />
             </el-tooltip>
-            <!-- [MODIFIED] Save button now calls the new action handler -->
             <el-tooltip content="保存会话" placement="bottom">
               <el-button @click="handleSaveAction" :icon="Download" />
             </el-tooltip>
@@ -1303,9 +1001,8 @@ async function processFilePath(filePath) {
             @click="showFullSystemPrompt(message.content)">
             <p class="system-prompt-preview">{{ String(message.content) }}</p>
           </div>
-
-          <Bubble v-if="message.role === 'user'" class="user-bubble" placement="end" shape="corner" maxWidth="2000px"
-            variant="shadow" :avatar="UserAvart" avatar-size="40px">
+          <Bubble v-if="message.role === 'user'" class="user-bubble" placement="end" shape="corner" variant="shadow"
+            maxWidth="2000px" :avatar="UserAvart" avatar-size="40px">
             <template #content>
               <div class="markdown-body" v-html="renderMarkdown(message)"></div>
             </template>
@@ -1323,7 +1020,6 @@ async function processFilePath(filePath) {
                 @click="deleteMessage()" circle />
             </template>
           </Bubble>
-
           <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner"
             variant="shadow" maxWidth="2000px" :avatar="AIAvart" avatar-size="40px">
             <template #header>
@@ -1375,7 +1071,6 @@ async function processFilePath(filePath) {
       </el-footer>
     </el-container>
   </main>
-  <!-- System prompt dialog -->
   <el-dialog v-model="systemPromptDialogVisible" custom-class="system-prompt-dialog" width="60%" :show-close="true"
     :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true" :close-on-press-escape="true">
     <pre class="system-prompt-full-content">{{ systemPromptContent }}</pre>
@@ -1393,11 +1088,75 @@ async function processFilePath(filePath) {
     </el-table>
     <template #footer><el-button @click="changeModel_page = false">关闭</el-button></template>
   </el-dialog>
-  <!-- [REMOVED] Old Save Session Dialog -->
 </template>
 
 <style>
-/* ... All previous global styles remain unchanged ... */
+/* [NEW] Add this rule to force the dialog to the center of the screen */
+.save-options-dialog.el-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0 !important;
+  /* Override default margins like top: 15vh */
+}
+
+.save-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 10px 0;
+}
+
+.save-option-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--el-border-radius-base);
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.save-option-item:hover {
+  transform: scale(1.02);
+  border-color: var(--el-color-primary);
+  box-shadow: var(--el-box-shadow-light);
+}
+
+.save-option-text {
+  flex-grow: 1;
+  /* <-- This is the fix for the internal layout */
+  margin-right: 20px;
+}
+
+.save-option-text h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.save-option-text p {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+html.dark .save-option-item {
+  border-color: var(--el-border-color-dark);
+}
+
+html.dark .save-option-item:hover {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-fill-color-dark);
+}
+
+html.dark .save-option-text p {
+  color: var(--el-text-color-regular);
+}
+
 html.dark .katex {
   color: var(--el-text-color-regular) !important;
 }
@@ -1747,7 +1506,6 @@ html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
   color: var(--el-text-color-primary);
 }
 
-/* [MODIFIED] 优化后的头部样式 */
 .header {
   height: 40px;
   width: 100%;
@@ -1775,7 +1533,6 @@ html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
 .header-center {
   flex-grow: 1;
   min-width: 0;
-  /* 允许中间部分在空间不足时收缩 */
   text-align: center;
 }
 
@@ -1784,14 +1541,11 @@ html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  /* 为右侧按钮组提供一致的间距 */
 }
 
 .header .el-button {
   height: 30px;
-  /* 统一按钮高度 */
   width: 30px;
-  /* 统一按钮宽度 */
   padding: 0;
   margin: 0;
   border: none;
@@ -1829,7 +1583,6 @@ html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
   color: var(--el-text-color-primary);
 }
 
-
 .chat-main {
   flex-grow: 1;
   padding-left: 10px;
@@ -1851,7 +1604,8 @@ html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
 
 .chat-message .user-bubble {
   align-self: flex-end;
-  max-width: 80%;
+  max-width: 90%;
+  margin: 0;
 
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
     background-color: #F4F4F4;
@@ -1866,7 +1620,7 @@ html.dark .chat-message .user-bubble {
 
 .chat-message .ai-bubble {
   width: auto;
-  max-width: 95%;
+  max-width: 90%;
   margin: 0;
   align-self: left;
 
@@ -1881,7 +1635,6 @@ html.dark .chat-message .ai-bubble {
   }
 }
 
-/* [MODIFIED] System Prompt Preview Styles */
 .system-prompt-container {
   width: auto;
   max-width: 90%;
@@ -1914,7 +1667,6 @@ html.dark .system-prompt-container:hover {
   color: var(--el-text-color-secondary);
   margin: 0;
   line-height: 1.5;
-
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1922,10 +1674,7 @@ html.dark .system-prompt-container:hover {
 
 .chat-message :deep(.markdown-body) {
 
-  &,
-  * {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  }
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
   font-size: var(--el-font-size-base);
   line-height: 1.7;
@@ -1970,7 +1719,6 @@ html.dark .system-prompt-container:hover {
       background-color: transparent !important;
     }
   }
-
 }
 
 .chat-message :deep(.markdown-body strong),
@@ -2258,7 +2006,6 @@ html.dark .chat-message :deep(.image-retry-button:hover) {
   color: var(--el-color-primary-light-7);
 }
 
-
 .file-list-container {
   display: flex;
   overflow-x: auto;
@@ -2370,7 +2117,6 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-clip: content-box;
 }
 
-
 .input-footer {
   padding: 10px 15px 15px 15px;
   height: auto;
@@ -2385,7 +2131,6 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   padding: 0;
   margin: 0;
 }
-
 
 .input-footer .chat-sender :deep(.el-sender-content) {
   background-color: #F3F4F6;

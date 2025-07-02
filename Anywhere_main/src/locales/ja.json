@@ -1,14 +1,49 @@
 {
   "app": {
     "header": {
-      "prompts": "プロンプト 🚀",
+      "chats": "クラウドチャット 💬",
+      "prompts": "クイックプロンプト 🚀",
       "providers": "プロバイダー ☁️",
-      "settings": "設定 ⚙️"
+      "settings": "設定 ⚙"
     },
     "tabs": {
-      "prompts": "プロンプト",
+      "chats": "クラウドチャット",
+      "prompts": "クイックプロンプト",
       "providers": "プロバイダー",
       "settings": "設定"
+    }
+  },
+  "chats": {
+    "configRequired": {
+      "title": "クラウドチャット",
+      "description": "この機能を使用するには、「設定」でWebDAV URLとデータパス (data_path) を設定してください。"
+    },
+    "table": {
+      "filename": "チャット名",
+      "modifiedTime": "更新日時",
+      "size": "サイズ",
+      "actions": "操作"
+    },
+    "actions": {
+      "chat": "チャット",
+      "rename": "名前を変更",
+      "delete": "削除"
+    },
+    "rename": {
+      "promptTitle": "チャットの名前を変更",
+      "promptMessage": "新しいチャットファイル名を入力してください。",
+      "invalidFilename": "ファイル名が無効です。'.json' で終わる必要があります。"
+    },
+    "confirmDelete": "チャット '{filename}' を完全に削除してもよろしいですか？",
+    "alerts": {
+      "configError": "設定の取得に失敗しました。",
+      "pathNotFound": "指定されたWebDAVデータパスが見つかりません。",
+      "fetchFailed": "チャットリストの取得に失敗しました。",
+      "loadingChat": "チャットを読み込み中...",
+      "restoreInitiated": "チャットの復元が開始されました。",
+      "restoreFailed": "チャットの復元に失敗しました。",
+      "renameSuccess": "名前の変更に成功しました。",
+      "renameFailed": "名前の変更に失敗しました。"
     }
   },
   "prompts": {
@@ -41,6 +76,7 @@
     },
     "modelLabel": "モデル",
     "llmParametersLabel": "モデルパラメータ（現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります）",
+    "sendDirectLabel": "テキスト/スクリーンショットを直接送信",
     "sendFileLabel": "ファイルの直接送信",
     "ifTextNecessary": "テキスト＆自動日時",
     "streamLabel": "ストリーム応答",
@@ -175,9 +211,11 @@
       "usernamePlaceholder": "WebDAV ユーザー名",
       "password": "WebDAV パスワード",
       "passwordPlaceholder": "WebDAV パスワード",
-      "path": "WebDAV パス",
+      "path": "WebDAV 構成パス",
       "pathPlaceholder": "/anywhere",
-      "backupRestoreTitle": "データのバックアップと復元",
+      "dataPath": "WebDAV データパス",
+      "dataPathPlaceholder": "/anywhere_data",
+      "backupRestoreTitle": "構成のバックアップと復元",
       "backupButton": "WebDAVへバックアップ",
       "restoreButton": "バックアップ管理",
       "backup": {
@@ -206,6 +244,7 @@
         "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました"
       },
       "alerts": {
+        "importSuccess": "設定のインポートに成功しました。",
         "urlRequired": "WebDAV URLは空にできません。",
         "backupInProgress": "バックアップ中...",
         "backupSuccess": "バックアップに成功しました",

@@ -1,14 +1,49 @@
 {
   "app": {
     "header": {
+      "chats": "云端对话 💬",
       "prompts": "快捷助手 🚀",
       "providers": "服务商 ☁️",
       "settings": "设置 ⚙️"
     },
     "tabs": {
+      "chats": "云端对话",
       "prompts": "快捷助手",
       "providers": "服务商",
       "settings": "设置"
+    }
+  },
+  "chats": {
+    "configRequired": {
+      "title": "云端对话",
+      "description": "请先在“设置”中配置 WebDAV URL 和数据路径 (data_path) 以使用此功能。"
+    },
+    "table": {
+      "filename": "对话名称",
+      "modifiedTime": "修改时间",
+      "size": "大小",
+      "actions": "操作"
+    },
+    "actions": {
+      "chat": "聊天",
+      "rename": "重命名",
+      "delete": "删除"
+    },
+    "rename": {
+      "promptTitle": "重命名对话",
+      "promptMessage": "请输入新的对话文件名。",
+      "invalidFilename": "文件名无效，必须以 .json 结尾。"
+    },
+    "confirmDelete": "您确定要永久删除对话 '{filename}' 吗？",
+    "alerts": {
+      "configError": "获取配置失败。",
+      "pathCreated": "数据路径不存在，已自动创建。",
+      "fetchFailed": "获取对话列表失败",
+      "loadingChat": "正在加载对话...",
+      "restoreInitiated": "对话已开始。",
+      "restoreFailed": "恢复对话失败",
+      "renameSuccess": "重命名成功。",
+      "renameFailed": "重命名失败。"
     }
   },
   "prompts": {
@@ -42,6 +77,7 @@
     "modelLabel": "模型",
     "llmParametersLabel": "模型参数（仅当前 快捷助手 模型生效，更换其他模型后不再生效）",
     "AssistantParametersLabel": "快捷助手参数",
+    "sendDirectLabel": "文本/截图直接发送",
     "sendFileLabel": "文件直接发送",
     "ifTextNecessary": "补充文本信息/自动添加时间",
     "streamLabel": "流式响应",
@@ -176,9 +212,11 @@
       "usernamePlaceholder": "WebDAV 用户名",
       "password": "WebDAV 密码",
       "passwordPlaceholder": "WebDAV 密码",
-      "path": "WebDAV 路径",
+      "path": "WebDAV 配置路径",
       "pathPlaceholder": "/anywhere",
-      "backupRestoreTitle": "数据备份与恢复",
+      "dataPath": "WebDAV 数据路径",
+      "dataPathPlaceholder": "/anywhere_data",
+      "backupRestoreTitle": "配置备份与恢复",
       "backupButton": "备份到 WebDAV",
       "restoreButton": "管理备份",
       "backup": {
@@ -198,15 +236,10 @@
         "restore": "恢复",
         "delete": "删除",
         "confirmRestore": "您确定要恢复此备份文件 '{filename}' 吗？此操作将覆盖您当前的配置。",
-        "confirmDelete": "您确定要永久删除文件 '{filename}' 吗？",
-        "confirmDeleteMultiple": "您确定要永久删除选中的 {count} 个文件吗？",
-        "noFileSelected": "未选择任何文件。",
-        "deleteSuccess": "文件删除成功。",
-        "deleteFailed": "文件删除失败",
-        "deleteSuccessMultiple": "选中的文件已成功删除。",
-        "deleteFailedMultiple": "删除选中的文件时出错"
+        "confirmDelete": "您确定要永久删除文件 '{filename}' 吗？"
       },
       "alerts": {
+        "importSuccess": "配置导入成功。",
         "urlRequired": "WebDAV 地址不能为空。",
         "backupInProgress": "正在备份...",
         "backupSuccess": "备份成功",
@@ -231,6 +264,12 @@
     "removeIcon": "移除图标",
     "warningTitle": "警告",
     "refresh": "刷新",
-    "deleteSelected": "删除选中"
+    "deleteSelected": "删除选中",
+    "noFileSelected": "未选择任何文件。",
+    "confirmDeleteMultiple": "您确定要永久删除选中的 {count} 个文件吗？",
+    "deleteSuccess": "删除成功。",
+    "deleteFailed": "删除失败。",
+    "deleteSuccessMultiple": "选中的文件已成功删除。",
+    "deleteFailedMultiple": "删除选中的文件时出错。"
   }
 }

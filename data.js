@@ -26,7 +26,8 @@ const defaultConfig = {
         stream: true,
         temperature: 0.7,
         isTemperature: false,
-        isDirectSend: false,
+        isDirectSend_file: false,
+        isDirectSend_normal: true,
         ifTextNecessary: false,
       },
     },
@@ -46,6 +47,7 @@ const defaultConfig = {
       username: "",
       password: "",
       path: "/anywhere",
+      dataPath: "/anywhere_data",
     },
   }
 };
@@ -110,6 +112,10 @@ function checkConfig(config) {
     };
     flag = true;
   }
+  if (config.webdav.dataPath == undefined) {
+    config.webdav.dataPath = "/anywhere_data";
+    flag = true;
+  }
   // 更新默认配置的存储方式
   if (config.apiUrl) {
     config.providers["0"] = {
@@ -147,8 +153,17 @@ function checkConfig(config) {
       config.prompts[key].icon = "";
       flag = true;
     }
-    if (config.prompts[key].isDirectSend === undefined) {
-      config.prompts[key].isDirectSend = false;
+    if (config.prompts[key].isDirectSend_file === undefined) {
+      if (config.prompts[key].isDirectSend === undefined){
+        config.prompts[key].isDirectSend_file = false;
+      }else{
+        config.prompts[key].isDirectSend_file = config.prompts[key].isDirectSend;
+        delete config.prompts[key].isDirectSend;
+      }
+      flag = true;
+    }
+    if (config.prompts[key].isDirectSend_normal === undefined) {
+      config.prompts[key].isDirectSend_normal = true;
       flag = true;
     }
     if (config.prompts[key].ifTextNecessary === undefined) {
@@ -276,7 +291,7 @@ function updateConfig(newConfig) {
         code: key + feature_suffix,
         explain: key,
         mainHide: true,
-        cmds: [key + feature_suffix]
+        cmds: [key]
       };
       if (newConfig.config.prompts[key].icon) {
         feature_ai.icon = newConfig.config.prompts[key].icon;
@@ -516,6 +531,50 @@ function copyText(content) {
   utools.copyText(content);
 }
 
+async function sethotkey(prompt_name,auto_copy){
+  console.log("sethotkey")
+  utools.redirectHotKeySetting(prompt_name,auto_copy);
+}
+
+// 打开独立窗口
+async function openWindow(config, msg) {
+  const window_position = getPosition(config);
+  let windowX = window_position.x;
+  let windowY = window_position.y;
+  let channel = "window"
+  // 创建运行窗口
+  const ubWindow = utools.createBrowserWindow(
+    "./window/index.html",
+    {
+      show: true,
+      title: "Anywhere",
+      useContentSize: true,
+      frame: true,
+      width: config.window_width,
+      height: config.window_height,
+      alwaysOnTop: config.isAlwaysOnTop,
+      shellOpenPath: true,
+      x: windowX,
+      y: windowY,
+      webPreferences: {
+        preload: "./window_preload.js",
+        // devTools: true,
+      },
+    },
+    () => {
+      ubWindow.webContents.send(channel, msg);
+      ubWindow.webContents.show(); // 显示窗口
+      ubWindow.setAlwaysOnTop(config.isAlwaysOnTop, "floating"); // 窗口置顶
+      ubWindow.setFullScreen(false); // 窗口全屏
+    }
+  );
+  // ubWindow.webContents.openDevTools({ mode: "detach" });
+}
+
+async function coderedirect(label, payload) {
+  utools.redirect(label, payload);
+}
+
 module.exports = {
   getConfig,
   checkConfig,
@@ -524,5 +583,8 @@ module.exports = {
   getPosition,
   getRandomItem,
   chatOpenAI,
-  copyText
+  copyText,
+  sethotkey,
+  openWindow,
+  coderedirect,
 };

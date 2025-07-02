@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted, computed, nextTick } from 'vue';
-import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled } from '@element-plus/icons-vue';
+import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -28,7 +28,8 @@ const defaultConfig = {
         stream: true,
         temperature: 0.7,
         isTemperature: false,
-        isDirectSend: false,
+        isDirectSend_file: false,
+        isDirectSend_normal: true,
         ifTextNecessary: false,
       },
     },
@@ -48,6 +49,7 @@ const defaultConfig = {
       username: "",
       password: "",
       path: "/anywhere",
+      data_path: "/anywhere_data",
     },
   }
 };
@@ -69,7 +71,8 @@ const editingPrompt = reactive({
   stream: true,
   isTemperature: false,
   temperature: 0.7,
-  isDirectSend: false,
+  isDirectSend_file: false,
+  isDirectSend_normal: true,
 });
 const isNewPrompt = ref(false);
 
@@ -250,7 +253,8 @@ function prepareAddPrompt() {
     stream: true,
     isTemperature: false,
     temperature: 0.7,
-    isDirectSend: false,
+    isDirectSend_file: false,
+    isDirectSend_normal: true,
     ifTextNecessary: false,
   });
   showPromptEditDialog.value = true;
@@ -273,7 +277,8 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
     stream: p.stream ?? true,
     isTemperature: p.isTemperature ?? false,
     temperature: p.temperature ?? 0.7,
-    isDirectSend: p.isDirectSend ?? false,
+    isDirectSend_file: p.isDirectSend_file ?? false,
+    isDirectSend_normal: p.isDirectSend_normal ?? true,
     ifTextNecessary: p.ifTextNecessary ?? false,
   });
   showPromptEditDialog.value = true;
@@ -300,7 +305,8 @@ function savePrompt() {
     stream: editingPrompt.stream,
     isTemperature: editingPrompt.isTemperature,
     temperature: editingPrompt.temperature,
-    isDirectSend: editingPrompt.isDirectSend,
+    isDirectSend_file: editingPrompt.isDirectSend_file,
+    isDirectSend_normal: editingPrompt.isDirectSend_normal,
     ifTextNecessary: editingPrompt.ifTextNecessary,
   };
 
@@ -343,6 +349,14 @@ function deletePrompt(promptKeyToDelete) {
   });
   saveConfig();
 }
+
+// async function setHotKey(promptKey, autoCopy){
+//   if (window.api && window.api.sethotkey) {
+//     await window.api.sethotkey(promptKey, autoCopy);
+//   }else{
+//     console.log("sethotkey API not available");
+//   }
+// }
 
 function removePromptFromTag(tagName, promptKey) {
   if (currentConfig.value.tags[tagName]) {
@@ -470,6 +484,7 @@ const removeEditingIcon = () => {
                   </span>
                 </el-tooltip>
                 <div class="prompt-actions-header">
+                  <!-- <el-button type="default" :icon="Position" circle plain size="small" @click="setHotKey(promptKey,false)" /> -->
                   <el-switch v-model="promptData.enable" @change="handlePromptEnableChange" size="small"
                     class="prompt-enable-toggle" />
                   <el-button type="danger" :icon="Delete" circle plain size="small" @click="deletePrompt(promptKey)" />
@@ -638,8 +653,12 @@ const removeEditingIcon = () => {
         <el-form-item :label="t('prompts.AssistantParametersLabel')">
           <div class="llm-params-container">
             <div class="param-item">
+              <span class="param-label">{{ t('prompts.sendDirectLabel') }}</span>
+              <el-switch v-model="editingPrompt.isDirectSend_normal" />
+            </div>
+            <div class="param-item">
               <span class="param-label">{{ t('prompts.sendFileLabel') }}</span>
-              <el-switch v-model="editingPrompt.isDirectSend" />
+              <el-switch v-model="editingPrompt.isDirectSend_file" />
             </div>
             <div class="param-item">
               <span class="param-label">{{ t('prompts.ifTextNecessary') }}</span>

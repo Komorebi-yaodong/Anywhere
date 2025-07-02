@@ -180,6 +180,14 @@ const handleFilePath = async (filePath) => {
     }
 };
 
+const handleJsonContent = async (fileContent) => {
+    const fileName = "chat.json";
+    const mimeType = 'application/json';
+
+    const fileObject = new File([fileContent], fileName, { type: mimeType });
+    return fileObject;
+}
+
 
 // （文件路径=>文件对象=>文件列表=>对话格式）
 async function sendfileDirect(filePathList) {
@@ -255,6 +263,7 @@ function saveFile(options) {
 
 module.exports = {
     handleFilePath, // (文件路径=>文件对象)
+    handleJsonContent, // (JSON内容=>文件对象)
     sendfileDirect, //（文件路径=>文件对象=>文件列表=>对话格式）
     saveFile,
 };
