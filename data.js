@@ -1,6 +1,7 @@
 const fs = require('fs/promises');
 const path = require('path');
 
+const feature_suffix = "anywhere助手^_^"
 
 // 默认配置
 const defaultConfig = {
@@ -281,7 +282,6 @@ function checkConfig(config) {
 // 更新配置文件
 function updateConfig(newConfig) {
   const features = utools.getFeatures();
-  const feature_suffix = "助手"
   let featuresMap = new Map(features.map((feature) => [feature.code, feature]));
   // 查找prompts中的key是否在features的元素的code中，如不在则添加
   for (let key in newConfig.config.prompts) {
@@ -307,7 +307,7 @@ function updateConfig(newConfig) {
       cmds: []
     }
     if (newConfig.config.prompts[key].type === "general") {
-      feature.cmds.push({ type: "over", label: key });
+      feature.cmds.push({ type: "over", label: key,"maxLength": 99999999999999999999999999999999999999 });
       feature.cmds.push({ type: "img", label: key });
       if (newConfig.config.prompts[key].showMode === "window") {
         feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
@@ -328,7 +328,7 @@ function updateConfig(newConfig) {
       feature.cmds.push({ type: "img", label: key });
     }
     else if (newConfig.config.prompts[key].type === "over") {
-      feature.cmds.push({ type: "over", label: key });
+      feature.cmds.push({ type: "over", label: key,"maxLength": 99999999999999999999999999999999999999 });
     }
 
     if (newConfig.config.prompts[key].icon) {
@@ -341,7 +341,7 @@ function updateConfig(newConfig) {
   }
   // 查找features的元素的code是否在prompts中的key中，如不在则删除
   for (let [key, feature] of featuresMap) {
-    if (!newConfig.config.prompts[feature.explain] || !newConfig.config.prompts[feature.explain].enable) {
+    if (!(newConfig.config.prompts[feature.code]||newConfig.config.prompts[feature.code.replace(feature_suffix, "")]) || !newConfig.config.prompts[feature.explain].enable) {
       utools.removeFeature(key);
     }
   }

@@ -16,7 +16,6 @@ const {
 
 const {
   handleFilePath,
-  handleJsonContent,
   sendfileDirect,
   saveFile,
 } = require('./file.js');
@@ -42,7 +41,7 @@ window.api = {
   coderedirect,
 };
 
-const feature_suffix = "助手"
+const feature_suffix = "anywhere助手^_^"
 
 // 主逻辑
 utools.onPluginEnter(async ({ code, type, payload, option }) => {
