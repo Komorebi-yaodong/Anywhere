@@ -31,7 +31,7 @@
     },
     "rename": {
       "promptTitle": "重命名对话",
-      "promptMessage": "请输入新的对话文件名。",
+      "promptMessage": "请输入新的会话名称。",
       "invalidFilename": "文件名无效，必须以 .json 结尾。"
     },
     "confirmDelete": "您确定要永久删除对话 '{filename}' 吗？",
@@ -239,7 +239,6 @@
         "confirmDelete": "您确定要永久删除文件 '{filename}' 吗？"
       },
       "alerts": {
-        "importSuccess": "配置导入成功。",
         "urlRequired": "WebDAV 地址不能为空。",
         "backupInProgress": "正在备份...",
         "backupSuccess": "备份成功",
@@ -249,6 +248,10 @@
         "restoreSuccess": "恢复成功",
         "restoreFailed": "恢复失败"
       }
+    },
+    "alerts":{
+        "importSuccess": "配置导入成功。",
+        "importFailed": "配置导入失败。"
     }
   },
   "common": {

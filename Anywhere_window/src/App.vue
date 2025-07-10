@@ -6,8 +6,7 @@ import { ElContainer, ElHeader, ElMain, ElFooter, ElButton, ElDialog, ElTable, E
 import { DocumentCopy, Refresh, Delete, CoffeeCup, Lollipop, Link, Document, Download, CaretTop, CaretBottom } from '@element-plus/icons-vue'
 import { createClient } from "webdav/web"; // Import for WebDAV functionality
 
-// import TitleBar from './TitleBar.vue'
-// import mammoth from 'mammoth';
+
 import 'katex/dist/katex.min.css';
 import MarkdownIt from 'markdown-it';
 import mdKatex from '@iktakahiro/markdown-it-katex';
@@ -127,16 +126,13 @@ const fileHandlers = {
   pdf: {
     extensions: ['.pdf'],
     handler: async (file) => {
-      const commaIndex = file.url.indexOf(',');
-      if (commaIndex > -1) {
-        return {
-          type: "input_file",
+      return {
+        type: "file",
+        file: {
           filename: file.name,
           file_data: file.url
-        };
-      }
-      ElMessage.error(`PDF文件 ${file.name} 格式不正确`);
-      return null;
+        }
+      };
     }
   }
 };
@@ -153,21 +149,57 @@ const getFileHandler = (fileName) => {
 };
 
 
+// const preprocessKatex = (text) => {
+//   if (!text) return '';
+
+//   let processedText = text;
+
+//   // 1. (安全) 替换特殊的连字号
+//   processedText = processedText
+//     .replace(/\u2013/g, '-') // Replace en-dash
+//     .replace(/\u2014/g, '-'); // Replace em-dash
+
+//   // 2. (安全) 将其他数学环境统一为 KaTeX 插件能识别的 $ 和 $$
+//   //    这个操作不会改变文本的块结构，是安全的。
+//   processedText = processedText
+//     .replace(/\\\(\s*(.*?)\s*\\\)/g, '$$$1$$') // \(...\) -> $...$ (inline)
+//     .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$'); // \[...\] -> $$...$$ (display)
+
+//   // 3. 对内联公式内容进行 trim，去除意外的空格
+//   processedText = processedText.replace(/\$([^$]+?)\$/g, (match, content) => {
+//     // 避免对 display math $$...$$ 进行错误匹配
+//     if (match.startsWith('$$')) {
+//       return match;
+//     }
+//     return `$${content.trim()}$`;
+//   });
+
+//   // processedText = processedText.replace(/(\S)\s*(\$\$[\s\S]+?\$\$)\s*(\S)/g, '$1\n$2\n$3');
+//   // processedText = processedText.replace(/(\$\$[\s\S]+?\$\$)/g, '\n$1\n');
+
+//   return processedText;
+// };
+
 const preprocessKatex = (text) => {
   if (!text) return '';
 
   let processedText = text;
-  processedText = processedText.replace(/(\S)\s*(\$\$[\s\S]+?\$\$)\s*(\S)/g, '$1\n\n$2\n\n$3');
 
-  processedText = processedText.replace(/(\$\$[\s\S]+?\$\$)/g, '\n\n$1\n\n');
+  // 1. 替换特殊的连字号，这不影响结构。
+  processedText = processedText
+    .replace(/\u2013/g, '-') // Replace en-dash
+    .replace(/\u2014/g, '-'); // Replace em-dash
 
-  processedText = processedText.replace(/\$([^$].*?)\$/g, (match, content) => {
+  // 2. 将其他数学环境统一为 KaTeX 插件能识别的 $ 和 $$
+  processedText = processedText
+    .replace(/\\\(\s*(.*?)\s*\\\)/g, '$$$1$$') // \(...\) -> $...$ (inline)
+    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$'); // \[...\] -> $$...$$ (display)
+
+  // 3. 对内联公式内容进行 trim，去除意外的空格。
+  processedText = processedText.replace(/(?<!\$)\$([^$]+?)\$(?!\$)/g, (match, content) => {
     return `$${content.trim()}$`;
   });
-  processedText = processedText
-    .replace(/\\\((.*?)\\\)/g, '$$$1$$')
-    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
-
+  
   return processedText;
 };
 
@@ -179,7 +211,14 @@ const md = new MarkdownIt({
     }
     return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
   }
-}).use(mdKatex);
+}).use(mdKatex, {
+  strict: (errorCode) => {
+    if (errorCode === 'newLineInDisplayMode') {
+      return 'ignore';
+    }
+    return 'warn';
+  }
+});
 
 
 const renderMarkdown = (message) => {
@@ -197,6 +236,7 @@ const defaultConfig = {
     providerOrder: ["0",],
     prompts: { AI: { type: "over", prompt: `你是一个AI助手`, showMode: "window", model: "0|gpt-4o", enable: true, icon: "", stream: true, temperature: 0.7, isTemperature: false, isDirectSend_file: false, isDirectSend_normal: true, ifTextNecessary: false, }, },
     tags: {}, stream: true, skipLineBreak: false, window_height: 520, window_width: 400, autoCloseOnBlur: false, CtrlEnterToSend: false, isAlwaysOnTop: false, showNotification: true, isDarkMode: false, fix_position: false,
+    zoom: 1, // [MODIFIED] Added zoom property with default value
     webdav: { url: "", username: "", password: "", path: "/anywhere", data_path: "/anywhere_data", },
   }
 };
@@ -228,6 +268,9 @@ var senderRef = ref();
 var signalController = ref(null);
 var changeModel_page = ref(false);
 var fileList = ref([]);
+
+// [NEW] Reactive state for zoom level
+const zoomLevel = ref(1);
 
 const systemPromptDialogVisible = ref(false);
 const systemPromptContent = ref('');
@@ -316,12 +359,12 @@ async function handleCollapseButtonClick(index, event) {
     const originalVisualPosition = originalElementTop - originalScrollTop;
 
     collapsedMessages.value.delete(index);
-    
+
     await nextTick();
-    
+
     const newElementTop = messageElement.offsetTop;
     const newScrollTop = newElementTop - originalVisualPosition;
-    
+
     chatContainer.style.scrollBehavior = 'auto';
     chatContainer.scrollTop = newScrollTop;
     chatContainer.style.scrollBehavior = '';
@@ -330,12 +373,12 @@ async function handleCollapseButtonClick(index, event) {
     const originalButtonTop = buttonElement.getBoundingClientRect().top;
 
     collapsedMessages.value.add(index);
-    
+
     await nextTick();
-    
+
     const newButtonTop = buttonElement.getBoundingClientRect().top;
     const visualShift = newButtonTop - originalButtonTop;
-    
+
     chatContainer.style.scrollBehavior = 'auto';
     chatContainer.scrollTop = originalScrollTop + visualShift;
     chatContainer.style.scrollBehavior = '';
@@ -359,7 +402,6 @@ function getSessionDataAsObject() {
   };
 }
 
-// [NEW] Handles saving the session to the cloud via WebDAV.
 async function saveSessionToCloud() {
   const now = new Date();
   const year = String(now.getFullYear()).slice(-2);
@@ -367,57 +409,87 @@ async function saveSessionToCloud() {
   const day = String(now.getDate()).padStart(2, '0');
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
-  const defaultFilename = `Session-${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}.json`;
+  const defaultBasename = `${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}`;
+  const inputValue = ref(defaultBasename);
 
   try {
-    const { value: filename } = await ElMessageBox.prompt(
-      '请输入要保存到云端的会话文件名。', '保存到云端', {
-      confirmButtonText: '确认', cancelButtonText: '取消', inputValue: defaultFilename,
-      inputValidator: (val) => val && val.endsWith('.json'),
-      inputErrorMessage: '文件名无效，必须以 .json 结尾。',
-    });
+    await ElMessageBox({
+      title: '保存到云端',
+      message: () => h('div', null, [
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入要保存到云端的会话名称。'),
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '文件名',
+          autofocus: true,
+        }, {
+          append: () => h('div', { class: 'input-suffix-display' }, '.json')
+        })
+      ]),
+      showCancelButton: true,
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      customClass: 'filename-prompt-dialog',
+      beforeClose: async (action, instance, done) => {
+        if (action === 'confirm') {
+          let finalBasename = inputValue.value.trim();
+          if (!finalBasename) {
+            ElMessage.error('文件名不能为空');
+            return;
+          }
+          if (finalBasename.toLowerCase().endsWith('.json')) {
+            finalBasename = finalBasename.slice(0, -5);
+          }
+          const filename = finalBasename + '.json';
 
-    if (filename) {
-      ElMessage.info('正在保存到云端...');
-      const sessionData = getSessionDataAsObject();
-      const jsonString = JSON.stringify(sessionData, null, 2);
+          instance.confirmButtonLoading = true;
+          ElMessage.info('正在保存到云端...');
+          try {
+            const sessionData = getSessionDataAsObject();
+            const jsonString = JSON.stringify(sessionData, null, 2);
+            const { url, username, password, data_path } = currentConfig.value.webdav;
+            const client = createClient(url, { username, password });
+            const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
+            const remoteFilePath = `${remoteDir}/${filename}`;
 
-      const { url, username, password, data_path } = currentConfig.value.webdav;
-      const client = createClient(url, { username, password });
-      const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
-      const remoteFilePath = `${remoteDir}/${filename}`;
-
-      if (!(await client.exists(remoteDir))) {
-        await client.createDirectory(remoteDir, { recursive: true });
+            if (!(await client.exists(remoteDir))) {
+              await client.createDirectory(remoteDir, { recursive: true });
+            }
+            await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
+            ElMessage.success('会话已成功保存到云端！');
+            done();
+          } catch (error) {
+            console.error("WebDAV save failed:", error);
+            ElMessage.error(`保存到云端失败: ${error.message}`);
+          } finally {
+            instance.confirmButtonLoading = false;
+          }
+        } else {
+          done();
+        }
       }
-
-      await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
-      ElMessage.success('会话已成功保存到云端！');
-    }
+    });
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      console.error("WebDAV save failed:", error);
-      ElMessage.error(`保存到云端失败: ${error.message}`);
+      console.error("MessageBox error:", error);
     }
   }
 }
 
-// [MODIFIED] Saves session as a local Markdown file.
 async function saveSessionAsMarkdown() {
   let markdownContent = '';
   const now = new Date();
   const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-  const defaultFilename = `Chat-${CODE.value || 'AI'}-${fileTimestamp}.md`;
+  // [MODIFICATION] Generate a base name WITHOUT the extension
+  const defaultBasename = `${CODE.value || 'AI'}-${fileTimestamp}`;
 
   markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n### 模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
-
   const systemPromptMessage = chat_show.value.find(m => m.role === 'system');
   if (systemPromptMessage && systemPromptMessage.content) {
     markdownContent += `### 系统提示词\n\n${String(systemPromptMessage.content).trim()}\n\n`;
   }
   markdownContent += '---\n\n';
-
   for (const message of chat_show.value) {
     if (message.role === 'system') continue;
     if (message.role === 'user') {
@@ -441,21 +513,69 @@ async function saveSessionAsMarkdown() {
     markdownContent += '---\n\n';
   }
 
+  const inputValue = ref(defaultBasename);
   try {
-    await window.api.saveFile({
-      title: '保存为 Markdown', defaultPath: defaultFilename, buttonLabel: '保存',
-      filters: [{ name: 'Markdown 文件', extensions: ['md'] }, { name: '所有文件', extensions: ['*'] }],
-      fileContent: markdownContent
+    await ElMessageBox({
+      title: '保存为 Markdown',
+      message: () => h('div', null, [
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '文件名',
+          autofocus: true,
+        }, {
+          append: () => h('div', { class: 'input-suffix-display' }, '.md')
+        })
+      ]),
+      showCancelButton: true,
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      customClass: 'filename-prompt-dialog',
+      beforeClose: async (action, instance, done) => {
+        if (action === 'confirm') {
+          let finalBasename = inputValue.value.trim();
+          if (!finalBasename) {
+            ElMessage.error('文件名不能为空');
+            return;
+          }
+          if (finalBasename.toLowerCase().endsWith('.md')) {
+            finalBasename = finalBasename.slice(0, -3);
+          }
+          const finalFilename = finalBasename + '.md';
+
+          instance.confirmButtonLoading = true;
+          try {
+            await window.api.saveFile({
+              title: '保存为 Markdown',
+              defaultPath: finalFilename,
+              buttonLabel: '保存',
+              filters: [{ name: 'Markdown 文件', extensions: ['md'] }, { name: '所有文件', extensions: ['*'] }],
+              fileContent: markdownContent
+            });
+            ElMessage.success('会话已成功保存为 Markdown！');
+            done();
+          } catch (error) {
+            if (!error.message.includes('canceled by the user')) {
+              console.error('保存 Markdown 失败:', error);
+              ElMessage.error(`保存失败: ${error.message}`);
+            }
+            done();
+          } finally {
+            instance.confirmButtonLoading = false;
+          }
+        } else {
+          done();
+        }
+      }
     });
-    ElMessage.success('会话已成功保存为 Markdown！');
   } catch (error) {
-    if (!error.message.includes('canceled by the user')) {
-      console.error('保存 Markdown 失败:', error); ElMessage.error(`保存失败: ${error.message}`);
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('MessageBox error:', error);
     }
   }
 }
 
-// [MODIFIED] Saves session as a local JSON file.
 async function saveSessionAsJson() {
   const sessionData = getSessionDataAsObject();
   const jsonString = JSON.stringify(sessionData, null, 2);
@@ -466,23 +586,73 @@ async function saveSessionAsJson() {
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const seconds = String(now.getSeconds()).padStart(2, '0');
-  const defaultFilename = `Session-${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}${seconds}.json`;
+  const defaultBasename = `${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}${seconds}`;
+  const inputValue = ref(defaultBasename);
 
   try {
-    await window.api.saveFile({
-      title: '保存聊天会话', defaultPath: defaultFilename, buttonLabel: '保存',
-      filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }],
-      fileContent: jsonString
+    await ElMessageBox({
+      title: '保存为 JSON',
+      message: () => h('div', null, [
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '文件名',
+          autofocus: true,
+        }, {
+          append: () => h('div', { class: 'input-suffix-display' }, '.json')
+        })
+      ]),
+      showCancelButton: true,
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      customClass: 'filename-prompt-dialog',
+      beforeClose: async (action, instance, done) => {
+        if (action === 'confirm') {
+          let finalBasename = inputValue.value.trim();
+          if (!finalBasename) {
+            ElMessage.error('文件名不能为空');
+            return; // Keep dialog open
+          }
+          // [KEY CHANGE] Automatically clean the user input
+          if (finalBasename.toLowerCase().endsWith('.json')) {
+            finalBasename = finalBasename.slice(0, -5);
+          }
+          const finalFilename = finalBasename + '.json';
+
+          instance.confirmButtonLoading = true;
+          try {
+            await window.api.saveFile({
+              title: '保存聊天会话',
+              defaultPath: finalFilename, // Use the final constructed name
+              buttonLabel: '保存',
+              filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }],
+              fileContent: jsonString
+            });
+            ElMessage.success('会话已成功保存！');
+            done(); // Close the dialog
+          } catch (error) {
+            if (!error.message.includes('canceled by the user')) {
+              console.error('保存会话失败:', error);
+              ElMessage.error(`保存失败: ${error.message}`);
+            }
+            // On failure or cancel, we still close the prompt
+            done();
+          } finally {
+            instance.confirmButtonLoading = false;
+          }
+        } else {
+          done(); // Close on cancel
+        }
+      }
     });
-    ElMessage.success('会话已成功保存！');
   } catch (error) {
-    if (!error.message.includes('canceled by the user')) {
-      console.error('保存会话失败:', error); ElMessage.error(`保存失败: ${error.message}`);
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('MessageBox error:', error);
     }
   }
 }
 
-// [COMPLETELY REWRITTEN] The main entry point for the save button.
 async function handleSaveAction() {
   if (autoCloseOnBlur.value) {
     changeAutoCloseOnBlur();
@@ -512,7 +682,7 @@ async function handleSaveAction() {
 
   saveOptions.push({
     title: '保存为 Markdown',
-    description: '导出为人类可读的 .md 文件，适合分享。',
+    description: '导出为可读性更强的 .md 文件，适合分享。',
     buttonType: '',
     action: saveSessionAsMarkdown
   });
@@ -538,7 +708,6 @@ async function handleSaveAction() {
   }).catch(() => { /* User clicked the 'X' button */ });
 }
 
-// --- END OF SAVE FUNCTIONALITY ---
 
 async function loadSession(jsonData) {
   loading.value = true;
@@ -556,6 +725,10 @@ async function loadSession(jsonData) {
 
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
+    zoomLevel.value = currentConfig.value.zoom || 1; // [MODIFIED] Load zoom setting
+    if (window.api && typeof window.api.setZoomFactor === 'function') {
+      window.api.setZoomFactor(zoomLevel.value);
+    }
     if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); favicon.value = "favicon-b.png"; }
     else { document.documentElement.classList.remove('dark'); favicon.value = "favicon.png"; }
 
@@ -572,6 +745,7 @@ async function loadSession(jsonData) {
     });
 
     let restoredModel = '';
+    // 优先加载存储的模型
     if (jsonData.model && modelMap.value[jsonData.model]) restoredModel = jsonData.model;
     else if (jsonData.currentPromptConfig?.model && modelMap.value[jsonData.currentPromptConfig.model]) restoredModel = jsonData.currentPromptConfig.model;
     else {
@@ -579,10 +753,24 @@ async function loadSession(jsonData) {
       restoredModel = (currentPromptConfig?.model && modelMap.value[currentPromptConfig.model]) ? currentPromptConfig.model : (modelList.value[0]?.value || '');
     }
     model.value = restoredModel;
-
+    // 优先加载存储的图标
     if (jsonData.currentPromptConfig?.icon) AIAvart.value = jsonData.currentPromptConfig.icon;
     else AIAvart.value = currentConfig.value.prompts[CODE.value].icon || "ai.svg";
-
+    // 优先使用新的系统提示词汇
+    if (currentConfig.value.prompts[CODE.value] && currentConfig.value.prompts[CODE.value].prompt) {
+      if (history.value.length > 0 && history.value[0].role == "system") {
+        history.value[0].content = currentConfig.value.prompts[CODE.value].prompt;
+        chat_show.value[0].content = currentConfig.value.prompts[CODE.value].prompt;
+      } else {
+        history.value.unshift({ role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
+        chat_show.value.unshift({ role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
+      }
+    }
+    // 优先使用新的用户提示词汇
+    if (currentConfig.value.prompts[CODE.value] && currentConfig.value.prompts[CODE.value].user_prompt) {
+      if (history.value.length > 0 && history.value[0].role == "user") {
+      }
+    }
     if (model.value) {
       currentProviderID.value = model.value.split("|")[0];
       const provider = currentConfig.value.providers[currentProviderID.value];
@@ -682,10 +870,55 @@ const addCopyButtonsToCodeBlocks = async () => {
 
 function senderFocus(focus_type = 'end') { senderRef.value?.focus(focus_type); }
 
+// [MODIFIED] Use Electron's native zoom via the preload bridge
+watch(zoomLevel, (newZoom) => {
+  if (window.api && typeof window.api.setZoomFactor === 'function') {
+    window.api.setZoomFactor(newZoom);
+  }
+});
+
+// [NEW] Event handler for Ctrl + Mouse Wheel zoom
+const handleWheel = (event) => {
+  if (event.ctrlKey) {
+    event.preventDefault();
+    const zoomStep = 0.05;
+    let newZoom;
+    if (event.deltaY < 0) {
+      newZoom = zoomLevel.value + zoomStep;
+    } else {
+      newZoom = zoomLevel.value - zoomStep;
+    }
+    // Clamp the zoom level between 0.5x and 2.0x
+    zoomLevel.value = Math.max(0.5, Math.min(2.0, newZoom));
+    // Update the config object in real-time so it's ready for saving
+    if (currentConfig.value) {
+      currentConfig.value.zoom = zoomLevel.value;
+    }
+  }
+};
+
 onMounted(async () => {
   if (isInit.value) return; isInit.value = true;
-  try { const configData = await window.api.getConfig(); currentConfig.value = configData.config; }
-  catch (err) { currentConfig.value = defaultConfig.config; ElMessage.error('加载配置失败，使用默认配置'); }
+  // [NEW] Add wheel event listener for zoom control
+  window.addEventListener('wheel', handleWheel, { passive: false });
+  try {
+    const configData = await window.api.getConfig();
+    currentConfig.value = configData.config;
+    zoomLevel.value = currentConfig.value.zoom || 1; // [MODIFIED] Load zoom setting
+    // [MODIFIED] Apply the zoom factor on startup
+    if (window.api && typeof window.api.setZoomFactor === 'function') {
+        window.api.setZoomFactor(zoomLevel.value);
+    }
+  }
+  catch (err) {
+    currentConfig.value = defaultConfig.config;
+    zoomLevel.value = currentConfig.value.zoom || 1; // [MODIFIED] Load default zoom
+    // [MODIFIED] Apply the zoom factor on startup
+    if (window.api && typeof window.api.setZoomFactor === 'function') {
+        window.api.setZoomFactor(zoomLevel.value);
+    }
+    ElMessage.error('加载配置失败，使用默认配置');
+  }
   if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); favicon.value = "favicon-b.png"; }
   try { const userInfo = await window.api.getUser(); UserAvart.value = userInfo.avatar; }
   catch (err) { UserAvart.value = "user.png"; }
@@ -794,6 +1027,8 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  // [NEW] Remove wheel event listener
+  window.removeEventListener('wheel', handleWheel);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
   const chatMainElement = document.querySelector('.chat-main');
   if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
@@ -837,6 +1072,7 @@ const formatMessageFile = (content) => {
     content.forEach(part => {
       if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) files.push(part.text.split('\n')[0].replace('file name:', '').trim());
       else if (part.type === "input_file" && part.filename) files.push(part.filename);
+      else if (part.type === "file" && part.file.filename) files.push(part.file.filename);
     });
   }
   return files;
@@ -870,11 +1106,22 @@ const tableSpanMethod = ({ row, column, rowIndex, columnIndex }) => {
 
 async function saveConfig() { try { await window.api.updateConfig({ config: JSON.parse(JSON.stringify(currentConfig.value)) }); } catch (error) { ElMessage.error('保存配置失败'); } }
 function changeAutoCloseOnBlur() { autoCloseOnBlur.value = !autoCloseOnBlur.value; if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage); else window.addEventListener('blur', closePage); }
+
+// [MODIFIED] This function now also saves the zoom level
 async function saveWindowSize() {
-  try { const configData = await window.api.getConfig(); currentConfig.value = configData.config; } catch (err) { }
-  currentConfig.value.window_height = window.innerHeight; currentConfig.value.window_width = window.innerWidth;
-  currentConfig.value.position_x = window.screenX; currentConfig.value.position_y = window.screenY;
-  saveConfig(); ElMessage.success('窗口大小位置已保存');
+  try {
+    const configData = await window.api.getConfig();
+    currentConfig.value = configData.config;
+  } catch (err) {
+    // In case of error, use the current in-memory config
+  }
+  currentConfig.value.window_height = window.innerHeight;
+  currentConfig.value.window_width = window.innerWidth;
+  currentConfig.value.position_x = window.screenX;
+  currentConfig.value.position_y = window.screenY;
+  currentConfig.value.zoom = zoomLevel.value; // Save the current zoom level
+  await saveConfig();
+  ElMessage.success('窗口大小、位置及缩放已保存');
 }
 
 async function askAI(forceSend = false) {
@@ -1009,12 +1256,27 @@ async function reaskAI() {
   else if (lastHistoryMessage.role === "user") { }
   prompt.value = ""; await askAI(true);
 }
-function deleteMessage() {
-  if (loading.value || history.value.length === 0) return;
-  const lastMessage = history.value[history.value.length - 1];
-  if (lastMessage.role === "system") return;
-  history.value.pop(); chat_show.value.pop();
+
+function deleteMessage(index) {
+  if (loading.value) {
+    ElMessage.warning('请等待当前回复完成后再操作');
+    return;
+  }
+
+  if (index < 0 || index >= chat_show.value.length) {
+    console.error(`Attempted to delete message with invalid index: ${index}`);
+    return;
+  }
+
+  if (chat_show.value[index]?.role === 'system') {
+    ElMessage.info('系统提示词不能被删除');
+    return;
+  }
+
+  history.value.splice(index, 1);
+  chat_show.value.splice(index, 1);
 }
+
 function clearHistory() {
   if (loading.value || history.value.length === 0) return;
   if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
@@ -1061,15 +1323,15 @@ async function processFilePath(filePath) {
     else ElMessage.error('无法读取或访问该文件，请检查路径和权限');
   } catch (error) { console.error('调用 handleFilePath 时发生意外错误:', error); ElMessage.error('处理文件路径时发生未知错误'); }
 }
-
 </script>
+
 <template>
   <main>
     <el-container>
       <el-header class="header">
         <div class="header-content-wrapper">
           <div class="header-left">
-            <el-tooltip content="保存窗口大小和位置" placement="bottom">
+            <el-tooltip content="保存窗口大小、位置及缩放" placement="bottom">
               <el-button @click="saveWindowSize">
                 <img :src="favicon" class="windows-logo" alt="App logo">
               </el-button>
@@ -1132,8 +1394,7 @@ async function processFilePath(filePath) {
                 @click="handleCollapseButtonClick(index, $event)" size="small" circle />
               <el-button v-if="message === chat_show[chat_show.length - 1]" :icon="Refresh" @click="reaskAI()"
                 size="small" circle />
-              <el-button v-if="message === chat_show[chat_show.length - 1]" :icon="Delete" size="small"
-                @click="deleteMessage()" circle />
+              <el-button :icon="Delete" size="small" @click="deleteMessage(index)" circle />
             </template>
           </Bubble>
           <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner"
@@ -1170,8 +1431,7 @@ async function processFilePath(filePath) {
               <el-button v-if="shouldShowCollapseButton(index)" :icon="isCollapsed(index) ? CaretBottom : CaretTop"
                 @click="handleCollapseButtonClick(index, $event)" size="small" circle />
               <el-button v-if="index === chat_show.length - 1" :icon="Refresh" @click="reaskAI()" size="small" circle />
-              <el-button v-if="index === chat_show.length - 1" :icon="Delete" size="small" @click="deleteMessage()"
-                circle />
+              <el-button :icon="Delete" size="small" @click="deleteMessage(index)" circle />
             </template>
           </Bubble>
         </div>
@@ -1215,21 +1475,20 @@ async function processFilePath(filePath) {
 </template>
 
 <style>
-/* [NEW] Add this rule to force the dialog to the center of the screen */
 .save-options-dialog.el-dialog {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   margin: 0 !important;
-  /* Override default margins like top: 15vh */
 }
 
 .save-options-list {
   display: flex;
   flex-direction: column;
   gap: 15px;
-  padding: 10px 0;
+  padding: 10px 0 0 20px;
+  margin: 0;
 }
 
 .save-option-item {
@@ -1616,6 +1875,52 @@ html.dark .system-prompt-full-content::-webkit-scrollbar-thumb {
 
 html.dark .system-prompt-full-content::-webkit-scrollbar-thumb:hover {
   background: #999;
+}
+
+.filename-prompt-dialog.el-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0 !important;
+  max-width: 600px;
+  width: 90%;
+}
+
+.filename-prompt-dialog .el-message-box__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 20px;
+}
+
+.filename-prompt-dialog .el-input {
+  width: 100%;
+  max-width: 520px;
+}
+
+.filename-prompt-dialog .el-input__wrapper {
+  height: 44px;
+  font-size: 16px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.filename-prompt-dialog .el-input-group__append {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  color: var(--el-text-color-placeholder);
+  background-color: var(--el-fill-color-light);
+}
+
+html.dark .filename-prompt-dialog .el-input-group__append {
+  background-color: var(--el-bg-color);
+  color: var(--el-text-color-placeholder);
+  border-color: var(--el-border-color);
 }
 </style>
 

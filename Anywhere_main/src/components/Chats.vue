@@ -115,24 +115,41 @@ async function startChat(file) {
 }
 
 async function renameFile(file) {
+    const defaultInputValue = file.basename.endsWith('.json')
+        ? file.basename.slice(0, -5)
+        : file.basename;
+
     try {
-        const { value: newFilename } = await ElMessageBox.prompt(
+        const { value: userInput } = await ElMessageBox.prompt(
             t('chats.rename.promptMessage'),
             t('chats.rename.promptTitle'),
             {
                 confirmButtonText: t('common.confirm'),
                 cancelButtonText: t('common.cancel'),
-                inputValue: file.basename,
-                inputValidator: (val) => val && val.endsWith('.json'),
-                inputErrorMessage: t('chats.rename.invalidFilename'),
+                inputValue: defaultInputValue, // 使用处理过的默认值
             }
         );
 
-        if (newFilename && newFilename !== file.basename) {
+        if (userInput) {
+            let finalFilename = userInput.trim();
+
+            if (!finalFilename.toLowerCase().endsWith('.json')) {
+                finalFilename += '.json';
+            }
+
+            if (finalFilename === file.basename) {
+                return;
+            }
+
+            if (finalFilename === '.json') {
+                ElMessage.error(t('chats.rename.invalidFilename')); // 使用现有的 i18n key
+                return;
+            }
+
             const { url, username, password, data_path } = webdavConfig.value;
             const client = createClient(url, { username, password });
             const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
-            await client.moveFile(`${remoteDir}/${file.basename}`, `${remoteDir}/${newFilename}`);
+            await client.moveFile(`${remoteDir}/${file.basename}`, `${remoteDir}/${finalFilename}`);
             ElMessage.success(t('chats.alerts.renameSuccess'));
             await fetchChatFiles();
         }
@@ -222,14 +239,19 @@ const handleSelectionChange = (val) => {
                     style="width: 100%" height="100%" border stripe>
                     <el-table-column type="selection" width="40" align="center" />
                     <el-table-column prop="basename" :label="t('chats.table.filename')" sortable show-overflow-tooltip
-                        min-width="190" />
+                        min-width="180">
+                        <template #default="scope">
+                            {{ scope.row.basename.endsWith('.json') ? scope.row.basename.slice(0, -5) :
+                            scope.row.basename }}
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="140" sortable>
                         <template #default="scope">{{ formatDate(scope.row.lastmod) }}</template>
                     </el-table-column>
                     <el-table-column prop="size" :label="t('chats.table.size')" width="90" sortable>
                         <template #default="scope">{{ formatBytes(scope.row.size) }}</template>
                     </el-table-column>
-                    <el-table-column :label="t('chats.table.actions')" width="200" align="center">
+                    <el-table-column :label="t('chats.table.actions')" width="220" align="center">
                         <template #default="scope">
                             <div class="action-buttons-container">
                                 <el-button link type="primary" :icon="ChatDotRound" @click="startChat(scope.row)">{{

@@ -244,7 +244,7 @@
         "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました"
       },
       "alerts": {
-        "importSuccess": "設定のインポートに成功しました。",
+        "importSuccess": "新しい会話名を入力してください。",
         "urlRequired": "WebDAV URLは空にできません。",
         "backupInProgress": "バックアップ中...",
         "backupSuccess": "バックアップに成功しました",
@@ -254,6 +254,10 @@
         "restoreSuccess": "復元に成功しました",
         "restoreFailed": "復元に失敗しました"
       }
+    },
+    "alerts":{
+        "importSuccess": "新しい会話名を入力してください。",
+        "importFailed": "設定のインポートに失敗しました"
     }
   },
   "common": {

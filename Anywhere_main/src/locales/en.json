@@ -31,7 +31,7 @@
     },
     "rename": {
       "promptTitle": "Rename Chat",
-      "promptMessage": "Please enter the new chat filename.",
+      "promptMessage": "Please enter a new conversation name.",
       "invalidFilename": "Invalid filename, must end with .json."
     },
     "confirmDelete": "Are you sure you want to permanently delete chat '{filename}'?",
@@ -254,6 +254,10 @@
         "restoreSuccess": "Restore successful",
         "restoreFailed": "Restore failed"
       }
+    },
+    "alerts":{
+        "importSuccess": "Configuration imported successfully.",
+        "importFailed": "Configuration import failed."
     }
   },
   "common": {
