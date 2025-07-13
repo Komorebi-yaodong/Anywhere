@@ -13,7 +13,7 @@ const props = defineProps({
     ctrlEnterToSend: Boolean,
 });
 
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'drop', 'paste']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload']);
 
 const senderRef = ref();
 
@@ -21,11 +21,11 @@ const attachmentsNode = computed(() => h(Attachments, {
     beforeUpload: () => false,
     onChange: (files) => emit('upload', files),
     children: h(ElButton, { type: 'default', icon: h(Link), circle: true }),
-    getDropContainer: () => (document.body),
+    // [REMOVED] The following line is the source of the conflict and has been removed.
+    // getDropContainer: () => (document.body), 
 }));
 
 const onSubmit = () => {
-    // 只有在非加载状态下才允许提交
     if (props.loading) return;
     emit('submit');
 };
@@ -33,8 +33,7 @@ const onSubmit = () => {
 const onCancel = () => emit('cancel');
 const onClearHistory = () => emit('clear-history');
 const onRemoveFile = (index) => emit('remove-file', index);
-const onDrop = (event) => emit('drop', event);
-const onPaste = (event) => emit('paste', event);
+
 
 const focus = (focusType = 'end') => {
     senderRef.value?.focus(focusType);

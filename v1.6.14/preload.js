@@ -1,6 +1,3 @@
-const { contextBridge, ipcRenderer } = require('electron');
-const { ipcMain, dialog } = require('electron');
-
 const {
   getConfig,
   updateConfig,
