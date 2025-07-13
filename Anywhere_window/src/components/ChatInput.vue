@@ -11,6 +11,10 @@ const fileList = defineModel('fileList');
 const props = defineProps({
     loading: Boolean,
     ctrlEnterToSend: Boolean,
+    layout: {
+        type: String,
+        default: 'horizontal' 
+    }
 });
 
 // --- Emits definition ---
@@ -166,13 +170,37 @@ defineExpose({ focus });
         <el-row>
             <el-col :span="1" />
             <el-col :span="22">
-                <div class="chat-input-wrapper">
+                
+                <!-- Horizontal Layout -->
+                <div v-if="layout === 'horizontal'" class="chat-input-area-horizontal">
+                    <div class="action-buttons-left">
+                        <el-button :icon="Delete" size="default" @click="onClearHistory" circle />
+                        <el-button :icon="Link" size="default" @click="triggerFileUpload" circle />
+                    </div>
                     <el-input 
                         ref="senderRef" 
-                        class="chat-textarea" 
+                        class="chat-textarea-horizontal" 
                         v-model="prompt" 
                         type="textarea"
-                        placeholder="在此输入，或拖拽会话文件以加载" 
+                        placeholder="输入、粘贴、拖拽以发送内容" 
+                        :autosize="{ minRows: 1, maxRows: 5 }" 
+                        resize="none"
+                        @keydown="handleKeyDown" 
+                    />
+                    <div class="action-buttons-right">
+                        <el-button v-if="loading" :icon="Close" @click="onCancel" circle></el-button>
+                        <el-button v-else :icon="Promotion" @click="onSubmit" circle :disabled="loading" />
+                    </div>
+                </div>
+
+                <!-- Vertical Layout -->
+                <div v-else class="chat-input-area-vertical">
+                    <el-input 
+                        ref="senderRef" 
+                        class="chat-textarea-vertical" 
+                        v-model="prompt" 
+                        type="textarea"
+                        placeholder="输入、粘贴、拖拽以发送内容" 
                         :autosize="{ minRows: 1, maxRows: 5 }" 
                         resize="none"
                         @keydown="handleKeyDown" 
@@ -181,8 +209,6 @@ defineExpose({ focus });
                         <div class="action-buttons-left">
                             <el-button :icon="Delete" size="default" @click="onClearHistory" circle />
                             <el-button :icon="Link" size="default" @click="triggerFileUpload" circle />
-                            <input ref="fileInputRef" type="file" multiple @change="handleFileChange"
-                                style="display: none;" />
                         </div>
                         <div class="action-buttons-right">
                             <el-button v-if="loading" :icon="Close" @click="onCancel" circle></el-button>
@@ -190,6 +216,9 @@ defineExpose({ focus });
                         </div>
                     </div>
                 </div>
+
+                <!-- Common hidden file input for both layouts -->
+                <input ref="fileInputRef" type="file" multiple @change="handleFileChange" style="display: none;" />
             </el-col>
             <el-col :span="1" />
         </el-row>
@@ -247,25 +276,69 @@ html.dark .drag-overlay {
     gap: 8px;
 }
 
-.chat-input-wrapper {
+/* === Horizontal Layout Styles === */
+.chat-input-area-horizontal {
+    display: flex;
+    align-items: center; /* Vertically center items */
+    background-color: #F3F4F6;
+    border-radius: 12px;
+    padding: 6px 8px;
+}
+html.dark .chat-input-area-horizontal {
+    background-color: #404045;
+}
+.chat-textarea-horizontal {
+    flex-grow: 1;
+}
+.chat-textarea-horizontal:deep(.el-textarea__inner) {
+    background-color: transparent;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 5px 0; 
+    color: var(--el-text-color-primary);
+    font-size: 14px;
+    line-height: 1.5;
+    resize: none;
+}
+.chat-input-area-horizontal .action-buttons-left,
+.chat-input-area-horizontal .action-buttons-right {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+.chat-input-area-horizontal .action-buttons-left {
+    margin-right: 8px; /* Space between buttons and input */
+}
+.chat-input-area-horizontal .action-buttons-right {
+    margin-left: 8px; /* Space between input and send button */
+}
+/* [MODIFIED] To make left buttons adjacent */
+.chat-input-area-horizontal .action-buttons-left .el-button:not(:last-child) {
+    margin-right: -10px; /* Negative margin pulls buttons together */
+}
+.chat-input-area-horizontal .el-button {
+    width: 32px;
+    height: 32px;
+}
+
+
+/* === Vertical Layout Styles === */
+.chat-input-area-vertical {
     display: flex;
     flex-direction: column;
     background-color: #F3F4F6;
     border-radius: 12px;
     padding: 10px 12px;
 }
-
-html.dark .chat-input-wrapper {
+html.dark .chat-input-area-vertical {
     background-color: #404045;
 }
-
-.chat-textarea {
+.chat-textarea-vertical {
     width: 100%;
     flex-grow: 1;
 }
-
-.chat-textarea:deep(.el-textarea__inner) {
-    background-color: transparent !important;
+.chat-textarea-vertical:deep(.el-textarea__inner) {
+    background-color: transparent;
     box-shadow: none !important;
     border: none !important;
     padding: 0;
@@ -274,7 +347,6 @@ html.dark .chat-input-wrapper {
     line-height: 1.5;
     resize: none;
 }
-
 .input-actions-bar {
     display: flex;
     justify-content: space-between;
@@ -282,58 +354,54 @@ html.dark .chat-input-wrapper {
     margin-top: 8px;
     flex-shrink: 0;
 }
-
-.action-buttons-left,
-.action-buttons-right {
+.chat-input-area-vertical .action-buttons-left,
+.chat-input-area-vertical .action-buttons-right {
     display: flex;
     align-items: center;
-    gap: 8px;
 }
-
-.input-actions-bar .el-button {
+.chat-input-area-vertical .action-buttons-left {
+    margin-left: -6px; 
+}
+.chat-input-area-vertical .action-buttons-right {
+    margin-right: -6px;
+}
+.chat-input-area-vertical .el-button {
     width: 32px;
     height: 32px;
     background: none;
     border: none;
 }
-
-.input-actions-bar .el-button:hover {
+.chat-input-area-vertical .el-button:hover {
     background-color: rgba(0, 0, 0, 0.05);
 }
-
-html.dark .input-actions-bar .el-button:hover {
+html.dark .chat-input-area-vertical .el-button:hover {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-/* [NEW] Custom scrollbar styles for the textarea */
-.chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar) {
+/* === Common Custom Scrollbar Styles for Textareas === */
+:deep(.el-textarea__inner::-webkit-scrollbar) {
     width: 8px;
     height: 8px;
 }
-
-.chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-track) {
+:deep(.el-textarea__inner::-webkit-scrollbar-track) {
     background: transparent;
     border-radius: 4px;
 }
-
-.chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+:deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
     background: var(--el-text-color-disabled, #c0c4cc);
     border-radius: 4px;
     border: 2px solid transparent;
     background-clip: content-box;
 }
-
-.chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+:deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
     background: var(--el-text-color-secondary, #909399);
     background-clip: content-box;
 }
-
-html.dark .chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
     background: #6b6b6b;
     background-clip: content-box;
 }
-
-html.dark .chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
     background: #999;
     background-clip: content-box;
 }

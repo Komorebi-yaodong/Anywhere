@@ -155,7 +155,6 @@ const commandHandlers = {
 // --- Main Plugin Entry ---
 utools.onPluginEnter(async (action) => {
   const { code } = action;
-
   if (commandHandlers[code]) {
     await commandHandlers[code](action);
   } else if (code.endsWith(feature_suffix)) {

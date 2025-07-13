@@ -191,6 +191,12 @@
       "label": "固定窗口位置",
       "description": "启用以固定对话窗口出现的位置。"
     },
+    "inputLayout": {
+      "label": "输入框布局",
+      "description": "切换独立对话窗口中输入框的样式。",
+      "horizontal": "水平",
+      "vertical": "垂直"
+    },
     "dataManagement": {
       "title": "数据管理",
       "exportLabel": "导出配置",

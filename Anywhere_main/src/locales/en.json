@@ -190,6 +190,12 @@
       "label": "Fix Window Position",
       "description": "Enable to fix the position where the dialog window appears."
     },
+    "inputLayout": {
+      "label": "Input Layout",
+      "description": "Switch the style of the input box in the conversation window.",
+      "horizontal": "Horizontal",
+      "vertical": "Vertical"
+    },
     "dataManagement": {
       "title": "Data Management",
       "exportLabel": "Export Configuration",

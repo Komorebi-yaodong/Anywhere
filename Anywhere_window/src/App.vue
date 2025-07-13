@@ -1,6 +1,7 @@
 <!-- ./Anywhere_window/src/App.vue -->
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick, watch, h } from 'vue';
+// [MODIFIED] Added 'computed' to imports
+import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
 import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton } from 'element-plus';
 import { createClient } from "webdav/web";
 
@@ -104,7 +105,11 @@ const signalController = ref(null);
 const fileList = ref([]);
 const zoomLevel = ref(1);
 const collapsedMessages = ref(new Set());
-const defaultConversationName = ref("");
+const defaultConversationName = ref(""); 
+
+// [NEW] Computed property to get the layout setting
+const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
+
 
 // --- Dialog State ---
 const changeModel_page = ref(false);
@@ -115,7 +120,7 @@ const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
 
 // --- Refs for Child Components ---
-const senderRef = ref();
+const senderRef = ref(); 
 
 // --- UI Logic ---
 let lastHeight = 0;
@@ -308,8 +313,6 @@ onMounted(async () => {
   if (isInit.value) return; isInit.value = true;
   window.addEventListener('wheel', handleWheel, { passive: false });
 
-  // [MODIFIED] Removed drag, drop and paste listeners. They are now in ChatInput.vue
-
   try {
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
@@ -327,13 +330,12 @@ onMounted(async () => {
   catch (err) { UserAvart.value = "user.png"; }
   autoCloseOnBlur.value = currentConfig.value.autoCloseOnBlur;
 
-  // The rest of the onMounted logic for initialization...
   try {
     window.preload.receiveMsg(async (data) => {
       if (data.filename) {
           defaultConversationName.value = data.filename.replace(/\.json$/i, '');
       } else {
-          defaultConversationName.value = "";
+          defaultConversationName.value = ""; 
       }
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
@@ -402,7 +404,6 @@ onMounted(async () => {
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
     });
   } catch (err) {
-    // Fallback initialization...
     basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
     document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
@@ -439,8 +440,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('wheel', handleWheel);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
-
-  // [MODIFIED] Removed drag, drop and paste listeners.
   
   const chatMainElement = document.querySelector('.chat-main');
   if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
@@ -723,7 +722,7 @@ const checkAndLoadSessionFromFile = async (file) => {
       const fileContent = await file.text();
       const jsonData = JSON.parse(fileContent);
       if (jsonData && jsonData.anywhere_history === true) {
-        defaultConversationName.value = file.name.replace(/\.json$/i, '');
+        defaultConversationName.value = file.name.replace(/\.json$/i, ''); 
         await loadSession(jsonData);
         return true;
       }
@@ -906,7 +905,7 @@ const clearHistory = () => {
   if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
   else { history.value = []; chat_show.value = []; }
   collapsedMessages.value.clear();
-  defaultConversationName.value = "";
+  defaultConversationName.value = ""; 
   senderRef.value?.focus(); ElMessage.success('历史记录已清除');
 };
 </script>
@@ -925,10 +924,21 @@ const clearHistory = () => {
           @copy-text="handleCopyText" @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse"
           @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
       </el-main>
-
-      <ChatInput ref="senderRef" v-model:prompt="prompt" v-model:fileList="fileList" :loading="loading"
-        :ctrlEnterToSend="currentConfig.CtrlEnterToSend" @submit="handleSubmit" @cancel="handleCancel"
-        @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload" />
+      
+      <!-- [MODIFIED] Pass the layout prop to the ChatInput component -->
+      <ChatInput 
+        ref="senderRef" 
+        v-model:prompt="prompt" 
+        v-model:fileList="fileList" 
+        :loading="loading"
+        :ctrlEnterToSend="currentConfig.CtrlEnterToSend"
+        :layout="inputLayout"
+        @submit="handleSubmit" 
+        @cancel="handleCancel"
+        @clear-history="handleClearHistory" 
+        @remove-file="handleRemoveFile" 
+        @upload="handleUpload" 
+      />
 
     </el-container>
   </main>

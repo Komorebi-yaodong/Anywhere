@@ -6,13 +6,7 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const currentConfig = ref({
-  providers: {},
-  providerOrder: [],
-  prompts: {},
-  tags: {},
-  webdav: {}
-});
+const currentConfig = ref(window.api.defaultConfig.config);
 const provider_key = ref(null);
 
 // Providers.vue - onMounted

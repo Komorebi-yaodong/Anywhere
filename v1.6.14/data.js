@@ -33,6 +33,7 @@ const defaultConfig = {
         ifTextNecessary: false,
       },
     },
+    language:"zh",
     tags: {},
     stream: true,
     skipLineBreak: false,
@@ -52,6 +53,7 @@ const defaultConfig = {
       path: "/anywhere",
       dataPath: "/anywhere_data",
     },
+    inputLayout: 'vertical',
   }
 };
 
@@ -69,8 +71,8 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (config.version !== "1.6.13") {
-    config.version = "1.6.13";
+  if (config.version !== "1.6.14") {
+    config.version = "1.6.14";
     flag = true;
   }
   else {
@@ -111,12 +113,18 @@ function checkConfig(config) {
     flag = true;
   }
 
+  if (config.inputLayout === undefined) {
+    config.inputLayout = 'vertical';
+    flag = true;
+  }
+
   if (config.webdav == undefined) {
     config.webdav = {
       url: "",
       username: "",
       password: "",
       path: "/anywhere",
+      dataPath: "/anywhere_data",
     };
     flag = true;
   }
@@ -186,7 +194,7 @@ function checkConfig(config) {
     flag = true;
   }
   if (!config.language) {
-    config.language = "en";
+    config.language = "zh";
     flag = true;
   }
 
@@ -600,5 +608,5 @@ module.exports = {
   coderedirect,
   setZoomFactor,
   feature_suffix,
-  defaultConfig
+  defaultConfig,
 };

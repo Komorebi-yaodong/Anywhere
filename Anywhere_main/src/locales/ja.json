@@ -190,6 +190,12 @@
       "label": "ウィンドウ位置を固定",
       "description": "ダイアログウィンドウが表示される位置を固定します。"
     },
+    "inputLayout": {
+      "label": "入力ボックスのレイアウト",
+      "description": "会話ウィンドウ内の入力ボックスのスタイルを切り替えます。",
+      "horizontal": "水平",
+      "vertical": "垂直"
+    },
     "dataManagement": {
       "title": "データ管理",
       "exportLabel": "設定のエクスポート",
