@@ -5,56 +5,13 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const defaultConfig = {
-  config: {
-    providers: {
-      "0": {
-        name: "default",
-        url: "https://api.openai.com/v1",
-        api_key: "",
-        modelList: [],
-        enable: true,
-      },
-    },
-    providerOrder: ["0",],
-    prompts: {
-      AI: {
-        type: "over",
-        prompt: `你是一个AI助手`,
-        showMode: "window",
-        model: "0|gpt-4o",
-        enable: true,
-        icon: "",
-        stream: true,
-        temperature: 0.7,
-        isTemperature: false,
-        isDirectSend_file: false,
-        isDirectSend_normal: true,
-        ifTextNecessary: false,
-      },
-    },
-    tags: {},
-    stream: true,
-    skipLineBreak: false,
-    window_height: 520,
-    window_width: 400,
-    autoCloseOnBlur: false,
-    CtrlEnterToSend: false,
-    isAlwaysOnTop: false,
-    showNotification: true,
-    isDarkMode: false,
-    fix_position: false,
-    webdav: {
-      url: "",
-      username: "",
-      password: "",
-      path: "/anywhere",
-      data_path: "/anywhere_data",
-    },
-  }
-};
-
-const currentConfig = ref(JSON.parse(JSON.stringify(defaultConfig.config)));
+const currentConfig = ref({
+  providers: {},
+  providerOrder: [],
+  prompts: {},
+  tags: {},
+  webdav: {}
+});
 const activeCollapseNames = ref([]);
 
 const showPromptEditDialog = ref(false);
@@ -162,13 +119,12 @@ onMounted(async () => {
       currentConfig.value = result.config;
     } else {
       console.error("Failed to get valid config from API.");
-      currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
+      currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
     }
   } catch (error) {
     console.error("Error fetching config in Prompts.vue:", error);
-    currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
+    currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
   } finally {
-    // nextTick 保证DOM更新后再执行后续操作，放在这里是好的实践
     await nextTick();
   }
 });

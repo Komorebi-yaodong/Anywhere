@@ -6,84 +6,38 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const defaultConfig = {
-  config: {
-    providers: {
-      "0": {
-        name: "default",
-        url: "https://api.openai.com/v1",
-        api_key: "",
-        modelList: [],
-        enable: true,
-      },
-    },
-    providerOrder: ["0",],
-    prompts: {
-      AI: {
-        type: "over",
-        prompt: `你是一个AI助手`,
-        showMode: "window",
-        model: "0|gpt-4o",
-        enable: true,
-        icon: "",
-        stream: true,
-        temperature: 0.7,
-        isTemperature: false,
-        isDirectSend_file: false,
-        isDirectSend_normal: true,
-        ifTextNecessary: false,
-      },
-    },
-    tags: {},
-    stream: true,
-    skipLineBreak: false,
-    window_height: 520,
-    window_width: 400,
-    autoCloseOnBlur: false,
-    CtrlEnterToSend: false,
-    isAlwaysOnTop: false,
-    showNotification: true,
-    isDarkMode: false,
-    fix_position: false,
-    webdav: {
-      url: "",
-      username: "",
-      password: "",
-      path: "/anywhere",
-      data_path: "/anywhere_data",
-    },
-  }
-};
-
-const currentConfig = ref(JSON.parse(JSON.stringify(defaultConfig.config)));
+const currentConfig = ref({
+  providers: {},
+  providerOrder: [],
+  prompts: {},
+  tags: {},
+  webdav: {}
+});
 const provider_key = ref(null);
 
 // Providers.vue - onMounted
 onMounted(async () => {
   try {
-    // 1. 从后端API获取已经处理好的配置
     const result = await window.api.getConfig();
 
     if (result && result.config) {
       currentConfig.value = result.config;
     } else {
       console.error("Failed to get valid config from API.");
-      currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
+      currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
     }
 
-    // 3. 在获取到正确的配置后，设置当前选中的 provider
     if (currentConfig.value.providerOrder && currentConfig.value.providerOrder.length > 0) {
       provider_key.value = currentConfig.value.providerOrder[0];
     } else if (currentConfig.value.providers && Object.keys(currentConfig.value.providers).length > 0) {
-      // 如果 order 为空但 providers 不为空，使用第一个 provider 作为备选
       provider_key.value = Object.keys(currentConfig.value.providers)[0];
     } else {
-      provider_key.value = null; // 或者一个表示“无”的默认值
+      provider_key.value = null;
     }
 
   } catch (error) {
     console.error("Error fetching config in Providers.vue:", error);
-    currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
+    currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
     if (currentConfig.value.providerOrder && currentConfig.value.providerOrder.length > 0) {
       provider_key.value = currentConfig.value.providerOrder[0];
     }

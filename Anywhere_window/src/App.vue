@@ -229,17 +229,7 @@ const renderMarkdown = (message) => {
   return md.render(formattedContent || ' ');
 };
 
-
-const defaultConfig = {
-  config: {
-    providers: { "0": { name: "default", url: "https://api.openai.com/v1", api_key: "", modelList: [], enable: true, }, },
-    providerOrder: ["0",],
-    prompts: { AI: { type: "over", prompt: `你是一个AI助手`, showMode: "window", model: "0|gpt-4o", enable: true, icon: "", stream: true, temperature: 0.7, isTemperature: false, isDirectSend_file: false, isDirectSend_normal: true, ifTextNecessary: false, }, },
-    tags: {}, stream: true, skipLineBreak: false, window_height: 520, window_width: 400, autoCloseOnBlur: false, CtrlEnterToSend: false, isAlwaysOnTop: false, showNotification: true, isDarkMode: false, fix_position: false,
-    zoom: 1, // [MODIFIED] Added zoom property with default value
-    webdav: { url: "", username: "", password: "", path: "/anywhere", data_path: "/anywhere_data", },
-  }
-};
+const defaultConfig = window.api.defaultConfig;
 
 let UserAvart = ref("user.png");
 let AIAvart = ref("ai.svg");

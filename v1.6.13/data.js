@@ -599,4 +599,5 @@ module.exports = {
   openWindow,
   coderedirect,
   setZoomFactor,
+  feature_suffix,
 };

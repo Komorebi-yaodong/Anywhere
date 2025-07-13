@@ -12,7 +12,7 @@ PRELOAD = "./"+moveDist()+"/"
 MAIN = [
     "./Anywhere_main/src/components/",
     "./Anywhere_main/src/App.vue",
-    "./Anywhere_main/src/locales/zh.json",
+    "./Anywhere_main/src/locales/",
 ]
 
 WINDOW = [
@@ -26,7 +26,7 @@ def read_text(file_path,iscode = True):
         if iscode:
             return f"```{file_path.split('.')[-1]}\n{file_path}\n"+file.read()+"\n```\n"
         else:
-            return file.read()+"\n\n"
+            return file.read()+"\n"
 
 
 # 从置顶目录下获取文件文本
@@ -63,14 +63,14 @@ def get_summary():
         readme,
         "以下是预加载文件和主页面,preload，preload.js是主界面的预加载文件、window_preload.js是独立窗口界面的预加载文件，其它是其他工具文件",
         preload,
-        "以下是主页面的前端代码",
+        "以下是主页面的前端代码，在./Anywhere_main/目录下，是设置页面，其预加载文件为preload.js",
         main_text,
-        "以下是独立窗口的前端代码",
+        "以下是独立窗口的前端代码，在./Anywhere_window/目录下，是独立窗口文件，其预加载文件为window_preload.js",
         window_text,
-        "不论你进行如何修改，一定保证不会破坏已有的功能，前端修改一定要保持相同的主题风格，并保证节省开发者工作量的原则，对于python和javascript代码，如果只改动一个函数，请给出完整的函数代码并告诉我在哪里进行覆盖，对于vue代码，请给出所需要修改的对应的块（完整的<script setup>、<template>或者<style>等块的代码），千万不要省略代码"
+        "不论你进行如何修改，一定保证不会破坏已有的功能，前端修改一定要保持相同的主题风格，并保证节省开发者工作量的原则，对于javascript，如果只改动一个函数，请给出完整的函数代码并告诉我在哪里进行覆盖，对于vue代码，请给出所需要修改的对应的块（完整的<script setup>块、<template>块或者<style>块等完整的代码），千万不要省略代码\n\n"
     ]
 
-    return "\n\n".join(text)
+    return "\n".join(text)
 
 if __name__ == "__main__":
     sum = get_summary()

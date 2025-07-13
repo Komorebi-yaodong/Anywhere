@@ -13,7 +13,8 @@ const {
   sethotkey,
   openWindow,
   coderedirect,
-  setZoomFactor
+  setZoomFactor,
+  feature_suffix,
 } = require('./data.js');
 
 const {
@@ -43,119 +44,110 @@ window.api = {
   setZoomFactor,
 };
 
-const feature_suffix = "anywhere助手^_^"
+// --- Command Handlers ---
+const commandHandlers = {
+  'Anywhere Settings': async () => {
+    const config = getConfig().config;
+    checkConfig(config);
+    // The main window will open automatically based on plugin.json, so no action needed here.
+  },
 
-// 主逻辑
-utools.onPluginEnter(async ({ code, type, payload, option }) => {
-  if (code === "Anywhere Settings") {
-    config = getConfig().config;
-    checkConfig(config);
-  }
-  else if (code === "Resume Conversation") {
-    // 获取配置文件，隐藏主窗口
+  'Resume Conversation': async ({ type, payload }) => {
     utools.hideMainWindow();
-    config = getConfig().config;
+    const config = getConfig().config;
     checkConfig(config);
-    if (type == "files" || type == "over") {
-      let msg = {
+    if (type === "files" || type === "over") {
+      const msg = {
         os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
-        code: code,
-        type: type,
-        payload: payload,
+        code: "Resume Conversation",
+        type,
+        payload,
       };
       await openWindow(config, msg);
     }
-  }
-  else if (code.endsWith(feature_suffix)) { // 助手功能
-    // 获取配置文件，隐藏主窗口
+    utools.outPlugin();
+  },
+
+  handleAssistant: async ({ code, type, payload }) => {
     utools.hideMainWindow();
-    config = getConfig().config;
+    const config = getConfig().config;
     checkConfig(config);
-    let msg = {
+    
+    const assistantName = code.replace(feature_suffix, "");
+    const msg = {
       os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
-      code: code.replace(feature_suffix, ""), // 去除" 助手"后缀
-      type: "over",
-      payload: code.replace(feature_suffix, ""),
+      code: assistantName,
+      type: "over", // Assistant commands are always treated as "over" type for window opening
+      payload: assistantName,
     };
     
     await openWindow(config, msg);
-    utools.outPlugin(); // 关闭插件窗口
-  }
-  else {
-    // 获取配置文件，隐藏主窗口
+    utools.outPlugin();
+  },
+  
+  handlePrompt: async ({ code, type, payload }) => {
     utools.hideMainWindow();
-    config = getConfig().config;
+    const config = getConfig().config;
     checkConfig(config);
-    // 直接输入到当前输入框
-    let content = null;
-    if (config.prompts[code].showMode === "input") {
-      if (type === "over") {
-        // 将换行符替换为空格或空
-        if (config.skipLineBreak) {
-          payload = payload
-            .replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2")
-            .replace(/\s*\n\s*/g, "");
+
+    const promptConfig = config.prompts[code];
+    if (!promptConfig) {
+        utools.showNotification(`Error: Prompt "${code}" not found.`);
+        utools.outPlugin();
+        return;
+    }
+
+    if (promptConfig.showMode === 'window') {
+        const msg = {
+          os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+          code,
+          type,
+          payload,
+        };
+        await openWindow(config, msg);
+    } else {
+        let content = null;
+        if (type === "over") {
+            if (config.skipLineBreak) {
+                payload = payload
+                    .replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2")
+                    .replace(/\s*\n\s*/g, "");
+            }
+            content = payload;
+        } else if (type === "img") {
+            content = [{ type: "image_url", image_url: { url: payload } }];
+        } else if (type === "files") {
+            content = await sendfileDirect(payload);
+        } else {
+            utools.showNotification("Unsupported input type");
         }
-        content = payload;
-      } else if (type === "img") {
-        content = [
-          {
-            type: "image_url",
-            image_url: {
-              url: payload,
-            },
-          },
-        ]
-      } else if (type === "files") {
-        content = await sendfileDirect(payload);
-      }
-      else {
-        content = false;
-        utools.showNotification("Unsupported input type");
-      }
-      if (content) {
-        response = await requestTextOpenAI(code, content, config);
-        handelReplyOpenAI(code, response, config.stream, config.showNotification);
-      }
-    }
-    // 输入到剪贴板
-    else if (config.prompts[code].showMode === "clipboard") {
-      config2 = config;
-      config2.stream = false;
-      if (type === "over") {
-        // 将换行符替换为空格或空
-        if (config.skipLineBreak) {
-          payload = payload
-            .replace(/([a-zA-Z])\s*\n\s*([a-zA-Z])/g, "$1 $2")
-            .replace(/\s*\n\s*/g, "");
+
+        if (content) {
+            const response = await requestTextOpenAI(code, content, config);
+            if (promptConfig.showMode === 'input') {
+                await handelReplyOpenAI(code, response, config.stream, config.showNotification);
+            } else if (promptConfig.showMode === 'clipboard') {
+                const config2 = { ...config, stream: false };
+                const data = await response.json();
+                const result = data.choices[0].message.content.replace(/<think>.*?<\/think>/gs, '').trim();
+                utools.copyText(result);
+                if(config.showNotification) utools.showNotification(code + " successfully!");
+            }
         }
-        response = await requestTextOpenAI(code, payload, config2);
-      } else if (type === "img") {
-        response = await requestImageOpenAI(code, payload, config2);
-      } else if (type === "files") {
-        file_content = await sendfileDirect(payload);
-        response = await requestTextOpenAI(code, file_content, config);
-      }
-      else {
-        utools.showNotification("Unsupported input type");
-      }
-      const data = await response.json();
-      // utools.copyText(data.choices[0].message.content.trimEnd());
-      // 正则匹配，删除<think></think>标签
-      const result = data.choices[0].message.content.replace(/<think>.*?<\/think>/gs, '').trim();
-      utools.copyText(result);
-      utools.showNotification(code + " successfully!");
     }
-    // 窗口运行
-    else if (config.prompts[code].showMode === "window") {
-      let msg = {
-        os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
-        code: code,
-        type: type,
-        payload: payload,
-      };
-      await openWindow(config, msg);
-    }
-    utools.outPlugin(); // 关闭插件窗口
+    utools.outPlugin();
+  }
+};
+
+// --- Main Plugin Entry ---
+utools.onPluginEnter(async (action) => {
+  const { code } = action;
+
+  if (commandHandlers[code]) {
+    await commandHandlers[code](action);
+  } else if (code.endsWith(feature_suffix)) {
+    await commandHandlers.handleAssistant(action);
+  } else {
+    await commandHandlers.handlePrompt(action);
   }
 });

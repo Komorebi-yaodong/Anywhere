@@ -8,57 +8,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t, locale } = useI18n()
 
-// --- 默认配置 ---
-const defaultConfig = {
-  config: {
-    providers: {
-      "0": {
-        name: "default",
-        url: "https://api.openai.com/v1",
-        api_key: "",
-        modelList: [],
-        enable: true,
-      },
-    },
-    providerOrder: ["0",],
-    prompts: {
-      AI: {
-        type: "over",
-        prompt: `你是一个AI助手`,
-        showMode: "window",
-        model: "0|gpt-4o",
-        enable: true,
-        icon: "",
-        stream: true,
-        temperature: 0.7,
-        isTemperature: false,
-        isDirectSend_file: false,
-        isDirectSend_normal: true,
-        ifTextNecessary: false,
-      },
-    },
-    tags: {},
-    stream: true,
-    skipLineBreak: false,
-    window_height: 520,
-    window_width: 400,
-    autoCloseOnBlur: false,
-    CtrlEnterToSend: false,
-    isAlwaysOnTop: false,
-    showNotification: true,
-    isDarkMode: false,
-    fix_position: false,
-    webdav: {
-      url: "",
-      username: "",
-      password: "",
-      path: "/anywhere",
-      data_path: "/anywhere_data",
-    },
-  }
-};
-
-const currentConfig = ref(JSON.parse(JSON.stringify(defaultConfig.config)));
+const currentConfig = ref({
+  providers: {},
+  providerOrder: [],
+  prompts: {},
+  tags: {},
+  webdav: {}
+});
 const selectedLanguage = ref(locale.value);
 
 
@@ -99,14 +55,15 @@ onMounted(async () => {
   try {
     const result = await window.api.getConfig();
     if (result && result.config) {
-      currentConfig.value = Object.assign({}, JSON.parse(JSON.stringify(defaultConfig.config)), result.config);
+      const baseConfig = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
+      currentConfig.value = Object.assign({}, baseConfig, result.config);
     } else {
       console.error("Failed to get valid config from API.");
-      currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
+      currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
     }
   } catch (error) {
     console.error("Error fetching config in Setting.vue:", error);
-    currentConfig.value = JSON.parse(JSON.stringify(defaultConfig.config));
+    currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
   }
   selectedLanguage.value = locale.value;
   await nextTick();
@@ -164,7 +121,7 @@ function importConfig() {
           if (typeof importedData !== 'object' || importedData === null) {
             throw new Error("Imported file is not a valid configuration object.");
           }
-          const baseConfig = JSON.parse(JSON.stringify(defaultConfig.config));
+          const baseConfig = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
           const finalConfig = Object.assign({}, baseConfig, importedData);
           currentConfig.value = finalConfig;
           await saveConfig();
@@ -312,7 +269,7 @@ async function restoreFromWebdav(file) {
       throw new Error("Downloaded file is not a valid configuration object.");
     }
     
-    const baseConfig = JSON.parse(JSON.stringify(defaultConfig.config));
+    const baseConfig = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
     const finalConfig = Object.assign({}, baseConfig, importedData);
     
     currentConfig.value = finalConfig;
