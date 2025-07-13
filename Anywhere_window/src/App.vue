@@ -285,21 +285,49 @@ const handleCancel = () => cancelAskAI();
 const handleClearHistory = () => clearHistory();
 const handleRemoveFile = (index) => fileList.value.splice(index, 1);
 const handleUpload = (files) => file2fileList(files.file, fileList.value.length + 1).then(() => senderRef.value?.focus());
+
 const handleDropEvent = async (event) => {
+    console.log("hello world");
     event.preventDefault();
-    for (const item of Array.from(event.dataTransfer.items)) {
-        if (item.kind === 'file') await file2fileList(item.getAsFile(), fileList.value.length + 1);
+    const files = event.dataTransfer.files;
+    if (!files || files.length === 0) {
+        return;
+    }
+    // Use a standard `for` loop to iterate through the FileList.
+    // This is often more reliable for DOM collections like FileList than for...of or .map in some environments.
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        // Sequentially await each file processing.
+        // This ensures one file is fully processed before the next one starts,
+        // preventing potential race conditions with the shared fileList state.
+        await file2fileList(file, fileList.value.length + 1);
     }
     senderRef.value?.focus();
 };
+
 const handlePasteEvent = async (event) => {
-    for (const item of Array.from((event.clipboardData || event.originalEvent?.clipboardData || event.dataTransfer).items)) {
-        if (item.kind === 'file') {
-            await file2fileList(item.getAsFile(), fileList.value.length + 1);
-            senderRef.value?.focus();
-        }
+    const clipboardData = event.clipboardData || event.originalEvent?.clipboardData || event.dataTransfer;
+    if (!clipboardData) return;
+
+    const items = Array.from(clipboardData.items).filter(item => item.kind === 'file');
+    if (items.length === 0) return;
+
+    event.preventDefault(); // Prevent default paste behavior only if files are found
+
+    const initialLength = fileList.value.length;
+    const fileProcessingPromises = items.map((item, index) =>
+        file2fileList(item.getAsFile(), initialLength + index)
+    );
+
+    try {
+        await Promise.all(fileProcessingPromises);
+        senderRef.value?.focus();
+    } catch (error) {
+        console.error("Error processing pasted files:", error);
+        ElMessage.error("处理部分或全部粘贴文件时出错。");
     }
 };
+
 
 // --- Core Logic (moved from original script) ---
 const closePage = () => { window.close(); };
@@ -909,7 +937,6 @@ const clearHistory = () => {
     defaultConversationName.value = ""; // [MODIFIED] Reset the default name on clear
     senderRef.value?.focus(); ElMessage.success('历史记录已清除');
 };
-
 </script>
 
 <template>
