@@ -17,6 +17,7 @@ MAIN = [
 
 WINDOW = [
     "./Anywhere_window/src/App.vue",
+    "./Anywhere_window/src/components/"
 ]
 
 
