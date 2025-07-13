@@ -330,7 +330,11 @@ onMounted(async () => {
   // The rest of the onMounted logic for initialization...
   try {
     window.preload.receiveMsg(async (data) => {
-      defaultConversationName.value = ""; // Reset on new message
+      if (data.filename) {
+          defaultConversationName.value = data.filename.replace(/\.json$/i, '');
+      } else {
+          defaultConversationName.value = "";
+      }
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];

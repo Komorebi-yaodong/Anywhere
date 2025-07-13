@@ -92,8 +92,8 @@ async function fetchChatFiles() {
  * This function should be implemented to handle the chat data.
  * @param {object} chatJsonData The parsed JSON data from the chat file.
  */
-async function startChatWithHistory(jsonString) {
-    await window.api.coderedirect("恢复聊天", jsonString);
+async function startChatWithHistory(payloadString) {
+    await window.api.coderedirect("恢复聊天", payloadString);
     ElMessage.success(t('chats.alerts.restoreInitiated'));
 }
 
@@ -105,8 +105,11 @@ async function startChat(file) {
         const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
         const remoteFilePath = `${remoteDir}/${file.basename}`;
         const jsonString = await client.getFileContents(remoteFilePath, { format: "text" });
-
-        await startChatWithHistory(jsonString);
+        const payload = {
+            sessionData: jsonString,
+            filename: file.basename
+        };
+        await startChatWithHistory(JSON.stringify(payload));
 
     } catch (error) {
         console.error("Failed to start chat:", error);
@@ -242,7 +245,7 @@ const handleSelectionChange = (val) => {
                         min-width="180">
                         <template #default="scope">
                             {{ scope.row.basename.endsWith('.json') ? scope.row.basename.slice(0, -5) :
-                            scope.row.basename }}
+                                scope.row.basename }}
                         </template>
                     </el-table-column>
                     <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="140" sortable>
