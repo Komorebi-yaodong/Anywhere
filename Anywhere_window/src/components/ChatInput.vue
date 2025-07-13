@@ -1,10 +1,10 @@
 <script setup>
-import { ref, h, computed } from 'vue';
-import { Sender } from 'vue-element-plus-x';
+import { ref, h, onMounted, onBeforeUnmount } from 'vue';
 import { Attachments } from 'ant-design-x-vue';
-import { ElFooter, ElRow, ElCol, ElButton } from 'element-plus';
-import { Link, Delete } from '@element-plus/icons-vue'
+import { ElFooter, ElRow, ElCol, ElButton, ElInput } from 'element-plus';
+import { Link, Delete, Promotion, Close } from '@element-plus/icons-vue';
 
+// --- v-model and props definition ---
 const prompt = defineModel('prompt');
 const fileList = defineModel('fileList');
 
@@ -13,17 +13,39 @@ const props = defineProps({
     ctrlEnterToSend: Boolean,
 });
 
+// --- Emits definition ---
 const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload']);
 
-const senderRef = ref();
+// --- Component refs ---
+const senderRef = ref(null);
+const fileInputRef = ref(null);
 
-const attachmentsNode = computed(() => h(Attachments, {
-    beforeUpload: () => false,
-    onChange: (files) => emit('upload', files),
-    children: h(ElButton, { type: 'default', icon: h(Link), circle: true }),
-    // [REMOVED] The following line is the source of the conflict and has been removed.
-    // getDropContainer: () => (document.body), 
-}));
+// --- State for drag-and-drop overlay ---
+const isDragging = ref(false);
+const dragCounter = ref(0);
+
+// --- Event Handlers ---
+const handleKeyDown = (event) => {
+    if (props.loading) {
+        if ((props.ctrlEnterToSend && event.ctrlKey && event.key === 'Enter') ||
+            (!props.ctrlEnterToSend && !event.shiftKey && event.key === 'Enter')) {
+            event.preventDefault();
+        }
+        return;
+    }
+
+    if (props.ctrlEnterToSend) {
+        if (event.ctrlKey && event.key === 'Enter') {
+            event.preventDefault();
+            emit('submit');
+        }
+    } else {
+        if (!event.shiftKey && event.key === 'Enter') {
+            event.preventDefault();
+            emit('submit');
+        }
+    }
+};
 
 const onSubmit = () => {
     if (props.loading) return;
@@ -34,45 +56,140 @@ const onCancel = () => emit('cancel');
 const onClearHistory = () => emit('clear-history');
 const onRemoveFile = (index) => emit('remove-file', index);
 
+// --- Custom File Upload Logic ---
+const triggerFileUpload = () => {
+    fileInputRef.value?.click();
+};
 
+const handleFileChange = (event) => {
+    const files = event.target.files;
+    if (files.length) {
+        emit('upload', { file: files[0], fileList: Array.from(files) });
+    }
+    if (fileInputRef.value) {
+        fileInputRef.value.value = '';
+    }
+};
+
+// --- Drag, Drop, and Paste Handlers ---
+const preventDefaults = (e) => e.preventDefault();
+
+const handleDragEnter = (event) => {
+    event.preventDefault();
+    dragCounter.value++;
+    isDragging.value = true;
+};
+
+const handleDragLeave = (event) => {
+    event.preventDefault();
+    dragCounter.value--;
+    if (dragCounter.value <= 0) {
+        isDragging.value = false;
+        dragCounter.value = 0;
+    }
+};
+
+const handleDrop = (event) => {
+    event.preventDefault();
+    isDragging.value = false;
+    dragCounter.value = 0;
+    const files = event.dataTransfer.files;
+    if (files && files.length > 0) {
+        emit('upload', { file: files[0], fileList: Array.from(files) });
+        focus();
+    }
+};
+
+const handlePasteEvent = (event) => {
+    const clipboardData = event.clipboardData || window.clipboardData;
+    if (!clipboardData) return;
+
+    const items = Array.from(clipboardData.items).filter(item => item.kind === 'file');
+    if (items.length > 0) {
+        event.preventDefault();
+        const files = items.map(item => item.getAsFile());
+        emit('upload', { file: files[0], fileList: files });
+        focus();
+    }
+};
+
+
+// --- Lifecycle Hooks to manage global listeners ---
+onMounted(() => {
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('dragover', preventDefaults);
+    window.addEventListener('drop', handleDrop);
+    window.addEventListener('paste', handlePasteEvent);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('dragenter', handleDragEnter);
+    window.removeEventListener('dragleave', handleDragLeave);
+    window.removeEventListener('dragover', preventDefaults);
+    window.removeEventListener('drop', handleDrop);
+    window.removeEventListener('paste', handlePasteEvent);
+});
+
+
+// --- Expose focus method for parent component ---
 const focus = (focusType = 'end') => {
-    senderRef.value?.focus(focusType);
+    senderRef.value?.focus();
+    if (focusType === 'end' && senderRef.value?.$refs.textarea) {
+        const textarea = senderRef.value.$refs.textarea;
+        const length = textarea.value.length;
+        textarea.setSelectionRange(length, length);
+    }
 };
 defineExpose({ focus });
 </script>
 
 <template>
+    <div v-if="isDragging" class="drag-overlay">
+        <div class="drag-overlay-content">
+            拖拽文件到此处以上传
+        </div>
+    </div>
+
     <el-footer class="input-footer">
-        <el-row>
+        <el-row v-if="fileList.length > 0">
             <el-col :span="1" />
             <el-col :span="22">
-                <Attachments.FileCard v-if="fileList.length > 0" v-for="(file, index) in fileList" :key="index"
-                    :item="file" v-on:remove="() => onRemoveFile(index)" :style="{ 'display': 'flex', 'float': 'left' }" />
+                <div class="file-card-container">
+                    <Attachments.FileCard v-for="(file, index) in fileList" :key="index" :item="file"
+                        v-on:remove="() => onRemoveFile(index)" :style="{ 'display': 'flex', 'float': 'left' }" />
+                </div>
             </el-col>
             <el-col :span="1" />
         </el-row>
+
         <el-row>
             <el-col :span="1" />
             <el-col :span="22">
-                <!-- 还原到使用第三方 Sender 组件的初始状态 -->
-                <Sender 
-                    class="chat-sender" 
-                    ref="senderRef" 
-                    v-model="prompt" 
-                    placeholder="在此输入，或拖拽会话文件以加载"
-                    :loading="loading"
-                    @submit="onSubmit" 
-                    @cancel="onCancel"
-                    :submit-type="ctrlEnterToSend ? 'shiftEnter' : 'enter'"
-                    @keyup.ctrl.enter="ctrlEnterToSend ? onSubmit() : null"
-                    @drop="onDrop" 
-                    @paste="onPaste"
-                    :submitBtnDisabled="false">
-                    <template #prefix>
-                        <el-button :icon="Delete" size="default" @click="onClearHistory" circle />
-                        <component :is="attachmentsNode" />
-                    </template>
-                </Sender>
+                <div class="chat-input-wrapper">
+                    <el-input 
+                        ref="senderRef" 
+                        class="chat-textarea" 
+                        v-model="prompt" 
+                        type="textarea"
+                        placeholder="在此输入，或拖拽会话文件以加载" 
+                        :autosize="{ minRows: 1, maxRows: 5 }" 
+                        resize="none"
+                        @keydown="handleKeyDown" 
+                    />
+                    <div class="input-actions-bar">
+                        <div class="action-buttons-left">
+                            <el-button :icon="Delete" size="default" @click="onClearHistory" circle />
+                            <el-button :icon="Link" size="default" @click="triggerFileUpload" circle />
+                            <input ref="fileInputRef" type="file" multiple @change="handleFileChange"
+                                style="display: none;" />
+                        </div>
+                        <div class="action-buttons-right">
+                            <el-button v-if="loading" :icon="Close" @click="onCancel" circle></el-button>
+                            <el-button v-else :icon="Promotion" @click="onSubmit" circle :disabled="loading" />
+                        </div>
+                    </div>
+                </div>
             </el-col>
             <el-col :span="1" />
         </el-row>
@@ -80,6 +197,34 @@ defineExpose({ focus });
 </template>
 
 <style scoped>
+.drag-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(90, 90, 90, 0.3);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+}
+html.dark .drag-overlay {
+    background-color: rgba(20, 20, 20, 0.4);
+}
+.drag-overlay-content {
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    padding: 20px 40px;
+    border: 2px dashed white;
+    border-radius: 12px;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
 .input-footer {
     padding: 10px 15px 15px 15px;
     height: auto;
@@ -95,13 +240,101 @@ defineExpose({ focus });
     margin: 0;
 }
 
-.input-footer .chat-sender :deep(.el-sender-content) {
-    background-color: #F3F4F6;
-    border-radius: 12px;
+.file-card-container {
+    margin-bottom: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
-html.dark .input-footer .chat-sender :deep(.el-sender-content) {
-    background-color: #404045;
+.chat-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    background-color: #F3F4F6;
     border-radius: 12px;
+    padding: 10px 12px;
+}
+
+html.dark .chat-input-wrapper {
+    background-color: #404045;
+}
+
+.chat-textarea {
+    width: 100%;
+    flex-grow: 1;
+}
+
+.chat-textarea:deep(.el-textarea__inner) {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0;
+    color: var(--el-text-color-primary);
+    font-size: 14px;
+    line-height: 1.5;
+    resize: none;
+}
+
+.input-actions-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    flex-shrink: 0;
+}
+
+.action-buttons-left,
+.action-buttons-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.input-actions-bar .el-button {
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: none;
+}
+
+.input-actions-bar .el-button:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+html.dark .input-actions-bar .el-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* [NEW] Custom scrollbar styles for the textarea */
+.chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar) {
+    width: 8px;
+    height: 8px;
+}
+
+.chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-track) {
+    background: transparent;
+    border-radius: 4px;
+}
+
+.chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+    background: var(--el-text-color-disabled, #c0c4cc);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+.chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+    background: var(--el-text-color-secondary, #909399);
+    background-clip: content-box;
+}
+
+html.dark .chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+    background: #6b6b6b;
+    background-clip: content-box;
+}
+
+html.dark .chat-textarea:deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+    background: #999;
+    background-clip: content-box;
 }
 </style>

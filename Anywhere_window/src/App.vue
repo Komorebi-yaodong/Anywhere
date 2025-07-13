@@ -104,7 +104,7 @@ const signalController = ref(null);
 const fileList = ref([]);
 const zoomLevel = ref(1);
 const collapsedMessages = ref(new Set());
-const defaultConversationName = ref(""); // [NEW] State for default session name
+const defaultConversationName = ref("");
 
 // --- Dialog State ---
 const changeModel_page = ref(false);
@@ -115,7 +115,7 @@ const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
 
 // --- Refs for Child Components ---
-const senderRef = ref(); // for ChatInput component
+const senderRef = ref();
 
 // --- UI Logic ---
 let lastHeight = 0;
@@ -256,7 +256,7 @@ const handleToggleCollapse = async (index, event) => {
     chatContainer.style.scrollBehavior = '';
   }
 };
-const handleAvatarClick = async (role, event) => {
+const onAvatarClick = async (role, event) => {
   const chatContainer = document.querySelector('.chat-main');
   const messageElement = event.currentTarget.closest('.chat-message');
   if (!chatContainer || !messageElement) return;
@@ -284,53 +284,15 @@ const handleSubmit = () => askAI(false);
 const handleCancel = () => cancelAskAI();
 const handleClearHistory = () => clearHistory();
 const handleRemoveFile = (index) => fileList.value.splice(index, 1);
-const handleUpload = (files) => file2fileList(files.file, fileList.value.length + 1).then(() => senderRef.value?.focus());
-
-const handleDropEvent = async (event) => {
-  event.preventDefault();
-  const files = event.dataTransfer.files;
-  if (!files || files.length === 0) {
-    return;
-  }
-  // Use a standard `for` loop to iterate through the FileList.
-  // This is often more reliable for DOM collections like FileList than for...of or .map in some environments.
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    // Sequentially await each file processing.
-    // This ensures one file is fully processed before the next one starts,
-    // preventing potential race conditions with the shared fileList state.
+const handleUpload = async ({ fileList: newFiles }) => {
+  for (const file of newFiles) {
     await file2fileList(file, fileList.value.length + 1);
   }
   senderRef.value?.focus();
 };
 
-const handlePasteEvent = async (event) => {
-  const clipboardData = event.clipboardData || event.originalEvent?.clipboardData || event.dataTransfer;
-  if (!clipboardData) return;
-
-  const items = Array.from(clipboardData.items).filter(item => item.kind === 'file');
-  if (items.length === 0) return;
-
-  event.preventDefault(); // Prevent default paste behavior only if files are found
-
-  const initialLength = fileList.value.length;
-  const fileProcessingPromises = items.map((item, index) =>
-    file2fileList(item.getAsFile(), initialLength + index)
-  );
-
-  try {
-    await Promise.all(fileProcessingPromises);
-    senderRef.value?.focus();
-  } catch (error) {
-    console.error("Error processing pasted files:", error);
-    ElMessage.error("处理部分或全部粘贴文件时出错。");
-  }
-};
-
 // --- Core Logic (moved from original script) ---
 const closePage = () => { window.close(); };
-
-const preventDefaults = (e) => e.preventDefault();
 
 watch(zoomLevel, (newZoom) => {
   if (window.api && typeof window.api.setZoomFactor === 'function') {
@@ -346,10 +308,7 @@ onMounted(async () => {
   if (isInit.value) return; isInit.value = true;
   window.addEventListener('wheel', handleWheel, { passive: false });
 
-  // Set up global drag and drop listeners
-  window.addEventListener('dragover', preventDefaults, false);
-  window.addEventListener('drop', handleDropEvent, false);
-  window.addEventListener('paste', handlePasteEvent, false);
+  // [MODIFIED] Removed drag, drop and paste listeners. They are now in ChatInput.vue
 
   try {
     const configData = await window.api.getConfig();
@@ -477,11 +436,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('wheel', handleWheel);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
 
-  // Clean up global listeners
-  window.removeEventListener('dragover', preventDefaults, false);
-  window.removeEventListener('drop', handleDropEvent, false);
-  window.removeEventListener('paste', handlePasteEvent, false);
-
+  // [MODIFIED] Removed drag, drop and paste listeners.
+  
   const chatMainElement = document.querySelector('.chat-main');
   if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
 });
@@ -763,7 +719,7 @@ const checkAndLoadSessionFromFile = async (file) => {
       const fileContent = await file.text();
       const jsonData = JSON.parse(fileContent);
       if (jsonData && jsonData.anywhere_history === true) {
-        defaultConversationName.value = file.name.replace(/\.json$/i, ''); // [MODIFIED] Set default name from filename
+        defaultConversationName.value = file.name.replace(/\.json$/i, '');
         await loadSession(jsonData);
         return true;
       }
@@ -946,7 +902,7 @@ const clearHistory = () => {
   if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
   else { history.value = []; chat_show.value = []; }
   collapsedMessages.value.clear();
-  defaultConversationName.value = ""; // [MODIFIED] Reset the default name on clear
+  defaultConversationName.value = "";
   senderRef.value?.focus(); ElMessage.success('历史记录已清除');
 };
 </script>
@@ -963,7 +919,7 @@ const clearHistory = () => {
           :isLastMessage="index === chat_show.length - 1" :isLoading="loading" :userAvatar="UserAvart"
           :aiAvatar="AIAvart" :isCollapsed="isCollapsed(index)" @delete-message="handleDeleteMessage"
           @copy-text="handleCopyText" @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse"
-          @show-system-prompt="handleShowSystemPrompt" @avatar-click="handleAvatarClick" />
+          @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
       </el-main>
 
       <ChatInput ref="senderRef" v-model:prompt="prompt" v-model:fileList="fileList" :loading="loading"
@@ -1436,7 +1392,6 @@ html.dark .filename-prompt-dialog .el-input-group__append {
 </style>
 
 <style scoped lang="less">
-/* Scoped styles from original App.vue */
 .el-container {
   width: 100vw;
   height: 100vh;
@@ -1459,7 +1414,6 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   background-color: var(--el-bg-color);
 }
 
-/* This part contains the specific styles that need to be scoped to App.vue */
 .chat-message :deep(.markdown-body) {
 
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
