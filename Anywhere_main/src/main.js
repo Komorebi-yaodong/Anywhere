@@ -5,6 +5,7 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import App from './App.vue'
 import { createI18n } from 'vue-i18n'
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 // 导入所有语言文件
 import en from './locales/en.json'
@@ -23,7 +24,7 @@ const getInitialLocale = () => {
   if (['zh', 'en', 'ja', 'ru'].includes(browserLanguage)) {
     return browserLanguage;
   }
-  return 'zh'; // 默认回退到英文
+  return 'zh'; // 默认回退到中文
 };
 
 const initialLocale = getInitialLocale();

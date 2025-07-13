@@ -67,7 +67,6 @@ async function fetchChatFiles() {
         const client = createClient(url, { username, password });
         const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
 
-        // [MODIFIED] Check if the directory exists, and create it if it doesn't.
         if (!(await client.exists(remoteDir))) {
             await client.createDirectory(remoteDir, { recursive: true });
             ElMessage.info(t('chats.alerts.pathCreated'));
@@ -87,11 +86,6 @@ async function fetchChatFiles() {
     }
 }
 
-/**
- * Placeholder function for restoring a chat session.
- * This function should be implemented to handle the chat data.
- * @param {object} chatJsonData The parsed JSON data from the chat file.
- */
 async function startChatWithHistory(payloadString) {
     await window.api.coderedirect("恢复聊天", payloadString);
     ElMessage.success(t('chats.alerts.restoreInitiated'));
@@ -129,7 +123,7 @@ async function renameFile(file) {
             {
                 confirmButtonText: t('common.confirm'),
                 cancelButtonText: t('common.cancel'),
-                inputValue: defaultInputValue, // 使用处理过的默认值
+                inputValue: defaultInputValue,
             }
         );
 
@@ -145,7 +139,7 @@ async function renameFile(file) {
             }
 
             if (finalFilename === '.json') {
-                ElMessage.error(t('chats.rename.invalidFilename')); // 使用现有的 i18n key
+                ElMessage.error(t('chats.rename.invalidFilename'));
                 return;
             }
 
@@ -228,11 +222,9 @@ const handleSelectionChange = (val) => {
         <div v-if="!isConfigValid" class="config-prompt">
             <el-empty :description="t('chats.configRequired.description')">
                 <template #image>
-                    <el-icon :size="64">
-                        <Edit />
-                    </el-icon>
+                    <el-icon :size="64" color="#909399"><Edit /></el-icon>
                 </template>
-                <h1>{{ t('chats.configRequired.title') }}</h1>
+                <h2 class="config-prompt-title">{{ t('chats.configRequired.title') }}</h2>
             </el-empty>
         </div>
 
@@ -240,29 +232,28 @@ const handleSelectionChange = (val) => {
             <div class="table-container">
                 <el-table :data="paginatedFiles" v-loading="isTableLoading" @selection-change="handleSelectionChange"
                     style="width: 100%" height="100%" border stripe>
-                    <el-table-column type="selection" width="40" align="center" />
-                    <el-table-column prop="basename" :label="t('chats.table.filename')" sortable show-overflow-tooltip
-                        min-width="180">
+                    <el-table-column type="selection" width="55" align="center" />
+                    <el-table-column prop="basename" :label="t('chats.table.filename')" sortable show-overflow-tooltip min-width="180">
                         <template #default="scope">
-                            {{ scope.row.basename.endsWith('.json') ? scope.row.basename.slice(0, -5) :
-                                scope.row.basename }}
+                            <span class="filename-text">
+                                {{ scope.row.basename.endsWith('.json') ? scope.row.basename.slice(0, -5) : scope.row.basename }}
+                            </span>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="140" sortable>
+                    <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="180" sortable align="center">
                         <template #default="scope">{{ formatDate(scope.row.lastmod) }}</template>
                     </el-table-column>
-                    <el-table-column prop="size" :label="t('chats.table.size')" width="90" sortable>
+                    <el-table-column prop="size" :label="t('chats.table.size')" width="120" sortable align="center">
                         <template #default="scope">{{ formatBytes(scope.row.size) }}</template>
                     </el-table-column>
-                    <el-table-column :label="t('chats.table.actions')" width="220" align="center">
+                    <el-table-column :label="t('chats.table.actions')" width="240" align="center">
                         <template #default="scope">
                             <div class="action-buttons-container">
-                                <el-button link type="primary" :icon="ChatDotRound" @click="startChat(scope.row)">{{
-                                    t('chats.actions.chat') }}</el-button>
-                                <el-button link type="warning" :icon="Edit" @click="renameFile(scope.row)">{{
-                                    t('chats.actions.rename') }}</el-button>
-                                <el-button link type="danger" :icon="DeleteIcon" @click="deleteFile(scope.row)">{{
-                                    t('chats.actions.delete') }}</el-button>
+                                <el-button link type="primary" :icon="ChatDotRound" @click="startChat(scope.row)">{{ t('chats.actions.chat') }}</el-button>
+                                <el-divider direction="vertical" />
+                                <el-button link type="warning" :icon="Edit" @click="renameFile(scope.row)">{{ t('chats.actions.rename') }}</el-button>
+                                <el-divider direction="vertical" />
+                                <el-button link type="danger" :icon="DeleteIcon" @click="deleteFile(scope.row)">{{ t('chats.actions.delete') }}</el-button>
                             </div>
                         </template>
                     </el-table-column>
@@ -272,18 +263,16 @@ const handleSelectionChange = (val) => {
             <div class="footer-bar">
                 <div class="footer-left">
                     <el-button :icon="Refresh" @click="fetchChatFiles">{{ t('common.refresh') }}</el-button>
-                    <el-button type="danger" :icon="DeleteIcon" @click="deleteSelectedFiles"
-                        :disabled="selectedFiles.length === 0">
+                    <el-button type="danger" :icon="DeleteIcon" @click="deleteSelectedFiles" :disabled="selectedFiles.length === 0">
                         {{ t('common.deleteSelected') }} ({{ selectedFiles.length }})
                     </el-button>
                 </div>
                 <div class="footer-center">
                     <el-pagination v-if="chatFiles.length > 0" v-model:current-page="currentPage"
                         v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="chatFiles.length"
-                        layout="total, sizes, prev, pager, next" background size="small" />
+                        layout="total, sizes, prev, pager, next, jumper" background size="small" />
                 </div>
                 <div class="footer-right">
-                    <!-- Placeholder for potential future buttons -->
                 </div>
             </div>
         </div>
@@ -296,23 +285,35 @@ const handleSelectionChange = (val) => {
     width: 100%;
     display: flex;
     flex-direction: column;
-    padding: 10px;
+    padding: 20px;
     box-sizing: border-box;
+    overflow: hidden;
+    background-color: var(--bg-primary);
 }
 
 .config-prompt {
     display: flex;
     justify-content: center;
     align-items: center;
+    flex-direction: column;
     height: 100%;
     text-align: center;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-primary);
 }
 
-.config-prompt h1 {
+.config-prompt-title {
     font-size: 18px;
-    color: #606266;
-    margin-top: -20px;
-    /* Adjust to be closer to empty description */
+    color: var(--text-primary);
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+:deep(.el-empty__description p) {
+    color: var(--text-secondary);
+    font-size: 14px;
 }
 
 .chats-content-wrapper {
@@ -320,27 +321,79 @@ const handleSelectionChange = (val) => {
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background-color: #ffffff;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-primary);
+    box-shadow: var(--shadow-sm);
     overflow: hidden;
 }
 
 .table-container {
     flex-grow: 1;
     overflow: hidden;
-    /* Important for table height to work */
-    padding: 10px;
+    padding: 15px;
+}
+
+.filename-text {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+:deep(.el-table),
+:deep(.el-table__expanded-cell) {
+    background-color: transparent;
+}
+
+:deep(.el-table tr) {
+    background-color: transparent;
+    transition: background-color 0.2s;
+}
+
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+    background-color: var(--bg-primary);
+}
+
+:deep(.el-table--enable-row-hover .el-table__body tr:hover>td.el-table__cell) {
+    background-color: var(--bg-tertiary);
+}
+
+:deep(.el-table__header-wrapper th) {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+:deep(.el-table--border .el-table__inner-wrapper::after),
+:deep(.el-table--border::after),
+:deep(.el-table--border::before),
+:deep(.el-table__inner-wrapper::before) {
+    background-color: var(--border-primary);
+}
+
+:deep(.el-table td.el-table__cell),
+:deep(.el-table th.el-table__cell.is-leaf) {
+    border-bottom: 1px solid var(--border-primary);
+}
+
+:deep(.el-table--border .el-table__cell) {
+    border-right: 1px solid var(--border-primary);
 }
 
 .action-buttons-container {
     display: flex;
     justify-content: center;
-    gap: 8px;
+    align-items: center;
+    gap: 0;
 }
 
 .action-buttons-container .el-button {
-    margin-left: 0;
+    font-weight: 500;
+}
+
+.action-buttons-container .el-divider--vertical {
+    height: 1em;
+    border-left: 1px solid var(--border-primary);
+    margin: 0 8px;
 }
 
 .footer-bar {
@@ -351,8 +404,9 @@ const handleSelectionChange = (val) => {
     flex-wrap: wrap;
     gap: 10px;
     padding: 10px 15px;
-    border-top: 1px solid #e5e7eb;
-    background-color: #fcfcfc;
+    border-top: 1px solid var(--border-primary);
+    background-color: var(--bg-primary);
+    flex-shrink: 0;
 }
 
 .footer-left,
@@ -373,12 +427,13 @@ const handleSelectionChange = (val) => {
     justify-content: flex-end;
 }
 
-:deep(.el-pagination.is-background.el-pagination--small) {
-    justify-content: center;
+:deep(.el-pagination.is-background .el-pager li),
+:deep(.el-pagination.is-background .btn-prev),
+:deep(.el-pagination.is-background .btn-next) {
+    background-color: var(--bg-tertiary);
 }
 
-:deep(.el-table__header-wrapper th) {
-    background-color: #fafafa !important;
-    color: #333;
+:deep(.el-pagination.is-background .el-pager li:not(.is-disabled).is-active) {
+    background-color: var(--bg-accent);
 }
 </style>

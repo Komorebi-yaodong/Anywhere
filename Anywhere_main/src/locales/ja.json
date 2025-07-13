@@ -4,7 +4,7 @@
       "chats": "クラウドチャット 💬",
       "prompts": "クイックプロンプト 🚀",
       "providers": "プロバイダー ☁️",
-      "settings": "設定 ⚙"
+      "settings": "設定 ⚙️"
     },
     "tabs": {
       "chats": "クラウドチャット",
@@ -38,6 +38,7 @@
     "alerts": {
       "configError": "設定の取得に失敗しました。",
       "pathNotFound": "指定されたWebDAVデータパスが見つかりません。",
+      "pathCreated": "データパスが存在しないため、自動的に作成されました。",
       "fetchFailed": "チャットリストの取得に失敗しました。",
       "loadingChat": "チャットを読み込み中...",
       "restoreInitiated": "チャットの復元が開始されました。",
@@ -76,6 +77,7 @@
     },
     "modelLabel": "モデル",
     "llmParametersLabel": "モデルパラメータ（現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります）",
+    "AssistantParametersLabel": "クイックアシスタントパラメータ",
     "sendDirectLabel": "テキスト/スクリーンショットを直接送信",
     "sendFileLabel": "ファイルの直接送信",
     "ifTextNecessary": "テキスト＆自動日時",
@@ -119,8 +121,8 @@
     "apiKeyDescription": "複数のAPIキーをカンマで区切って入力できます。",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "例: https://api.openai.com/v1",
-    "searchModelsPlaceholder":"Модель поиска",
-    "modelsLabel": "検索モデル",
+    "searchModelsPlaceholder":"モデルを検索",
+    "modelsLabel": "モデル",
     "noModelsAdded": "モデルはまだ追加されていません。",
     "getModelsFromApiBtn": "APIからモデルを取得",
     "addManuallyBtn": "手動で追加",
@@ -240,17 +242,10 @@
         "actions": "操作",
         "restore": "復元",
         "delete": "削除",
-        "confirmRestore": "本当にこのバックアップファイル '{filename}' を復元しますか？この操作は現在の設定を上書きします。",
-        "confirmDelete": "本当にファイル '{filename}' を完全に削除しますか？",
-        "confirmDeleteMultiple": "選択した {count} 個のファイルを本当に完全に削除しますか？",
-        "noFileSelected": "ファイルが選択されていません。",
-        "deleteSuccess": "ファイルの削除に成功しました。",
-        "deleteFailed": "ファイルの削除に失敗しました",
-        "deleteSuccessMultiple": "選択したファイルを削除しました。",
-        "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました"
+        "confirmRestore": "本当にこのバックアップファイル '{filename}' を復元しますか？この操作は現在の設定を上書きします。"
       },
       "alerts": {
-        "importSuccess": "新しい会話名を入力してください。",
+        "importSuccess": "設定のインポートに成功しました。",
         "urlRequired": "WebDAV URLは空にできません。",
         "backupInProgress": "バックアップ中...",
         "backupSuccess": "バックアップに成功しました",
@@ -262,8 +257,8 @@
       }
     },
     "alerts":{
-        "importSuccess": "新しい会話名を入力してください。",
-        "importFailed": "設定のインポートに失敗しました"
+        "importSuccess": "設定のインポートに成功しました。",
+        "importFailed": "設定のインポートに失敗しました。"
     }
   },
   "common": {
@@ -276,6 +271,15 @@
     "close": "閉じる",
     "assignSelected": "選択を割り当て",
     "addTag": "タグを追加",
-    "removeIcon": "アイコンを削除"
+    "removeIcon": "アイコンを削除",
+    "warningTitle": "警告",
+    "refresh": "更新",
+    "deleteSelected": "選択を削除",
+    "noFileSelected": "ファイルが選択されていません。",
+    "confirmDeleteMultiple": "選択した {count} 個のファイルを本当に完全に削除しますか？",
+    "deleteSuccess": "ファイルの削除に成功しました。",
+    "deleteFailed": "ファイルの削除に失敗しました。",
+    "deleteSuccessMultiple": "選択したファイルを削除しました。",
+    "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました。"
   }
 }

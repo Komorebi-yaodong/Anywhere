@@ -4,7 +4,7 @@
       "chats": "Cloud Chats 💬",
       "prompts": "Quick Prompts 🚀",
       "providers": "Providers ☁️",
-      "settings": "Settings ⚙"
+      "settings": "Settings ⚙️"
     },
     "tabs": {
       "chats": "Cloud Chats",
@@ -38,6 +38,7 @@
     "alerts": {
       "configError": "Failed to get configuration.",
       "pathNotFound": "Specified WebDAV data path not found.",
+      "pathCreated": "Data path does not exist, automatically created.",
       "fetchFailed": "Failed to fetch chat list.",
       "loadingChat": "Loading chat...",
       "restoreInitiated": "Chat restoration initiated.",
@@ -76,6 +77,7 @@
     },
     "modelLabel": "Model",
     "llmParametersLabel": "Model Parameters (Only effective for the current Quick Assistant model; no longer effective after switching to other models)",
+    "AssistantParametersLabel": "Quick Assistant Parameters",
     "sendDirectLabel": "Direct Text/Screenshot Sending",
     "sendFileLabel": "Direct file sending",
     "ifTextNecessary": "Add Text / Auto-Timestamp",
@@ -240,14 +242,7 @@
         "actions": "Actions",
         "restore": "Restore",
         "delete": "Delete",
-        "confirmRestore": "Are you sure you want to restore this backup file '{filename}'? This will overwrite your current configuration.",
-        "confirmDelete": "Are you sure you want to permanently delete the file '{filename}'?",
-        "confirmDeleteMultiple": "Are you sure you want to permanently delete the {count} selected files?",
-        "noFileSelected": "No files selected.",
-        "deleteSuccess": "File deleted successfully.",
-        "deleteFailed": "Failed to delete file",
-        "deleteSuccessMultiple": "Selected files deleted successfully.",
-        "deleteFailedMultiple": "Error deleting selected files"
+        "confirmRestore": "Are you sure you want to restore this backup file '{filename}'? This will overwrite your current configuration."
       },
       "alerts": {
         "importSuccess": "Configuration imported successfully.",
@@ -276,6 +271,15 @@
     "close": "Close",
     "assignSelected": "Assign Selected",
     "addTag": "Add Tag",
-    "removeIcon": "Remove Icon"
+    "removeIcon": "Remove Icon",
+    "warningTitle": "Warning",
+    "refresh": "Refresh",
+    "deleteSelected": "Delete Selected",
+    "noFileSelected": "No files selected.",
+    "confirmDeleteMultiple": "Are you sure you want to permanently delete the {count} selected files?",
+    "deleteSuccess": "Deleted successfully.",
+    "deleteFailed": "Deletion failed.",
+    "deleteSuccessMultiple": "Selected files deleted successfully.",
+    "deleteFailedMultiple": "Error deleting selected files."
   }
 }

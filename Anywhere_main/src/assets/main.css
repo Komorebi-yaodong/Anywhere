@@ -1,9 +1,13 @@
 @import './base.css';
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  /*
+    Remove max-width and margin: auto to allow the app to fill the full width.
+    The height: 100% is already set in index.html's inline styles,
+    which is correct for this application layout.
+  */
+  width: 100%;
+  height: 100%;
   font-weight: normal;
 }
 
@@ -21,15 +25,8 @@ a,
   }
 }
 
-@media (min-width: 1024px) {
-  body {
-    display: flex;
-    place-items: center;
-  }
-
-  #app {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: 0 2rem;
-  }
-}
+/*
+  The media query below was the main cause of the issue on larger screens.
+  It forced a grid layout and flex on the body, which is not suitable for this UI.
+  It has been completely removed.
+*/

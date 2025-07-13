@@ -37,6 +37,7 @@
     "confirmDelete": "您确定要永久删除对话 '{filename}' 吗？",
     "alerts": {
       "configError": "获取配置失败。",
+      "pathNotFound": "未找到指定的WebDAV数据路径。",
       "pathCreated": "数据路径不存在，已自动创建。",
       "fetchFailed": "获取对话列表失败",
       "loadingChat": "正在加载对话...",
@@ -203,7 +204,7 @@
       "exportDesc": "将当前所有设置导出为 JSON 文件， 注意配置文件包含敏感信息，切勿分享。",
       "exportButton": "导出",
       "importLabel": "导入配置",
-      "importDesc": "从 JSON 文件导入设置。这将覆盖当前设置。",
+      "importDesc": "从 JSON 文件导入设置，这将覆盖当前设置。",
       "importButton": "导入"
     },
     "dimensions": {

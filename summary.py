@@ -10,6 +10,7 @@ README = "./README.md"
 PRELOAD = "./"+moveDist()+"/"
 
 MAIN = [
+    "./Anywhere_main/index.html",
     "./Anywhere_main/src/components/",
     "./Anywhere_main/src/App.vue",
     "./Anywhere_main/src/locales/",
