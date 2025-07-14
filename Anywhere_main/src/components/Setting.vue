@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, nextTick, computed } from 'vue'
+import { ref, onMounted, nextTick, computed, inject } from 'vue' // [MODIFIED] Added inject
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
 import { Upload, FolderOpened, Refresh, Delete as DeleteIcon, Download } from '@element-plus/icons-vue'
@@ -7,7 +7,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t, locale } = useI18n()
 
-const currentConfig = ref(window.api.defaultConfig.config);
+// [MODIFIED] Inject config from App.vue instead of managing its own state
+const currentConfig = inject('config'); 
 const selectedLanguage = ref(locale.value);
 
 
@@ -43,37 +44,21 @@ const formatBytes = (bytes, decimals = 2) => {
 };
 
 
-// --- 生命周期和配置函数 ---
-onMounted(async () => {
-  try {
-    const result = await window.api.getConfig();
-    if (result && result.config) {
-      const baseConfig = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-      const finalConfig = Object.assign({}, baseConfig, result.config);
-
-      Object.keys(finalConfig).forEach(key => {
-        currentConfig.value[key] = finalConfig[key];
-      });
-
-    } else {
-      console.error("Failed to get valid config from API.");
-      currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-    }
-  } catch (error) {
-    console.error("Error fetching config in Setting.vue:", error);
-    currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-  }
+// [MODIFIED] Simplified onMounted
+onMounted(() => {
   selectedLanguage.value = locale.value;
-  await nextTick();
 });
 
+// [MODIFIED] Now uses the new lightweight save function
 async function saveConfig() {
+  if (!currentConfig.value) return;
   try {
-    const new_config = { config: JSON.parse(JSON.stringify(currentConfig.value)) };
-    if (window.api && window.api.updateConfig) {
-      await window.api.updateConfig(new_config);
+    // Use the new lightweight update function for settings that don't affect features
+    const configToSave = { config: JSON.parse(JSON.stringify(currentConfig.value)) };
+    if (window.api && window.api.updateConfigWithoutFeatures) {
+       await window.api.updateConfigWithoutFeatures(configToSave);
     } else {
-      console.warn("window.api.updateConfig is not available. Settings not saved.");
+      console.warn("window.api.updateConfigWithoutFeatures is not available. Settings not saved.");
     }
   } catch (error) {
     console.error("Error saving settings config:", error);
@@ -87,6 +72,7 @@ function handleLanguageChange(lang) {
 }
 
 async function exportConfig() {
+  if (!currentConfig.value) return;
   try {
     const configToExport = JSON.parse(JSON.stringify(currentConfig.value));
     const jsonString = JSON.stringify(configToExport, null, 2);
@@ -119,11 +105,15 @@ function importConfig() {
           if (typeof importedData !== 'object' || importedData === null) {
             throw new Error("Imported file is not a valid configuration object.");
           }
-          const baseConfig = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-          const finalConfig = Object.assign({}, baseConfig, importedData);
-          currentConfig.value = finalConfig;
-          await saveConfig();
-          await nextTick();
+          // [MODIFIED] Use a full update here since import can change everything
+          if (window.api && window.api.updateConfig) {
+            await window.api.updateConfig({ config: importedData });
+            // After a full update, we need to refresh the local state to match
+            const result = await window.api.getConfig();
+            if (result && result.config) {
+               currentConfig.value = result.config;
+            }
+          }
           console.log("Configuration imported and replaced successfully.");
           ElMessage.success(t('setting.alerts.importSuccess'));
         } catch (err) {
@@ -140,6 +130,7 @@ function importConfig() {
 
 // --- WebDAV 功能 ---
 async function backupToWebdav() {
+  if (!currentConfig.value) return;
   const { url, username, password, path } = currentConfig.value.webdav;
   if (!url) {
     ElMessage.error(t('setting.webdav.alerts.urlRequired'));
@@ -192,6 +183,7 @@ async function backupToWebdav() {
 }
 
 async function openBackupManager() {
+  if (!currentConfig.value) return;
   const { url } = currentConfig.value.webdav;
   if (!url) {
     ElMessage.error(t('setting.webdav.alerts.urlRequired'));
@@ -265,13 +257,15 @@ async function restoreFromWebdav(file) {
     if (typeof importedData !== 'object' || importedData === null) {
       throw new Error("Downloaded file is not a valid configuration object.");
     }
-
-    const baseConfig = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-    const finalConfig = Object.assign({}, baseConfig, importedData);
-
-    currentConfig.value = finalConfig;
-    await saveConfig();
-    await nextTick();
+    
+    // [MODIFIED] Use a full update for restoring a backup
+    if (window.api && window.api.updateConfig) {
+        await window.api.updateConfig({ config: importedData });
+        const result = await window.api.getConfig();
+        if (result && result.config) {
+            currentConfig.value = result.config;
+        }
+    }
 
     ElMessage.success(t('setting.webdav.alerts.restoreSuccess'));
     isBackupManagerVisible.value = false;
@@ -344,6 +338,7 @@ const handleSelectionChange = (val) => {
   selectedFiles.value = val;
 };
 </script>
+
 
 <template>
   <div class="settings-page-container">
@@ -490,15 +485,15 @@ const handleSelectionChange = (val) => {
     <!-- 备份数据管理弹窗 -->
     <el-dialog v-model="isBackupManagerVisible" :title="t('setting.webdav.manager.title')" width="800px" top="10vh" :destroy-on-close="true" style="max-width: 90vw;">
       <el-table :data="paginatedFiles" v-loading="isTableLoading" @selection-change="handleSelectionChange" style="width: 100%" height="55vh" border stripe>
-        <el-table-column type="selection" width="55" align="center" />
-        <el-table-column prop="basename" :label="t('setting.webdav.manager.filename')" sortable show-overflow-tooltip min-width="200" />
-        <el-table-column prop="lastmod" :label="t('setting.webdav.manager.modifiedTime')" width="180" sortable align="center">
+        <el-table-column type="selection" width="50" align="center" />
+        <el-table-column prop="basename" :label="t('setting.webdav.manager.filename')" sortable show-overflow-tooltip min-width="160" />
+        <el-table-column prop="lastmod" :label="t('setting.webdav.manager.modifiedTime')" width="170" sortable align="center">
           <template #default="scope">{{ formatDate(scope.row.lastmod) }}</template>
         </el-table-column>
-        <el-table-column prop="size" :label="t('setting.webdav.manager.size')" width="120" sortable align="center">
+        <el-table-column prop="size" :label="t('setting.webdav.manager.size')" width="100" sortable align="center">
           <template #default="scope">{{ formatBytes(scope.row.size) }}</template>
         </el-table-column>
-        <el-table-column :label="t('setting.webdav.manager.actions')" width="160" align="center">
+        <el-table-column :label="t('setting.webdav.manager.actions')" width="120" align="center">
           <template #default="scope">
             <div class="action-buttons-container">
               <el-button link type="primary" @click="restoreFromWebdav(scope.row)">{{ t('setting.webdav.manager.restore') }}</el-button>
@@ -581,26 +576,23 @@ const handleSelectionChange = (val) => {
 .setting-option-item {
   display: flex;
   justify-content: space-between;
-  align-items: center; /* Vertically center the content and the control */
+  align-items: center;
   padding: 15px 0;
   border-bottom: 1px solid var(--border-primary);
-  gap: 20px; /* Add gap for responsiveness */
-  flex-wrap: wrap; /* Allow control to wrap on small screens */
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
-.setting-option-item:last-child {
-  border-bottom: none;
-}
+.setting-option-item:last-child,
 .setting-option-item.no-border {
   border-bottom: none;
 }
 
-/* Requirement #3: Redesigned layout for settings items */
 .setting-text-content {
   display: flex;
-  align-items: baseline; /* Align text by baseline */
-  flex-wrap: wrap; /* Allow description to wrap */
-  gap: 8px; /* Gap between label and description */
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
@@ -609,7 +601,7 @@ const handleSelectionChange = (val) => {
   font-size: 15px;
   font-weight: 500;
   color: var(--text-primary);
-  white-space: nowrap; /* Prevent label from wrapping */
+  white-space: nowrap;
 }
 
 .setting-option-description {
@@ -620,7 +612,6 @@ const handleSelectionChange = (val) => {
 
 .el-switch {
   --el-switch-on-color: var(--bg-accent);
-  --el-switch-off-color: #bdc1c6;
   flex-shrink: 0;
 }
 
@@ -683,7 +674,35 @@ const handleSelectionChange = (val) => {
   justify-content: center;
 }
 
-:deep(.el-pagination.is-background.el-pagination--small) {
-  justify-content: center;
+:deep(.el-pagination.is-background .el-pager li),
+:deep(.el-pagination.is-background .btn-prev),
+:deep(.el-pagination.is-background .btn-next) {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+:deep(.el-pagination.is-background .el-pager li:not(.is-disabled).is-active) {
+    background-color: var(--bg-accent);
+    color: var(--text-on-accent);
+}
+
+:deep(.el-table__header-wrapper th) {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+:deep(.el-table), :deep(.el-table tr) {
+  background-color: var(--bg-secondary);
+}
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+    background-color: var(--bg-primary);
+}
+:deep(.el-table td.el-table__cell),
+:deep(.el-table th.el-table__cell.is-leaf) {
+    border-bottom: 1px solid var(--border-primary);
+    color: var(--text-primary);
+}
+:deep(.el-table--border .el-table__cell) {
+    border-right: 1px solid var(--border-primary);
 }
 </style>

@@ -1,6 +1,7 @@
 const {
   getConfig,
   updateConfig,
+  updateConfigWithoutFeatures,
   checkConfig,
   getUser,
   getRandomItem,
@@ -28,6 +29,7 @@ const {
 window.api = {
   getConfig,
   updateConfig,
+  updateConfigWithoutFeatures,
   getUser,
   getRandomItem,
   chatOpenAI,

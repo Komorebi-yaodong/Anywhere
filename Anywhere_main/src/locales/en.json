@@ -186,8 +186,8 @@
       "description": "Enable to show a notification on successful response."
     },
     "darkMode": {
-      "label": "Dark Mode (Standalone Window)",
-      "description": "Use dark mode theme in the standalone response window."
+      "label": "Dark Mode",
+      "description": "Use a dark theme."
     },
     "fixPosition": {
       "label": "Fix Window Position",

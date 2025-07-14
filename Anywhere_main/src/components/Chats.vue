@@ -300,7 +300,8 @@ const handleSelectionChange = (val) => {
     text-align: center;
     background-color: var(--bg-secondary);
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border-primary);
+    /* [MODIFIED] Replaced border with shadow */
+    box-shadow: 0 0 0 1px var(--border-primary);
 }
 
 .config-prompt-title {
@@ -323,8 +324,8 @@ const handleSelectionChange = (val) => {
     width: 100%;
     background-color: var(--bg-secondary);
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border-primary);
-    box-shadow: var(--shadow-sm);
+    /* [MODIFIED] Replaced border with compound shadow */
+    box-shadow: 0 0 0 1px var(--border-primary), var(--shadow-sm);
     overflow: hidden;
 }
 
@@ -342,6 +343,10 @@ const handleSelectionChange = (val) => {
 :deep(.el-table),
 :deep(.el-table__expanded-cell) {
     background-color: transparent;
+}
+
+:deep(.el-table .el-table__cell) {
+    color: var(--text-secondary);
 }
 
 :deep(.el-table tr) {
@@ -373,10 +378,15 @@ const handleSelectionChange = (val) => {
 :deep(.el-table td.el-table__cell),
 :deep(.el-table th.el-table__cell.is-leaf) {
     border-bottom: 1px solid var(--border-primary);
+    color: var(--text-primary);
 }
 
 :deep(.el-table--border .el-table__cell) {
     border-right: 1px solid var(--border-primary);
+}
+
+:deep(.el-table__empty-text) {
+    color: var(--text-tertiary);
 }
 
 .action-buttons-container {
@@ -427,13 +437,27 @@ const handleSelectionChange = (val) => {
     justify-content: flex-end;
 }
 
+:deep(.el-pagination) {
+    --el-pagination-text-color: var(--text-secondary);
+}
+
 :deep(.el-pagination.is-background .el-pager li),
 :deep(.el-pagination.is-background .btn-prev),
 :deep(.el-pagination.is-background .btn-next) {
     background-color: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 :deep(.el-pagination.is-background .el-pager li:not(.is-disabled).is-active) {
     background-color: var(--bg-accent);
+    color: var(--text-on-accent);
+}
+
+:deep(.el-pagination.is-background .el-pager li:hover) {
+    color: var(--text-accent);
+}
+:deep(.el-pagination.is-background .btn-prev:hover),
+:deep(.el-pagination.is-background .btn-next:hover) {
+    color: var(--text-accent);
 }
 </style>

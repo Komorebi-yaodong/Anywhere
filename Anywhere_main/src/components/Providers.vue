@@ -1,25 +1,16 @@
 <script setup>
 // The <script setup> block remains unchanged.
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, inject } from 'vue' // [MODIFIED] Added inject
 import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove, Search } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const currentConfig = ref(window.api.defaultConfig.config);
+const currentConfig = inject('config'); // [MODIFIED] Inject config from App.vue
 const provider_key = ref(null);
 
 onMounted(async () => {
-  try {
-    const result = await window.api.getConfig();
-
-    if (result && result.config) {
-      currentConfig.value = result.config;
-    } else {
-      console.error("Failed to get valid config from API.");
-      currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-    }
-
+    // [MODIFIED] Simplified onMounted since config is injected
     if (currentConfig.value.providerOrder && currentConfig.value.providerOrder.length > 0) {
       provider_key.value = currentConfig.value.providerOrder[0];
     } else if (currentConfig.value.providers && Object.keys(currentConfig.value.providers).length > 0) {
@@ -27,14 +18,6 @@ onMounted(async () => {
     } else {
       provider_key.value = null;
     }
-
-  } catch (error) {
-    console.error("Error fetching config in Providers.vue:", error);
-    currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-    if (currentConfig.value.providerOrder && currentConfig.value.providerOrder.length > 0) {
-      provider_key.value = currentConfig.value.providerOrder[0];
-    }
-  }
 });
 
 const selectedProvider = computed(() => {
@@ -52,7 +35,7 @@ function delete_provider() {
   delete currentConfig.value.providers[provider_key.value];
   currentConfig.value.providerOrder = currentConfig.value.providerOrder.filter(key => key !== provider_key.value);
 
-  saveConfig();
+  saveConfig(); // This will be a lightweight save
 
   if (currentConfig.value.providerOrder.length > 0) {
     if (index > 0 && index <= currentConfig.value.providerOrder.length) {
@@ -75,7 +58,7 @@ function add_prvider_function() {
     url: "", api_key: "", modelList: [], enable: true,
   };
   currentConfig.value.providerOrder.push(timestamp);
-  saveConfig();
+  saveConfig(); // This will be a lightweight save
   addprovider_form.name = "";
   provider_key.value = timestamp;
   addProvider_page.value = false;
@@ -93,7 +76,7 @@ function openChangeProviderNameDialog(){
 function change_provider_name_function() {
   if (selectedProvider.value) {
     selectedProvider.value.name = change_provider_name_form.name;
-    saveConfig();
+    saveConfig(); // This will be a lightweight save
   }
   change_provider_name_form.name = "";
   change_provider_name_page.value = false;
@@ -102,7 +85,7 @@ function change_provider_name_function() {
 function delete_model(model) {
   if (selectedProvider.value) {
     selectedProvider.value.modelList = selectedProvider.value.modelList.filter(m => m !== model);
-    saveConfig();
+    saveConfig(); // This will be a lightweight save
   }
 }
 
@@ -114,7 +97,7 @@ function add_model_function() {
         selectedProvider.value.modelList = [];
     }
     selectedProvider.value.modelList.push(addModel_form.name.trim());
-    saveConfig();
+    saveConfig(); // This will be a lightweight save
   }
   addModel_form.name = "";
   addModel_page.value = false;
@@ -194,7 +177,7 @@ function get_model_function(add, modelId) {
     } else {
       selectedProvider.value.modelList = selectedProvider.value.modelList.filter(m => m !== modelId);
     }
-    saveConfig();
+    saveConfig(); // This will be a lightweight save
   }
 }
 
@@ -214,20 +197,22 @@ function change_order(flag) {
     return;
   }
   currentConfig.value.providerOrder = newOrder;
-  saveConfig();
+  saveConfig(); // This will be a lightweight save
 }
 
 async function change_enable(){
-  saveConfig();
+  saveConfig(); // This will be a lightweight save
 }
 
+// [MODIFIED] Now uses the new lightweight save function
 async function saveConfig() {
+  if (!currentConfig.value) return;
   try {
     const configToSave = { config: JSON.parse(JSON.stringify(currentConfig.value)) };
-    if (window.api && window.api.updateConfig) {
-      await window.api.updateConfig(configToSave);
+    if (window.api && window.api.updateConfigWithoutFeatures) {
+      await window.api.updateConfigWithoutFeatures(configToSave);
     } else {
-      console.warn("window.api.updateConfig is not available. Config not saved.");
+      console.warn("window.api.updateConfigWithoutFeatures is not available. Config not saved.");
     }
   } catch (error) {
     console.error("Error saving config:", error);
@@ -613,8 +598,27 @@ async function saveConfig() {
 }
 
 :deep(.el-table__header-wrapper th) {
-  background-color: var(--bg-tertiary) !important;
+  background-color: var(--bg-primary) !important;
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+:deep(.el-table tr), :deep(.el-table) {
+  background-color: var(--bg-secondary);
+}
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+    background-color: var(--bg-primary);
+}
+:deep(.el-table td.el-table__cell),
+:deep(.el-table th.el-table__cell.is-leaf) {
+    border-bottom: 1px solid var(--border-primary);
+    color: var(--text-primary);
+}
+:deep(.el-table--border .el-table__cell) {
+    border-right: 1px solid var(--border-primary);
+}
+
+:deep(.el-table--border::after), :deep(.el-table--border::before) {
+    background-color: var(--border-primary);
 }
 </style>

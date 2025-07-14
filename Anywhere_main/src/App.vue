@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, provide } from 'vue'
 import Chats from './components/Chats.vue'
 import Prompts from './components/Prompts.vue'
 import Setting from './components/Setting.vue'
@@ -10,6 +10,44 @@ import { ChatDotRound, MagicStick, Cloudy, Setting as SettingIcon } from '@eleme
 const { t, locale } = useI18n()
 const tab = ref(0);
 const header_text = ref(t('app.header.chats'));
+
+const config = ref(null);
+
+// [MODIFIED] 将 config provide 给所有子组件
+provide('config', config);
+
+// This watcher is now very effective because of the CSS variables and shared state.
+watch(() => config.value?.isDarkMode, (isDark) => {
+  if (isDark === undefined) return;
+  if (isDark) {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+}, { deep: true }); // [MODIFIED] deep watch might be more robust here
+
+onMounted(async () => {
+  try {
+    const result = await window.api.getConfig();
+    if (result && result.config) {
+      const baseConfig = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
+      config.value = Object.assign({}, baseConfig, result.config);
+    } else {
+      config.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
+    }
+  } catch (error) {
+    console.error("Error fetching config in App.vue:", error);
+    config.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
+  }
+  
+  // [NEW] Immediately apply dark mode on mount
+  if (config.value?.isDarkMode) {
+      document.documentElement.classList.add('dark');
+  } else {
+      document.documentElement.classList.remove('dark');
+  }
+});
+
 
 function changeTab(newTab) {
   tab.value = newTab;
@@ -32,49 +70,47 @@ watch(locale, () => {
 </script>
 
 <template>
-  <div class="common-layout">
-    <el-container>
-      <el-header>
-        <el-row :gutter="0" class="header-row" align="middle">
-          <el-col :span="6" class="blank-col"></el-col>
-          <el-col :span="12" class="header-title-col">
-            <el-text class="header-title-text">{{ header_text }}</el-text>
-          </el-col>
-          <el-col :span="6" class="tabs-col">
-            <div class="tabs-container">
-              <el-tooltip :content="t('app.tabs.chats')" placement="bottom">
-                <el-button class="tab-button" text @click="changeTab(0)" :class="{ 'active-tab': tab === 0 }">
-                  <el-icon :size="18"><ChatDotRound /></el-icon>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip :content="t('app.tabs.prompts')" placement="bottom">
-                <el-button class="tab-button" text @click="changeTab(1)" :class="{ 'active-tab': tab === 1 }">
-                  <el-icon :size="18"><MagicStick /></el-icon>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip :content="t('app.tabs.providers')" placement="bottom">
-                <el-button class="tab-button" text @click="changeTab(2)" :class="{ 'active-tab': tab === 2 }">
-                  <el-icon :size="18"><Cloudy /></el-icon>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip :content="t('app.tabs.settings')" placement="bottom">
-                <el-button class="tab-button" text @click="changeTab(3)" :class="{ 'active-tab': tab === 3 }">
-                  <el-icon :size="18"><SettingIcon /></el-icon>
-                </el-button>
-              </el-tooltip>
-            </div>
-          </el-col>
-        </el-row>
-      </el-header>
+  <el-container class="common-layout">
+    <el-header>
+      <el-row :gutter="0" class="header-row" align="middle">
+        <el-col :span="6" class="blank-col"></el-col>
+        <el-col :span="12" class="header-title-col">
+          <el-text class="header-title-text">{{ header_text }}</el-text>
+        </el-col>
+        <el-col :span="6" class="tabs-col">
+          <div class="tabs-container">
+            <el-tooltip :content="t('app.tabs.chats')" placement="bottom">
+              <el-button class="tab-button" text @click="changeTab(0)" :class="{ 'active-tab': tab === 0 }">
+                <el-icon :size="18"><ChatDotRound /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('app.tabs.prompts')" placement="bottom">
+              <el-button class="tab-button" text @click="changeTab(1)" :class="{ 'active-tab': tab === 1 }">
+                <el-icon :size="18"><MagicStick /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('app.tabs.providers')" placement="bottom">
+              <el-button class="tab-button" text @click="changeTab(2)" :class="{ 'active-tab': tab === 2 }">
+                <el-icon :size="18"><Cloudy /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('app.tabs.settings')" placement="bottom">
+              <el-button class="tab-button" text @click="changeTab(3)" :class="{ 'active-tab': tab === 3 }">
+                <el-icon :size="18"><SettingIcon /></el-icon>
+              </el-button>
+            </el-tooltip>
+          </div>
+        </el-col>
+      </el-row>
+    </el-header>
 
-      <el-main>
+    <el-main v-if="config">
         <Chats v-if="tab === 0" />
         <Prompts v-if="tab === 1" />
         <Providers v-if="tab === 2" />
         <Setting v-if="tab === 3" />
-      </el-main>
-    </el-container>
-  </div>
+    </el-main>
+  </el-container>
 </template>
 
 <style scoped>
@@ -157,8 +193,7 @@ watch(locale, () => {
 .el-main {
   padding: 0;
   flex-grow: 1;
-  /* 关键：让子组件处理滚动，这里设置为 hidden 防止出现双重滚动条 */
-  overflow: hidden;
+  overflow-y: auto;
   background-color: var(--bg-primary);
 }
 

@@ -186,8 +186,8 @@
       "description": "応答が成功したときに通知を表示します。"
     },
     "darkMode": {
-      "label": "ダークモード（独立ウィンドウ）",
-      "description": "独立した応答ウィンドウでダークモードのテーマを使用します。"
+      "label": "ダークモード",
+      "description": "暗いテーマを使用する"
     },
     "fixPosition": {
       "label": "ウィンドウ位置を固定",

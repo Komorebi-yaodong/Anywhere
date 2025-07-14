@@ -186,8 +186,8 @@
       "description": "启用以在响应成功时显示通知"
     },
     "darkMode": {
-      "label": "深色模式 (独立窗口)",
-      "description": "在独立的响应窗口中使用深色模式主题"
+      "label": "深色模式",
+      "description": "使用深色模式主题"
     },
     "fixPosition": {
       "label": "固定窗口位置",

@@ -1,5 +1,5 @@
 <script setup>
-// The <script setup> block remains unchanged from the previous version.
+// Script setup remains unchanged
 import { ref, reactive, onMounted, computed, nextTick } from 'vue';
 import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
@@ -421,7 +421,7 @@ const removeEditingIcon = () => {
                     <span class="prompt-name" @click="prepareEditPrompt(item.key)">{{ item.key }}</span>
                   </el-tooltip>
                   <div class="prompt-actions-header">
-                    <el-switch v-model="item.enable" @change="handlePromptEnableChange" size="small" class="prompt-enable-toggle" />
+                    <el-switch v-model="currentConfig.prompts[item.key].enable" @change="handlePromptEnableChange" size="small" class="prompt-enable-toggle" />
                     <el-button type="danger" :icon="Delete" circle plain size="small" @click="deletePrompt(item.key)" />
                   </div>
                 </div>
@@ -435,9 +435,11 @@ const removeEditingIcon = () => {
               <div class="tag-title-content">
                 <span class="tag-name-header">{{ tagName }} ({{ tagEabledPromptsCount(tagName) }} / {{ currentConfig.tags[tagName]?.length || 0 }})</span>
                 <div class="tag-actions">
-                  <el-tooltip :content="areAllPromptsInTagEnabled(tagName) ? '全部禁用' : '全部启用'">
-                    <el-switch v-if="currentConfig.tags[tagName]?.length > 0" :model-value="areAllPromptsInTagEnabled(tagName)" @change="(value) => toggleAllPromptsInTag(tagName, value)" size="small" class="tag-enable-toggle" />
-                  </el-tooltip>
+                  <template v-if="currentConfig.tags[tagName]?.length > 0">
+                    <el-tooltip :content="areAllPromptsInTagEnabled(tagName) ? '全部禁用' : '全部启用'">
+                      <el-switch :model-value="areAllPromptsInTagEnabled(tagName)" @change="(value) => toggleAllPromptsInTag(tagName, value)" size="small" class="tag-enable-toggle" />
+                    </el-tooltip>
+                  </template>
                   <el-button type="danger" :icon="Delete" circle plain size="small" @click.stop="deleteTag(tagName)" class="delete-tag-btn" />
                 </div>
               </div>
@@ -482,25 +484,27 @@ const removeEditingIcon = () => {
       </el-button>
     </div>
 
-    <!-- Dialogs remain unchanged -->
+    <!-- Dialogs -->
     <el-dialog v-model="showPromptEditDialog" :title="isNewPrompt ? t('prompts.addNewPrompt') : t('prompts.editPrompt')" width="700px" :close-on-click-modal="false">
       <el-form :model="editingPrompt" label-position="top" @submit.prevent="savePrompt">
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item :label="t('prompts.iconLabel')">
               <div class="icon-editor-area">
-                <el-upload class="icon-uploader" action="#" :show-file-list="false" :before-upload="handleIconUpload" accept="image/png, image/jpeg, image/gif, image/webp, image/svg+xml" drag>
+                <el-upload class="icon-uploader" action="#" :show-file-list="false" :before-upload="handleIconUpload" accept="image/png, image/jpeg, image/svg+xml" drag>
                   <template v-if="editingPrompt.icon">
                     <el-avatar :src="editingPrompt.icon" shape="square" :size="120" class="uploaded-icon-avatar" />
                   </template>
                   <template v-else>
-                    <el-icon class="icon-uploader-icon" :size="40"><UploadFilled /></el-icon>
-                    <div class="el-upload__text">{{ t('prompts.dragIconHere') }}<em>{{ t('prompts.orClickToUpload') }}</em></div>
+                    <div>
+                      <el-icon class="icon-uploader-icon" :size="40"><UploadFilled /></el-icon>
+                      <div class="el-upload__text">{{ t('prompts.dragIconHere') }}<em>{{ t('prompts.orClickToUpload') }}</em></div>
+                    </div>
                   </template>
                 </el-upload>
+                <div class="el-upload__tip">{{ t('prompts.iconUploadTip', { formats: 'JPG, PNG', maxSize: '100KB' }) }}</div>
+                <el-button v-if="editingPrompt.icon" class="remove-icon-button" type="danger" plain size="small" @click="removeEditingIcon">{{ t('common.removeIcon') }}</el-button>
               </div>
-              <div class="el-upload__tip">{{ t('prompts.iconUploadTip', { formats: 'JPG, PNG', maxSize: '100KB' }) }}</div>
-              <el-button v-if="editingPrompt.icon" class="remove-icon-button" type="danger" plain size="small" @click="removeEditingIcon">{{ t('common.removeIcon') }}</el-button>
             </el-form-item>
           </el-col>
           <el-col :span="16">
@@ -537,12 +541,15 @@ const removeEditingIcon = () => {
                 </el-form-item>
               </el-col>
             </el-row>
+            <el-form-item :label="t('prompts.modelLabel')">
+              <el-select v-model="editingPrompt.model" filterable clearable style="width: 100%;">
+                <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item :label="t('prompts.modelLabel')">
-          <el-select v-model="editingPrompt.model" filterable clearable style="width: 100%;">
-            <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
+        <el-form-item :label="t('prompts.promptContentLabel')">
+          <el-input v-model="editingPrompt.prompt" type="textarea" :rows="6" />
         </el-form-item>
         <el-form-item :label="t('prompts.llmParametersLabel')">
           <div class="llm-params-container">
@@ -559,9 +566,6 @@ const removeEditingIcon = () => {
             <div class="param-item"><span class="param-label">{{ t('prompts.sendFileLabel') }}</span><el-switch v-model="editingPrompt.isDirectSend_file" /></div>
             <div class="param-item"><span class="param-label">{{ t('prompts.ifTextNecessary') }}</span><el-switch v-model="editingPrompt.ifTextNecessary" /></div>
           </div>
-        </el-form-item>
-        <el-form-item :label="t('prompts.promptContentLabel')">
-          <el-input v-model="editingPrompt.prompt" type="textarea" :rows="6" />
         </el-form-item>
         <el-form-item v-if="isNewPrompt" :label="t('prompts.addToTagLabel')">
           <el-select v-model="editingPrompt.selectedTag" :placeholder="t('prompts.addToTagPlaceholder')" style="width: 100%;" clearable>
@@ -630,49 +634,51 @@ const removeEditingIcon = () => {
 
 .tag-collapse-item {
   margin-bottom: 8px;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
   border: 1px solid var(--border-primary);
   background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
   transition: box-shadow 0.3s ease;
+  /* Removed overflow:hidden to allow sticky header to work correctly */
 }
-
-/* 关键修复：当折叠项展开时，必须将其 overflow 设置为 visible，否则 sticky 定位会失效 */
-.tag-collapse-item.is-active {
-  overflow: visible;
-}
-
 
 .tag-collapse-item:hover {
   box-shadow: var(--shadow-md);
 }
 
 .tag-collapse-item :deep(.el-collapse-item__header) {
-  background-color: var(--bg-secondary) !important;
-  border-bottom: 1px solid var(--border-primary);
-  padding: 0px 20px 0px  20px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid transparent; /* Default to transparent */
+  padding: 0 20px;
   height: 52px;
   font-weight: 600;
-  transition: background-color 0.2s;
+  border-radius: var(--radius-lg); /* Rounded corners when closed */
+  transition: border-radius 0.15s ease-out, background-color 0.2s;
 }
 
-/* 核心修改：当折叠项展开时，使其头部固定在顶部 */
+/* THE FIX: When active, header becomes sticky and only top corners are rounded */
 .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: var(--bg-secondary) !important;
+  background-color: var(--bg-secondary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--border-primary);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 html.dark .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
-    background-color: var(--bg-tertiary) !important;
+    background-color: var(--bg-tertiary);
 }
 
 .tag-collapse-item :deep(.el-collapse-item__wrap) {
   background-color: var(--bg-secondary);
   border-top: none;
-  overflow: visible; /* 确保内容区本身也是可见的 */
+  /* THE FIX: When active, the content area gets the bottom round corners */
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
 }
 
 .tag-collapse-item :deep(.el-collapse-item__content) {
@@ -788,6 +794,7 @@ html.dark .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
 
 .prompt-enable-toggle {
   margin-left: 8px;
+  --el-switch-on-color: var(--bg-accent);
 }
 
 .empty-tag-message {
@@ -843,30 +850,10 @@ html.dark .bottom-actions-container {
   color: var(--text-on-accent);
 }
 
-:deep(.el-dialog__header) {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-primary);
-  margin-right: 0;
-}
-
-:deep(.el-dialog__title) {
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 18px;
-}
-
-:deep(.el-dialog__body) {
-  padding: 24px;
-}
-
-.el-form-item {
-  margin-bottom: 22px;
-}
-
 :deep(.el-form-item__label) {
   font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 8px !important;
 }
 
 .icon-editor-area {
@@ -878,11 +865,18 @@ html.dark .bottom-actions-container {
 }
 
 .icon-uploader :deep(.el-upload-dragger) {
-  width: 120px;
-  height: 120px;
+  width: 96px;
+  height: 96px;
   padding: 0;
   border: 2px dashed var(--border-primary);
   border-radius: var(--radius-md);
+  background-color: var(--bg-primary);
+}
+.icon-uploader :deep(.el-upload-dragger:hover) {
+    border-color: var(--border-accent);
+}
+.icon-uploader :deep(.el-upload__text) {
+    color: var(--text-secondary);
 }
 
 .uploaded-icon-avatar {
@@ -892,6 +886,13 @@ html.dark .bottom-actions-container {
   display: block;
 }
 
+.el-upload__tip {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .el-upload__text em {
   color: var(--text-accent);
   font-style: normal;
@@ -899,7 +900,6 @@ html.dark .bottom-actions-container {
 
 .remove-icon-button {
   width: 120px;
-  margin-top: 8px;
 }
 
 .llm-params-container {
@@ -924,5 +924,18 @@ html.dark .bottom-actions-container {
 .param-label {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+:deep(.el-slider__runway) {
+  background-color: var(--bg-tertiary);
+}
+:deep(.el-slider__bar) {
+  background-color: var(--bg-accent);
+}
+:deep(.el-slider__button) {
+  border-color: var(--bg-accent);
+}
+:deep(.el-slider .el-input-number) {
+    width: 130px;
 }
 </style>

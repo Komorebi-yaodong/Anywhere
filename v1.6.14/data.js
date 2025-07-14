@@ -294,84 +294,83 @@ function checkConfig(config) {
 
 }
 
-// 更新配置文件
-function updateConfig(newConfig) {
-  const features = utools.getFeatures();
-  let featuresMap = new Map(features.map((feature) => [feature.code, feature]));
-  // 查找prompts中的key是否在features的元素的code中，如不在则添加
-  for (let key in newConfig.config.prompts) {
-    // 功能指令
-    if (newConfig.config.prompts[key].showMode === "window" && newConfig.config.prompts[key].enable) {
-      let feature_ai = {
-        code: key + feature_suffix,
-        explain: key,
-        mainHide: true,
-        cmds: [key]
-      };
-      if (newConfig.config.prompts[key].icon) {
-        feature_ai.icon = newConfig.config.prompts[key].icon;
-      }
-      utools.setFeature(feature_ai);
-    }
-
-    // 匹配指令
-    let feature = {
-      code: key,
-      explain: key,
-      mainHide: true,
-      cmds: []
-    }
-    if (newConfig.config.prompts[key].type === "general") {
-      feature.cmds.push({ type: "over", label: key,"maxLength": 99999999999999999999999999999999999999 });
-      feature.cmds.push({ type: "img", label: key });
-      if (newConfig.config.prompts[key].showMode === "window") {
-        feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
-      }
-      else {
-        feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
-      }
-    }
-    else if (newConfig.config.prompts[key].type === "files") {
-      if (newConfig.config.prompts[key].showMode === "window") {
-        feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
-      }
-      else {
-        feature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
-      }
-    }
-    else if (newConfig.config.prompts[key].type === "img") {
-      feature.cmds.push({ type: "img", label: key });
-    }
-    else if (newConfig.config.prompts[key].type === "over") {
-      feature.cmds.push({ type: "over", label: key,"maxLength": 99999999999999999999999999999999999999 });
-    }
-
-    if (newConfig.config.prompts[key].icon) {
-      feature.icon = newConfig.config.prompts[key].icon;
-    }
-
-    if (newConfig.config.prompts[key].enable) {
-      utools.setFeature(feature);
-    }
-  }
-  // 查找features的元素的code是否在prompts中的key中，如不在则删除
-  for (let [key, feature] of featuresMap) {
-    if (!(newConfig.config.prompts[feature.code]||newConfig.config.prompts[feature.code.replace(feature_suffix, "")]) || !newConfig.config.prompts[feature.explain].enable || newConfig.config.prompts[feature.explain].showMode!== "window") {
-      utools.removeFeature(key);
-    }
-  }
+function updateConfigWithoutFeatures(newConfig) {
   let configDoc = utools.db.get("config");
   if (configDoc) {
-    // 更新已存在的配置
     configDoc.data = { ...configDoc.data, ...newConfig };
     return utools.db.put(configDoc);
   } else {
-    // 创建新的配置
     return utools.db.put({
       _id: "config",
       data: newConfig,
     });
   }
+}
+
+function updateConfig(newConfig) {
+  const features = utools.getFeatures();
+  const featuresMap = new Map(features.map((feature) => [feature.code, feature]));
+  const currentPrompts = newConfig.config.prompts || {};
+  const enabledPromptKeys = new Set();
+
+  for (let key in currentPrompts) {
+    const prompt = currentPrompts[key];
+    if (prompt.enable) {
+      enabledPromptKeys.add(key);
+      const featureCode = key;
+      const functionCmdCode = key + feature_suffix;
+
+      // 更新或添加匹配指令
+      const expectedMatchFeature = {
+        code: featureCode,
+        explain: key,
+        mainHide: true,
+        cmds: [],
+        icon: prompt.icon || ""
+      };
+      if (prompt.type === "general") {
+          expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
+          expectedMatchFeature.cmds.push({ type: "img", label: key });
+          expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+      } else if (prompt.type === "files") {
+          expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+      } else if (prompt.type === "img") {
+          expectedMatchFeature.cmds.push({ type: "img", label: key });
+      } else if (prompt.type === "over") {
+          expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
+      }
+      utools.setFeature(expectedMatchFeature);
+
+      // 更新或添加功能指令（仅限窗口模式）
+      if (prompt.showMode === "window") {
+        utools.setFeature({
+          code: functionCmdCode,
+          explain: key,
+          mainHide: true,
+          cmds: [key],
+          icon: prompt.icon || ""
+        });
+      } else {
+        if (featuresMap.has(functionCmdCode)) {
+          utools.removeFeature(functionCmdCode);
+        }
+      }
+    }
+  }
+
+  // 移除不再需要的 features
+  for (const [code, feature] of featuresMap) {
+    if (code === "Anywhere Settings" || code === "Resume Conversation") continue;
+    const promptKey = feature.explain;
+    if (!enabledPromptKeys.has(promptKey) || 
+        (currentPrompts[promptKey] && currentPrompts[promptKey].showMode !== "window" && code.endsWith(feature_suffix))
+       ) {
+        utools.removeFeature(code);
+    }
+  }
+
+  // 最后将配置写入数据库
+  updateConfigWithoutFeatures(newConfig);
 }
 
 function getUser() {
@@ -598,6 +597,7 @@ module.exports = {
   getConfig,
   checkConfig,
   updateConfig,
+  updateConfigWithoutFeatures, // [NEW] 导出新函数
   getUser,
   getPosition,
   getRandomItem,
