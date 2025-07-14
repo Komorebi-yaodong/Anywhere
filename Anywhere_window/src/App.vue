@@ -1,4 +1,3 @@
-<!-- ./Anywhere_window/src/App.vue -->
 <script setup>
 // [MODIFIED] Added 'computed' to imports
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
@@ -295,6 +294,19 @@ const handleUpload = async ({ fileList: newFiles }) => {
   }
   senderRef.value?.focus();
 };
+
+// [NEW] Handler for the new 'send-audio' event
+const handleSendAudio = async (audioFile) => {
+    // Clear any existing prompts or files
+    prompt.value = '';
+    fileList.value = [];
+    
+    // Add the audio file to the list
+    await file2fileList(audioFile, 0);
+
+    // Immediately send the message
+    await askAI(false);
+}
 
 // --- Core Logic (moved from original script) ---
 const closePage = () => { window.close(); };
@@ -925,7 +937,6 @@ const clearHistory = () => {
           @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
       </el-main>
       
-      <!-- [MODIFIED] Pass the layout prop to the ChatInput component -->
       <ChatInput 
         ref="senderRef" 
         v-model:prompt="prompt" 
@@ -938,6 +949,7 @@ const clearHistory = () => {
         @clear-history="handleClearHistory" 
         @remove-file="handleRemoveFile" 
         @upload="handleUpload" 
+        @send-audio="handleSendAudio"
       />
 
     </el-container>
