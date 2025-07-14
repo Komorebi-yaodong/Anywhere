@@ -549,7 +549,16 @@ const removeEditingIcon = () => {
           </el-col>
         </el-row>
         <el-form-item :label="t('prompts.promptContentLabel')">
-          <el-input v-model="editingPrompt.prompt" type="textarea" :rows="6" />
+          <!-- [FIX] Replaced el-input with el-scrollbar wrapping el-input -->
+          <el-scrollbar height="150px" class="prompt-textarea-scrollbar">
+            <el-input
+              v-model="editingPrompt.prompt"
+              type="textarea"
+              :autosize="{ minRows: 6 }"
+              resize="none"
+              placeholder="请输入提示词内容..."
+            />
+          </el-scrollbar>
         </el-form-item>
         <el-form-item :label="t('prompts.llmParametersLabel')">
           <div class="llm-params-container">
@@ -621,6 +630,43 @@ const removeEditingIcon = () => {
   width: 100%;
 }
 
+.main-content-scrollbar :deep(.el-scrollbar__thumb) {
+    background-color: var(--text-tertiary);
+}
+.main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
+    background-color: var(--text-secondary);
+}
+
+/* [FIX START] Styles for the new el-scrollbar wrapper around the textarea */
+.prompt-textarea-scrollbar {
+  width: 100%;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-tertiary);
+}
+
+.prompt-textarea-scrollbar :deep(.el-textarea__inner) {
+  box-shadow: none !important;
+  background-color: transparent !important;
+  padding: 8px 12px;
+}
+
+/* Ensure native scrollbar is hidden inside the scrollbar component */
+.prompt-textarea-scrollbar :deep(.el-textarea__inner::-webkit-scrollbar) {
+  display: none;
+}
+
+/* Style the simulated scrollbar thumb for dark mode */
+html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb) {
+  background-color: var(--text-tertiary);
+}
+
+html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
+  background-color: var(--text-secondary);
+}
+/* [FIX END] */
+
+
 .content-wrapper {
   max-width: 1200px;
   margin: 0 auto;
@@ -655,7 +701,6 @@ const removeEditingIcon = () => {
   transition: border-radius 0.15s ease-out, background-color 0.2s;
 }
 
-/* THE FIX: When active, header becomes sticky and only top corners are rounded */
 .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
   position: sticky;
   top: 0;
@@ -676,7 +721,6 @@ html.dark .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
 .tag-collapse-item :deep(.el-collapse-item__wrap) {
   background-color: var(--bg-secondary);
   border-top: none;
-  /* THE FIX: When active, the content area gets the bottom round corners */
   border-bottom-left-radius: var(--radius-lg);
   border-bottom-right-radius: var(--radius-lg);
 }
