@@ -67,7 +67,7 @@
       "general": "Общий",
       "text": "Текст",
       "image": "Скриншот",
-      "files":"Файлы"
+      "files": "Файлы"
     },
     "showModeLabel": "Режим отображения",
     "showModeOptions": {
@@ -121,8 +121,8 @@
     "apiKeyDescription": "Вы можете ввести несколько ключей API, разделенных запятыми.",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "например, https://api.openai.com/v1",
-    "searchModelsPlaceholder":"Модель поиска",
     "modelsLabel": "Модели",
+    "searchModelsPlaceholder": "Модель поиска",
     "noModelsAdded": "Модели пока не добавлены.",
     "getModelsFromApiBtn": "Получить модели из API",
     "addManuallyBtn": "Добавить вручную",
@@ -141,6 +141,7 @@
       "action": "Действие"
     },
     "noModelsFoundError": "Модели не найдены или ошибка API.",
+    "noModelsMatchSearch": "Соответствующие модели не найдены",
     "addModelTooltip": "Добавить модель",
     "removeModelTooltip": "Удалить модель",
     "alerts": {
@@ -242,10 +243,16 @@
         "actions": "Действия",
         "restore": "Восстановить",
         "delete": "Удалить",
-        "confirmRestore": "Вы уверены, что хотите восстановить этот файл '{filename}'? Это перезапишет вашу текущую конфигурацию."
+        "confirmRestore": "Вы уверены, что хотите восстановить этот файл '{filename}'? Это перезапишет вашу текущую конфигурацию.",
+        "confirmDelete": "Вы уверены, что хотите навсегда удалить файл '{filename}'?",
+        "noFileSelected": "Файлы не выбраны.",
+        "confirmDeleteMultiple": "Вы уверены, что хотите навсегда удалить {count} выбранных файлов?",
+        "deleteSuccess": "Файл успешно удален.",
+        "deleteFailed": "Не удалось удалить файл.",
+        "deleteSuccessMultiple": "Выбранные файлы успешно удалены.",
+        "deleteFailedMultiple": "Ошибка при удалении выбранных файлов."
       },
       "alerts": {
-        "importSuccess": "Конфигурация импортирована успешно.",
         "urlRequired": "URL-адрес WebDAV не может быть пустым.",
         "backupInProgress": "Выполняется резервное копирование...",
         "backupSuccess": "Резервное копирование успешно завершено",
@@ -256,9 +263,9 @@
         "restoreFailed": "Ошибка восстановления"
       }
     },
-    "alerts":{
-        "importSuccess": "Конфигурация импортирована успешно.",
-        "importFailed": "Ошибка при импорте конфигурации."
+    "alerts": {
+      "importSuccess": "Конфигурация импортирована успешно.",
+      "importFailed": "Ошибка при импорте конфигурации."
     }
   },
   "common": {

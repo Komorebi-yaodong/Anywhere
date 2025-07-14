@@ -121,8 +121,8 @@
     "apiKeyDescription": "You can enter multiple API keys separated by commas.",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "e.g., https://api.openai.com/v1",
-    "searchModelsPlaceholder":"Search model",
     "modelsLabel": "Models",
+    "searchModelsPlaceholder": "Search model",
     "noModelsAdded": "No models added yet.",
     "getModelsFromApiBtn": "Get Models from API",
     "addManuallyBtn": "Add Manually",
@@ -141,6 +141,7 @@
       "action": "Action"
     },
     "noModelsFoundError": "No models found or API error.",
+    "noModelsMatchSearch": "No models match search",
     "addModelTooltip": "Add Model",
     "removeModelTooltip": "Remove Model",
     "alerts": {
@@ -242,10 +243,16 @@
         "actions": "Actions",
         "restore": "Restore",
         "delete": "Delete",
-        "confirmRestore": "Are you sure you want to restore this backup file '{filename}'? This will overwrite your current configuration."
+        "confirmRestore": "Are you sure you want to restore this backup file '{filename}'? This will overwrite your current configuration.",
+        "confirmDelete": "Are you sure you want to permanently delete the file '{filename}'?",
+        "noFileSelected": "No files selected.",
+        "confirmDeleteMultiple": "Are you sure you want to permanently delete the {count} selected files?",
+        "deleteSuccess": "Deleted successfully.",
+        "deleteFailed": "Deletion failed.",
+        "deleteSuccessMultiple": "Selected files deleted successfully.",
+        "deleteFailedMultiple": "Error deleting selected files."
       },
       "alerts": {
-        "importSuccess": "Configuration imported successfully.",
         "urlRequired": "WebDAV URL cannot be empty.",
         "backupInProgress": "Backing up...",
         "backupSuccess": "Backup successful",
@@ -256,9 +263,9 @@
         "restoreFailed": "Restore failed"
       }
     },
-    "alerts":{
-        "importSuccess": "Configuration imported successfully.",
-        "importFailed": "Configuration import failed."
+    "alerts": {
+      "importSuccess": "Configuration imported successfully.",
+      "importFailed": "Configuration import failed."
     }
   },
   "common": {

@@ -629,9 +629,9 @@ const removeEditingIcon = () => {
 }
 
 .tag-collapse-item {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   border-radius: var(--radius-lg);
-  overflow: hidden; /* 默认保持 hidden 以便动画正常 */
+  overflow: hidden;
   border: 1px solid var(--border-primary);
   background-color: var(--bg-secondary);
   transition: box-shadow 0.3s ease;
@@ -650,8 +650,8 @@ const removeEditingIcon = () => {
 .tag-collapse-item :deep(.el-collapse-item__header) {
   background-color: var(--bg-secondary) !important;
   border-bottom: 1px solid var(--border-primary);
-  padding: 0 24px;
-  height: 64px;
+  padding: 0px 20px 0px  20px;
+  height: 52px;
   font-weight: 600;
   transition: background-color 0.2s;
 }
@@ -689,7 +689,7 @@ html.dark .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
 .tag-name-header {
   font-weight: 600;
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .tag-actions {

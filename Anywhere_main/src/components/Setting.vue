@@ -582,7 +582,7 @@ const handleSelectionChange = (val) => {
   display: flex;
   justify-content: space-between;
   align-items: center; /* Vertically center the content and the control */
-  padding: 20px 0;
+  padding: 15px 0;
   border-bottom: 1px solid var(--border-primary);
   gap: 20px; /* Add gap for responsiveness */
   flex-wrap: wrap; /* Allow control to wrap on small screens */

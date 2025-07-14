@@ -121,8 +121,8 @@
     "apiKeyDescription": "複数のAPIキーをカンマで区切って入力できます。",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "例: https://api.openai.com/v1",
-    "searchModelsPlaceholder":"モデルを検索",
     "modelsLabel": "モデル",
+    "searchModelsPlaceholder": "モデルを検索",
     "noModelsAdded": "モデルはまだ追加されていません。",
     "getModelsFromApiBtn": "APIからモデルを取得",
     "addManuallyBtn": "手動で追加",
@@ -141,6 +141,7 @@
       "action": "操作"
     },
     "noModelsFoundError": "モデルが見つからないか、APIエラーです。",
+    "noModelsMatchSearch": "一致するモデルが見つかりませんでした",
     "addModelTooltip": "モデルを追加",
     "removeModelTooltip": "モデルを削除",
     "alerts": {
@@ -242,10 +243,16 @@
         "actions": "操作",
         "restore": "復元",
         "delete": "削除",
-        "confirmRestore": "本当にこのバックアップファイル '{filename}' を復元しますか？この操作は現在の設定を上書きします。"
+        "confirmRestore": "本当にこのバックアップファイル '{filename}' を復元しますか？この操作は現在の設定を上書きします。",
+        "confirmDelete": "本当にファイル '{filename}' を完全に削除しますか？",
+        "noFileSelected": "ファイルが選択されていません。",
+        "confirmDeleteMultiple": "選択した {count} 個のファイルを本当に完全に削除しますか？",
+        "deleteSuccess": "ファイルの削除に成功しました。",
+        "deleteFailed": "ファイルの削除に失敗しました。",
+        "deleteSuccessMultiple": "選択したファイルを削除しました。",
+        "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました。"
       },
       "alerts": {
-        "importSuccess": "設定のインポートに成功しました。",
         "urlRequired": "WebDAV URLは空にできません。",
         "backupInProgress": "バックアップ中...",
         "backupSuccess": "バックアップに成功しました",
@@ -256,9 +263,9 @@
         "restoreFailed": "復元に失敗しました"
       }
     },
-    "alerts":{
-        "importSuccess": "設定のインポートに成功しました。",
-        "importFailed": "設定のインポートに失敗しました。"
+    "alerts": {
+      "importSuccess": "設定のインポートに成功しました。",
+      "importFailed": "設定のインポートに失敗しました。"
     }
   },
   "common": {
