@@ -276,6 +276,57 @@ html.dark .drag-overlay {
     gap: 8px;
 }
 
+/* --- FINAL, CORRECTED STYLES for FileCard --- */
+/* 1. Style the main container for the thumbnail. Set a fixed size and remove flex properties. */
+.file-card-container :deep(.ant-attachments-file-card-item-image) {
+    width: 56px;
+    height: 56px;
+    overflow: hidden;
+    position: relative;
+    display: block; /* Important: Override flex to prevent centering */
+}
+
+/* 2. Force the immediate wrapper of the image to fill the container */
+.file-card-container :deep(.ant-image) {
+    width: 100%;
+    height: 100%;
+}
+
+/* 3. Force the image to fill its wrapper and apply the crop effect */
+.file-card-container :deep(.ant-image-img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* THIS IS THE CORRECT CROPPING PROPERTY */
+    object-position: center;
+}
+
+/* 4. Style the preview overlay mask to appear on hover */
+.file-card-container :deep(.ant-image-mask) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity .2s;
+}
+
+.file-card-container :deep(.ant-attachments-file-card-item:hover .ant-image-mask) {
+    opacity: 1;
+}
+
+/* 5. Style the icon inside the mask for better visibility */
+.file-card-container :deep(.ant-image-mask-info .anticon) {
+    font-size: 20px;
+    color: #fff;
+}
+/* --- END OF FINAL STYLES --- */
+
+
 /* === Horizontal Layout Styles === */
 .chat-input-area-horizontal {
     display: flex;
@@ -312,7 +363,6 @@ html.dark .chat-input-area-horizontal {
 .chat-input-area-horizontal .action-buttons-right {
     margin-left: 8px; /* Space between input and send button */
 }
-/* [MODIFIED] To make left buttons adjacent */
 .chat-input-area-horizontal .action-buttons-left .el-button:not(:last-child) {
     margin-right: -10px; /* Negative margin pulls buttons together */
 }
