@@ -363,17 +363,24 @@ const handleSelectionChange = (val) => {
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
+              <span class="setting-option-label">{{ t('setting.darkMode.label') }}</span>
+              <span class="setting-option-description">{{ t('setting.darkMode.description') }}</span>
+            </div>
+            <el-switch v-model="currentConfig.isDarkMode" @change="saveConfig" inline-prompt :active-text="t('setting.darkMode.dark')" :inactive-text="t('setting.darkMode.light')" />
+          </div>
+          <div class="setting-option-item">
+            <div class="setting-text-content">
+              <span class="setting-option-label">{{ t('setting.inputLayout.label') }}</span>
+              <span class="setting-option-description">{{ t('setting.inputLayout.description') }}</span>
+            </div>
+            <el-switch v-model="currentConfig.inputLayout" @change="saveConfig" inline-prompt :active-text="t('setting.inputLayout.vertical')" :inactive-text="t('setting.inputLayout.horizontal')" active-value="vertical" inactive-value="horizontal" />
+          </div>
+          <div class="setting-option-item">
+            <div class="setting-text-content">
               <span class="setting-option-label">{{ t('setting.stream.label') }}</span>
               <span class="setting-option-description">{{ t('setting.stream.description') }}</span>
             </div>
             <el-switch v-model="currentConfig.stream" @change="saveConfig" />
-          </div>
-          <div class="setting-option-item">
-            <div class="setting-text-content">
-              <span class="setting-option-label">{{ t('setting.darkMode.label') }}</span>
-              <span class="setting-option-description">{{ t('setting.darkMode.description') }}</span>
-            </div>
-            <el-switch v-model="currentConfig.isDarkMode" @change="saveConfig" />
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
@@ -416,13 +423,6 @@ const handleSelectionChange = (val) => {
               <span class="setting-option-description">{{ t('setting.fixPosition.description') }}</span>
             </div>
             <el-switch v-model="currentConfig.fix_position" @change="saveConfig" />
-          </div>
-          <div class="setting-option-item no-border">
-            <div class="setting-text-content">
-              <span class="setting-option-label">{{ t('setting.inputLayout.label') }}</span>
-              <span class="setting-option-description">{{ t('setting.inputLayout.description') }}</span>
-            </div>
-            <el-switch v-model="currentConfig.inputLayout" @change="saveConfig" inline-prompt :active-text="t('setting.inputLayout.vertical')" :inactive-text="t('setting.inputLayout.horizontal')" active-value="vertical" inactive-value="horizontal" />
           </div>
         </el-card>
 

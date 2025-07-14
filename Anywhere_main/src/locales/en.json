@@ -186,8 +186,10 @@
       "description": "Enable to show a notification on successful response."
     },
     "darkMode": {
-      "label": "Dark Mode",
-      "description": "Use a dark theme."
+      "label": "Theme",
+      "description": "Light mode or dark mode",
+      "dark":"Dark",
+      "light":"Light"
     },
     "fixPosition": {
       "label": "Fix Window Position",

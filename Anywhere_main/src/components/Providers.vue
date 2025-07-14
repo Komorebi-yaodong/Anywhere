@@ -246,57 +246,60 @@ async function saveConfig() {
         </el-aside>
 
         <el-main class="provider-main-content">
-          <div v-if="selectedProvider" class="provider-details">
-            <div class="provider-header">
-              <div class="provider-title-actions">
-                <h2 class="provider-name" @click="openChangeProviderNameDialog">
-                  {{ selectedProvider.name }}
-                  <el-tooltip :content="t('providers.editNameTooltip')" placement="top">
-                    <el-icon class="edit-icon"><Edit /></el-icon>
-                  </el-tooltip>
-                </h2>
-                <div class="header-buttons">
-                  <el-button :icon="ArrowUp" circle plain size="small" :title="t('providers.moveUpTooltip')" :disabled="!currentConfig.providerOrder || currentConfig.providerOrder.indexOf(provider_key) === 0"
-                    @click="change_order('up')" />
-                  <el-button :icon="ArrowDown" circle plain size="small" :title="t('providers.moveDownTooltip')" :disabled="!currentConfig.providerOrder || currentConfig.providerOrder.indexOf(provider_key) === currentConfig.providerOrder.length - 1"
-                    @click="change_order('down')" />
-                  <el-button type="danger" :icon="Delete" circle plain size="small" @click="delete_provider"
-                    :title="t('providers.deleteProviderTooltip')" />
-                </div>
-              </div>
-              <el-switch v-model="selectedProvider.enable" @change="change_enable" size="large" />
-            </div>
-
-            <el-form label-position="top" class="provider-form">
-              <el-form-item :label="t('providers.apiKeyLabel')">
-                <el-input v-model="selectedProvider.api_key" type="password" :placeholder="t('providers.apiKeyPlaceholder')"
-                  show-password clearable @change="saveConfig" />
-                <div class="form-item-description">{{ t('providers.apiKeyDescription') }}</div>
-              </el-form-item>
-              <el-form-item :label="t('providers.apiUrlLabel')">
-                <el-input v-model="selectedProvider.url" :placeholder="t('providers.apiUrlPlaceholder')" clearable
-                  @change="saveConfig" />
-              </el-form-item>
-
-              <el-form-item :label="t('providers.modelsLabel')" class="models-form-item">
-                <div class="models-list-container">
-                  <el-tag v-for="model in selectedProvider.modelList" :key="model" closable @close="delete_model(model)"
-                    class="model-tag" type="info" effect="light">
-                    {{ model }}
-                  </el-tag>
-                  <div v-if="!selectedProvider.modelList || selectedProvider.modelList.length === 0"
-                    class="no-models-message">
-                    {{ t('providers.noModelsAdded') }}
+          <!-- 使用 el-scrollbar 包裹内容 -->
+          <el-scrollbar class="provider-details-scrollbar">
+            <div v-if="selectedProvider" class="provider-details">
+              <div class="provider-header">
+                <div class="provider-title-actions">
+                  <h2 class="provider-name" @click="openChangeProviderNameDialog">
+                    {{ selectedProvider.name }}
+                    <el-tooltip :content="t('providers.editNameTooltip')" placement="top">
+                      <el-icon class="edit-icon"><Edit /></el-icon>
+                    </el-tooltip>
+                  </h2>
+                  <div class="header-buttons">
+                    <el-button :icon="ArrowUp" circle plain size="small" :title="t('providers.moveUpTooltip')" :disabled="!currentConfig.providerOrder || currentConfig.providerOrder.indexOf(provider_key) === 0"
+                      @click="change_order('up')" />
+                    <el-button :icon="ArrowDown" circle plain size="small" :title="t('providers.moveDownTooltip')" :disabled="!currentConfig.providerOrder || currentConfig.providerOrder.indexOf(provider_key) === currentConfig.providerOrder.length - 1"
+                      @click="change_order('down')" />
+                    <el-button type="danger" :icon="Delete" circle plain size="small" @click="delete_provider"
+                      :title="t('providers.deleteProviderTooltip')" />
                   </div>
                 </div>
-                <div class="models-actions-row">
-                  <el-button :icon="Refresh" plain @click="activate_get_model_function">{{ t('providers.getModelsFromApiBtn') }}</el-button>
-                  <el-button :icon="Plus" plain @click="addModel_page = true">{{ t('providers.addManuallyBtn') }}</el-button>
-                </div>
-              </el-form-item>
-            </el-form>
-          </div>
-          <el-empty v-else :description="t('providers.selectProviderOrAdd')" class="empty-state-main" />
+                <el-switch v-model="selectedProvider.enable" @change="change_enable" size="large" />
+              </div>
+
+              <el-form label-position="top" class="provider-form">
+                <el-form-item :label="t('providers.apiKeyLabel')">
+                  <el-input v-model="selectedProvider.api_key" type="password" :placeholder="t('providers.apiKeyPlaceholder')"
+                    show-password clearable @change="saveConfig" />
+                  <div class="form-item-description">{{ t('providers.apiKeyDescription') }}</div>
+                </el-form-item>
+                <el-form-item :label="t('providers.apiUrlLabel')">
+                  <el-input v-model="selectedProvider.url" :placeholder="t('providers.apiUrlPlaceholder')" clearable
+                    @change="saveConfig" />
+                </el-form-item>
+
+                <el-form-item :label="t('providers.modelsLabel')" class="models-form-item">
+                  <div class="models-list-container">
+                    <el-tag v-for="model in selectedProvider.modelList" :key="model" closable @close="delete_model(model)"
+                      class="model-tag" type="info" effect="light">
+                      {{ model }}
+                    </el-tag>
+                    <div v-if="!selectedProvider.modelList || selectedProvider.modelList.length === 0"
+                      class="no-models-message">
+                      {{ t('providers.noModelsAdded') }}
+                    </div>
+                  </div>
+                  <div class="models-actions-row">
+                    <el-button :icon="Refresh" plain @click="activate_get_model_function">{{ t('providers.getModelsFromApiBtn') }}</el-button>
+                    <el-button :icon="Plus" plain @click="addModel_page = true">{{ t('providers.addManuallyBtn') }}</el-button>
+                  </div>
+                </el-form-item>
+              </el-form>
+            </div>
+            <el-empty v-else :description="t('providers.selectProviderOrAdd')" class="empty-state-main" />
+          </el-scrollbar>
         </el-main>
       </el-container>
     </div>
@@ -482,11 +485,24 @@ async function saveConfig() {
   padding: 0;
   background-color: var(--bg-secondary);
   height: 100%;
-  overflow-y: auto;
 }
+
+.provider-details-scrollbar {
+  height: 100%;
+}
+
+/* 确保 el-scrollbar 内部的 view 也能正确撑开，这对于 el-empty 的居中很重要 */
+.provider-details-scrollbar :deep(.el-scrollbar__view) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 
 .provider-details {
   padding: 30px 36px;
+  /* 添加 flex-grow: 1 以便在有内容时撑满 */
+  flex-grow: 1;
 }
 
 .provider-header {

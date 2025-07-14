@@ -186,8 +186,10 @@
       "description": "応答が成功したときに通知を表示します。"
     },
     "darkMode": {
-      "label": "ダークモード",
-      "description": "暗いテーマを使用する"
+      "label": "テーマ",
+      "description": "ライトモードまたはダークモード",
+      "dark":"ダーク",
+      "light":"ライト"
     },
     "fixPosition": {
       "label": "ウィンドウ位置を固定",

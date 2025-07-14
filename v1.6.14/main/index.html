@@ -3,11 +3,10 @@
 
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Anywhere</title>
-  <script type="module" crossorigin src="./assets/index-Cg-8yjRU.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-CnWbmdkF.css">
+  <script type="module" crossorigin src="./assets/index-DHyFVNb2.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-Dp7ymhkW.css">
 </head>
 
 <body>
@@ -82,33 +81,12 @@
       background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80"><g fill="%23E2E2E2" fill-opacity="0.04"><circle fill-rule="evenodd" cx="40" cy="40" r="40"/><circle fill-rule="evenodd" cx="40" cy="40" r="30"/><circle fill-rule="evenodd" cx="40" cy="40" r="20"/><circle fill-rule="evenodd" cx="40" cy="40" r="10"/></g></svg>');
     }
 
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--text-tertiary);
-      border-radius: var(--radius-lg);
-      border: 2px solid transparent;
-      background-clip: content-box;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--text-secondary);
-      background-clip: content-box;
-    }
-
     .el-dialog {
       background-color: var(--bg-secondary) !important;
       border-radius: var(--radius-lg) !important;
       box-shadow: var(--shadow-md) !important;
     }
-    
+
     .el-dialog__header {
       padding: 20px 24px !important;
       margin-right: 0 !important;
@@ -135,8 +113,7 @@
     .el-message-box__message {
       color: var(--text-primary);
     }
-    
-    /* === Global Dark Mode Overrides for Element Plus === */
+
     html.dark {
       color-scheme: dark;
       --el-color-primary-light-9: #2a3042;
@@ -176,6 +153,7 @@
       --el-button-border-color: var(--border-primary);
       --el-button-text-color: var(--text-secondary);
     }
+
     html.dark .el-button.is-plain:hover,
     html.dark .el-button.is-plain:focus,
     html.dark .el-button--default:hover,
@@ -184,9 +162,11 @@
       --el-button-hover-bg-color: var(--bg-tertiary);
       --el-button-hover-border-color: var(--border-accent);
     }
+
     html.dark .el-button--danger.is-plain {
-       --el-button-text-color: var(--el-color-danger);
+      --el-button-text-color: var(--el-color-danger);
     }
+
     html.dark .el-button--danger.is-plain:hover,
     html.dark .el-button--danger.is-plain:focus {
       --el-button-hover-text-color: #fff;
@@ -201,27 +181,33 @@
       box-shadow: 0 0 0 1px var(--border-primary) inset !important;
       color: var(--text-primary);
     }
+
     html.dark .el-input__wrapper.is-focus,
     html.dark .el-textarea__inner:focus,
     html.dark .el-select__wrapper.is-focused {
       box-shadow: 0 0 0 1px var(--text-accent) inset !important;
     }
+
     html.dark .el-input-number {
       --el-input-number-bg-color: var(--bg-tertiary);
     }
+
     html.dark .el-input-number .el-input__wrapper {
       box-shadow: none !important;
     }
+
     html.dark .el-input-number__decrease,
     html.dark .el-input-number__increase {
       background-color: var(--bg-primary);
       border-color: var(--border-primary);
       color: var(--text-secondary);
     }
+
     html.dark .el-input-number__decrease:hover,
     html.dark .el-input-number__increase:hover {
       color: var(--text-accent);
     }
+
     html.dark .el-input__inner,
     html.dark .el-select-v2__inner {
       color: var(--text-primary);
@@ -232,14 +218,17 @@
       border-color: var(--border-primary) !important;
       box-shadow: var(--shadow-md) !important;
     }
+
     html.dark .el-select-dropdown__item {
       color: var(--text-secondary);
     }
+
     html.dark .el-select-dropdown__item.is-hovering,
     html.dark .el-select-dropdown__item:hover {
       background-color: var(--bg-tertiary);
       color: var(--text-primary);
     }
+
     html.dark .el-select-dropdown__item.is-selected {
       color: var(--text-accent);
       font-weight: 600;
@@ -249,6 +238,7 @@
     html.dark .el-loading-mask {
       background-color: rgba(23, 24, 28, 0.7);
     }
+
     html.dark .el-loading-spinner .path {
       stroke: var(--text-accent);
     }
@@ -259,7 +249,48 @@
     html.dark .el-table__inner-wrapper::after,
     html.dark .el-table--group::after,
     html.dark .el-table__border-left-patch {
-        background-color: var(--border-primary);
+      background-color: var(--border-primary);
+    }
+
+    /* === [FINAL FIX] Global Scrollbar Styles for Native Scrollbars === */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--text-tertiary);
+      border-radius: var(--radius-lg);
+      border: 2px solid var(--bg-primary);
+      background-clip: content-box;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-secondary);
+      background-clip: content-box;
+    }
+
+    html.dark .el-main::-webkit-scrollbar-track,
+    html.dark .el-scrollbar__view::-webkit-scrollbar-track,
+    html.dark .settings-scrollbar-wrapper::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+    }
+
+    html.dark .el-main::-webkit-scrollbar-thumb,
+    html.dark .el-scrollbar__view::-webkit-scrollbar-thumb,
+    html.dark .settings-scrollbar-wrapper::-webkit-scrollbar-thumb {
+      background: var(--text-tertiary);
+      border-color: var(--bg-secondary);
+    }
+
+    html.dark .el-main::-webkit-scrollbar-thumb:hover,
+    html.dark .el-scrollbar__view::-webkit-scrollbar-thumb:hover,
+    html.dark .settings-scrollbar-wrapper::-webkit-scrollbar-thumb:hover {
+      background: var(--text-secondary);
     }
   </style>
 </body>

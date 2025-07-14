@@ -118,7 +118,7 @@
     "deleteProviderTooltip": "删除服务商",
     "apiKeyLabel": "API 密钥",
     "apiKeyPlaceholder": "输入 API 密钥 (可输入多个，用逗号分隔)",
-    "apiKeyDescription": "您可以输入多个 API 密钥，用逗号分隔",
+    "apiKeyDescription": "可以输入多个 API 密钥，用逗号分隔",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "例如, https://api.openai.com/v1",
     "modelsLabel": "模型",
@@ -186,8 +186,10 @@
       "description": "启用以在响应成功时显示通知"
     },
     "darkMode": {
-      "label": "深色模式",
-      "description": "使用深色模式主题"
+      "label": "主题",
+      "description": "浅色模式或深色模式",
+      "dark":"深色",
+      "light":"浅色"
     },
     "fixPosition": {
       "label": "固定窗口位置",
