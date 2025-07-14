@@ -2,21 +2,21 @@
   "app": {
     "header": {
       "chats": "クラウドチャット 💬",
-      "prompts": "クイックプロンプト 🚀",
-      "providers": "プロバイダー ☁️",
+      "prompts": "クイックアシスタント 🚀",
+      "providers": "サービスプロバイダー ☁️",
       "settings": "設定 ⚙️"
     },
     "tabs": {
       "chats": "クラウドチャット",
-      "prompts": "クイックプロンプト",
-      "providers": "プロバイダー",
+      "prompts": "クイックアシスタント",
+      "providers": "サービスプロバイダー",
       "settings": "設定"
     }
   },
   "chats": {
     "configRequired": {
       "title": "クラウドチャット",
-      "description": "この機能を使用するには、「設定」でWebDAV URLとデータパス (data_path) を設定してください。"
+      "description": "この機能を使用するには、「設定」でWebDAV URLとデータパス（data_path）を設定してください。"
     },
     "table": {
       "filename": "チャット名",
@@ -31,8 +31,8 @@
     },
     "rename": {
       "promptTitle": "チャットの名前を変更",
-      "promptMessage": "新しいチャットファイル名を入力してください。",
-      "invalidFilename": "ファイル名が無効です。'.json' で終わる必要があります。"
+      "promptMessage": "新しい会話名を入力してください。",
+      "invalidFilename": "ファイル名が無効です。'.json'で終わる必要があります。"
     },
     "confirmDelete": "チャット '{filename}' を完全に削除してもよろしいですか？",
     "alerts": {
@@ -41,27 +41,27 @@
       "pathCreated": "データパスが存在しないため、自動的に作成されました。",
       "fetchFailed": "チャットリストの取得に失敗しました。",
       "loadingChat": "チャットを読み込み中...",
-      "restoreInitiated": "チャットの復元が開始されました。",
+      "restoreInitiated": "チャットが開始されました。",
       "restoreFailed": "チャットの復元に失敗しました。",
       "renameSuccess": "名前の変更に成功しました。",
       "renameFailed": "名前の変更に失敗しました。"
     }
   },
   "prompts": {
-    "allPrompts": "すべてのプロンプト",
-    "noPrompts": "まだプロンプトは定義されていません。",
-    "noPromptsInTag": "このタグにはプロンプトがありません。",
-    "addExistingPrompt": "既存のプロンプトを追加",
-    "addNewPrompt": "新しいプロンプトを追加",
-    "editPrompt": "プロンプトの編集",
+    "allPrompts": "すべてのクイックアシスタント",
+    "noPrompts": "まだクイックアシスタントは定義されていません。",
+    "noPromptsInTag": "このタグにはクイックアシスタントがありません。",
+    "addExistingPrompt": "既存のクイックアシスタントを追加",
+    "addNewPrompt": "新しいクイックアシスタントを追加",
+    "editPrompt": "クイックアシスタントを編集",
     "addNewTag": "新しいタグを追加",
-    "assignPromptsToTag": "'{tagName}' にプロンプトを割り当て",
-    "promptKeyLabel": "プロンプトキー (一意の識別子)",
-    "promptKeyPlaceholder": "例: CodeGeneration",
+    "assignPromptsToTag": "'{tagName}' にクイックアシスタントを追加",
+    "promptKeyLabel": "クイックアシスタント名 (一意の識別子)",
+    "promptKeyPlaceholder": "例：CodeGeneration",
     "typeLabel": "タイプ",
     "iconLabel": "アイコン",
-    "iconUploadTip": "{formats} 形式をサポート、最大 {maxSize}。",
-    "dragIconHere": "ドラッグ ",
+    "iconUploadTip": "{formats}形式をサポート、最大{maxSize}。",
+    "dragIconHere": "ドラッグ",
     "orClickToUpload": "またはクリック",
     "typeOptions": {
       "general": "汎用",
@@ -71,69 +71,78 @@
     },
     "showModeLabel": "表示モード",
     "showModeOptions": {
-      "input": "入力",
+      "input": "入力ボックス",
       "clipboard": "クリップボード",
-      "window": "ウィンドウ"
+      "window": "独立したウィンドウ"
     },
     "modelLabel": "モデル",
     "llmParametersLabel": "モデルパラメータ（現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります）",
     "AssistantParametersLabel": "クイックアシスタントパラメータ",
     "sendDirectLabel": "テキスト/スクリーンショットを直接送信",
-    "sendFileLabel": "ファイルの直接送信",
-    "ifTextNecessary": "テキスト＆自動日時",
+    "sendFileLabel": "ファイルを直接送信",
+    "ifTextNecessary": "テキスト情報を補足",
     "streamLabel": "ストリーム応答",
     "enableTemperatureLabel": "カスタム温度",
     "temperatureLabel": "温度設定（モデルによって温度範囲が異なります。エラーが発生した場合は、カスタム温度を無効にできます）",
-    "promptContentLabel": "プロンプト内容",
+    "promptContentLabel": "クイックアシスタント内容",
     "enabledLabel": "有効",
-    "addToTagLabel": "タグに追加 (オプション)",
-    "addToTagPlaceholder": "タグを選択 (オプション)",
+    "addToTagLabel": "タグに追加（オプション）",
+    "addToTagPlaceholder": "タグを選択（オプション）",
     "tagNameLabel": "タグ名",
-    "selectPromptsToAddLabel": "追加するプロンプトを選択",
-    "selectPromptsPlaceholder": "プロンプトを選択",
+    "selectPromptsToAddLabel": "追加するクイックアシスタントを選択",
+    "selectPromptsPlaceholder": "クイックアシスタントを選択",
     "alerts": {
       "tagNameEmpty": "タグ名は空にできません。",
-      "tagExists": "タグ \"{tagName}\" はすでに存在します。",
-      "promptKeyEmpty": "プロンプトキーは空にできません。",
-      "promptKeyExists": "プロンプトキー \"{newKey}\" はすでに存在します。",
+      "tagExists": "タグ「{tagName}」は既に存在します。",
+      "promptKeyEmpty": "クイックアシスタント名は空にできません。",
+      "promptKeyExists": "クイックアシスタント名「{newKey}」は既に存在します。",
       "targetTagNotFound": "対象のタグが見つかりません。",
-      "noPromptsToAssign": "このタグに割り当てる他のプロンプトはありません。",
-      "invalidImageFormat": "無効な画像形式です。{formats} を使用してください。",
-      "imageSizeTooLarge": "画像サイズが {maxSize} を超えています。"
+      "noPromptsToAssign": "このタグに割り当てる他のクイックアシスタントはありません。",
+      "invalidImageFormat": "無効な画像形式です。{formats}を使用してください。",
+      "imageSizeTooLarge": "画像サイズが{maxSize}を超えています。"
     },
     "tooltips": {
       "moveLeft": "左に移動",
       "moveRight": "右に移動",
-      "removeFromTag": "タグからプロンプトを削除"
+      "removeFromTag": "このタグからクイックアシスタントを削除",
+      "sendDirect": "有効にすると、選択したテキストやスクリーンショットが直接AIに送信されます。",
+      "sendFile": "有効にすると、選択したファイルが直接AIに送信されて処理されます。",
+      "ifTextNecessary": "有効にすると、一部のプロバイダー（例: Vertex）の要件を満たすため、リクエストにテキストが含まれるように、テキストの前にタイムスタンプを自動的に追加します。"
+    },
+    "voiceLabel": "デフォルト音声",
+    "voicePlaceholder": "音声を選択または無効化",
+    "voiceTooltip": "音声を選択すると、デフォルトで音声出力が有効になります。モデルが音声出力をサポートしている必要があります。「無効化」を選択すると使用しません。",
+    "voiceOptions": {
+      "off": "無効化"
     }
   },
   "providers": {
-    "addProviderBtn": "プロバイダーを追加",
-    "noProviders": "まだプロバイダーがありません。",
+    "addProviderBtn": "サービスプロバイダーを追加",
+    "noProviders": "サービスプロバイダーがありません。",
     "statusOff": "オフ",
-    "unnamedProvider": "無名のプロバイダー",
+    "unnamedProvider": "無名のサービスプロバイダー",
     "editNameTooltip": "名前を編集",
     "moveUpTooltip": "上に移動",
     "moveDownTooltip": "下に移動",
-    "deleteProviderTooltip": "プロバイダーを削除",
+    "deleteProviderTooltip": "サービスプロバイダーを削除",
     "apiKeyLabel": "APIキー",
-    "apiKeyPlaceholder": "APIキーを入力 (複数可、カンマ区切り)",
+    "apiKeyPlaceholder": "APIキーを入力（複数可、カンマ区切り）",
     "apiKeyDescription": "複数のAPIキーをカンマで区切って入力できます。",
     "apiUrlLabel": "API URL",
-    "apiUrlPlaceholder": "例: https://api.openai.com/v1",
+    "apiUrlPlaceholder": "例：https://api.openai.com/v1",
     "modelsLabel": "モデル",
     "searchModelsPlaceholder": "モデルを検索",
     "noModelsAdded": "モデルはまだ追加されていません。",
     "getModelsFromApiBtn": "APIからモデルを取得",
     "addManuallyBtn": "手動で追加",
-    "selectProviderOrAdd": "プロバイダーを選択または新規追加",
-    "addProviderDialogTitle": "新しいプロバイダーを追加",
-    "providerNameLabel": "プロバイダー名",
-    "providerNamePlaceholder": "例: OpenAIメイン",
-    "changeProviderNameDialogTitle": "プロバイダー名の変更",
+    "selectProviderOrAdd": "サービスプロバイダーを選択または新規追加",
+    "addProviderDialogTitle": "新しいサービスプロバイダーを追加",
+    "providerNameLabel": "サービスプロバイダー名",
+    "providerNamePlaceholder": "例：OpenAIメインアカウント",
+    "changeProviderNameDialogTitle": "サービスプロバイダー名の変更",
     "addModelDialogTitle": "モデルの手動追加",
     "modelNameIdLabel": "モデル名/ID",
-    "modelNameIdPlaceholder": "例: gpt-4, text-davinci-003",
+    "modelNameIdPlaceholder": "例：gpt-4, text-davinci-003",
     "availableModelsDialogTitle": "APIから利用可能なモデル",
     "table": {
       "modelId": "モデルID",
@@ -141,13 +150,13 @@
       "action": "操作"
     },
     "noModelsFoundError": "モデルが見つからないか、APIエラーです。",
-    "noModelsMatchSearch": "一致するモデルが見つかりませんでした",
+    "noModelsMatchSearch": "一致するモデルが見つかりませんでした。",
     "addModelTooltip": "モデルを追加",
     "removeModelTooltip": "モデルを削除",
     "alerts": {
-      "providerUrlNotSet": "プロバイダーURLが設定されていません。",
+      "providerUrlNotSet": "サービスプロバイダーURLが設定されていません。",
       "fetchModelsError": "エラー {status}: {message}",
-      "fetchModelsFailedDefault": "モデルの取得に失敗しました",
+      "fetchModelsFailedDefault": "モデルの取得に失敗しました。",
       "configSaveFailed": "設定の保存に失敗しました。"
     }
   },
@@ -159,6 +168,17 @@
       "japanese": "日本語",
       "russian": "Русский",
       "selectPlaceholder": "言語を選択"
+    },
+    "voice": {
+      "title": "音声設定",
+      "description": "音声合成に利用できる音声のリストを管理します。",
+      "add": "音声を追加",
+      "addPromptTitle": "新しい音声を追加",
+      "addPromptMessage": "音声名を入力してください（例：alloy）。",
+      "addSuccess": "音声が正常に追加されました。",
+      "addFailExists": "音声は既に存在します。",
+      "addFailEmpty": "音声名を空にすることはできません。",
+      "deleteConfirm": "音声 '{voiceName}' を削除してもよろしいですか？"
     },
     "title": "一般設定",
     "stream": {
@@ -188,8 +208,8 @@
     "darkMode": {
       "label": "テーマ",
       "description": "ライトモードまたはダークモード",
-      "dark":"ダーク",
-      "light":"ライト"
+      "dark": "ダーク",
+      "light": "ライト"
     },
     "fixPosition": {
       "label": "ウィンドウ位置を固定",
@@ -197,7 +217,7 @@
     },
     "inputLayout": {
       "label": "入力ボックスのレイアウト",
-      "description": "会話ウィンドウ内の入力ボックスのスタイルを切り替えます。",
+      "description": "独立した会話ウィンドウ内の入力ボックスのスタイルを切り替えます。",
       "horizontal": "水平",
       "vertical": "垂直"
     },
@@ -212,57 +232,57 @@
     },
     "dimensions": {
       "title": "ウィンドウのサイズ",
-      "widthLabel": "ウィンドウの幅 (px)",
-      "heightLabel": "ウィンドウの高さ (px)"
+      "widthLabel": "ウィンドウの幅（px）",
+      "heightLabel": "ウィンドウの高さ（px）"
     },
     "webdav": {
-      "url": "WebDAV URL",
+      "url": "WebDAVアドレス",
       "urlPlaceholder": "http://localhost:8080",
-      "username": "WebDAV ユーザー名",
-      "usernamePlaceholder": "WebDAV ユーザー名",
-      "password": "WebDAV パスワード",
-      "passwordPlaceholder": "WebDAV パスワード",
-      "path": "WebDAV 構成パス",
+      "username": "WebDAVユーザー名",
+      "usernamePlaceholder": "WebDAVユーザー名",
+      "password": "WebDAVパスワード",
+      "passwordPlaceholder": "WebDAVパスワード",
+      "path": "WebDAV設定パス",
       "pathPlaceholder": "/anywhere",
-      "dataPath": "WebDAV データパス",
+      "dataPath": "WebDAVデータパス",
       "dataPathPlaceholder": "/anywhere_data",
-      "backupRestoreTitle": "構成のバックアップと復元",
+      "backupRestoreTitle": "設定のバックアップと復元",
       "backupButton": "WebDAVへバックアップ",
       "restoreButton": "バックアップ管理",
       "backup": {
         "confirmTitle": "バックアップファイル名の確認",
         "confirmMessage": "バックアップファイル名を入力してください。タイムスタンプを保持するために、デフォルト名の使用をお勧めします。",
-        "invalidFilename": "無効なファイル名です。末尾は .json である必要があります。",
+        "invalidFilename": "無効なファイル名です。末尾は.jsonである必要があります。",
         "cancelled": "バックアップはキャンセルされました。"
       },
       "manager": {
         "title": "バックアップデータ管理",
         "pathNotFound": "指定されたWebDAVパスが存在しません。",
-        "fetchFailed": "バックアップリストの取得に失敗しました",
+        "fetchFailed": "バックアップリストの取得に失敗しました。",
         "filename": "ファイル名",
         "modifiedTime": "更新日時",
         "size": "サイズ",
         "actions": "操作",
         "restore": "復元",
         "delete": "削除",
-        "confirmRestore": "本当にこのバックアップファイル '{filename}' を復元しますか？この操作は現在の設定を上書きします。",
-        "confirmDelete": "本当にファイル '{filename}' を完全に削除しますか？",
+        "confirmRestore": "本当にこのバックアップファイル'{filename}'を復元しますか？この操作は現在の設定を上書きします。",
+        "confirmDelete": "本当にファイル'{filename}'を完全に削除しますか？",
         "noFileSelected": "ファイルが選択されていません。",
-        "confirmDeleteMultiple": "選択した {count} 個のファイルを本当に完全に削除しますか？",
-        "deleteSuccess": "ファイルの削除に成功しました。",
-        "deleteFailed": "ファイルの削除に失敗しました。",
+        "confirmDeleteMultiple": "選択した{count}個のファイルを本当に完全に削除しますか？",
+        "deleteSuccess": "削除に成功しました。",
+        "deleteFailed": "削除に失敗しました。",
         "deleteSuccessMultiple": "選択したファイルを削除しました。",
         "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました。"
       },
       "alerts": {
-        "urlRequired": "WebDAV URLは空にできません。",
+        "urlRequired": "WebDAVアドレスは空にできません。",
         "backupInProgress": "バックアップ中...",
-        "backupSuccess": "バックアップに成功しました",
-        "backupFailed": "バックアップに失敗しました",
-        "fileNotFound": "バックアップファイルが見つかりません",
+        "backupSuccess": "バックアップに成功しました。",
+        "backupFailed": "バックアップに失敗しました。",
+        "fileNotFound": "バックアップファイルが見つかりません。",
         "restoreInProgress": "復元中...",
-        "restoreSuccess": "復元に成功しました",
-        "restoreFailed": "復元に失敗しました"
+        "restoreSuccess": "復元に成功しました。",
+        "restoreFailed": "復元に失敗しました。"
       }
     },
     "alerts": {
@@ -285,9 +305,9 @@
     "refresh": "更新",
     "deleteSelected": "選択を削除",
     "noFileSelected": "ファイルが選択されていません。",
-    "confirmDeleteMultiple": "選択した {count} 個のファイルを本当に完全に削除しますか？",
-    "deleteSuccess": "ファイルの削除に成功しました。",
-    "deleteFailed": "ファイルの削除に失敗しました。",
+    "confirmDeleteMultiple": "選択した{count}個のファイルを本当に完全に削除しますか？",
+    "deleteSuccess": "削除に成功しました。",
+    "deleteFailed": "削除に失敗しました。",
     "deleteSuccessMultiple": "選択したファイルを削除しました。",
     "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました。"
   }

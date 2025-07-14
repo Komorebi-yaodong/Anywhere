@@ -31,17 +31,17 @@
     },
     "rename": {
       "promptTitle": "Rename Chat",
-      "promptMessage": "Please enter a new conversation name.",
+      "promptMessage": "Please enter the new conversation name.",
       "invalidFilename": "Invalid filename, must end with .json."
     },
     "confirmDelete": "Are you sure you want to permanently delete chat '{filename}'?",
     "alerts": {
       "configError": "Failed to get configuration.",
       "pathNotFound": "Specified WebDAV data path not found.",
-      "pathCreated": "Data path does not exist, automatically created.",
+      "pathCreated": "Data path does not exist, has been created automatically.",
       "fetchFailed": "Failed to fetch chat list.",
       "loadingChat": "Loading chat...",
-      "restoreInitiated": "Chat restoration initiated.",
+      "restoreInitiated": "Chat has started.",
       "restoreFailed": "Failed to restore chat.",
       "renameSuccess": "Rename successful.",
       "renameFailed": "Rename failed."
@@ -55,12 +55,12 @@
     "addNewPrompt": "Add New Prompt",
     "editPrompt": "Edit Prompt",
     "addNewTag": "Add New Tag",
-    "assignPromptsToTag": "Assign Prompts to '{tagName}'",
-    "promptKeyLabel": "Prompt Key (Unique Identifier)",
+    "assignPromptsToTag": "Add Prompts to '{tagName}'",
+    "promptKeyLabel": "Prompt Name (Unique Identifier)",
     "promptKeyPlaceholder": "e.g., CodeGeneration",
     "typeLabel": "Type",
     "iconLabel": "Icon",
-    "iconUploadTip": "Supports {formats}. Max size: {maxSize}.",
+    "iconUploadTip": "Supports {formats} format, max size {maxSize}.",
     "dragIconHere": "Drag ",
     "orClickToUpload": "or click",
     "typeOptions": {
@@ -71,16 +71,16 @@
     },
     "showModeLabel": "Show Mode",
     "showModeOptions": {
-      "input": "Input",
+      "input": "Input Box",
       "clipboard": "Clipboard",
-      "window": "Window"
+      "window": "Standalone Window"
     },
     "modelLabel": "Model",
-    "llmParametersLabel": "Model Parameters (Only effective for the current Quick Assistant model; no longer effective after switching to other models)",
-    "AssistantParametersLabel": "Quick Assistant Parameters",
+    "llmParametersLabel": "Model Parameters (Only effective for the current Quick Prompt model; no longer effective after switching to other models)",
+    "AssistantParametersLabel": "Quick Prompt Parameters",
     "sendDirectLabel": "Direct Text/Screenshot Sending",
-    "sendFileLabel": "Direct file sending",
-    "ifTextNecessary": "Add Text / Auto-Timestamp",
+    "sendFileLabel": "Direct File Sending",
+    "ifTextNecessary": "Add Text Info",
     "streamLabel": "Stream Responses",
     "enableTemperatureLabel": "Custom Temperature",
     "temperatureLabel": "Temperature Settings (Temperature ranges vary for different models; if an error occurs, you can disable custom temperature)",
@@ -94,8 +94,8 @@
     "alerts": {
       "tagNameEmpty": "Tag name cannot be empty.",
       "tagExists": "Tag \"{tagName}\" already exists.",
-      "promptKeyEmpty": "Prompt key cannot be empty.",
-      "promptKeyExists": "Prompt key \"{newKey}\" already exists.",
+      "promptKeyEmpty": "Prompt name cannot be empty.",
+      "promptKeyExists": "Prompt name \"{newKey}\" already exists.",
       "targetTagNotFound": "Target tag not found.",
       "noPromptsToAssign": "No other prompts available to assign to this tag.",
       "invalidImageFormat": "Invalid image format. Please use {formats}.",
@@ -104,7 +104,16 @@
     "tooltips": {
       "moveLeft": "Move Left",
       "moveRight": "Move Right",
-      "removeFromTag": "Remove Prompt from Tag"
+      "removeFromTag": "Remove prompt from this tag",
+      "sendDirect": "When enabled, selected text or screenshot will be sent directly to the AI.",
+      "sendFile": "When enabled, selected files will be sent directly to the AI for processing.",
+      "ifTextNecessary": "When enabled, a timestamp will be automatically added before the text to ensure every request contains text, satisfying requirements of some providers (e.g., Vertex)."
+    },
+    "voiceLabel": "Default Voice",
+    "voicePlaceholder": "Select a voice or disable",
+    "voiceTooltip": "Select a voice to enable speech output by default. The model must support speech output. Select 'Disable' to not use it.",
+    "voiceOptions": {
+      "off": "Disable"
     }
   },
   "providers": {
@@ -117,19 +126,19 @@
     "moveDownTooltip": "Move Down",
     "deleteProviderTooltip": "Delete Provider",
     "apiKeyLabel": "API Key",
-    "apiKeyPlaceholder": "Enter API Key (can be multiple, comma-separated)",
+    "apiKeyPlaceholder": "Enter API Key (multiple can be entered, separated by commas)",
     "apiKeyDescription": "You can enter multiple API keys separated by commas.",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "e.g., https://api.openai.com/v1",
     "modelsLabel": "Models",
-    "searchModelsPlaceholder": "Search model",
+    "searchModelsPlaceholder": "Search models",
     "noModelsAdded": "No models added yet.",
     "getModelsFromApiBtn": "Get Models from API",
     "addManuallyBtn": "Add Manually",
     "selectProviderOrAdd": "Select a provider or add a new one",
     "addProviderDialogTitle": "Add New Provider",
     "providerNameLabel": "Provider Name",
-    "providerNamePlaceholder": "e.g., OpenAI Main",
+    "providerNamePlaceholder": "e.g., OpenAI Main Account",
     "changeProviderNameDialogTitle": "Change Provider Name",
     "addModelDialogTitle": "Add Model Manually",
     "modelNameIdLabel": "Model Name/ID",
@@ -141,13 +150,13 @@
       "action": "Action"
     },
     "noModelsFoundError": "No models found or API error.",
-    "noModelsMatchSearch": "No models match search",
+    "noModelsMatchSearch": "No models match search.",
     "addModelTooltip": "Add Model",
     "removeModelTooltip": "Remove Model",
     "alerts": {
       "providerUrlNotSet": "Provider URL is not set.",
       "fetchModelsError": "Error {status}: {message}",
-      "fetchModelsFailedDefault": "Failed to fetch models",
+      "fetchModelsFailedDefault": "Failed to fetch models.",
       "configSaveFailed": "Failed to save configuration."
     }
   },
@@ -159,6 +168,17 @@
       "japanese": "日本語",
       "russian": "Русский",
       "selectPlaceholder": "Select Language"
+    },
+    "voice": {
+      "title": "Voice Settings",
+      "description": "Manage the list of voices available for speech synthesis.",
+      "add": "Add Voice",
+      "addPromptTitle": "Add New Voice",
+      "addPromptMessage": "Please enter the voice name (e.g., alloy).",
+      "addSuccess": "Voice added successfully.",
+      "addFailExists": "Voice already exists.",
+      "addFailEmpty": "Voice name cannot be empty.",
+      "deleteConfirm": "Are you sure you want to delete the voice '{voiceName}'?"
     },
     "title": "General Settings",
     "stream": {
@@ -188,8 +208,8 @@
     "darkMode": {
       "label": "Theme",
       "description": "Light mode or dark mode",
-      "dark":"Dark",
-      "light":"Light"
+      "dark": "Dark",
+      "light": "Light"
     },
     "fixPosition": {
       "label": "Fix Window Position",
@@ -197,7 +217,7 @@
     },
     "inputLayout": {
       "label": "Input Layout",
-      "description": "Switch the style of the input box in the conversation window.",
+      "description": "Switch the style of the input box in the standalone conversation window.",
       "horizontal": "Horizontal",
       "vertical": "Vertical"
     },
@@ -222,11 +242,11 @@
       "usernamePlaceholder": "WebDAV Username",
       "password": "WebDAV Password",
       "passwordPlaceholder": "WebDAV Password",
-      "path": "WebDAV configuration path",
+      "path": "WebDAV Config Path",
       "pathPlaceholder": "/anywhere",
-      "dataPath": "WebDAV data path",
+      "dataPath": "WebDAV Data Path",
       "dataPathPlaceholder": "/anywhere_data",
-      "backupRestoreTitle": "Configuration backup and recovery",
+      "backupRestoreTitle": "Config Backup & Restore",
       "backupButton": "Backup to WebDAV",
       "restoreButton": "Manage Backups",
       "backup": {
@@ -238,7 +258,7 @@
       "manager": {
         "title": "Backup Data Management",
         "pathNotFound": "The specified WebDAV path does not exist.",
-        "fetchFailed": "Failed to fetch backup list",
+        "fetchFailed": "Failed to fetch backup list.",
         "filename": "Filename",
         "modifiedTime": "Modified Time",
         "size": "Size",
@@ -257,12 +277,12 @@
       "alerts": {
         "urlRequired": "WebDAV URL cannot be empty.",
         "backupInProgress": "Backing up...",
-        "backupSuccess": "Backup successful",
-        "backupFailed": "Backup failed",
-        "fileNotFound": "Backup file not found",
+        "backupSuccess": "Backup successful.",
+        "backupFailed": "Backup failed.",
+        "fileNotFound": "Backup file not found.",
         "restoreInProgress": "Restoring...",
-        "restoreSuccess": "Restore successful",
-        "restoreFailed": "Restore failed"
+        "restoreSuccess": "Restore successful.",
+        "restoreFailed": "Restore failed."
       }
     },
     "alerts": {

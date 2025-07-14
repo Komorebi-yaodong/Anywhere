@@ -1,8 +1,9 @@
 <script setup>
-import { ref, h, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
 import { Attachments } from 'ant-design-x-vue';
-import { ElFooter, ElRow, ElCol, ElButton, ElInput, ElMessage, ElTooltip } from 'element-plus';
-import { Link, Delete, Promotion, Close, Microphone, Check } from '@element-plus/icons-vue';
+// [修改] 引入 ElScrollbar
+import { ElFooter, ElRow, ElCol, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
+import { Link, Delete, Promotion, Close, Microphone, Check, Headset } from '@element-plus/icons-vue';
 import Recorder from 'recorder-core';
 import 'recorder-core/src/extensions/waveview.js';
 import 'recorder-core/src/engine/wav';
@@ -13,9 +14,11 @@ const fileList = defineModel('fileList');
 const props = defineProps({
     loading: Boolean,
     ctrlEnterToSend: Boolean,
-    layout: { type: String, default: 'horizontal' }
+    layout: { type: String, default: 'horizontal' },
+    voiceList: { type: Array, default: () => [] },
+    selectedVoice: { type: String, default: null },
 });
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'update:selectedVoice']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -25,6 +28,9 @@ const isDragging = ref(false);
 const dragCounter = ref(0);
 const isRecording = ref(false);
 let recorder = null;
+
+// [新增] 控制语音选择行是否可见
+const isVoiceSelectorVisible = ref(false);
 
 // --- Waveform Visualization State ---
 let wave = null; 
@@ -40,6 +46,18 @@ const onCancel = () => emit('cancel');
 const onClearHistory = () => emit('clear-history');
 const onRemoveFile = (index) => emit('remove-file', index);
 
+// [修改] 切换语音选择行的可见性
+const toggleVoiceSelector = () => {
+    if (isRecording.value) return;
+    isVoiceSelectorVisible.value = !isVoiceSelectorVisible.value;
+};
+
+// [修改] 处理语音选择并关闭选择行
+const handleVoiceSelection = (value) => {
+    emit('update:selectedVoice', value);
+    isVoiceSelectorVisible.value = false;
+};
+
 // --- File Handling ---
 const triggerFileUpload = () => fileInputRef.value?.click();
 const handleFileChange = (event) => { const files = event.target.files; if (files.length) emit('upload', { file: files[0], fileList: Array.from(files) }); if (fileInputRef.value) fileInputRef.value.value = ''; };
@@ -52,7 +70,7 @@ const handlePasteEvent = (event) => { const clipboardData = event.clipboardData 
 // --- Audio Recording and Visualization Logic ---
 const startRecording = () => {
     if (isRecording.value) return;
-
+    isVoiceSelectorVisible.value = false; // 开始录音时关闭选择器
     Recorder.TrafficFree = true;
     recorder = Recorder({
         type: 'wav', sampleRate: 16000, bitRate: 16,
@@ -83,9 +101,8 @@ const stopRecordingAndCleanup = () => {
         recorder.close();
         recorder = null;
     }
-    // KEY FIX: The WaveView plugin does not have a destroy method. Setting to null is enough.
     if (wave) {
-        wave.elem.innerHTML = ""; // Manually clear the canvas container
+        wave.elem.innerHTML = "";
         wave = null;
     }
     isRecording.value = false;
@@ -108,9 +125,7 @@ const handleConfirmAndSendRecording = () => {
     }, (msg) => { ElMessage.error('录音失败: ' + msg); stopRecordingAndCleanup(); });
 };
 
-
 // --- Lifecycle & Focus ---
-let resizeObserver = null;
 onMounted(() => {
     window.addEventListener('dragenter', handleDragEnter);
     window.addEventListener('dragleave', handleDragLeave);
@@ -125,14 +140,8 @@ onBeforeUnmount(() => {
     window.removeEventListener('dragover', preventDefaults);
     window.removeEventListener('drop', handleDrop);
     window.removeEventListener('paste', handlePasteEvent);
-    if (recorder) {
-        recorder.close();
-    }
-    // KEY FIX: Also remove destroy() call from here.
-    if (wave) {
-        wave.elem.innerHTML = "";
-        wave = null;
-    }
+    if (recorder) { recorder.close(); }
+    if (wave) { wave.elem.innerHTML = ""; wave = null; }
 });
 const focus = (focusType = 'end') => { senderRef.value?.focus(); if (focusType === 'end' && senderRef.value?.$refs.textarea) { const ta = senderRef.value.$refs.textarea; ta.setSelectionRange(ta.value.length, ta.value.length); } };
 defineExpose({ focus });
@@ -166,6 +175,37 @@ defineExpose({ focus });
              <el-col :span="1" />
         </el-row>
 
+        <!-- [修改] 语音选择行 -->
+        <el-row v-if="isVoiceSelectorVisible" class="voice-selector-row">
+            <el-col :span="1" />
+            <el-col :span="22">
+                <!-- [新增] 新的包裹容器，用于对齐样式 -->
+                <div class="voice-selector-wrapper">
+                    <el-scrollbar>
+                        <div class="voice-selector-content">
+                            <el-button 
+                                @click="handleVoiceSelection(null)" 
+                                :type="!selectedVoice ? 'primary' : 'default'" 
+                                round
+                            >
+                                关闭语音
+                            </el-button>
+                            <el-button 
+                                v-for="voice in props.voiceList" 
+                                :key="voice" 
+                                @click="handleVoiceSelection(voice)" 
+                                :type="selectedVoice === voice ? 'primary' : 'default'" 
+                                round
+                            >
+                                {{ voice }}
+                            </el-button>
+                        </div>
+                    </el-scrollbar>
+                </div>
+            </el-col>
+            <el-col :span="1" />
+        </el-row>
+
         <el-row>
             <el-col :span="1" />
             <el-col :span="22">
@@ -174,6 +214,18 @@ defineExpose({ focus });
                     <div class="action-buttons-left">
                         <el-tooltip content="清除聊天记录"><el-button :icon="Delete" size="default" @click="onClearHistory" circle :disabled="isRecording"/></el-tooltip>
                         <el-tooltip content="添加附件"><el-button :icon="Link" size="default" @click="triggerFileUpload" circle :disabled="isRecording"/></el-tooltip>
+                        
+                        <el-tooltip content="语音回复设置">
+                            <el-button 
+                                :icon="Headset" 
+                                size="default" 
+                                circle 
+                                :disabled="isRecording"
+                                :type="selectedVoice ? 'primary' : ''"
+                                :class="{ 'is-pulsing': selectedVoice }"
+                                @click="toggleVoiceSelector"
+                            />
+                        </el-tooltip>
                     </div>
                     
                     <div class="input-wrapper">
@@ -186,7 +238,6 @@ defineExpose({ focus });
 
                     <div class="action-buttons-right">
                         <template v-if="isRecording">
-                            <!-- UI FIX: Added 'plain' for light mode visibility. Dark mode is handled in CSS. -->
                             <el-tooltip content="取消录音"><el-button :icon="Close" size="default" @click="handleCancelRecording" circle /></el-tooltip>
                             <el-tooltip content="结束并发送"><el-button :icon="Check" size="default" @click="handleConfirmAndSendRecording" circle /></el-tooltip>
                         </template>
@@ -210,10 +261,21 @@ defineExpose({ focus });
                         <div class="action-buttons-left">
                            <el-tooltip content="清除聊天记录"><el-button :icon="Delete" size="default" @click="onClearHistory" circle :disabled="isRecording"/></el-tooltip>
                            <el-tooltip content="添加附件"><el-button :icon="Link" size="default" @click="triggerFileUpload" circle :disabled="isRecording"/></el-tooltip>
+                           
+                           <el-tooltip content="语音回复设置">
+                               <el-button 
+                                    :icon="Headset" 
+                                    size="default" 
+                                    circle 
+                                    :disabled="isRecording"
+                                    :type="selectedVoice ? 'primary' : ''"
+                                    :class="{ 'is-pulsing': selectedVoice }"
+                                    @click="toggleVoiceSelector"
+                                />
+                            </el-tooltip>
                         </div>
                         <div class="action-buttons-right">
                            <template v-if="isRecording">
-                                <!-- UI FIX: Added 'plain' for light mode visibility. Dark mode is handled in CSS. -->
                                 <el-tooltip content="取消录音"><el-button :icon="Close" size="default" @click="handleCancelRecording" circle /></el-tooltip>
                                 <el-tooltip content="结束并发送"><el-button :icon="Check" size="default" @click="handleConfirmAndSendRecording" circle /></el-tooltip>
                            </template>
@@ -261,6 +323,34 @@ html.dark .drag-overlay { background-color: rgba(20, 20, 20, 0.4); }
 }
 html.dark .waveform-display-area { background-color: #404045; }
 
+/* [修改] Voice Selector Styles */
+.voice-selector-row {
+    margin-bottom: 8px;
+}
+.voice-selector-wrapper {
+    background-color: #F3F4F6;
+    border-radius: 12px;
+    padding: 6px 8px; /* 关键：与输入框的 padding 一致 */
+}
+html.dark .voice-selector-wrapper {
+    background-color: #404045;
+}
+.voice-selector-content {
+    display: flex;
+    gap: 8px;
+    white-space: nowrap; /* 确保内容不换行，以触发滚动条 */
+}
+.voice-selector-content .el-button {
+    flex-shrink: 0;
+}
+.voice-selector-wrapper :deep(.el-scrollbar__bar.is-horizontal) {
+    height: 4px;
+}
+.voice-selector-wrapper :deep(.el-scrollbar__view) {
+    padding-bottom: 4px; /* 为滚动条留出空间 */
+}
+
+
 .input-wrapper {
     position: relative;
     flex-grow: 1;
@@ -302,8 +392,8 @@ html.dark .chat-input-area-vertical .el-button:hover { background-color: rgba(25
 html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb) { background: #6b6b6b; background-clip: content-box; }
 html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) { background: #999; background-clip: content-box; }
 
+
 /* --- FINAL UI FIX for Buttons --- */
-/* 1. Make default circle buttons more visible in light mode */
 .el-button.is-circle {
     color: var(--el-text-color-regular);
 }
@@ -311,8 +401,31 @@ html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) { background
     color: var(--el-color-primary);
     background-color: var(--el-color-primary-light-9);
 }
+.el-button.is-circle[type="primary"] {
+    background-color: var(--el-color-primary);
+    color: #ffffff;
+}
+.el-button.is-circle[type="primary"]:hover, .el-button.is-circle[type="primary"]:focus {
+    background-color: var(--el-color-primary-light-3);
+}
 
-/* 2. Override 'plain' buttons in DARK MODE ONLY to restore solid fill */
+/* Pulsing glow animation */
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(var(--el-color-primary-rgb), 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0);
+  }
+}
+
+.el-button.is-pulsing {
+  animation: pulse-glow 2s infinite;
+}
+
 html.dark .el-button--danger.is-plain {
     color: #ffffff;
     background-color: var(--el-color-danger);

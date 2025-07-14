@@ -80,7 +80,7 @@
     "AssistantParametersLabel": "快捷助手参数",
     "sendDirectLabel": "文本/截图直接发送",
     "sendFileLabel": "文件直接发送",
-    "ifTextNecessary": "补充文本信息/自动添加时间",
+    "ifTextNecessary": "补充文本信息",
     "streamLabel": "流式响应",
     "enableTemperatureLabel": "自定义温度",
     "temperatureLabel": "温度设置（不同模型温度范围不同，如果报错可以关闭自定义温度）",
@@ -104,7 +104,16 @@
     "tooltips": {
       "moveLeft": "左移",
       "moveRight": "右移",
-      "removeFromTag": "从此标签移除快捷助手"
+      "removeFromTag": "从此标签移除快捷助手",
+      "sendDirect": "开启后，选中文字或截图后将直接发送给AI",
+      "sendFile": "开启后，选中文件后将直接发送给AI并处理结果",
+      "ifTextNecessary": "开启后，将自动在文本前添加当前时间戳，以确保每次请求都包含文本，满足部分服务商要求（vertex）"
+    },
+    "voiceLabel": "默认声音",
+    "voicePlaceholder": "选择一个声音或关闭",
+    "voiceTooltip": "选择声音后默认开启语音输出，模型须支持语音输出，选择“关闭”则不使用",
+    "voiceOptions": {
+      "off": "关闭"
     }
   },
   "providers": {
@@ -159,6 +168,17 @@
       "japanese": "日本語",
       "russian": "Русский",
       "selectPlaceholder": "选择语言"
+    },
+    "voice": {
+      "title": "语音设置",
+      "description": "管理可用于语音合成的声音列表",
+      "add": "添加声音",
+      "addPromptTitle": "添加新声音",
+      "addPromptMessage": "请输入声音名称（例如, alloy）",
+      "addSuccess": "声音添加成功",
+      "addFailExists": "声音已存在",
+      "addFailEmpty": "声音名称不能为空",
+      "deleteConfirm": "确定要删除声音 '{voiceName}' 吗？"
     },
     "title": "通用设置",
     "stream": {

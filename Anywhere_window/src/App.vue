@@ -1,16 +1,13 @@
 <script setup>
-// [MODIFIED] Added 'computed' to imports
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
 import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton } from 'element-plus';
 import { createClient } from "webdav/web";
 
-// Import new components
 import ChatHeader from './components/ChatHeader.vue';
 import ChatMessage from './components/ChatMessage.vue';
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
-// Helper functions for file parsing
 const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
 const parseWord = async (base64Data) => {
   const mammoth = (await import('mammoth')).default;
@@ -76,7 +73,6 @@ const getFileHandler = (fileName) => {
   return null;
 };
 
-// --- Core State ---
 const defaultConfig = window.api.defaultConfig;
 const UserAvart = ref("user.png");
 const AIAvart = ref("ai.svg");
@@ -104,13 +100,12 @@ const signalController = ref(null);
 const fileList = ref([]);
 const zoomLevel = ref(1);
 const collapsedMessages = ref(new Set());
-const defaultConversationName = ref(""); 
+const defaultConversationName = ref("");
+const selectedVoice = ref(null); // [新增] 当前选择的语音
 
-// [NEW] Computed property to get the layout setting
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 
 
-// --- Dialog State ---
 const changeModel_page = ref(false);
 const systemPromptDialogVisible = ref(false);
 const systemPromptContent = ref('');
@@ -118,10 +113,8 @@ const imageViewerVisible = ref(false);
 const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
 
-// --- Refs for Child Components ---
-const senderRef = ref(); 
+const senderRef = ref();
 
-// --- UI Logic ---
 let lastHeight = 0;
 const scrollToBottom = async (force = false) => {
   await nextTick();
@@ -203,7 +196,6 @@ const handleWheel = (event) => {
   }
 };
 
-// --- Child Component Event Handlers ---
 const handleSaveWindowSize = () => saveWindowSize();
 const handleOpenModelDialog = () => { changeModel_page.value = true; };
 const handleChangeModel = (chosenModel) => {
@@ -295,20 +287,14 @@ const handleUpload = async ({ fileList: newFiles }) => {
   senderRef.value?.focus();
 };
 
-// [NEW] Handler for the new 'send-audio' event
 const handleSendAudio = async (audioFile) => {
-    // Clear any existing prompts or files
-    prompt.value = '';
-    fileList.value = [];
-    
-    // Add the audio file to the list
-    await file2fileList(audioFile, 0);
+  prompt.value = '';
+  fileList.value = [];
 
-    // Immediately send the message
-    await askAI(false);
+  await file2fileList(audioFile, 0);
+  await askAI(false);
 }
 
-// --- Core Logic (moved from original script) ---
 const closePage = () => { window.close(); };
 
 watch(zoomLevel, (newZoom) => {
@@ -345,14 +331,15 @@ onMounted(async () => {
   try {
     window.preload.receiveMsg(async (data) => {
       if (data.filename) {
-          defaultConversationName.value = data.filename.replace(/\.json$/i, '');
+        defaultConversationName.value = data.filename.replace(/\.json$/i, '');
       } else {
-          defaultConversationName.value = ""; 
+        defaultConversationName.value = "";
       }
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
+      selectedVoice.value = currentPromptConfig?.voice || null; // [新增]
       modelList.value = []; modelMap.value = {};
       currentConfig.value.providerOrder.forEach(id => {
         const provider = currentConfig.value.providers[id];
@@ -420,6 +407,7 @@ onMounted(async () => {
     document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
     model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
+    selectedVoice.value = currentPromptConfig?.voice || null; // [新增]
     modelList.value = []; modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
@@ -452,7 +440,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('wheel', handleWheel);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
-  
+
   const chatMainElement = document.querySelector('.chat-main');
   if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
 });
@@ -485,6 +473,7 @@ const getSessionDataAsObject = () => {
     currentPromptConfig: currentPromptConfig,
     history: history.value,
     chat_show: chat_show.value,
+    selectedVoice: selectedVoice.value, // [新增]
   };
 }
 const saveSessionToCloud = async () => {
@@ -673,6 +662,7 @@ const loadSession = async (jsonData) => {
     temporary.value = jsonData.temporary;
     history.value = jsonData.history;
     chat_show.value = jsonData.chat_show;
+    selectedVoice.value = jsonData.selectedVoice || null; // [新增]
 
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
@@ -734,7 +724,7 @@ const checkAndLoadSessionFromFile = async (file) => {
       const fileContent = await file.text();
       const jsonData = JSON.parse(fileContent);
       if (jsonData && jsonData.anywhere_history === true) {
-        defaultConversationName.value = file.name.replace(/\.json$/i, ''); 
+        defaultConversationName.value = file.name.replace(/\.json$/i, '');
         await loadSession(jsonData);
         return true;
       }
@@ -777,6 +767,7 @@ const sendFile = async () => {
   fileList.value = []; return contentList;
 };
 
+// [修改] askAI 函数，以支持语音回复
 const askAI = async (forceSend = false) => {
   if (loading.value) return;
   let is_think_flag = false;
@@ -819,23 +810,41 @@ const askAI = async (forceSend = false) => {
   try {
     const messagesForAPI = JSON.parse(JSON.stringify(history.value.slice(0, aiMessageHistoryIndex)));
     senderRef.value?.focus();
-    aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, CODE.value, signalController.value.signal);
+
+    // [修改] 将 selectedVoice.value 传递给 chatOpenAI
+    aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, CODE.value, signalController.value.signal, selectedVoice.value);
+
     if (!aiResponse?.ok && aiResponse?.status !== 200) {
       let errorMsg = `API 请求失败: ${aiResponse?.status} ${aiResponse?.statusText}`;
       try { const errorBody = await aiResponse?.text(); errorMsg += `\n${errorBody || '(No Response Body)'}`; } catch { }
       throw new Error(errorMsg);
     }
-    if (!currentConfig.value.stream) {
+
+    // [修改] 响应处理逻辑
+    const isVoiceReply = !!selectedVoice.value;
+    const isStreamReply = currentConfig.value.stream && !isVoiceReply;
+
+    if (isVoiceReply) { // 处理语音和文本回复
       const data = await aiResponse.json();
-      const reasoning_content = data.choices?.[0]?.message?.reasoning_content || '';
-      const aiContent = data.choices?.[0]?.message?.content || '抱歉，未能获取到回复内容。';
-      history.value[aiMessageHistoryIndex].content = aiContent;
-      if (chat_show.value[aiMessageChatShowIndex]) {
-        chat_show.value[aiMessageChatShowIndex].content[0].text = aiContent;
-        chat_show.value[aiMessageChatShowIndex].reasoning_content = reasoning_content;
-        chat_show.value[aiMessageChatShowIndex].status = reasoning_content ? "end" : "";
+      const aiMessage = data.choices?.[0]?.message;
+      if (!aiMessage) throw new Error('API响应格式不正确，缺少message字段');
+
+      const textContent = aiMessage.audio?.transcript || aiMessage.content || '未获取到文本内容。';
+      const audioData = aiMessage.audio?.data;
+
+      history.value[aiMessageHistoryIndex].content = textContent;
+
+      const chatShowContent = [{ type: 'text', text: textContent }];
+      if (audioData) {
+        chatShowContent.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
       }
-    } else {
+
+      if (chat_show.value[aiMessageChatShowIndex]) {
+        chat_show.value[aiMessageChatShowIndex].content = chatShowContent;
+        chat_show.value[aiMessageChatShowIndex].status = "";
+      }
+
+    } else if (isStreamReply) { // 处理流式文本回复
       scrollToBottom(true);
       const reader = aiResponse.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
       while (true) {
@@ -881,7 +890,18 @@ const askAI = async (forceSend = false) => {
           thinking.value = false; is_think_flag = false; break;
         }
       }
+    } else { // 处理非流式文本回复
+      const data = await aiResponse.json();
+      const reasoning_content = data.choices?.[0]?.message?.reasoning_content || '';
+      const aiContent = data.choices?.[0]?.message?.content || '抱歉，未能获取到回复内容。';
+      history.value[aiMessageHistoryIndex].content = aiContent;
+      if (chat_show.value[aiMessageChatShowIndex]) {
+        chat_show.value[aiMessageChatShowIndex].content[0].text = aiContent;
+        chat_show.value[aiMessageChatShowIndex].reasoning_content = reasoning_content;
+        chat_show.value[aiMessageChatShowIndex].status = reasoning_content ? "end" : "";
+      }
     }
+
   } catch (error) {
     let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
     if (error.name === 'AbortError') errorDisplay = "请求已取消";
@@ -917,7 +937,7 @@ const clearHistory = () => {
   if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
   else { history.value = []; chat_show.value = []; }
   collapsedMessages.value.clear();
-  defaultConversationName.value = ""; 
+  defaultConversationName.value = "";
   senderRef.value?.focus(); ElMessage.success('历史记录已清除');
 };
 </script>
@@ -936,21 +956,13 @@ const clearHistory = () => {
           @copy-text="handleCopyText" @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse"
           @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
       </el-main>
-      
-      <ChatInput 
-        ref="senderRef" 
-        v-model:prompt="prompt" 
-        v-model:fileList="fileList" 
-        :loading="loading"
-        :ctrlEnterToSend="currentConfig.CtrlEnterToSend"
-        :layout="inputLayout"
-        @submit="handleSubmit" 
-        @cancel="handleCancel"
-        @clear-history="handleClearHistory" 
-        @remove-file="handleRemoveFile" 
-        @upload="handleUpload" 
-        @send-audio="handleSendAudio"
-      />
+
+      <!-- [修改] 传递 voiceList 和 selectedVoice -->
+      <ChatInput ref="senderRef" v-model:prompt="prompt" v-model:fileList="fileList"
+        v-model:selectedVoice="selectedVoice" :loading="loading" :ctrlEnterToSend="currentConfig.CtrlEnterToSend"
+        :layout="inputLayout" :voiceList="currentConfig.voiceList" @submit="handleSubmit" @cancel="handleCancel"
+        @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
+        @send-audio="handleSendAudio" />
 
     </el-container>
   </main>

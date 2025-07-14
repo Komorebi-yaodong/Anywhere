@@ -1,13 +1,12 @@
 <script setup>
-import { ref, onMounted, nextTick, computed, inject } from 'vue' // [MODIFIED] Added inject
+import { ref, onMounted, nextTick, computed, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
-import { Upload, FolderOpened, Refresh, Delete as DeleteIcon, Download } from '@element-plus/icons-vue'
+import { Upload, FolderOpened, Refresh, Delete as DeleteIcon, Download, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t, locale } = useI18n()
 
-// [MODIFIED] Inject config from App.vue instead of managing its own state
 const currentConfig = inject('config'); 
 const selectedLanguage = ref(locale.value);
 
@@ -44,16 +43,13 @@ const formatBytes = (bytes, decimals = 2) => {
 };
 
 
-// [MODIFIED] Simplified onMounted
 onMounted(() => {
   selectedLanguage.value = locale.value;
 });
 
-// [MODIFIED] Now uses the new lightweight save function
 async function saveConfig() {
   if (!currentConfig.value) return;
   try {
-    // Use the new lightweight update function for settings that don't affect features
     const configToSave = { config: JSON.parse(JSON.stringify(currentConfig.value)) };
     if (window.api && window.api.updateConfigWithoutFeatures) {
        await window.api.updateConfigWithoutFeatures(configToSave);
@@ -105,10 +101,8 @@ function importConfig() {
           if (typeof importedData !== 'object' || importedData === null) {
             throw new Error("Imported file is not a valid configuration object.");
           }
-          // [MODIFIED] Use a full update here since import can change everything
           if (window.api && window.api.updateConfig) {
             await window.api.updateConfig({ config: importedData });
-            // After a full update, we need to refresh the local state to match
             const result = await window.api.getConfig();
             if (result && result.config) {
                currentConfig.value = result.config;
@@ -126,6 +120,50 @@ function importConfig() {
   };
   input.click();
 }
+
+
+// --- [新增] Voice Management ---
+const addNewVoice = () => {
+  ElMessageBox.prompt(t('setting.voice.addPromptMessage'), t('setting.voice.addPromptTitle'), {
+    confirmButtonText: t('common.confirm'),
+    cancelButtonText: t('common.cancel'),
+    inputValidator: (value) => {
+      if (!value || value.trim() === '') return t('setting.voice.addFailEmpty');
+      if (currentConfig.value.voiceList.includes(value.trim())) return t('setting.voice.addFailExists');
+      return true;
+    },
+  }).then(({ value }) => {
+    const newVoice = value.trim();
+    if (!currentConfig.value.voiceList) {
+      currentConfig.value.voiceList = [];
+    }
+    currentConfig.value.voiceList.push(newVoice);
+    saveConfig();
+    ElMessage.success(t('setting.voice.addSuccess'));
+  }).catch(() => {
+    // User cancelled
+  });
+};
+
+const deleteVoice = (voiceToDelete) => {
+  ElMessageBox.confirm(
+    t('setting.voice.deleteConfirm', { voiceName: voiceToDelete }),
+    t('common.warningTitle'),
+    {
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+    }
+  ).then(() => {
+    const index = currentConfig.value.voiceList.indexOf(voiceToDelete);
+    if (index > -1) {
+      currentConfig.value.voiceList.splice(index, 1);
+      saveConfig();
+    }
+  }).catch(() => {
+    // User cancelled
+  });
+};
 
 
 // --- WebDAV 功能 ---
@@ -258,7 +296,6 @@ async function restoreFromWebdav(file) {
       throw new Error("Downloaded file is not a valid configuration object.");
     }
     
-    // [MODIFIED] Use a full update for restoring a backup
     if (window.api && window.api.updateConfig) {
         await window.api.updateConfig({ config: importedData });
         const result = await window.api.getConfig();
@@ -338,7 +375,6 @@ const handleSelectionChange = (val) => {
   selectedFiles.value = val;
 };
 </script>
-
 
 <template>
   <div class="settings-page-container">
@@ -423,6 +459,38 @@ const handleSelectionChange = (val) => {
               <span class="setting-option-description">{{ t('setting.fixPosition.description') }}</span>
             </div>
             <el-switch v-model="currentConfig.fix_position" @change="saveConfig" />
+          </div>
+        </el-card>
+
+        <!-- [新增] 语音设置卡片 -->
+        <el-card class="settings-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <el-tooltip :content="t('setting.voice.description')" placement="top">
+                <span>{{ t('setting.voice.title') }}</span>
+              </el-tooltip>
+            </div>
+          </template>
+          <div class="voice-list-container">
+            <el-tag
+              v-for="voice in currentConfig.voiceList"
+              :key="voice"
+              closable
+              @close="deleteVoice(voice)"
+              class="voice-tag"
+              size="large"
+            >
+              {{ voice }}
+            </el-tag>
+            <el-button
+              class="add-voice-button"
+              type="primary"
+              plain
+              :icon="Plus"
+              @click="addNewVoice"
+            >
+              {{ t('setting.voice.add') }}
+            </el-button>
           </div>
         </el-card>
 
@@ -527,6 +595,21 @@ const handleSelectionChange = (val) => {
 </template>
 
 <style scoped>
+/* [新增] 语音设置样式 */
+.voice-list-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 15px 0;
+}
+.voice-tag {
+  font-size: 14px;
+  height: 32px;
+  padding: 0 12px;
+}
+.add-voice-button {
+  border-style: dashed;
+}
 .settings-page-container {
   height: 100%;
   width: 100%;

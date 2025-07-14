@@ -31,6 +31,7 @@ const defaultConfig = {
         isDirectSend_file: false,
         isDirectSend_normal: true,
         ifTextNecessary: false,
+        voice: null,
       },
     },
     language:"zh",
@@ -54,6 +55,7 @@ const defaultConfig = {
       dataPath: "/anywhere_data",
     },
     inputLayout: 'vertical',
+    voiceList:["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer"],
   }
 };
 
@@ -118,6 +120,11 @@ function checkConfig(config) {
     flag = true;
   }
 
+  if (config.voiceList === undefined) {
+    config.voiceList = ["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer"];
+    flag = true;
+  }
+
   if (config.webdav == undefined) {
     config.webdav = {
       url: "",
@@ -155,6 +162,10 @@ function checkConfig(config) {
 
   // 检查prompt的enable属性是否存在
   for (let key in config.prompts) {
+    if (config.prompts[key].voice === undefined) {
+      config.prompts[key].voice = null;
+      flag = true;
+    }
     if (config.prompts[key].enable === undefined) {
       config.prompts[key].enable = true;
       flag = true;
@@ -472,7 +483,7 @@ function getRandomItem(list) {
 }
 
 // 函数：请求chat
-async function chatOpenAI(history, config, modelInfo, CODE, signal) {
+async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoice = null) {
 
   let apiUrl = "";
   let apiKey = "";
@@ -492,7 +503,7 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal) {
     const now = new Date();
     const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    content = history[history.length - 1].content;
+    let content = history[history.length - 1].content;
     // 如果是字符串
     if (typeof content === "string") {
       history[history.length - 1].content = timestamp + "\n\n" + content;
@@ -515,19 +526,34 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal) {
       }
     }
   }
-
+  
+  // [修改] 构建请求体
   let payload = {
     model: model,
     messages: history,
-    stream: config.stream,
-  }
+  };
 
-  if (config.prompts[CODE] && config.prompts[CODE].model === modelInfo) {
-    payload.stream = config.prompts[CODE].stream;
-    if (config.prompts[CODE].isTemperature) {
-      payload.temperature = config.prompts[CODE].temperature;
+  // 根据 selectedVoice 的值来决定是否启用语音回复
+  if (selectedVoice) {
+    // 强制非流式
+    payload.stream = false;
+    // 添加语音相关参数
+    payload.modalities = ["text", "audio"];
+    payload.audio = { voice: selectedVoice, format: "wav" };
+  } else {
+    // 沿用快捷助手的流式设置
+    if (config.prompts[CODE] && config.prompts[CODE].model === modelInfo) {
+      payload.stream = config.prompts[CODE].stream;
+    } else {
+        payload.stream = config.stream;
     }
   }
+
+  // 添加温度参数
+  if (config.prompts[CODE] && config.prompts[CODE].isTemperature) {
+    payload.temperature = config.prompts[CODE].temperature;
+  }
+  
   const response = await fetch(apiUrl + '/chat/completions', {
     method: 'POST',
     headers: {

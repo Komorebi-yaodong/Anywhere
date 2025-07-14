@@ -1,12 +1,12 @@
 <script setup>
-// Script setup remains unchanged
-import { ref, reactive, onMounted, computed, nextTick } from 'vue';
-import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position } from '@element-plus/icons-vue';
+import { ref, reactive, computed, inject } from 'vue'; // [修改] 移除 onMounted, nextTick; 引入 inject
+import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled } from '@element-plus/icons-vue'; // [修改] 引入 QuestionFilled
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-const currentConfig = ref(window.api.defaultConfig.config);
+// [修改] 注入来自 App.vue 的响应式 config，修复数据流问题
+const currentConfig = inject('config'); 
 const activeCollapseNames = ref([]);
 
 const showPromptEditDialog = ref(false);
@@ -26,6 +26,7 @@ const editingPrompt = reactive({
   isDirectSend_file: false,
   isDirectSend_normal: true,
   ifTextNecessary: false,
+  voice: null,
 });
 const isNewPrompt = ref(false);
 
@@ -54,6 +55,14 @@ const availableModels = computed(() => {
     }
   });
   return models;
+});
+
+const availableVoices = computed(() => {
+  const voices = currentConfig.value?.voiceList || [];
+  return [
+    { label: t('prompts.voiceOptions.off'), value: null },
+    ...voices.map(v => ({ label: v, value: v }))
+  ];
 });
 
 const allPrompts = computed(() => {
@@ -111,24 +120,6 @@ const promptsAvailableToAssign = computed(() => (tagName) => {
     .map(key => ({ key, label: key, data: currentConfig.value.prompts[key] }));
 });
 
-onMounted(async () => {
-  try {
-    const result = await window.api.getConfig();
-
-    if (result && result.config) {
-      currentConfig.value = result.config;
-    } else {
-      console.error("Failed to get valid config from API.");
-      currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-    }
-  } catch (error) {
-    console.error("Error fetching config in Prompts.vue:", error);
-    currentConfig.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
-  } finally {
-    await nextTick();
-  }
-});
-
 async function saveConfig() {
   try {
     const configToSave = {
@@ -160,9 +151,7 @@ function addTag() {
   currentConfig.value.tags[tagName] = [];
   saveConfig();
   showAddTagDialog.value = false;
-  nextTick(() => {
-    activeCollapseNames.value = [tagName];
-  });
+  activeCollapseNames.value = [tagName];
 }
 
 function deleteTag(tagName) {
@@ -212,6 +201,7 @@ function prepareAddPrompt() {
     isDirectSend_file: false,
     isDirectSend_normal: true,
     ifTextNecessary: false,
+    voice: null,
   });
   showPromptEditDialog.value = true;
 }
@@ -236,6 +226,7 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
     isDirectSend_file: p.isDirectSend_file ?? false,
     isDirectSend_normal: p.isDirectSend_normal ?? true,
     ifTextNecessary: p.ifTextNecessary ?? false,
+    voice: p.voice ?? null,
   });
   showPromptEditDialog.value = true;
 }
@@ -264,6 +255,7 @@ function savePrompt() {
     isDirectSend_file: editingPrompt.isDirectSend_file,
     isDirectSend_normal: editingPrompt.isDirectSend_normal,
     ifTextNecessary: editingPrompt.ifTextNecessary,
+    voice: editingPrompt.voice,
   };
 
   if (isNewPrompt.value) {
@@ -541,15 +533,14 @@ const removeEditingIcon = () => {
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-form-item :label="t('prompts.modelLabel')">
-              <el-select v-model="editingPrompt.model" filterable clearable style="width: 100%;">
-                <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
-              </el-select>
-            </el-form-item>
+             <el-form-item :label="t('prompts.modelLabel')">
+                <el-select v-model="editingPrompt.model" filterable clearable style="width: 100%;">
+                  <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+              </el-form-item>
           </el-col>
         </el-row>
         <el-form-item :label="t('prompts.promptContentLabel')">
-          <!-- [FIX] Replaced el-input with el-scrollbar wrapping el-input -->
           <el-scrollbar height="150px" class="prompt-textarea-scrollbar">
             <el-input
               v-model="editingPrompt.prompt"
@@ -562,8 +553,16 @@ const removeEditingIcon = () => {
         </el-form-item>
         <el-form-item :label="t('prompts.llmParametersLabel')">
           <div class="llm-params-container">
-            <div class="param-item"><span class="param-label">{{ t('prompts.streamLabel') }}</span><el-switch v-model="editingPrompt.stream" /></div>
-            <div class="param-item"><span class="param-label">{{ t('prompts.enableTemperatureLabel') }}</span><el-switch v-model="editingPrompt.isTemperature" /></div>
+            <div class="param-item">
+                <span class="param-label">{{ t('prompts.streamLabel') }}</span>
+                <div class="spacer"></div>
+                <el-switch v-model="editingPrompt.stream" />
+            </div>
+            <div class="param-item">
+                <span class="param-label">{{ t('prompts.enableTemperatureLabel') }}</span>
+                <div class="spacer"></div>
+                <el-switch v-model="editingPrompt.isTemperature" />
+            </div>
           </div>
         </el-form-item>
         <el-form-item v-if="editingPrompt.isTemperature" :label="t('prompts.temperatureLabel')">
@@ -571,9 +570,33 @@ const removeEditingIcon = () => {
         </el-form-item>
         <el-form-item :label="t('prompts.AssistantParametersLabel')">
           <div class="llm-params-container">
-            <div class="param-item"><span class="param-label">{{ t('prompts.sendDirectLabel') }}</span><el-switch v-model="editingPrompt.isDirectSend_normal" /></div>
-            <div class="param-item"><span class="param-label">{{ t('prompts.sendFileLabel') }}</span><el-switch v-model="editingPrompt.isDirectSend_file" /></div>
-            <div class="param-item"><span class="param-label">{{ t('prompts.ifTextNecessary') }}</span><el-switch v-model="editingPrompt.ifTextNecessary" /></div>
+              <div class="param-item">
+                  <span class="param-label">{{ t('prompts.sendDirectLabel') }}</span>
+                  <el-tooltip :content="t('prompts.tooltips.sendDirect')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
+                  <div class="spacer"></div>
+                  <el-switch v-model="editingPrompt.isDirectSend_normal" />
+              </div>
+              <div class="param-item">
+                  <span class="param-label">{{ t('prompts.sendFileLabel') }}</span>
+                  <el-tooltip :content="t('prompts.tooltips.sendFile')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
+                  <div class="spacer"></div>
+                  <el-switch v-model="editingPrompt.isDirectSend_file" />
+              </div>
+              <div class="param-item">
+                  <span class="param-label">{{ t('prompts.ifTextNecessary') }}</span>
+                  <el-tooltip :content="t('prompts.tooltips.ifTextNecessary')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
+                  <div class="spacer"></div>
+                  <el-switch v-model="editingPrompt.ifTextNecessary" />
+              </div>
+              <!-- 移动到此处的 Voice Selector -->
+              <div class="param-item voice-param">
+                  <span class="param-label">{{ t('prompts.voiceLabel') }}</span>
+                  <el-tooltip :content="t('prompts.voiceTooltip')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
+                  <div class="spacer"></div>
+                  <el-select v-model="editingPrompt.voice" :placeholder="t('prompts.voicePlaceholder')" clearable size="small" style="width: 120px;">
+                      <el-option v-for="item in availableVoices" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+              </div>
           </div>
         </el-form-item>
         <el-form-item v-if="isNewPrompt" :label="t('prompts.addToTagLabel')">
@@ -587,6 +610,7 @@ const removeEditingIcon = () => {
         <el-button type="primary" @click="savePrompt">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
+    <!-- 其他 Dialogs 保持不变 -->
     <el-dialog v-model="showAddTagDialog" :title="t('prompts.addNewTag')" width="400px" :close-on-click-modal="false">
       <el-form @submit.prevent="addTag">
         <el-form-item :label="t('prompts.tagNameLabel')" required>
@@ -637,7 +661,6 @@ const removeEditingIcon = () => {
     background-color: var(--text-secondary);
 }
 
-/* [FIX START] Styles for the new el-scrollbar wrapper around the textarea */
 .prompt-textarea-scrollbar {
   width: 100%;
   border: 1px solid var(--border-primary);
@@ -651,12 +674,10 @@ const removeEditingIcon = () => {
   padding: 8px 12px;
 }
 
-/* Ensure native scrollbar is hidden inside the scrollbar component */
 .prompt-textarea-scrollbar :deep(.el-textarea__inner::-webkit-scrollbar) {
   display: none;
 }
 
-/* Style the simulated scrollbar thumb for dark mode */
 html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb) {
   background-color: var(--text-tertiary);
 }
@@ -664,8 +685,6 @@ html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb) {
 html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
   background-color: var(--text-secondary);
 }
-/* [FIX END] */
-
 
 .content-wrapper {
   max-width: 1200px;
@@ -684,7 +703,6 @@ html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
   background-color: var(--bg-secondary);
   border-radius: var(--radius-lg);
   transition: box-shadow 0.3s ease;
-  /* Removed overflow:hidden to allow sticky header to work correctly */
 }
 
 .tag-collapse-item:hover {
@@ -693,11 +711,11 @@ html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
 
 .tag-collapse-item :deep(.el-collapse-item__header) {
   background-color: var(--bg-secondary);
-  border-bottom: 1px solid transparent; /* Default to transparent */
+  border-bottom: 1px solid transparent; 
   padding: 0 20px;
   height: 52px;
   font-weight: 600;
-  border-radius: var(--radius-lg); /* Rounded corners when closed */
+  border-radius: var(--radius-lg);
   transition: border-radius 0.15s ease-out, background-color 0.2s;
 }
 
@@ -948,13 +966,12 @@ html.dark .bottom-actions-container {
 
 .llm-params-container {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 24px;
+  flex-direction: column; 
+  gap: 16px; 
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
-  padding: 12px 16px;
+  padding: 16px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -968,6 +985,19 @@ html.dark .bottom-actions-container {
 .param-label {
   font-size: 14px;
   color: var(--text-secondary);
+  line-height: 1;
+}
+.tip-icon {
+  color: var(--text-tertiary);
+  cursor: help;
+}
+
+.spacer {
+  flex-grow: 1;
+}
+
+.param-item.voice-param .el-select {
+  flex-shrink: 0;
 }
 
 :deep(.el-slider__runway) {
