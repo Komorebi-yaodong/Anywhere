@@ -122,7 +122,7 @@ function importConfig() {
 }
 
 
-// --- [新增] Voice Management ---
+// --- [MODIFIED] Voice Management ---
 const addNewVoice = () => {
   ElMessageBox.prompt(t('setting.voice.addPromptMessage'), t('setting.voice.addPromptTitle'), {
     confirmButtonText: t('common.confirm'),
@@ -145,24 +145,59 @@ const addNewVoice = () => {
   });
 };
 
-const deleteVoice = (voiceToDelete) => {
-  ElMessageBox.confirm(
-    t('setting.voice.deleteConfirm', { voiceName: voiceToDelete }),
-    t('common.warningTitle'),
-    {
-      confirmButtonText: t('common.confirm'),
-      cancelButtonText: t('common.cancel'),
-      type: 'warning',
-    }
-  ).then(() => {
-    const index = currentConfig.value.voiceList.indexOf(voiceToDelete);
+// [ADDED] Function to edit a voice
+const editVoice = (oldVoice) => {
+  ElMessageBox.prompt(t('setting.voice.editPromptMessage'), t('setting.voice.editPromptTitle'), {
+    confirmButtonText: t('common.confirm'),
+    cancelButtonText: t('common.cancel'),
+    inputValue: oldVoice,
+    inputValidator: (value) => {
+      const trimmedValue = value.trim();
+      if (!trimmedValue) return t('setting.voice.addFailEmpty');
+      if (trimmedValue !== oldVoice && currentConfig.value.voiceList.includes(trimmedValue)) {
+        return t('setting.voice.addFailExists');
+      }
+      return true;
+    },
+  }).then(({ value }) => {
+    const newVoice = value.trim();
+    if (newVoice === oldVoice) return; // No change
+
+    // Update voice in the main list
+    const index = currentConfig.value.voiceList.indexOf(oldVoice);
     if (index > -1) {
-      currentConfig.value.voiceList.splice(index, 1);
+      currentConfig.value.voiceList[index] = newVoice;
+
+      // Update voice in all prompts that use it
+      Object.values(currentConfig.value.prompts).forEach(prompt => {
+        if (prompt.voice === oldVoice) {
+          prompt.voice = newVoice;
+        }
+      });
+
       saveConfig();
+      ElMessage.success(t('setting.voice.editSuccess'));
     }
   }).catch(() => {
     // User cancelled
   });
+};
+
+// [MODIFIED] Function to delete a voice without confirmation
+const deleteVoice = (voiceToDelete) => {
+  const index = currentConfig.value.voiceList.indexOf(voiceToDelete);
+  if (index > -1) {
+    currentConfig.value.voiceList.splice(index, 1);
+    
+    // Set voice to null in all prompts that use it
+    Object.values(currentConfig.value.prompts).forEach(prompt => {
+      if (prompt.voice === voiceToDelete) {
+        prompt.voice = null;
+      }
+    });
+
+    saveConfig();
+  }
 };
 
 
@@ -455,7 +490,7 @@ const handleSelectionChange = (val) => {
           </div>
         </el-card>
 
-        <!-- [新增] 语音设置卡片 -->
+        <!-- [MODIFIED] 语音设置卡片 -->
         <el-card class="settings-card" shadow="never">
           <template #header>
             <div class="card-header">
@@ -469,6 +504,7 @@ const handleSelectionChange = (val) => {
               v-for="voice in currentConfig.voiceList"
               :key="voice"
               closable
+              @click="editVoice(voice)"
               @close="deleteVoice(voice)"
               class="voice-tag"
               size="large"
@@ -588,7 +624,7 @@ const handleSelectionChange = (val) => {
 </template>
 
 <style scoped>
-/* [新增] 语音设置样式 */
+/* [MODIFIED] 语音设置样式 */
 .voice-list-container {
   display: flex;
   flex-wrap: wrap;
@@ -599,6 +635,12 @@ const handleSelectionChange = (val) => {
   font-size: 14px;
   height: 32px;
   padding: 0 12px;
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out, filter 0.2s ease-in-out;
+}
+.voice-tag:hover {
+  transform: scale(1.05);
+  filter: brightness(1.2);
 }
 .add-voice-button {
   border-style: dashed;

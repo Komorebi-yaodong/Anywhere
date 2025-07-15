@@ -170,7 +170,7 @@
       "selectPlaceholder": "选择语言"
     },
     "voice": {
-      "title": "语音设置",
+      "title": "语音设置  (声音名称-自定义描述)",
       "description": "管理可用于语音合成的声音列表",
       "add": "添加声音",
       "addPromptTitle": "添加新声音",
@@ -178,7 +178,9 @@
       "addSuccess": "声音添加成功",
       "addFailExists": "声音已存在",
       "addFailEmpty": "声音名称不能为空",
-      "deleteConfirm": "确定要删除声音 '{voiceName}' 吗？"
+      "editPromptTitle": "修改声音名称",
+      "editPromptMessage": "请输入新的声音名称",
+      "editSuccess": "声音修改成功"
     },
     "title": "通用设置",
     "stream": {

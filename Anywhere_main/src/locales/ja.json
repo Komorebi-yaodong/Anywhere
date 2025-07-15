@@ -170,7 +170,7 @@
       "selectPlaceholder": "言語を選択"
     },
     "voice": {
-      "title": "音声設定",
+      "title": "音声設定  (音声名 - カスタム説明)",
       "description": "音声合成に利用できる音声のリストを管理します。",
       "add": "音声を追加",
       "addPromptTitle": "新しい音声を追加",
@@ -178,7 +178,10 @@
       "addSuccess": "音声が正常に追加されました。",
       "addFailExists": "音声は既に存在します。",
       "addFailEmpty": "音声名を空にすることはできません。",
-      "deleteConfirm": "音声 '{voiceName}' を削除してもよろしいですか？"
+      "editPromptTitle": "音声名の編集",
+      "editPromptMessage": "新しい音声名を入力してください",
+      "editSuccess": "音声が正常に修正されました"
+
     },
     "title": "一般設定",
     "stream": {

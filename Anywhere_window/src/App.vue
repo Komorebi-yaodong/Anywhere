@@ -8,6 +8,8 @@ import ChatMessage from './components/ChatMessage.vue';
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
+const chatInputRef = ref(null);
+
 const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
 const parseWord = async (base64Data) => {
   const mammoth = (await import('mammoth')).default;
@@ -101,7 +103,7 @@ const fileList = ref([]);
 const zoomLevel = ref(1);
 const collapsedMessages = ref(new Set());
 const defaultConversationName = ref("");
-const selectedVoice = ref(null); // [新增] 当前选择的语音
+const selectedVoice = ref(null);
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 
@@ -166,7 +168,10 @@ const addCopyButtonsToCodeBlocks = async () => {
       const button = document.createElement('button'); button.className = `code-block-copy-button ${positionClass}`; button.innerHTML = copyButtonSVG; button.title = 'Copy code';
       button.addEventListener('click', async (event) => {
         event.stopPropagation();
-        try { await navigator.clipboard.writeText(codeText); ElMessage.success('Code copied to clipboard!'); }
+        try {
+          await navigator.clipboard.writeText(codeText.trimEnd());
+          ElMessage.success('Code copied to clipboard!');
+        }
         catch (err) { console.error('Failed to copy code:', err); ElMessage.error('Failed to copy code.'); }
       });
       wrapper.appendChild(button);
@@ -205,7 +210,7 @@ const handleChangeModel = (chosenModel) => {
   base_url.value = provider.url;
   api_key.value = provider.api_key;
   changeModel_page.value = false;
-  senderRef.value?.focus();
+  chatInputRef.value?.focus(); // [修改]
   ElMessage.success(`模型已切换为: ${modelMap.value[chosenModel]}`);
 };
 const handleTogglePin = () => {
@@ -284,7 +289,7 @@ const handleUpload = async ({ fileList: newFiles }) => {
   for (const file of newFiles) {
     await file2fileList(file, fileList.value.length + 1);
   }
-  senderRef.value?.focus();
+  chatInputRef.value?.focus(); // [修改]
 };
 
 const handleSendAudio = async (audioFile) => {
@@ -294,6 +299,12 @@ const handleSendAudio = async (audioFile) => {
   await file2fileList(audioFile, 0);
   await askAI(false);
 }
+
+const handleWindowFocus = () => {
+    setTimeout(() => {
+        chatInputRef.value?.focus();
+    }, 50);
+};
 
 const closePage = () => { window.close(); };
 
@@ -310,6 +321,7 @@ watch(chat_show, async () => {
 onMounted(async () => {
   if (isInit.value) return; isInit.value = true;
   window.addEventListener('wheel', handleWheel, { passive: false });
+  window.addEventListener('focus', handleWindowFocus);
 
   try {
     const configData = await window.api.getConfig();
@@ -339,7 +351,7 @@ onMounted(async () => {
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
-      selectedVoice.value = currentPromptConfig?.voice || null; // [新增]
+      selectedVoice.value = currentPromptConfig?.voice || null;
       modelList.value = []; modelMap.value = {};
       currentConfig.value.providerOrder.forEach(id => {
         const provider = currentConfig.value.providers[id];
@@ -364,16 +376,16 @@ onMounted(async () => {
         let sessionLoaded = false;
         try {
           let old_session = JSON.parse(basic_msg.value.payload);
-          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); senderRef.value?.focus(); }
+          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); chatInputRef.value?.focus(); } // [修改]
         } catch (error) { }
         if (!sessionLoaded) {
-          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(true); senderRef.value?.focus(); }
+          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(true); chatInputRef.value?.focus(); } // [修改]
           else {
             if (currentPromptConfig?.isDirectSend_normal) {
               history.value.push({ role: "user", content: basic_msg.value.payload });
               chat_show.value.push({ role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
               scrollToBottom(true); await askAI(true);
-            } else { prompt.value = basic_msg.value.payload; scrollToBottom(true); senderRef.value?.focus(); }
+            } else { prompt.value = basic_msg.value.payload; scrollToBottom(true); chatInputRef.value?.focus(); } // [修改]
           }
         }
       } else if (basic_msg.value.type === "img" && basic_msg.value.payload) {
@@ -383,20 +395,20 @@ onMounted(async () => {
           scrollToBottom(true); await askAI(true);
         } else {
           fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(basic_msg.value.payload) });
-          scrollToBottom(true); senderRef.value?.focus();
+          scrollToBottom(true); chatInputRef.value?.focus(); // [修改]
         }
       } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
         try {
           let sessionLoaded = false;
           if (basic_msg.value.payload.length === 1 && basic_msg.value.payload[0].path.toLowerCase().endsWith('.json')) {
             const fileObject = await window.api.handleFilePath(basic_msg.value.payload[0].path);
-            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); senderRef.value?.focus(); }
+            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); chatInputRef.value?.focus(); } // [修改]
           }
           if (!sessionLoaded) {
             const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
             await Promise.all(fileProcessingPromises);
             if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(true); await askAI(false); }
-            else { senderRef.value?.focus(); scrollToBottom(true); }
+            else { chatInputRef.value?.focus(); scrollToBottom(true); } // [修改]
           }
         } catch (error) { console.error("Error during initial file processing:", error); ElMessage.error("文件处理失败: " + error.message); }
       }
@@ -407,7 +419,7 @@ onMounted(async () => {
     document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
     model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
-    selectedVoice.value = currentPromptConfig?.voice || null; // [新增]
+    selectedVoice.value = currentPromptConfig?.voice || null;
     modelList.value = []; modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
@@ -435,10 +447,16 @@ onMounted(async () => {
   const chatMainElement = document.querySelector('.chat-main');
   if (chatMainElement) chatMainElement.addEventListener('click', handleMarkdownImageClick);
   await addCopyButtonsToCodeBlocks(); await attachImageErrorHandlers();
+  
+  // [新增] 确保初次加载后聚焦
+  setTimeout(() => {
+    chatInputRef.value?.focus();
+  }, 100);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('wheel', handleWheel);
+  window.removeEventListener('focus', handleWindowFocus);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
 
   const chatMainElement = document.querySelector('.chat-main');
@@ -473,7 +491,7 @@ const getSessionDataAsObject = () => {
     currentPromptConfig: currentPromptConfig,
     history: history.value,
     chat_show: chat_show.value,
-    selectedVoice: selectedVoice.value, // [新增]
+    selectedVoice: selectedVoice.value,
   };
 }
 const saveSessionToCloud = async () => {
@@ -518,6 +536,7 @@ const saveSessionToCloud = async () => {
             const remoteFilePath = `${remoteDir}/${filename}`;
             if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
             await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
+            defaultConversationName.value = finalBasename;
             ElMessage.success('会话已成功保存到云端！');
             done();
           } catch (error) {
@@ -529,7 +548,6 @@ const saveSessionToCloud = async () => {
     });
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error("MessageBox error:", error); }
 }
-
 const saveSessionAsMarkdown = async () => {
   let markdownContent = '';
   const now = new Date();
@@ -540,14 +558,19 @@ const saveSessionAsMarkdown = async () => {
   const formatContent = (content) => !Array.isArray(content) ? String(content).trim() : content.map(p => p.type === 'text' ? p.text.trim() : '').join(' ');
   const formatFiles = (content) => Array.isArray(content) ? content.filter(p => p.type !== 'text').map(p => p.type === 'file' ? p.file.filename : 'Image') : [];
 
-  markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n### 模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
+  markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n### 当前模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
   const systemPromptMessage = chat_show.value.find(m => m.role === 'system');
   if (systemPromptMessage && systemPromptMessage.content) markdownContent += `### 系统提示词\n\n${String(systemPromptMessage.content).trim()}\n\n`;
   markdownContent += '---\n\n';
+
   for (const message of chat_show.value) {
     if (message.role === 'system') continue;
     if (message.role === 'user') {
-      markdownContent += `### 👤 用户\n\n`;
+      let userHeader = '### 👤 用户';
+      if (message.timestamp) {
+        userHeader += ` - *${formatTimestamp(message.timestamp)}*`;
+      }
+      markdownContent += `${userHeader}\n\n`;
       const mainContent = formatContent(message.content);
       const files = formatFiles(message.content);
       if (mainContent) markdownContent += `${mainContent}\n\n`;
@@ -557,7 +580,15 @@ const saveSessionAsMarkdown = async () => {
         markdownContent += `\n`;
       }
     } else if (message.role === 'assistant') {
-      markdownContent += `### 🤖 ${CODE.value || 'AI'}\n\n`;
+      let assistantHeader = `### 🤖 ${message.aiName || 'AI'}`;
+      if (message.voiceName) {
+          assistantHeader += ` (${message.voiceName})`;
+      }
+      if (message.completedTimestamp) {
+          assistantHeader += ` - *${formatTimestamp(message.completedTimestamp)}*`;
+      }
+      markdownContent += `${assistantHeader}\n\n`;
+
       if (message.reasoning_content) markdownContent += `> ${message.reasoning_content.replace(/\n/g, '\n> ')}\n\n`;
       const mainContent = formatContent(message.content);
       if (mainContent) markdownContent += `${mainContent}\n\n`;
@@ -585,6 +616,7 @@ const saveSessionAsMarkdown = async () => {
           instance.confirmButtonLoading = true;
           try {
             await window.api.saveFile({ title: '保存为 Markdown', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'Markdown 文件', extensions: ['md'] }, { name: '所有文件', extensions: ['*'] }], fileContent: markdownContent });
+            defaultConversationName.value = finalBasename;
             ElMessage.success('会话已成功保存为 Markdown！');
             done();
           } catch (error) {
@@ -621,6 +653,7 @@ const saveSessionAsJson = async () => {
           instance.confirmButtonLoading = true;
           try {
             await window.api.saveFile({ title: '保存聊天会话', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }], fileContent: jsonString });
+            defaultConversationName.value = finalBasename;
             ElMessage.success('会话已成功保存！');
             done();
           } catch (error) {
@@ -662,7 +695,7 @@ const loadSession = async (jsonData) => {
     temporary.value = jsonData.temporary;
     history.value = jsonData.history;
     chat_show.value = jsonData.chat_show;
-    selectedVoice.value = jsonData.selectedVoice || null; // [新增]
+    selectedVoice.value = jsonData.selectedVoice || null;
 
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
@@ -735,7 +768,7 @@ const checkAndLoadSessionFromFile = async (file) => {
 
 const file2fileList = async (file, idx) => {
   const isSessionFile = await checkAndLoadSessionFromFile(file);
-  if (isSessionFile) { senderRef.value?.focus(); return; }
+  if (isSessionFile) { chatInputRef.value?.focus(); return; } // [修改]
   return new Promise((resolve, reject) => {
     const handler = getFileHandler(file.name);
     if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; ElMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }
@@ -767,7 +800,6 @@ const sendFile = async () => {
   fileList.value = []; return contentList;
 };
 
-// [修改] askAI 函数，以支持语音回复
 const askAI = async (forceSend = false) => {
   if (loading.value) return;
   let is_think_flag = false;
@@ -778,12 +810,14 @@ const askAI = async (forceSend = false) => {
       const userContentList = [];
       if (promptText) userContentList.push({ type: "text", text: promptText });
       if (file_content && file_content.length > 0) userContentList.push(...file_content);
+      const userTimestamp = new Date().toLocaleString('sv-SE');
+
       if (userContentList.length == 1 && userContentList[0].type === "text") {
         history.value.push({ role: "user", content: userContentList[0]["text"] });
-        chat_show.value.push({ role: "user", content: [{ type: "text", text: userContentList[0]["text"] }] });
+        chat_show.value.push({ role: "user", content: [{ type: "text", text: userContentList[0]["text"] }], timestamp: userTimestamp });
       } else if (userContentList.length > 0) {
         history.value.push({ role: "user", content: userContentList });
-        chat_show.value.push({ role: "user", content: userContentList });
+        chat_show.value.push({ role: "user", content: userContentList, timestamp: userTimestamp });
       } else return;
     } else return;
     prompt.value = "";
@@ -805,13 +839,20 @@ const askAI = async (forceSend = false) => {
   let aiResponse = null; scrollToBottom(true);
   const aiMessageHistoryIndex = history.value.length; const aiMessageChatShowIndex = chat_show.value.length;
   history.value.push({ role: "assistant", content: "" });
-  chat_show.value.push({ role: "assistant", content: [{ type: "text", text: "" }], reasoning_content: "", status: "" });
+
+  chat_show.value.push({
+    role: "assistant",
+    content: [{ type: "text", text: "" }],
+    reasoning_content: "",
+    status: "",
+    aiName: modelMap.value[model.value] || model.value.split('|')[1], 
+    voiceName: selectedVoice.value
+  });
 
   try {
     const messagesForAPI = JSON.parse(JSON.stringify(history.value.slice(0, aiMessageHistoryIndex)));
-    senderRef.value?.focus();
+    chatInputRef.value?.focus(); // [修改]
 
-    // [修改] 将 selectedVoice.value 传递给 chatOpenAI
     aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, CODE.value, signalController.value.signal, selectedVoice.value);
 
     if (!aiResponse?.ok && aiResponse?.status !== 200) {
@@ -820,11 +861,10 @@ const askAI = async (forceSend = false) => {
       throw new Error(errorMsg);
     }
 
-    // [修改] 响应处理逻辑
     const isVoiceReply = !!selectedVoice.value;
     const isStreamReply = currentConfig.value.stream && !isVoiceReply;
 
-    if (isVoiceReply) { // 处理语音和文本回复
+    if (isVoiceReply) {
       const data = await aiResponse.json();
       const aiMessage = data.choices?.[0]?.message;
       if (!aiMessage) throw new Error('API响应格式不正确，缺少message字段');
@@ -844,7 +884,7 @@ const askAI = async (forceSend = false) => {
         chat_show.value[aiMessageChatShowIndex].status = "";
       }
 
-    } else if (isStreamReply) { // 处理流式文本回复
+    } else if (isStreamReply) {
       scrollToBottom(true);
       const reader = aiResponse.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
       while (true) {
@@ -890,7 +930,7 @@ const askAI = async (forceSend = false) => {
           thinking.value = false; is_think_flag = false; break;
         }
       }
-    } else { // 处理非流式文本回复
+    } else {
       const data = await aiResponse.json();
       const reasoning_content = data.choices?.[0]?.message?.reasoning_content || '';
       const aiContent = data.choices?.[0]?.message?.content || '抱歉，未能获取到回复内容。';
@@ -912,18 +952,24 @@ const askAI = async (forceSend = false) => {
     loading.value = false; signalController.value = null;
     const lastChatMsg = chat_show.value[chat_show.value.length - 1];
     if (lastChatMsg && lastChatMsg.role === 'assistant' && thinking.value && !is_think_flag) { lastChatMsg.status = "end"; thinking.value = false; }
+    
+    if (chat_show.value[aiMessageChatShowIndex] && chat_show.value[aiMessageChatShowIndex].role === 'assistant') {
+        chat_show.value[aiMessageChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
+    }
+
     is_think_flag = false; scrollToBottom();
+    chatInputRef.value?.focus(); // [新增]
   }
 };
 
-const cancelAskAI = () => { if (loading.value && signalController.value) signalController.value.abort(); };
+const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } }; // [修改]
 const copyText = async (content, index) => { if (loading.value && index === history.value.length - 1) return; await window.api.copyText(content); };
 const reaskAI = async () => {
   if (loading.value || history.value.length === 0) return;
   const lastHistoryMessage = history.value[history.value.length - 1];
   if (lastHistoryMessage.role === "system") return;
   if (lastHistoryMessage.role === "assistant") { history.value.pop(); chat_show.value.pop(); }
-  prompt.value = ""; await askAI(true);
+  await askAI(true);
 };
 const deleteMessage = (index) => {
   if (loading.value) { ElMessage.warning('请等待当前回复完成后再操作'); return; }
@@ -938,7 +984,18 @@ const clearHistory = () => {
   else { history.value = []; chat_show.value = []; }
   collapsedMessages.value.clear();
   defaultConversationName.value = "";
-  senderRef.value?.focus(); ElMessage.success('历史记录已清除');
+  chatInputRef.value?.focus(); ElMessage.success('历史记录已清除'); // [修改]
+};
+const formatTimestamp = (dateString) => {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    const datePart = date.toLocaleDateString('sv-SE'); 
+    const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }); 
+    return `${datePart} ${timePart}`;
+  } catch (e) {
+    return '';
+  }
 };
 </script>
 
@@ -957,8 +1014,8 @@ const clearHistory = () => {
           @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
       </el-main>
 
-      <!-- [修改] 传递 voiceList 和 selectedVoice -->
-      <ChatInput ref="senderRef" v-model:prompt="prompt" v-model:fileList="fileList"
+      <!-- [修改] 添加 ref="chatInputRef" -->
+      <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
         v-model:selectedVoice="selectedVoice" :loading="loading" :ctrlEnterToSend="currentConfig.CtrlEnterToSend"
         :layout="inputLayout" :voiceList="currentConfig.voiceList" @submit="handleSubmit" @cancel="handleCancel"
         @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
@@ -1844,4 +1901,5 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #999;
   background-clip: content-box;
 }
+
 </style>

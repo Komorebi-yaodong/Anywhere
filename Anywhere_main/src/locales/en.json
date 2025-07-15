@@ -170,7 +170,7 @@
       "selectPlaceholder": "Select Language"
     },
     "voice": {
-      "title": "Voice Settings",
+      "title": "Voice Settings  (Voice Name - Custom Description)",
       "description": "Manage the list of voices available for speech synthesis.",
       "add": "Add Voice",
       "addPromptTitle": "Add New Voice",
@@ -178,7 +178,9 @@
       "addSuccess": "Voice added successfully.",
       "addFailExists": "Voice already exists.",
       "addFailEmpty": "Voice name cannot be empty.",
-      "deleteConfirm": "Are you sure you want to delete the voice '{voiceName}'?"
+      "editPromptTitle": "Edit Voice Name",
+      "editPromptMessage": "Please enter the new voice name",
+      "editSuccess": "Voice modified successfully"
     },
     "title": "General Settings",
     "stream": {

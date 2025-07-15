@@ -54,7 +54,7 @@ const defaultConfig = {
       path: "/anywhere",
       dataPath: "/anywhere_data",
     },
-    voiceList:["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer"],
+    voiceList:["alloy-👧","echo-👨"],
   }
 };
 
@@ -526,19 +526,19 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
     }
   }
   
-  // [修改] 构建请求体
   let payload = {
     model: model,
     messages: history,
   };
 
-  // 根据 selectedVoice 的值来决定是否启用语音回复
-  if (selectedVoice) {
+  if (selectedVoice && typeof selectedVoice === 'string') {
     // 强制非流式
     payload.stream = false;
+    // 提取'-'之前的部分作为API调用的voice参数
+    const voiceForAPI = selectedVoice.split('-')[0].trim();
     // 添加语音相关参数
     payload.modalities = ["text", "audio"];
-    payload.audio = { voice: selectedVoice, format: "wav" };
+    payload.audio = { voice: voiceForAPI, format: "wav" };
   } else {
     // 沿用快捷助手的流式设置
     if (config.prompts[CODE] && config.prompts[CODE].model === modelInfo) {

@@ -16,6 +16,8 @@ const props = defineProps({
     ctrlEnterToSend: Boolean,
     voiceList: { type: Array, default: () => [] },
     selectedVoice: { type: String, default: null },
+    // [MODIFIED] Add the layout prop to fix the warning
+    layout: { type: String, default: 'horizontal' }
 });
 const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'update:selectedVoice']);
 
@@ -232,33 +234,31 @@ defineExpose({ focus });
              <el-col :span="1" />
         </el-row>
 
-        <!-- [修改] 语音选择行 -->
+        <!-- [MODIFIED] Voice selector structure simplified -->
         <el-row v-if="isVoiceSelectorVisible" class="voice-selector-row">
             <el-col :span="1" />
             <el-col :span="22">
-                <!-- [新增] 新的包裹容器，用于对齐样式 -->
-                <div class="voice-selector-wrapper">
-                    <el-scrollbar>
-                        <div class="voice-selector-content">
-                            <el-button 
-                                @click="handleVoiceSelection(null)" 
-                                :type="!selectedVoice ? 'primary' : 'default'" 
-                                round
-                            >
-                                关闭语音
-                            </el-button>
-                            <el-button 
-                                v-for="voice in props.voiceList" 
-                                :key="voice" 
-                                @click="handleVoiceSelection(voice)" 
-                                :type="selectedVoice === voice ? 'primary' : 'default'" 
-                                round
-                            >
-                                {{ voice }}
-                            </el-button>
-                        </div>
-                    </el-scrollbar>
-                </div>
+                <!-- Apply the wrapper class directly to el-scrollbar -->
+                <el-scrollbar class="voice-selector-wrapper">
+                    <div class="voice-selector-content">
+                        <el-button 
+                            @click="handleVoiceSelection(null)" 
+                            :type="!selectedVoice ? 'primary' : 'default'" 
+                            round
+                        >
+                            关闭语音
+                        </el-button>
+                        <el-button 
+                            v-for="voice in props.voiceList" 
+                            :key="voice" 
+                            @click="handleVoiceSelection(voice)" 
+                            :type="selectedVoice === voice ? 'primary' : 'default'" 
+                            round
+                        >
+                            {{ voice }}
+                        </el-button>
+                    </div>
+                </el-scrollbar>
             </el-col>
             <el-col :span="1" />
         </el-row>
@@ -341,31 +341,29 @@ html.dark .drag-overlay { background-color: rgba(20, 20, 20, 0.4); }
 }
 html.dark .waveform-display-area { background-color: #404045; }
 
-/* [修改] Voice Selector Styles */
+/* [MODIFIED] Voice Selector Styles */
 .voice-selector-row {
     margin-bottom: 8px;
 }
 .voice-selector-wrapper {
     background-color: #F3F4F6;
     border-radius: 12px;
-    padding: 6px 8px; /* 关键：与输入框的 padding 一致 */
+    padding: 8px;
+    max-height: 132px; /* Constrain to approx 3 rows */
 }
 html.dark .voice-selector-wrapper {
     background-color: #404045;
 }
 .voice-selector-content {
     display: flex;
+    flex-wrap: wrap; 
     gap: 8px;
-    white-space: nowrap; /* 确保内容不换行，以触发滚动条 */
 }
 .voice-selector-content .el-button {
     flex-shrink: 0;
 }
-.voice-selector-wrapper :deep(.el-scrollbar__bar.is-horizontal) {
-    height: 4px;
-}
 .voice-selector-wrapper :deep(.el-scrollbar__view) {
-    padding-bottom: 4px; /* 为滚动条留出空间 */
+    padding-right: 8px; /* Add some padding to avoid content touching scrollbar */
 }
 
 
