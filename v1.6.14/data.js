@@ -54,7 +54,6 @@ const defaultConfig = {
       path: "/anywhere",
       dataPath: "/anywhere_data",
     },
-    inputLayout: 'vertical',
     voiceList:["alloy","ash","ballad","coral","echo","fable","nova","onyx","sage","shimmer"],
   }
 };
@@ -115,8 +114,8 @@ function checkConfig(config) {
     flag = true;
   }
 
-  if (config.inputLayout === undefined) {
-    config.inputLayout = 'vertical';
+  if (config.inputLayout) {
+    delete config.inputLayout;
     flag = true;
   }
 

@@ -14,7 +14,6 @@ const fileList = defineModel('fileList');
 const props = defineProps({
     loading: Boolean,
     ctrlEnterToSend: Boolean,
-    layout: { type: String, default: 'horizontal' },
     voiceList: { type: Array, default: () => [] },
     selectedVoice: { type: String, default: null },
 });
@@ -33,13 +32,71 @@ let recorder = null;
 const isVoiceSelectorVisible = ref(false);
 
 // --- Waveform Visualization State ---
-let wave = null; 
+let wave = null;
+
+// --- Helper function to manually insert a newline ---
+const insertNewline = () => {
+    const textarea = senderRef.value?.$refs.textarea;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const value = prompt.value;
+
+    // Update the model's value
+    prompt.value = value.substring(0, start) + '\n' + value.substring(end);
+
+    // Wait for the DOM to update, then set the cursor position
+    nextTick(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 1;
+        textarea.focus();
+    });
+};
+
 
 // --- Event Handlers ---
 const handleKeyDown = (event) => {
-    if (props.loading || isRecording.value) { if (!((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c')) { event.preventDefault(); } return; }
-    if (props.ctrlEnterToSend) { if (event.ctrlKey && event.key === 'Enter') { event.preventDefault(); emit('submit'); } }
-    else { if (!event.shiftKey && event.key === 'Enter') { event.preventDefault(); emit('submit'); } }
+    // 录音时，保持原有逻辑，只允许复制
+    if (isRecording.value) {
+        if (!((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c')) {
+            event.preventDefault();
+        }
+        return;
+    }
+
+    // 只处理 Enter 键的按下事件
+    if (event.key !== 'Enter') {
+        return;
+    }
+
+    const isCtrlOrMetaPressed = event.ctrlKey || event.metaKey;
+
+    // 模式一：Enter 发送, Ctrl+Enter 换行
+    if (!props.ctrlEnterToSend) {
+        if (isCtrlOrMetaPressed) {
+            // 用户按了 Ctrl/Cmd + Enter，执行换行
+            event.preventDefault();
+            insertNewline();
+        } else if (!event.shiftKey) {
+            // 用户只按了 Enter，执行发送
+            event.preventDefault();
+            if (!props.loading) {
+                emit('submit');
+            }
+        }
+        // 如果是 Shift+Enter，不作处理，让浏览器执行默认的换行行为
+    } 
+    // 模式二：Ctrl+Enter 发送, Enter 换行
+    else {
+        if (isCtrlOrMetaPressed) {
+            // 用户按了 Ctrl/Cmd + Enter，执行发送
+            event.preventDefault();
+            if (!props.loading) {
+                emit('submit');
+            }
+        }
+        // 如果只按了 Enter，不作处理，让浏览器执行默认的换行行为
+    }
 };
 const onSubmit = () => { if (props.loading) return; emit('submit'); };
 const onCancel = () => emit('cancel');
@@ -209,47 +266,8 @@ defineExpose({ focus });
         <el-row>
             <el-col :span="1" />
             <el-col :span="22">
-                <!-- Horizontal Layout -->
-                <div v-if="layout === 'horizontal'" class="chat-input-area-horizontal">
-                    <div class="action-buttons-left">
-                        <el-tooltip content="清除聊天记录"><el-button :icon="Delete" size="default" @click="onClearHistory" circle :disabled="isRecording"/></el-tooltip>
-                        <el-tooltip content="添加附件"><el-button :icon="Link" size="default" @click="triggerFileUpload" circle :disabled="isRecording"/></el-tooltip>
-                        
-                        <el-tooltip content="语音回复设置">
-                            <el-button 
-                                :icon="Headset" 
-                                size="default" 
-                                circle 
-                                :disabled="isRecording"
-                                :type="selectedVoice ? 'primary' : ''"
-                                :class="{ 'is-pulsing': selectedVoice }"
-                                @click="toggleVoiceSelector"
-                            />
-                        </el-tooltip>
-                    </div>
-                    
-                    <div class="input-wrapper">
-                        <el-input v-if="!isRecording" ref="senderRef" class="chat-textarea-horizontal" v-model="prompt" type="textarea"
-                            placeholder="输入、粘贴、拖拽以发送内容" 
-                            :autosize="{ minRows: 1, maxRows: 5 }" 
-                            resize="none"
-                            @keydown="handleKeyDown" />
-                    </div>
-
-                    <div class="action-buttons-right">
-                        <template v-if="isRecording">
-                            <el-tooltip content="取消录音"><el-button :icon="Close" size="default" @click="handleCancelRecording" circle /></el-tooltip>
-                            <el-tooltip content="结束并发送"><el-button :icon="Check" size="default" @click="handleConfirmAndSendRecording" circle /></el-tooltip>
-                        </template>
-                        <template v-else>
-                            <el-tooltip content="发送语音"><el-button :icon="Microphone" size="default" @click="startRecording" circle /></el-tooltip>
-                            <el-tooltip content="发送"><el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle :disabled="loading" /><el-button v-else :icon="Close" @click="onCancel" circle></el-button></el-tooltip>
-                        </template>
-                    </div>
-                </div>
-
-                <!-- Vertical Layout -->
-                <div v-else class="chat-input-area-vertical">
+                <!-- Vertical Layout Only -->
+                <div class="chat-input-area-vertical">
                      <div class="input-wrapper">
                         <el-input v-if="!isRecording" ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
                             placeholder="输入、粘贴、拖拽以发送内容"
@@ -356,16 +374,6 @@ html.dark .voice-selector-wrapper {
     flex-grow: 1;
     display: flex;
 }
-
-/* Horizontal Layout */
-.chat-input-area-horizontal { display: flex; align-items: center; background-color: #F3F4F6; border-radius: 12px; padding: 6px 8px; }
-html.dark .chat-input-area-horizontal { background-color: #404045; }
-.chat-textarea-horizontal { flex-grow: 1; }
-.chat-textarea-horizontal:deep(.el-textarea__inner) { background-color: transparent; box-shadow: none !important; border: none !important; padding: 5px 0; color: var(--el-text-color-primary); font-size: 14px; line-height: 1.5; resize: none; }
-.chat-input-area-horizontal .action-buttons-left, .chat-input-area-horizontal .action-buttons-right { display: flex; align-items: center; flex-shrink: 0; gap: 4px; }
-.chat-input-area-horizontal .action-buttons-left { margin-right: 8px; }
-.chat-input-area-horizontal .action-buttons-right { margin-left: 8px; }
-.chat-input-area-horizontal .el-button { width: 32px; height: 32px; }
 
 /* Vertical Layout */
 .chat-input-area-vertical { display: flex; flex-direction: column; background-color: #F3F4F6; border-radius: 12px; padding: 10px 12px; }
