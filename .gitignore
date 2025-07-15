@@ -32,6 +32,8 @@ coverage
 
 *.tsbuildinfo
 
+__pucache__
+
 # my ignore
 result.md
 ToDoList.md
