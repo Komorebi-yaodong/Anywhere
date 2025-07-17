@@ -164,6 +164,23 @@ const onDelete = () => emit('delete-message', props.index);
 const onToggleCollapse = (event) => emit('toggle-collapse', props.index, event);
 const onShowSystemPrompt = () => emit('show-system-prompt', props.message.content);
 const onAvatarClick = (role, event) => emit('avatar-click', role, event);
+const truncateFilename = (filename, maxLength = 30) => {
+  if (typeof filename !== 'string' || filename.length <= maxLength) {
+    return filename;
+  }
+  const ellipsis = '...';
+  const lastDotIndex = filename.lastIndexOf('.');
+  if (lastDotIndex === -1 || lastDotIndex < 10) { // 如果没有扩展名或文件名太短
+    return filename.substring(0, maxLength - ellipsis.length) + ellipsis;
+  }
+  const nameWithoutExt = filename.substring(0, lastDotIndex);
+  const extension = filename.substring(lastDotIndex);
+  const charsToKeep = maxLength - extension.length - ellipsis.length;
+  if (charsToKeep < 1) {
+    return ellipsis + extension; // 如果扩展名本身就很长
+  }
+  return nameWithoutExt.substring(0, charsToKeep) + ellipsis + extension;
+};
 </script>
 
 <template>
@@ -192,8 +209,7 @@ const onAvatarClick = (role, event) => emit('avatar-click', role, event);
             <div class="file-list-container" v-if="formatMessageFile(message.content).length > 0">
               <el-tooltip v-for="(file_name, idx) in formatMessageFile(message.content)" :key="idx" :content="file_name"
                 placement="top" :disabled="file_name.length < 20">
-                <el-button class="file-button" type="info" plain size="small" :icon="Document">{{ file_name
-                  }}</el-button>
+                <el-button class="file-button" type="info" plain size="small" :icon="Document">{{truncateFilename(file_name)}}</el-button>
               </el-tooltip>
             </div>
             <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
@@ -269,13 +285,15 @@ const onAvatarClick = (role, event) => emit('avatar-click', role, event);
   margin: 0;
 
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background-color: #F4F4F4;
+    background-color: #E7E7E7;
+    border: #DCDCDC 1px solid;
   }
 }
 
 html.dark .chat-message .user-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background: #414158;
+    background: #404045;
+    border: #383838 0px solid;
   }
 }
 
@@ -286,13 +304,15 @@ html.dark .chat-message .user-bubble {
   align-self: left;
 
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background-color: #F0F2F5;
+    background-color: #E7E7E7;
+    border: #DCDCDC 1px solid;
   }
 }
 
 html.dark .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
     background: #404045;
+    border: #383838 0px solid;
   }
 }
 

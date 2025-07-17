@@ -181,14 +181,66 @@ const addCopyButtonsToCodeBlocks = async () => {
   });
 };
 
+const addDownloadButtonsToImages = async () => {
+    await nextTick();
+    document.querySelectorAll('.markdown-body img:not([data-download-processed])').forEach(img => {
+        img.setAttribute('data-download-processed', 'true');
+        
+        // Don't wrap if already in a wrapper
+        if (img.parentElement.classList.contains('image-download-wrapper')) {
+            return;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'image-download-wrapper';
+
+        const button = document.createElement('button');
+        button.className = 'image-download-button';
+        button.title = '下载图片';
+        button.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" /></svg>`;
+
+        button.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                ElMessage.info('正在准备下载...');
+                const response = await fetch(img.src);
+                const blob = await response.blob();
+                const arrayBuffer = await blob.arrayBuffer();
+
+                const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
+                
+                // --- FIX: Use Uint8Array instead of Buffer ---
+                await window.api.saveFile({
+                    title: '保存图片',
+                    defaultPath: defaultFilename,
+                    buttonLabel: '保存',
+                    fileContent: new Uint8Array(arrayBuffer),
+                });
+                ElMessage.success('图片保存成功！');
+            } catch (error) {
+                if (!error.message.includes('User cancelled')) {
+                    console.error('下载图片失败:', error);
+                    ElMessage.error(`下载失败: ${error.message}`);
+                }
+            }
+        });
+
+        img.parentNode.insertBefore(wrapper, img);
+        wrapper.appendChild(img);
+        wrapper.appendChild(button);
+    });
+};
+
+
 const handleMarkdownImageClick = (event) => {
-  if (event.target.closest('.image-error-container') || event.target.closest('.code-block-wrapper')) return;
-  const imgElement = event.target.closest('.markdown-body img');
-  if (imgElement && imgElement.src) {
-    imageViewerSrcList.value = [imgElement.src];
-    imageViewerInitialIndex.value = 0;
-    imageViewerVisible.value = true;
-  }
+    if (event.target.closest('.image-error-container') || event.target.closest('.code-block-wrapper') || event.target.closest('.image-download-button')) return;
+    const imgElement = event.target.closest('.markdown-body img');
+    if (imgElement && imgElement.src) {
+        imageViewerSrcList.value = [imgElement.src];
+        imageViewerInitialIndex.value = 0;
+        imageViewerVisible.value = true;
+    }
 };
 
 const handleWheel = (event) => {
@@ -313,9 +365,11 @@ watch(zoomLevel, (newZoom) => {
     window.api.setZoomFactor(newZoom);
   }
 });
+
 watch(chat_show, async () => {
   await addCopyButtonsToCodeBlocks();
   await attachImageErrorHandlers();
+  await addDownloadButtonsToImages(); // 新增调用
 }, { deep: true, flush: 'post' });
 
 onMounted(async () => {
@@ -446,7 +500,9 @@ onMounted(async () => {
 
   const chatMainElement = document.querySelector('.chat-main');
   if (chatMainElement) chatMainElement.addEventListener('click', handleMarkdownImageClick);
-  await addCopyButtonsToCodeBlocks(); await attachImageErrorHandlers();
+  await addCopyButtonsToCodeBlocks();
+  await attachImageErrorHandlers();
+  await addDownloadButtonsToImages(); // 新增调用
   
   // [新增] 确保初次加载后聚焦
   setTimeout(() => {
@@ -499,8 +555,8 @@ const saveSessionToCloud = async () => {
   const year = String(now.getFullYear()).slice(-2);
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const hours = String(now.getHours()).toString().padStart(2, '0');
+  const minutes = String(now.getMinutes()).toString().padStart(2, '0');
   const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}`;
   const inputValue = ref(defaultBasename);
 
@@ -1483,6 +1539,42 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   background-color: var(--el-bg-color);
   color: var(--el-text-color-placeholder);
   border-color: var(--el-border-color);
+}
+
+.image-download-wrapper {
+  position: relative;
+  display: inline-block;
+  /* 让包裹器只占图片大小 */
+  line-height: 0;
+  /* 移除img下方的空隙 */
+}
+
+.image-download-button {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  z-index: 1;
+}
+
+.image-download-wrapper:hover .image-download-button {
+  opacity: 1;
+}
+
+.image-download-button:hover {
+  background-color: rgba(0, 0, 0, 0.7);
 }
 </style>
 
