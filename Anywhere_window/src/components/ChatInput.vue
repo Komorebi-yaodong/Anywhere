@@ -1,7 +1,7 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
 import { Attachments } from 'ant-design-x-vue';
-// [修改] 引入 ElScrollbar
+// 移除 ElPopover, 因为不再使用
 import { ElFooter, ElRow, ElCol, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
 import { Link, Delete, Promotion, Close, Microphone, Check, Headset } from '@element-plus/icons-vue';
 import Recorder from 'recorder-core';
@@ -11,15 +11,16 @@ import 'recorder-core/src/engine/wav';
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
 const fileList = defineModel('fileList');
+const selectedVoice = defineModel('selectedVoice');
+const tempReasoningEffort = defineModel('tempReasoningEffort');
+
 const props = defineProps({
     loading: Boolean,
     ctrlEnterToSend: Boolean,
     voiceList: { type: Array, default: () => [] },
-    selectedVoice: { type: String, default: null },
-    // [MODIFIED] Add the layout prop to fix the warning
     layout: { type: String, default: 'horizontal' }
 });
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'update:selectedVoice']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -30,11 +31,22 @@ const dragCounter = ref(0);
 const isRecording = ref(false);
 let recorder = null;
 
-// [新增] 控制语音选择行是否可见
+// 移除 reasoningPopoverVisible, 新增 isReasoningSelectorVisible
+const isReasoningSelectorVisible = ref(false);
 const isVoiceSelectorVisible = ref(false);
 
 // --- Waveform Visualization State ---
 let wave = null;
+
+// --- Computed Properties ---
+const reasoningButtonType = computed(() => {
+    return tempReasoningEffort.value && tempReasoningEffort.value !== 'default' ? 'primary' : '';
+});
+
+const reasoningTooltipContent = computed(() => {
+    const map = { default: '默认', low: '低', medium: '中', high: '高' };
+    return `思考预算: ${map[tempReasoningEffort.value] || '默认'}`;
+});
 
 // --- Helper function to manually insert a newline ---
 const insertNewline = () => {
@@ -45,10 +57,8 @@ const insertNewline = () => {
     const end = textarea.selectionEnd;
     const value = prompt.value;
 
-    // Update the model's value
     prompt.value = value.substring(0, start) + '\n' + value.substring(end);
 
-    // Wait for the DOM to update, then set the cursor position
     nextTick(() => {
         textarea.selectionStart = textarea.selectionEnd = start + 1;
         textarea.focus();
@@ -58,7 +68,6 @@ const insertNewline = () => {
 
 // --- Event Handlers ---
 const handleKeyDown = (event) => {
-    // 录音时，保持原有逻辑，只允许复制
     if (isRecording.value) {
         if (!((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c')) {
             event.preventDefault();
@@ -66,38 +75,30 @@ const handleKeyDown = (event) => {
         return;
     }
 
-    // 只处理 Enter 键的按下事件
     if (event.key !== 'Enter') {
         return;
     }
 
     const isCtrlOrMetaPressed = event.ctrlKey || event.metaKey;
 
-    // 模式一：Enter 发送, Ctrl+Enter 换行
     if (!props.ctrlEnterToSend) {
         if (isCtrlOrMetaPressed) {
-            // 用户按了 Ctrl/Cmd + Enter，执行换行
             event.preventDefault();
             insertNewline();
         } else if (!event.shiftKey) {
-            // 用户只按了 Enter，执行发送
             event.preventDefault();
             if (!props.loading) {
                 emit('submit');
             }
         }
-        // 如果是 Shift+Enter，不作处理，让浏览器执行默认的换行行为
     } 
-    // 模式二：Ctrl+Enter 发送, Enter 换行
     else {
         if (isCtrlOrMetaPressed) {
-            // 用户按了 Ctrl/Cmd + Enter，执行发送
             event.preventDefault();
             if (!props.loading) {
                 emit('submit');
             }
         }
-        // 如果只按了 Enter，不作处理，让浏览器执行默认的换行行为
     }
 };
 const onSubmit = () => { if (props.loading) return; emit('submit'); };
@@ -105,15 +106,31 @@ const onCancel = () => emit('cancel');
 const onClearHistory = () => emit('clear-history');
 const onRemoveFile = (index) => emit('remove-file', index);
 
-// [修改] 切换语音选择行的可见性
+// 新增：切换思考预算选择器的可见性，并确保与语音选择器互斥
+const toggleReasoningSelector = () => {
+    if (isRecording.value) return;
+    isReasoningSelectorVisible.value = !isReasoningSelectorVisible.value;
+    if (isReasoningSelectorVisible.value) {
+        isVoiceSelectorVisible.value = false;
+    }
+};
+
+const handleReasoningSelection = (effort) => {
+    tempReasoningEffort.value = effort;
+    isReasoningSelectorVisible.value = false;
+};
+
+// 修改：确保与思考预算选择器互斥
 const toggleVoiceSelector = () => {
     if (isRecording.value) return;
     isVoiceSelectorVisible.value = !isVoiceSelectorVisible.value;
+    if (isVoiceSelectorVisible.value) {
+        isReasoningSelectorVisible.value = false;
+    }
 };
 
-// [修改] 处理语音选择并关闭选择行
 const handleVoiceSelection = (value) => {
-    emit('update:selectedVoice', value);
+    selectedVoice.value = value;
     isVoiceSelectorVisible.value = false;
 };
 
@@ -129,7 +146,8 @@ const handlePasteEvent = (event) => { const clipboardData = event.clipboardData 
 // --- Audio Recording and Visualization Logic ---
 const startRecording = () => {
     if (isRecording.value) return;
-    isVoiceSelectorVisible.value = false; // 开始录音时关闭选择器
+    isVoiceSelectorVisible.value = false;
+    isReasoningSelectorVisible.value = false; // 开始录音时关闭选择器
     Recorder.TrafficFree = true;
     recorder = Recorder({
         type: 'wav', sampleRate: 16000, bitRate: 16,
@@ -234,13 +252,27 @@ defineExpose({ focus });
              <el-col :span="1" />
         </el-row>
 
-        <!-- [MODIFIED] Voice selector structure simplified -->
-        <el-row v-if="isVoiceSelectorVisible" class="voice-selector-row">
+        <!-- 新增：思考预算选择器行 -->
+        <el-row v-if="isReasoningSelectorVisible" class="option-selector-row">
             <el-col :span="1" />
             <el-col :span="22">
-                <!-- Apply the wrapper class directly to el-scrollbar -->
-                <el-scrollbar class="voice-selector-wrapper">
-                    <div class="voice-selector-content">
+                <div class="option-selector-wrapper">
+                    <div class="option-selector-content">
+                        <el-button @click="handleReasoningSelection('default')" :type="tempReasoningEffort === 'default' ? 'primary' : 'default'" round>默认</el-button>
+                        <el-button @click="handleReasoningSelection('low')" :type="tempReasoningEffort === 'low' ? 'primary' : 'default'" round>快速</el-button>
+                        <el-button @click="handleReasoningSelection('medium')" :type="tempReasoningEffort === 'medium' ? 'primary' : 'default'" round>均衡</el-button>
+                        <el-button @click="handleReasoningSelection('high')" :type="tempReasoningEffort === 'high' ? 'primary' : 'default'" round>深入</el-button>
+                    </div>
+                </div>
+            </el-col>
+            <el-col :span="1" />
+        </el-row>
+
+        <el-row v-if="isVoiceSelectorVisible" class="option-selector-row">
+            <el-col :span="1" />
+            <el-col :span="22">
+                <el-scrollbar class="option-selector-wrapper">
+                    <div class="option-selector-content">
                         <el-button 
                             @click="handleVoiceSelection(null)" 
                             :type="!selectedVoice ? 'primary' : 'default'" 
@@ -266,7 +298,6 @@ defineExpose({ focus });
         <el-row>
             <el-col :span="1" />
             <el-col :span="22">
-                <!-- Vertical Layout Only -->
                 <div class="chat-input-area-vertical">
                      <div class="input-wrapper">
                         <el-input v-if="!isRecording" ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
@@ -280,6 +311,14 @@ defineExpose({ focus });
                            <el-tooltip content="清除聊天记录"><el-button :icon="Delete" size="default" @click="onClearHistory" circle :disabled="isRecording"/></el-tooltip>
                            <el-tooltip content="添加附件"><el-button :icon="Link" size="default" @click="triggerFileUpload" circle :disabled="isRecording"/></el-tooltip>
                            
+                           <el-tooltip :content="reasoningTooltipContent">
+                             <el-button :type="reasoningButtonType" size="default" circle :disabled="isRecording" @click="toggleReasoningSelector">
+                               <el-icon :size="18">
+                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M1 11h3v2H1zm18.1-7.5L17 5.6L18.4 7l2.1-2.1zM11 1h2v3h-2zM4.9 3.5L3.5 4.9L5.6 7L7 5.6zM10 22c0 .6.4 1 1 1h2c.6 0 1-.4 1-1v-1h-4zm2-16c-3.3 0-6 2.7-6 6c0 2.2 1.2 4.2 3 5.2V19c0 .6.4 1 1 1h4c.6 0 1-.4 1-1v-1.8c1.8-1 3-3 3-5.2c0-3.3-2.7-6-6-6m1 9.9V17h-2v-1.1c-1.7-.4-3-2-3-3.9c0-2.2 1.8-4 4-4s4 1.8 4 4c0 1.9-1.3 3.4-3 3.9m7-4.9h3v2h-3z"></path></svg>
+                               </el-icon>
+                             </el-button>
+                           </el-tooltip>
+
                            <el-tooltip content="语音回复设置">
                                <el-button 
                                     :icon="Headset" 
@@ -341,29 +380,29 @@ html.dark .drag-overlay { background-color: rgba(20, 20, 20, 0.4); }
 }
 html.dark .waveform-display-area { background-color: #404045; }
 
-/* [MODIFIED] Voice Selector Styles */
-.voice-selector-row {
+/* 修改：通用化选项选择器样式 */
+.option-selector-row {
     margin-bottom: 8px;
 }
-.voice-selector-wrapper {
+.option-selector-wrapper {
     background-color: #F3F4F6;
     border-radius: 12px;
     padding: 8px;
-    max-height: 132px; /* Constrain to approx 3 rows */
+    max-height: 132px;
 }
-html.dark .voice-selector-wrapper {
+html.dark .option-selector-wrapper {
     background-color: #404045;
 }
-.voice-selector-content {
+.option-selector-content {
     display: flex;
     flex-wrap: wrap; 
     gap: 8px;
 }
-.voice-selector-content .el-button {
+.option-selector-content .el-button {
     flex-shrink: 0;
 }
-.voice-selector-wrapper :deep(.el-scrollbar__view) {
-    padding-right: 8px; /* Add some padding to avoid content touching scrollbar */
+.option-selector-wrapper :deep(.el-scrollbar__view) {
+    padding-right: 8px;
 }
 
 
@@ -397,7 +436,6 @@ html.dark .chat-input-area-vertical .el-button:hover { background-color: rgba(25
 :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) { background: var(--el-text-color-secondary, #909399); background-clip: content-box; }
 html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb) { background: #6b6b6b; background-clip: content-box; }
 html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) { background: #999; background-clip: content-box; }
-
 
 /* --- FINAL UI FIX for Buttons --- */
 .el-button.is-circle {

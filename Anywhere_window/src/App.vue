@@ -104,6 +104,7 @@ const zoomLevel = ref(1);
 const collapsedMessages = ref(new Set());
 const defaultConversationName = ref("");
 const selectedVoice = ref(null);
+const tempReasoningEffort = ref('default');
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 
@@ -262,7 +263,7 @@ const handleChangeModel = (chosenModel) => {
   base_url.value = provider.url;
   api_key.value = provider.api_key;
   changeModel_page.value = false;
-  chatInputRef.value?.focus(); // [修改]
+  chatInputRef.value?.focus();
   ElMessage.success(`模型已切换为: ${modelMap.value[chosenModel]}`);
 };
 const handleTogglePin = () => {
@@ -341,7 +342,7 @@ const handleUpload = async ({ fileList: newFiles }) => {
   for (const file of newFiles) {
     await file2fileList(file, fileList.value.length + 1);
   }
-  chatInputRef.value?.focus(); // [修改]
+  chatInputRef.value?.focus();
 };
 
 const handleSendAudio = async (audioFile) => {
@@ -369,7 +370,7 @@ watch(zoomLevel, (newZoom) => {
 watch(chat_show, async () => {
   await addCopyButtonsToCodeBlocks();
   await attachImageErrorHandlers();
-  await addDownloadButtonsToImages(); // 新增调用
+  await addDownloadButtonsToImages();
 }, { deep: true, flush: 'post' });
 
 onMounted(async () => {
@@ -404,6 +405,8 @@ onMounted(async () => {
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
+      // 新增：初始化思考预算
+      tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
       selectedVoice.value = currentPromptConfig?.voice || null;
       modelList.value = []; modelMap.value = {};
@@ -430,16 +433,16 @@ onMounted(async () => {
         let sessionLoaded = false;
         try {
           let old_session = JSON.parse(basic_msg.value.payload);
-          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); chatInputRef.value?.focus(); } // [修改]
+          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); chatInputRef.value?.focus(); }
         } catch (error) { }
         if (!sessionLoaded) {
-          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(true); chatInputRef.value?.focus(); } // [修改]
+          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(true); chatInputRef.value?.focus(); }
           else {
             if (currentPromptConfig?.isDirectSend_normal) {
               history.value.push({ role: "user", content: basic_msg.value.payload });
               chat_show.value.push({ role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
               scrollToBottom(true); await askAI(true);
-            } else { prompt.value = basic_msg.value.payload; scrollToBottom(true); chatInputRef.value?.focus(); } // [修改]
+            } else { prompt.value = basic_msg.value.payload; scrollToBottom(true); chatInputRef.value?.focus(); }
           }
         }
       } else if (basic_msg.value.type === "img" && basic_msg.value.payload) {
@@ -449,20 +452,20 @@ onMounted(async () => {
           scrollToBottom(true); await askAI(true);
         } else {
           fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(basic_msg.value.payload) });
-          scrollToBottom(true); chatInputRef.value?.focus(); // [修改]
+          scrollToBottom(true); chatInputRef.value?.focus();
         }
       } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
         try {
           let sessionLoaded = false;
           if (basic_msg.value.payload.length === 1 && basic_msg.value.payload[0].path.toLowerCase().endsWith('.json')) {
             const fileObject = await window.api.handleFilePath(basic_msg.value.payload[0].path);
-            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); chatInputRef.value?.focus(); } // [修改]
+            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); chatInputRef.value?.focus(); }
           }
           if (!sessionLoaded) {
             const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
             await Promise.all(fileProcessingPromises);
             if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(true); await askAI(false); }
-            else { chatInputRef.value?.focus(); scrollToBottom(true); } // [修改]
+            else { chatInputRef.value?.focus(); scrollToBottom(true); }
           }
         } catch (error) { console.error("Error during initial file processing:", error); ElMessage.error("文件处理失败: " + error.message); }
       }
@@ -472,6 +475,8 @@ onMounted(async () => {
     basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
     document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
+    // 新增：初始化思考预算
+    tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
     model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
     selectedVoice.value = currentPromptConfig?.voice || null;
     modelList.value = []; modelMap.value = {};
@@ -502,9 +507,8 @@ onMounted(async () => {
   if (chatMainElement) chatMainElement.addEventListener('click', handleMarkdownImageClick);
   await addCopyButtonsToCodeBlocks();
   await attachImageErrorHandlers();
-  await addDownloadButtonsToImages(); // 新增调用
+  await addDownloadButtonsToImages();
   
-  // [新增] 确保初次加载后聚焦
   setTimeout(() => {
     chatInputRef.value?.focus();
   }, 100);
@@ -607,7 +611,7 @@ const saveSessionToCloud = async () => {
 const saveSessionAsMarkdown = async () => {
   let markdownContent = '';
   const now = new Date();
-  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
   const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
 
@@ -752,6 +756,9 @@ const loadSession = async (jsonData) => {
     history.value = jsonData.history;
     chat_show.value = jsonData.chat_show;
     selectedVoice.value = jsonData.selectedVoice || null;
+    // 新增：加载会话时恢复思考预算
+    tempReasoningEffort.value = jsonData.currentPromptConfig?.reasoning_effort || 'default';
+
 
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
@@ -824,7 +831,7 @@ const checkAndLoadSessionFromFile = async (file) => {
 
 const file2fileList = async (file, idx) => {
   const isSessionFile = await checkAndLoadSessionFromFile(file);
-  if (isSessionFile) { chatInputRef.value?.focus(); return; } // [修改]
+  if (isSessionFile) { chatInputRef.value?.focus(); return; }
   return new Promise((resolve, reject) => {
     const handler = getFileHandler(file.name);
     if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; ElMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }
@@ -850,7 +857,7 @@ const sendFile = async () => {
     const handler = getFileHandler(currentFile.name);
     if (handler) {
       try { const processedContent = await handler(currentFile); if (processedContent) contentList.push(processedContent); }
-      catch (error) { ElMessage.error(`处理文件 ${currentFile.name} 失败: ${error.message}`); }
+      catch (error) { ElMessage.error(`处理文件 ${currentFile.name} 失败:${error.message}`); }
     } else ElMessage.warning(`文件类型不支持: ${currentFile.name}`);
   }
   fileList.value = []; return contentList;
@@ -907,12 +914,12 @@ const askAI = async (forceSend = false) => {
 
   try {
     const messagesForAPI = JSON.parse(JSON.stringify(history.value.slice(0, aiMessageHistoryIndex)));
-    chatInputRef.value?.focus(); // [修改]
+    chatInputRef.value?.focus();
 
-    aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, CODE.value, signalController.value.signal, selectedVoice.value);
+    aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, CODE.value, signalController.value.signal, selectedVoice.value, tempReasoningEffort.value);
 
     if (!aiResponse?.ok && aiResponse?.status !== 200) {
-      let errorMsg = `API 请求失败: ${aiResponse?.status} ${aiResponse?.statusText}`;
+      let errorMsg = `API 请求失败: ${aiResponse?.status}${aiResponse?.statusText}`;
       try { const errorBody = await aiResponse?.text(); errorMsg += `\n${errorBody || '(No Response Body)'}`; } catch { }
       throw new Error(errorMsg);
     }
@@ -1014,11 +1021,11 @@ const askAI = async (forceSend = false) => {
     }
 
     is_think_flag = false; scrollToBottom();
-    chatInputRef.value?.focus(); // [新增]
+    chatInputRef.value?.focus();
   }
 };
 
-const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } }; // [修改]
+const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } };
 const copyText = async (content, index) => { if (loading.value && index === history.value.length - 1) return; await window.api.copyText(content); };
 const reaskAI = async () => {
   if (loading.value || history.value.length === 0) return;
@@ -1040,7 +1047,7 @@ const clearHistory = () => {
   else { history.value = []; chat_show.value = []; }
   collapsedMessages.value.clear();
   defaultConversationName.value = "";
-  chatInputRef.value?.focus(); ElMessage.success('历史记录已清除'); // [修改]
+  chatInputRef.value?.focus(); ElMessage.success('历史记录已清除');
 };
 const formatTimestamp = (dateString) => {
   if (!dateString) return '';
@@ -1048,7 +1055,7 @@ const formatTimestamp = (dateString) => {
     const date = new Date(dateString);
     const datePart = date.toLocaleDateString('sv-SE'); 
     const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }); 
-    return `${datePart} ${timePart}`;
+    return `${datePart}${timePart}`;
   } catch (e) {
     return '';
   }
@@ -1070,9 +1077,10 @@ const formatTimestamp = (dateString) => {
           @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
       </el-main>
 
-      <!-- [修改] 添加 ref="chatInputRef" -->
+      <!-- [修改] 添加 v-model:tempReasoningEffort -->
       <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
-        v-model:selectedVoice="selectedVoice" :loading="loading" :ctrlEnterToSend="currentConfig.CtrlEnterToSend"
+        v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort"
+        :loading="loading" :ctrlEnterToSend="currentConfig.CtrlEnterToSend"
         :layout="inputLayout" :voiceList="currentConfig.voiceList" @submit="handleSubmit" @cancel="handleCancel"
         @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
         @send-audio="handleSendAudio" />

@@ -487,7 +487,7 @@ function getRandomItem(list) {
 }
 
 // 函数：请求chat
-async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoice = null) {
+async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoice = null, overrideReasoningEffort = null) {
 
   let apiUrl = "";
   let apiKey = "";
@@ -505,7 +505,7 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
 
   if (config.prompts[CODE] && config.prompts[CODE].ifTextNecessary) {
     const now = new Date();
-    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     let content = history[history.length - 1].content;
     // 如果是字符串
@@ -557,10 +557,16 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
   if (config.prompts[CODE] && config.prompts[CODE].isTemperature) {
     payload.temperature = config.prompts[CODE].temperature;
   }
-
-  // 添加 reasoning_effort 参数
-  if (config.prompts[CODE] && config.prompts[CODE].reasoning_effort && config.prompts[CODE].reasoning_effort !== 'default') {
-    payload.reasoning_effort = config.prompts[CODE].reasoning_effort;
+  
+  // 思考预算逻辑：优先使用覆盖值，否则使用配置值
+  const reasoningEffort = overrideReasoningEffort && overrideReasoningEffort !== 'default'
+    ? overrideReasoningEffort
+    : (config.prompts[CODE]?.reasoning_effort && config.prompts[CODE].reasoning_effort !== 'default'
+        ? config.prompts[CODE].reasoning_effort
+        : null);
+  
+  if (reasoningEffort) {
+    payload.reasoning_effort = reasoningEffort;
   }
   
   const response = await fetch(apiUrl + '/chat/completions', {
