@@ -505,7 +505,7 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
 
   if (config.prompts[CODE] && config.prompts[CODE].ifTextNecessary) {
     const now = new Date();
-    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     let content = history[history.length - 1].content;
     // 如果是字符串
@@ -556,6 +556,11 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
   // 添加温度参数
   if (config.prompts[CODE] && config.prompts[CODE].isTemperature) {
     payload.temperature = config.prompts[CODE].temperature;
+  }
+
+  // 添加 reasoning_effort 参数
+  if (config.prompts[CODE] && config.prompts[CODE].reasoning_effort && config.prompts[CODE].reasoning_effort !== 'default') {
+    payload.reasoning_effort = config.prompts[CODE].reasoning_effort;
   }
   
   const response = await fetch(apiUrl + '/chat/completions', {

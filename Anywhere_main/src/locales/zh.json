@@ -114,6 +114,13 @@
     "voiceTooltip": "选择声音后默认开启语音输出，模型须支持语音输出，选择“关闭”则不使用",
     "voiceOptions": {
       "off": "关闭"
+    },
+    "reasoningEffortLabel": "思考预算",
+    "reasoningEffort": {
+      "default": "默认",
+      "low": "低",
+      "medium": "中",
+      "high": "高"
     }
   },
   "providers": {

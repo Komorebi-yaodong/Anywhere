@@ -114,6 +114,13 @@
     "voiceTooltip": "Select a voice to enable speech output by default. The model must support speech output. Select 'Disable' to not use it.",
     "voiceOptions": {
       "off": "Disable"
+    },
+    "reasoningEffortLabel": "Reasoning Effort",
+    "reasoningEffort": {
+      "default": "Default",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
     }
   },
   "providers": {

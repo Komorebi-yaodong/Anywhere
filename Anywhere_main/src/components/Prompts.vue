@@ -27,6 +27,7 @@ const editingPrompt = reactive({
   isDirectSend_normal: true,
   ifTextNecessary: false,
   voice: null,
+  reasoning_effort: "default", 
 });
 const isNewPrompt = ref(false);
 
@@ -202,6 +203,7 @@ function prepareAddPrompt() {
     isDirectSend_normal: true,
     ifTextNecessary: false,
     voice: null,
+    reasoning_effort: "default", 
   });
   showPromptEditDialog.value = true;
 }
@@ -227,6 +229,7 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
     isDirectSend_normal: p.isDirectSend_normal ?? true,
     ifTextNecessary: p.ifTextNecessary ?? false,
     voice: p.voice ?? null,
+    reasoning_effort: p.reasoning_effort ?? "default", 
   });
   showPromptEditDialog.value = true;
 }
@@ -256,6 +259,7 @@ function savePrompt() {
     isDirectSend_normal: editingPrompt.isDirectSend_normal,
     ifTextNecessary: editingPrompt.ifTextNecessary,
     voice: editingPrompt.voice,
+    reasoning_effort: editingPrompt.reasoning_effort, 
   };
 
   if (isNewPrompt.value) {
@@ -563,6 +567,18 @@ const removeEditingIcon = () => {
                 <div class="spacer"></div>
                 <el-switch v-model="editingPrompt.isTemperature" />
             </div>
+            <!-- 思考预算选择器已移动到此处 -->
+            <div class="param-item reasoning-effort-param">
+                <span class="param-label">{{ t('prompts.reasoningEffortLabel') }}</span>
+                <el-tooltip :content="t('prompts.tooltips.reasoningEffort')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
+                <div class="spacer"></div>
+                <el-select v-model="editingPrompt.reasoning_effort" size="small" style="width: 120px;">
+                    <el-option :label="t('prompts.reasoningEffort.default')" value="default" />
+                    <el-option :label="t('prompts.reasoningEffort.low')" value="low" />
+                    <el-option :label="t('prompts.reasoningEffort.medium')" value="medium" />
+                    <el-option :label="t('prompts.reasoningEffort.high')" value="high" />
+                </el-select>
+            </div>
           </div>
         </el-form-item>
         <el-form-item v-if="editingPrompt.isTemperature" :label="t('prompts.temperatureLabel')">
@@ -588,7 +604,6 @@ const removeEditingIcon = () => {
                   <div class="spacer"></div>
                   <el-switch v-model="editingPrompt.ifTextNecessary" />
               </div>
-              <!-- 移动到此处的 Voice Selector -->
               <div class="param-item voice-param">
                   <span class="param-label">{{ t('prompts.voiceLabel') }}</span>
                   <el-tooltip :content="t('prompts.voiceTooltip')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>

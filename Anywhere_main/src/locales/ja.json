@@ -114,6 +114,13 @@
     "voiceTooltip": "音声を選択すると、デフォルトで音声出力が有効になります。モデルが音声出力をサポートしている必要があります。「無効化」を選択すると使用しません。",
     "voiceOptions": {
       "off": "無効化"
+    },
+    "reasoningEffortLabel": "思考量",
+    "reasoningEffort": {
+      "default": "デフォルト",
+      "low": "低",
+      "medium": "中",
+      "high": "高"
     }
   },
   "providers": {
