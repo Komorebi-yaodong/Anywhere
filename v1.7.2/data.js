@@ -32,6 +32,7 @@ const defaultConfig = {
         isDirectSend_normal: true,
         ifTextNecessary: false,
         voice: null,
+        reasoning_effort: "default",
       },
     },
     language:"zh",
@@ -72,8 +73,8 @@ function getConfig() {
 // 检查并更新配置文件
 function checkConfig(config) {
   let flag = false;
-  if (config.version !== "1.6.14") {
-    config.version = "1.6.14";
+  if (config.version !== "1.7.2") {
+    config.version = "1.7.2";
     flag = true;
   }
   else {
@@ -194,6 +195,10 @@ function checkConfig(config) {
     }
     if (config.prompts[key].ifTextNecessary === undefined) {
       config.prompts[key].ifTextNecessary = false;
+      flag = true;
+    }
+    if (config.prompts[key].reasoning_effort === undefined) {
+      config.prompts[key].reasoning_effort = "default";
       flag = true;
     }
   }
