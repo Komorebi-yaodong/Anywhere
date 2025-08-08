@@ -25,10 +25,12 @@ const editingPrompt = reactive({
   isDirectSend_file: false,
   isDirectSend_normal: true,
   ifTextNecessary: false,
-  voice: '', // FIX: Default to empty string instead of null
+  voice: '',
   reasoning_effort: "default", 
   window_width: 540,
   window_height: 700,
+  isAlwaysOnTop: true,      // 新增
+  autoCloseOnBlur: true,   // 新增
 });
 const isNewPrompt = ref(false);
 
@@ -62,7 +64,7 @@ const availableModels = computed(() => {
 const availableVoices = computed(() => {
   const voices = currentConfig.value?.voiceList || [];
   return [
-    { label: t('prompts.voiceOptions.off'), value: '' }, // FIX: Use empty string for "off" state
+    { label: t('prompts.voiceOptions.off'), value: '' },
     ...voices.map(v => ({ label: v, value: v }))
   ];
 });
@@ -203,12 +205,14 @@ function prepareAddPrompt() {
     isDirectSend_file: false,
     isDirectSend_normal: true,
     ifTextNecessary: false,
-    voice: '', // FIX: Change null to empty string
+    voice: '',
     reasoning_effort: "default", 
     window_width: 540,
     window_height: 700,
     position_x: 0, 
     position_y: 0,
+    isAlwaysOnTop: true,      // 新增
+    autoCloseOnBlur: true,   // 新增
   });
   showPromptEditDialog.value = true;
 }
@@ -233,10 +237,12 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
     isDirectSend_file: p.isDirectSend_file ?? false,
     isDirectSend_normal: p.isDirectSend_normal ?? true,
     ifTextNecessary: p.ifTextNecessary ?? false,
-    voice: p.voice ?? '', // FIX: Use empty string as fallback
+    voice: p.voice ?? '',
     reasoning_effort: p.reasoning_effort ?? "default", 
     window_width: p.window_width ?? 540,
     window_height: p.window_height ?? 700,
+    isAlwaysOnTop: p.isAlwaysOnTop ?? true,        // 新增
+    autoCloseOnBlur: p.autoCloseOnBlur ?? true,  // 新增
   });
   showPromptEditDialog.value = true;
 }
@@ -269,6 +275,8 @@ function savePrompt() {
     reasoning_effort: editingPrompt.reasoning_effort, 
     window_width: editingPrompt.window_width,
     window_height: editingPrompt.window_height,
+    isAlwaysOnTop: editingPrompt.isAlwaysOnTop,        // 新增
+    autoCloseOnBlur: editingPrompt.autoCloseOnBlur,  // 新增
   };
 
   if (isNewPrompt.value) {
@@ -647,6 +655,20 @@ const downloadEditingIcon = () => {
                       <el-option v-for="item in availableVoices" :key="item.value" :label="item.label" :value="item.value" />
                   </el-select>
               </div>
+               <!-- 新增的窗口行为设置 -->
+              <div v-if="editingPrompt.showMode === 'window'" class="param-item">
+                <span class="param-label">{{ t('prompts.isAlwaysOnTopLabel') }}</span>
+                <el-tooltip :content="t('prompts.tooltips.isAlwaysOnTopTooltip')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
+                <div class="spacer"></div>
+                <el-switch v-model="editingPrompt.isAlwaysOnTop" />
+              </div>
+              <div v-if="editingPrompt.showMode === 'window'" class="param-item">
+                <span class="param-label">{{ t('prompts.autoCloseOnBlurLabel') }}</span>
+                <el-tooltip :content="t('prompts.tooltips.autoCloseOnBlurTooltip')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
+                <div class="spacer"></div>
+                <el-switch v-model="editingPrompt.autoCloseOnBlur" />
+              </div>
+              <!-- 结束新增 -->
               <el-row :gutter="20" v-if="editingPrompt.showMode === 'window'" class="dimensions-group-row">
                 <el-col :span="12">
                   <el-form-item :label="t('setting.dimensions.widthLabel')">

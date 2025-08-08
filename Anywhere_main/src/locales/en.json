@@ -91,6 +91,8 @@
     "tagNameLabel": "Tag Name",
     "selectPromptsToAddLabel": "Select Prompts to Add",
     "selectPromptsPlaceholder": "Choose prompts",
+    "isAlwaysOnTopLabel": "Always on Top",
+    "autoCloseOnBlurLabel": "Auto-close on Blur",
     "alerts": {
       "tagNameEmpty": "Tag name cannot be empty.",
       "tagExists": "Tag \"{tagName}\" already exists.",
@@ -108,7 +110,9 @@
       "sendDirect": "When enabled, selected text or screenshot will be sent directly to the AI.",
       "sendFile": "When enabled, selected files will be sent directly to the AI for processing.",
       "ifTextNecessary": "When enabled, a timestamp will be automatically added before the text to ensure every request contains text, satisfying requirements of some providers (e.g., Vertex).",
-      "reasoningEffort": "Sets the computational budget for the model's reasoning process. Higher values may yield more thorough answers but increase latency and cost."
+      "reasoningEffort": "Sets the computational budget for the model's reasoning process. Higher values may yield more thorough answers but increase latency and cost.",
+      "isAlwaysOnTopTooltip": "Enable to keep the window always on top of other windows.",
+      "autoCloseOnBlurTooltip": "Enable to close the standalone window when it loses focus."
     },
     "voiceLabel": "Default Voice",
     "voicePlaceholder": "Select a voice or disable",
@@ -191,21 +195,9 @@
       "editSuccess": "Voice modified successfully"
     },
     "title": "General Settings",
-    "stream": {
-      "label": "Stream Response",
-      "description": "Enable to use streaming responses from the provider."
-    },
     "skipLineBreak": {
       "label": "Skip Line Breaks on Send",
       "description": "Enable to skip line breaks when selecting text."
-    },
-    "autoClose": {
-      "label": "Auto-close on Blur",
-      "description": "Enable to close the standalone window when it loses focus."
-    },
-    "isAlwaysOnTop": {
-      "label": "Always on Top",
-      "description": "Enable to keep the window always on top of other windows."
     },
     "ctrlEnter": {
       "label": "Ctrl+Enter to Send",
@@ -235,7 +227,6 @@
       "importButton": "Import"
     },
     "dimensions": {
-      "title": "Window Dimensions",
       "widthLabel": "Window Width (px)",
       "heightLabel": "Window Height (px)"
     },

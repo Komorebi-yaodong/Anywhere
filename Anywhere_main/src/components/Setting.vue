@@ -441,20 +441,6 @@ const handleSelectionChange = (val) => {
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
-              <span class="setting-option-label">{{ t('setting.autoClose.label') }}</span>
-              <span class="setting-option-description">{{ t('setting.autoClose.description') }}</span>
-            </div>
-            <el-switch v-model="currentConfig.autoCloseOnBlur" @change="saveConfig" />
-          </div>
-          <div class="setting-option-item">
-            <div class="setting-text-content">
-              <span class="setting-option-label">{{ t('setting.isAlwaysOnTop.label') }}</span>
-              <span class="setting-option-description">{{ t('setting.isAlwaysOnTop.description') }}</span>
-            </div>
-            <el-switch v-model="currentConfig.isAlwaysOnTop" @change="saveConfig" />
-          </div>
-          <div class="setting-option-item">
-            <div class="setting-text-content">
               <span class="setting-option-label">{{ t('setting.skipLineBreak.label') }}</span>
               <span class="setting-option-description">{{ t('setting.skipLineBreak.description') }}</span>
             </div>

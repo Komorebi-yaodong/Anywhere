@@ -91,6 +91,8 @@
     "tagNameLabel": "标签名",
     "selectPromptsToAddLabel": "选择要添加的快捷助手",
     "selectPromptsPlaceholder": "选择快捷助手",
+    "isAlwaysOnTopLabel": "窗口置顶",
+    "autoCloseOnBlurLabel": "失焦关闭",
     "alerts": {
       "tagNameEmpty": "标签名不能为空",
       "tagExists": "标签 \"{tagName}\" 已存在",
@@ -108,7 +110,9 @@
       "sendDirect": "开启后，选中文字或截图后将直接发送给AI",
       "sendFile": "开启后，选中文件后将直接发送给AI并处理结果",
       "ifTextNecessary": "开启后，将自动在文本前添加当前时间戳，以确保每次请求都包含文本，满足部分服务商要求（vertex）",
-      "reasoningEffort": "设置模型思考过程的计算预算。更高的值可能会产生更详尽的回答，但会增加延迟和成本。"
+      "reasoningEffort": "设置模型思考过程的计算预算。更高的值可能会产生更详尽的回答，但会增加延迟和成本。",
+      "isAlwaysOnTopTooltip": "启用以使窗口始终保持在最上层。",
+      "autoCloseOnBlurTooltip": "启用以在独立窗口失去焦点时将其关闭。"
     },
     "voiceLabel": "默认声音",
     "voicePlaceholder": "选择一个声音或关闭",
@@ -191,21 +195,9 @@
       "editSuccess": "声音修改成功"
     },
     "title": "通用设置",
-    "stream": {
-      "label": "流式响应",
-      "description": "启用以使用来自提供商的流式响应"
-    },
     "skipLineBreak": {
       "label": "发送时跳过换行符",
       "description": "启用以在划词时跳过换行符"
-    },
-    "autoClose": {
-      "label": "失焦时自动关闭窗口",
-      "description": "启用以在独立窗口失去焦点时将其关闭"
-    },
-    "isAlwaysOnTop": {
-      "label": "始终在最上层",
-      "description": "启用以使窗口始终保持在最上层"
     },
     "ctrlEnter": {
       "label": "Ctrl+Enter 发送",
@@ -235,7 +227,6 @@
       "importButton": "导入"
     },
     "dimensions": {
-      "title": "窗口尺寸",
       "widthLabel": "窗口宽度 (px)",
       "heightLabel": "窗口高度 (px)"
     },

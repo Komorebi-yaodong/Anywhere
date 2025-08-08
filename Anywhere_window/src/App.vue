@@ -541,7 +541,6 @@ onMounted(async () => {
   if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); favicon.value = "favicon-b.png"; }
   try { const userInfo = await window.api.getUser(); UserAvart.value = userInfo.avatar; }
   catch (err) { UserAvart.value = "user.png"; }
-  autoCloseOnBlur.value = currentConfig.value.autoCloseOnBlur;
 
   try {
     window.preload.receiveMsg(async (data) => {
@@ -553,6 +552,7 @@ onMounted(async () => {
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
+      autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
       tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
       selectedVoice.value = currentPromptConfig?.voice || null;
@@ -602,9 +602,6 @@ onMounted(async () => {
           scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' });
         }
       } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
-        // --- MODIFICATION START ---
-        // Session loading from local files is now handled by preload.js.
-        // This block now only needs to process files for regular quick assistants.
         try {
             const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
             await Promise.all(fileProcessingPromises);
@@ -619,7 +616,6 @@ onMounted(async () => {
             console.error("Error during initial file processing:", error);
             ElMessage.error("文件处理失败: " + error.message);
         }
-        // --- MODIFICATION END ---
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
     });
@@ -627,6 +623,7 @@ onMounted(async () => {
     basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
     document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
+    autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
     tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
     model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
     selectedVoice.value = currentPromptConfig?.voice || null;
@@ -995,11 +992,6 @@ const loadSession = async (jsonData) => {
 };
 
 const file2fileList = async (file, idx) => {
-  // --- MODIFICATION START ---
-  // The check for session files is no longer needed here as it's handled upstream in preload.js.
-  // const isSessionFile = await checkAndLoadSessionFromFile(file);
-  // if (isSessionFile) { chatInputRef.value?.focus({ cursor: 'end' }); return; }
-  // --- MODIFICATION END ---
   return new Promise((resolve, reject) => {
     const handler = getFileHandler(file.name);
     if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; ElMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }
@@ -1220,8 +1212,8 @@ const clearHistory = () => {
   if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
   else { history.value = []; chat_show.value = []; }
   collapsedMessages.value.clear();
-  messageRefs.clear(); // [修改] 清空 refs
-  focusedMessageIndex.value = null; // [修改] 重置聚焦索引
+  messageRefs.clear(); 
+  focusedMessageIndex.value = null; 
   defaultConversationName.value = "";
   chatInputRef.value?.focus({ cursor: 'end' }); ElMessage.success('历史记录已清除');
 };

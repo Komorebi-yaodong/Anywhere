@@ -91,6 +91,8 @@
     "tagNameLabel": "タグ名",
     "selectPromptsToAddLabel": "追加するクイックアシスタントを選択",
     "selectPromptsPlaceholder": "クイックアシスタントを選択",
+    "isAlwaysOnTopLabel": "常に最前面に表示",
+    "autoCloseOnBlurLabel": "フォーカスが外れたら閉じる",
     "alerts": {
       "tagNameEmpty": "タグ名は空にできません。",
       "tagExists": "タグ「{tagName}」は既に存在します。",
@@ -108,7 +110,9 @@
       "sendDirect": "有効にすると、選択したテキストやスクリーンショットが直接AIに送信されます。",
       "sendFile": "有効にすると、選択したファイルが直接AIに送信されて処理されます。",
       "ifTextNecessary": "有効にすると、一部のプロバイダー（例: Vertex）の要件を満たすため、リクエストにテキストが含まれるように、テキストの前にタイムスタンプを自動的に追加します。",
-      "reasoningEffort": "モデルの思考プロセスの計算予算を設定します。高い値はより詳細な回答をもたらす可能性がありますが、遅延とコストが増加します。"
+      "reasoningEffort": "モデルの思考プロセスの計算予算を設定します。高い値はより詳細な回答をもたらす可能性がありますが、遅延とコストが増加します。",
+      "isAlwaysOnTopTooltip": "ウィンドウを常に他のウィンドウより手前に表示します。",
+      "autoCloseOnBlurTooltip": "独立したウィンドウがフォーカスを失ったときに自動的に閉じるようにします。"
     },
     "voiceLabel": "デフォルト音声",
     "voicePlaceholder": "音声を選択または無効化",
@@ -191,21 +195,9 @@
       "editSuccess": "音声が正常に修正されました"
     },
     "title": "一般設定",
-    "stream": {
-      "label": "ストリーミング応答",
-      "description": "プロバイダーからのストリーミング応答を有効にします。"
-    },
     "skipLineBreak": {
       "label": "送信時に改行をスキップ",
       "description": "テキスト選択時に改行をスキップするようにします。"
-    },
-    "autoClose": {
-      "label": "フォーカスが外れたら自動で閉じる",
-      "description": "独立したウィンドウがフォーカスを失ったときに自動的に閉じるようにします。"
-    },
-    "isAlwaysOnTop": {
-      "label": "常に最前面に表示",
-      "description": "ウィンドウを常に他のウィンドウより手前に表示します。"
     },
     "ctrlEnter": {
       "label": "Ctrl+Enterで送信",
@@ -235,7 +227,6 @@
       "importButton": "インポート"
     },
     "dimensions": {
-      "title": "ウィンドウのサイズ",
       "widthLabel": "ウィンドウの幅（px）",
       "heightLabel": "ウィンドウの高さ（px）"
     },

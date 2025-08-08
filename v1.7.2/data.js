@@ -37,14 +37,14 @@ const defaultConfig = {
         window_height: 700,
         position_x: 0,
         position_y: 0,
+        autoCloseOnBlur: false,
+        isAlwaysOnTop: false,
       },
     },
     language:"zh",
     tags: {},
     skipLineBreak: false,
-    autoCloseOnBlur: false,
     CtrlEnterToSend: false,
-    isAlwaysOnTop: false,
     showNotification: true,
     isDarkMode: false,
     fix_position: false,
@@ -56,7 +56,49 @@ const defaultConfig = {
       path: "/anywhere",
       dataPath: "/anywhere_data",
     },
-    voiceList:["alloy-👧","echo-👨"],
+    voiceList:[
+    "alloy-👩",
+    "echo-👨‍🦰清晰",
+    "nova-👩清晰",
+    "sage-👧年轻",
+    "shimmer-👧明亮",
+    "fable-😐中性",
+    "coral-👩客服",
+    "ash-🧔‍♂️商业",
+    "ballad-👨故事",
+    "verse-👨诗歌",
+    "onyx-👨‍🦰新闻",
+    "Zephyr-👧明亮",
+    "Puck-👦欢快",
+    "Charon-👦信息丰富",
+    "Kore-👩坚定",
+    "Fenrir-👨‍🦰易激动",
+    "Leda-👧年轻",
+    "Orus-👨‍🦰鉴定",
+    "Aoede-👩轻松",
+    "Callirrhoe-👩随和",
+    "Autonoe-👩明亮",
+    "Enceladus-🧔‍♂️呼吸感",
+    "Iapetus-👦清晰",
+    "Umbriel-👦随和",
+    "Algieba-👦平滑",
+    "Despina-👩平滑",
+    "Erinome-👩清晰",
+    "Algenib-👨‍🦰沙哑",
+    "Rasalgethi-👨‍🦰信息丰富",
+    "Laomedeia-👩欢快",
+    "Achernar-👩轻柔",
+    "Alnilam-👦坚定",
+    "Schedar-👦平稳",
+    "Gacrux-👩成熟",
+    "Pulcherrima-👩向前",
+    "Achird-👦友好",
+    "Zubenelgenubi-👦休闲",
+    "Vindemiatrix-👩温柔",
+    "Sadachbia-👨‍🦰活泼",
+    "Sadaltager-👨‍🦰博学",
+    "Sulafat-👩温暖"
+  ],
   }
 };
 
@@ -72,8 +114,8 @@ function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  if (config.version !== "1.7.2") {
-    config.version = "1.7.2";
+  if (config.version !== "1.7.1") {
+    config.version = "1.7.1";
     flag = true;
   }
 
@@ -87,16 +129,16 @@ function checkConfig(config) {
     flag = true;
   }
 
-  if (config.autoCloseOnBlur == undefined) {
-    config.autoCloseOnBlur = false;
+  if (config.autoCloseOnBlur !== undefined) {
+    delete config.autoCloseOnBlur;
+    flag = true;
+  }
+  if (config.isAlwaysOnTop !== undefined) {
+    delete config.isAlwaysOnTop;
     flag = true;
   }
   if (config.CtrlEnterToSend == undefined) {
     config.CtrlEnterToSend = false;
-    flag = true;
-  }
-  if (config.isAlwaysOnTop == undefined) {
-    config.isAlwaysOnTop = false;
     flag = true;
   }
   if (config.showNotification == undefined) {
@@ -207,6 +249,14 @@ function checkConfig(config) {
   }
 
   for (let key in config.prompts) {
+    if (config.prompts[key].isAlwaysOnTop === undefined) {
+      config.prompts[key].isAlwaysOnTop = true;
+      flag = true;
+    }
+    if (config.prompts[key].autoCloseOnBlur === undefined) {
+      config.prompts[key].autoCloseOnBlur = true;
+      flag = true;
+    }
     if (config.prompts[key].window_width === undefined) {
       config.prompts[key].window_width = 540;
       flag = true;
@@ -652,6 +702,9 @@ async function sethotkey(prompt_name,auto_copy){
 
 async function openWindow(config, msg) {
   const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
+  const promptCode = msg.originalCode || msg.code;
+  const promptConfig = config.prompts[promptCode];
+  const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true; // 从快捷助手配置读取
   let channel = "window";
   
   const ubWindow = utools.createBrowserWindow(
@@ -663,7 +716,7 @@ async function openWindow(config, msg) {
       frame: true,
       width: width,
       height: height,
-      alwaysOnTop: config.isAlwaysOnTop,
+      alwaysOnTop: isAlwaysOnTop, // 使用快捷助手配置
       shellOpenPath: true,
       x: x,
       y: y,
@@ -675,7 +728,7 @@ async function openWindow(config, msg) {
     () => {
       ubWindow.webContents.send(channel, msg);
       ubWindow.webContents.show();
-      ubWindow.setAlwaysOnTop(config.isAlwaysOnTop, "floating");
+      ubWindow.setAlwaysOnTop(isAlwaysOnTop, "floating"); // 再次确认置顶状态
       ubWindow.setFullScreen(false);
     }
   );
