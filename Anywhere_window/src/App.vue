@@ -9,6 +9,9 @@ import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
 const chatInputRef = ref(null);
+// --- 光标位置状态 ---
+const lastSelectionStart = ref(null);
+const lastSelectionEnd = ref(null);
 // --- 滚动与导航状态 ---
 const chatContainerRef = ref(null);
 const isAtBottom = ref(true);
@@ -383,7 +386,7 @@ const handleChangeModel = (chosenModel) => {
   base_url.value = provider.url;
   api_key.value = provider.api_key;
   changeModel_page.value = false;
-  chatInputRef.value?.focus();
+  chatInputRef.value?.focus({ cursor: 'end' });
   ElMessage.success(`模型已切换为: ${modelMap.value[chosenModel]}`);
 };
 const handleTogglePin = () => {
@@ -462,7 +465,7 @@ const handleUpload = async ({ fileList: newFiles }) => {
   for (const file of newFiles) {
     await file2fileList(file, fileList.value.length + 1);
   }
-  chatInputRef.value?.focus();
+  chatInputRef.value?.focus({ cursor: 'end' });
 };
 
 const handleSendAudio = async (audioFile) => {
@@ -473,11 +476,29 @@ const handleSendAudio = async (audioFile) => {
   await askAI(false);
 }
 
+const handleWindowBlur = () => {
+    const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
+    if (textarea) {
+        lastSelectionStart.value = textarea.selectionStart;
+        lastSelectionEnd.value = textarea.selectionEnd;
+    }
+};
+
 const handleWindowFocus = () => {
     setTimeout(() => {
-        chatInputRef.value?.focus();
+        const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
+        if (!textarea) return;
+
+        if (document.activeElement !== textarea) {
+            if (lastSelectionStart.value !== null && lastSelectionEnd.value !== null) {
+                chatInputRef.value?.focus({ position: { start: lastSelectionStart.value, end: lastSelectionEnd.value } });
+            } else {
+                chatInputRef.value?.focus({ cursor: 'end' });
+            }
+        }
     }, 50);
 };
+
 
 const closePage = () => { window.close(); };
 
@@ -497,6 +518,7 @@ onMounted(async () => {
   if (isInit.value) return; isInit.value = true;
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
+  window.addEventListener('blur', handleWindowBlur);
   
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) {
@@ -557,16 +579,16 @@ onMounted(async () => {
         let sessionLoaded = false;
         try {
           let old_session = JSON.parse(basic_msg.value.payload);
-          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); chatInputRef.value?.focus(); }
+          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); chatInputRef.value?.focus({ cursor: 'end' }); }
         } catch (error) { }
         if (!sessionLoaded) {
-          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(); chatInputRef.value?.focus(); }
+          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' }); }
           else {
             if (currentPromptConfig?.isDirectSend_normal) {
               history.value.push({ role: "user", content: basic_msg.value.payload });
               chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
               scrollToBottom(); await askAI(true);
-            } else { prompt.value = basic_msg.value.payload; scrollToBottom(); chatInputRef.value?.focus(); }
+            } else { prompt.value = basic_msg.value.payload; scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' }); }
           }
         }
       } else if (basic_msg.value.type === "img" && basic_msg.value.payload) {
@@ -576,20 +598,20 @@ onMounted(async () => {
           scrollToBottom(); await askAI(true);
         } else {
           fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(basic_msg.value.payload) });
-          scrollToBottom(); chatInputRef.value?.focus();
+          scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' });
         }
       } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
         try {
           let sessionLoaded = false;
           if (basic_msg.value.payload.length === 1 && basic_msg.value.payload[0].path.toLowerCase().endsWith('.json')) {
             const fileObject = await window.api.handleFilePath(basic_msg.value.payload[0].path);
-            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); chatInputRef.value?.focus(); }
+            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); chatInputRef.value?.focus({ cursor: 'end' }); }
           }
           if (!sessionLoaded) {
             const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
             await Promise.all(fileProcessingPromises);
             if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(); await askAI(false); }
-            else { chatInputRef.value?.focus(); scrollToBottom(); }
+            else { chatInputRef.value?.focus({ cursor: 'end' }); scrollToBottom(); }
           }
         } catch (error) { console.error("Error during initial file processing:", error); ElMessage.error("文件处理失败: " + error.message); }
       }
@@ -631,13 +653,14 @@ onMounted(async () => {
   await addDownloadButtonsToImages();
   
   setTimeout(() => {
-    chatInputRef.value?.focus();
+    chatInputRef.value?.focus({ cursor: 'end' });
   }, 100);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
+  window.removeEventListener('blur', handleWindowBlur);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
 
   const chatMainElement = chatContainerRef.value?.$el;
@@ -965,7 +988,7 @@ const checkAndLoadSessionFromFile = async (file) => {
 
 const file2fileList = async (file, idx) => {
   const isSessionFile = await checkAndLoadSessionFromFile(file);
-  if (isSessionFile) { chatInputRef.value?.focus(); return; }
+  if (isSessionFile) { chatInputRef.value?.focus({ cursor: 'end' }); return; }
   return new Promise((resolve, reject) => {
     const handler = getFileHandler(file.name);
     if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; ElMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }
@@ -1049,7 +1072,7 @@ const askAI = async (forceSend = false) => {
 
   try {
     const messagesForAPI = JSON.parse(JSON.stringify(history.value.slice(0, aiMessageHistoryIndex)));
-    chatInputRef.value?.focus();
+    chatInputRef.value?.focus({ cursor: 'end' });
 
     aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, CODE.value, signalController.value.signal, selectedVoice.value, tempReasoningEffort.value);
 
@@ -1161,7 +1184,7 @@ const askAI = async (forceSend = false) => {
     }
 
     is_think_flag = false; scrollToBottom();
-    chatInputRef.value?.focus();
+    chatInputRef.value?.focus({ cursor: 'end' });
   }
 };
 
@@ -1189,7 +1212,7 @@ const clearHistory = () => {
   messageRefs.clear(); // [修改] 清空 refs
   focusedMessageIndex.value = null; // [修改] 重置聚焦索引
   defaultConversationName.value = "";
-  chatInputRef.value?.focus(); ElMessage.success('历史记录已清除');
+  chatInputRef.value?.focus({ cursor: 'end' }); ElMessage.success('历史记录已清除');
 };
 const formatTimestamp = (dateString) => {
   if (!dateString) return '';

@@ -225,8 +225,28 @@ onBeforeUnmount(() => {
     if (recorder) { recorder.close(); }
     if (wave) { wave.elem.innerHTML = ""; wave = null; }
 });
-const focus = (focusType = 'end') => { senderRef.value?.focus(); if (focusType === 'end' && senderRef.value?.$refs.textarea) { const ta = senderRef.value.$refs.textarea; ta.setSelectionRange(ta.value.length, ta.value.length); } };
-defineExpose({ focus });
+
+const focus = (options = {}) => {
+    const textarea = senderRef.value?.$refs.textarea;
+    if (!textarea) return;
+
+    textarea.focus();
+
+    nextTick(() => {
+        if (options.position && typeof options.position.start === 'number') {
+            const textLength = prompt.value?.length || 0;
+            const start = Math.min(options.position.start, textLength);
+            const end = Math.min(options.position.end, textLength);
+            textarea.setSelectionRange(start, end);
+        } else if (options.cursor === 'end') {
+            const textLength = prompt.value?.length || 0;
+            textarea.setSelectionRange(textLength, textLength);
+        }
+        // If no options, just focuses without changing selection.
+    });
+};
+
+defineExpose({ focus, senderRef });
 </script>
 
 <template>
