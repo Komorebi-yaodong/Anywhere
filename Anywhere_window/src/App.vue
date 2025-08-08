@@ -924,8 +924,13 @@ const askAI = async (forceSend = false) => {
       throw new Error(errorMsg);
     }
 
+    const currentPromptConfig = currentConfig.value.prompts[CODE.value];
+    let useStream = currentConfig.value.stream;
+    if (currentPromptConfig && typeof currentPromptConfig.stream === 'boolean') {
+        useStream = currentPromptConfig.stream;
+    }
     const isVoiceReply = !!selectedVoice.value;
-    const isStreamReply = currentConfig.value.stream && !isVoiceReply;
+    const isStreamReply = useStream && !isVoiceReply;
 
     if (isVoiceReply) {
       const data = await aiResponse.json();
