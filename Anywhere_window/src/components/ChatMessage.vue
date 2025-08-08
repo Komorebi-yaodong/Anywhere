@@ -304,14 +304,14 @@ html.dark .chat-message .user-bubble {
   align-self: left;
 
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background-color: var(--bg-tertiary);
-    border: 1px solid var(--border-primary);
+    background-color: #FFFFFF;
+    border: 1px solid #E6E6E6;
   }
 }
 
 html.dark .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background: #191919;
+    background: #222222;
     border: 1px solid var(--border-primary);
   }
 }
