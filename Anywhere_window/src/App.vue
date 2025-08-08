@@ -138,15 +138,15 @@ const imageViewerInitialIndex = ref(0);
 
 const senderRef = ref();
 
-// [新增] 计算属性判断下一个是否为最后一条消息
-const isNextMessageLast = computed(() => {
-    if (focusedMessageIndex.value === null) return true;
-    // 如果当前聚焦的是倒数第二条，那么下一条就是最后一条
-    return focusedMessageIndex.value >= chat_show.value.length - 2;
+// [BUG修复] 1. 新增一个更精确的计算属性，判断当前是否正在查看最后一条消息
+const isViewingLastMessage = computed(() => {
+  if (focusedMessageIndex.value === null) return false; // 未进入导航模式
+  return focusedMessageIndex.value === chat_show.value.length - 1;
 });
 
+// [BUG修复] 2. 更新提示文本的计算属性，使其更符合实际操作
 const nextButtonTooltip = computed(() => {
-    return isNextMessageLast.value ? '滚动到底部' : '查看下一条消息';
+  return isViewingLastMessage.value ? '滚动到底部' : '查看下一条消息';
 });
 
 const scrollToBottom = async () => {
@@ -179,35 +179,35 @@ const forceScrollToBottom = () => {
 
 // [新增] 在滚动时，找到当前视口顶部的消息
 const findFocusedMessageIndex = () => {
-    const container = chatContainerRef.value?.$el;
-    if (!container) return;
-    
-    const scrollTop = container.scrollTop;
-    let closestIndex = -1;
-    let smallestDistance = Infinity;
+  const container = chatContainerRef.value?.$el;
+  if (!container) return;
 
-    // 倒序遍历，优先找到视口内的消息
-    for (let i = chat_show.value.length - 1; i >= 0; i--) {
-        const msgComponent = messageRefs.get(i);
-        if (msgComponent) {
-            const el = msgComponent.$el;
-            const elTop = el.offsetTop;
-            const elBottom = elTop + el.clientHeight;
-            // 如果消息在视口内
-            if (elTop < scrollTop + container.clientHeight && elBottom > scrollTop) {
-                // 找到视口中最顶部的消息
-                const distance = Math.abs(elTop - scrollTop);
-                if (distance < smallestDistance) {
-                    smallestDistance = distance;
-                    closestIndex = i;
-                }
-            }
+  const scrollTop = container.scrollTop;
+  let closestIndex = -1;
+  let smallestDistance = Infinity;
+
+  // 倒序遍历，优先找到视口内的消息
+  for (let i = chat_show.value.length - 1; i >= 0; i--) {
+    const msgComponent = messageRefs.get(i);
+    if (msgComponent) {
+      const el = msgComponent.$el;
+      const elTop = el.offsetTop;
+      const elBottom = elTop + el.clientHeight;
+      // 如果消息在视口内
+      if (elTop < scrollTop + container.clientHeight && elBottom > scrollTop) {
+        // 找到视口中最顶部的消息
+        const distance = Math.abs(elTop - scrollTop);
+        if (distance < smallestDistance) {
+          smallestDistance = distance;
+          closestIndex = i;
         }
+      }
     }
-    
-    if (closestIndex !== -1) {
-        focusedMessageIndex.value = closestIndex;
-    }
+  }
+
+  if (closestIndex !== -1) {
+    focusedMessageIndex.value = closestIndex;
+  }
 };
 
 const handleScroll = (event) => {
@@ -215,7 +215,7 @@ const handleScroll = (event) => {
   const el = event.target;
   if (!el) return;
   const isScrolledToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 10;
-  
+
   if (isAtBottom.value && !isScrolledToBottom) {
     // 刚从底部向上滚动，激活导航模式
     findFocusedMessageIndex();
@@ -230,32 +230,33 @@ const handleScroll = (event) => {
 
 // [新增] 导航到上一条消息
 const navigateToPreviousMessage = () => {
-    if (focusedMessageIndex.value === null) {
-        findFocusedMessageIndex();
-        return;
+  if (focusedMessageIndex.value === null) {
+    findFocusedMessageIndex();
+    return;
+  }
+  if (focusedMessageIndex.value > 0) {
+    focusedMessageIndex.value--;
+    const targetComponent = messageRefs.get(focusedMessageIndex.value);
+    if (targetComponent) {
+      targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-    if (focusedMessageIndex.value > 0) {
-        focusedMessageIndex.value--;
-        const targetComponent = messageRefs.get(focusedMessageIndex.value);
-        if (targetComponent) {
-            targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    }
+  }
 };
 
-// [新增] 导航到下一条消息
+// [BUG修复] 3. 修正导航到下一条消息的逻辑
 const navigateToNextMessage = () => {
-    if (isNextMessageLast.value) {
-        forceScrollToBottom();
-        return;
+  // 检查是否可以向下导航（即当前不是最后一条消息）
+  if (focusedMessageIndex.value !== null && focusedMessageIndex.value < chat_show.value.length - 1) {
+    // 如果可以，则移动到下一条消息的顶部
+    focusedMessageIndex.value++;
+    const targetComponent = messageRefs.get(focusedMessageIndex.value);
+    if (targetComponent) {
+      targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-    if (focusedMessageIndex.value < chat_show.value.length - 1) {
-        focusedMessageIndex.value++;
-        const targetComponent = messageRefs.get(focusedMessageIndex.value);
-        if (targetComponent) {
-            targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    }
+  } else {
+    // 如果已经是最后一条消息，或者未处于导航模式，则滚动到底部
+    forceScrollToBottom();
+  }
 };
 
 const isCollapsed = (index) => collapsedMessages.value.has(index);
@@ -308,63 +309,63 @@ const addCopyButtonsToCodeBlocks = async () => {
 };
 
 const addDownloadButtonsToImages = async () => {
-    await nextTick();
-    document.querySelectorAll('.markdown-body img:not([data-download-processed])').forEach(img => {
-        img.setAttribute('data-download-processed', 'true');
-        
-        if (img.parentElement.classList.contains('image-download-wrapper')) {
-            return;
-        }
+  await nextTick();
+  document.querySelectorAll('.markdown-body img:not([data-download-processed])').forEach(img => {
+    img.setAttribute('data-download-processed', 'true');
 
-        const wrapper = document.createElement('div');
-        wrapper.className = 'image-download-wrapper';
+    if (img.parentElement.classList.contains('image-download-wrapper')) {
+      return;
+    }
 
-        const button = document.createElement('button');
-        button.className = 'image-download-button';
-        button.title = '下载图片';
-        button.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" /></svg>`;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'image-download-wrapper';
 
-        button.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try {
-                ElMessage.info('正在准备下载...');
-                const response = await fetch(img.src);
-                const blob = await response.blob();
-                const arrayBuffer = await blob.arrayBuffer();
+    const button = document.createElement('button');
+    button.className = 'image-download-button';
+    button.title = '下载图片';
+    button.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" /></svg>`;
 
-                const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
-                
-                await window.api.saveFile({
-                    title: '保存图片',
-                    defaultPath: defaultFilename,
-                    buttonLabel: '保存',
-                    fileContent: new Uint8Array(arrayBuffer),
-                });
-                ElMessage.success('图片保存成功！');
-            } catch (error) {
-                if (!error.message.includes('User cancelled')) {
-                    console.error('下载图片失败:', error);
-                    ElMessage.error(`下载失败: ${error.message}`);
-                }
-            }
+    button.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        ElMessage.info('正在准备下载...');
+        const response = await fetch(img.src);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+
+        const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
+
+        await window.api.saveFile({
+          title: '保存图片',
+          defaultPath: defaultFilename,
+          buttonLabel: '保存',
+          fileContent: new Uint8Array(arrayBuffer),
         });
-
-        img.parentNode.insertBefore(wrapper, img);
-        wrapper.appendChild(img);
-        wrapper.appendChild(button);
+        ElMessage.success('图片保存成功！');
+      } catch (error) {
+        if (!error.message.includes('User cancelled')) {
+          console.error('下载图片失败:', error);
+          ElMessage.error(`下载失败: ${error.message}`);
+        }
+      }
     });
+
+    img.parentNode.insertBefore(wrapper, img);
+    wrapper.appendChild(img);
+    wrapper.appendChild(button);
+  });
 };
 
 
 const handleMarkdownImageClick = (event) => {
-    if (event.target.closest('.image-error-container') || event.target.closest('.code-block-wrapper') || event.target.closest('.image-download-button')) return;
-    const imgElement = event.target.closest('.markdown-body img');
-    if (imgElement && imgElement.src) {
-        imageViewerSrcList.value = [imgElement.src];
-        imageViewerInitialIndex.value = 0;
-        imageViewerVisible.value = true;
-    }
+  if (event.target.closest('.image-error-container') || event.target.closest('.code-block-wrapper') || event.target.closest('.image-download-button')) return;
+  const imgElement = event.target.closest('.markdown-body img');
+  if (imgElement && imgElement.src) {
+    imageViewerSrcList.value = [imgElement.src];
+    imageViewerInitialIndex.value = 0;
+    imageViewerVisible.value = true;
+  }
 };
 
 const handleWheel = (event) => {
@@ -477,26 +478,26 @@ const handleSendAudio = async (audioFile) => {
 }
 
 const handleWindowBlur = () => {
-    const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
-    if (textarea) {
-        lastSelectionStart.value = textarea.selectionStart;
-        lastSelectionEnd.value = textarea.selectionEnd;
-    }
+  const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
+  if (textarea) {
+    lastSelectionStart.value = textarea.selectionStart;
+    lastSelectionEnd.value = textarea.selectionEnd;
+  }
 };
 
 const handleWindowFocus = () => {
-    setTimeout(() => {
-        const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
-        if (!textarea) return;
+  setTimeout(() => {
+    const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
+    if (!textarea) return;
 
-        if (document.activeElement !== textarea) {
-            if (lastSelectionStart.value !== null && lastSelectionEnd.value !== null) {
-                chatInputRef.value?.focus({ position: { start: lastSelectionStart.value, end: lastSelectionEnd.value } });
-            } else {
-                chatInputRef.value?.focus({ cursor: 'end' });
-            }
-        }
-    }, 50);
+    if (document.activeElement !== textarea) {
+      if (lastSelectionStart.value !== null && lastSelectionEnd.value !== null) {
+        chatInputRef.value?.focus({ position: { start: lastSelectionStart.value, end: lastSelectionEnd.value } });
+      } else {
+        chatInputRef.value?.focus({ cursor: 'end' });
+      }
+    }
+  }, 50);
 };
 
 
@@ -519,7 +520,7 @@ onMounted(async () => {
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
   window.addEventListener('blur', handleWindowBlur);
-  
+
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) {
     chatMainElement.addEventListener('click', handleMarkdownImageClick);
@@ -651,7 +652,7 @@ onMounted(async () => {
   await addCopyButtonsToCodeBlocks();
   await attachImageErrorHandlers();
   await addDownloadButtonsToImages();
-  
+
   setTimeout(() => {
     chatInputRef.value?.focus({ cursor: 'end' });
   }, 100);
@@ -670,34 +671,34 @@ onBeforeUnmount(() => {
 });
 
 const saveWindowSize = async () => {
-    if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
-        ElMessage.warning('无法保存窗口设置，因为当前不是一个已定义的快捷助手。');
-        return;
-    }
+  if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
+    ElMessage.warning('无法保存窗口设置，因为当前不是一个已定义的快捷助手。');
+    return;
+  }
 
-    const settingsToSave = {
-        window_height: window.innerHeight,
-        window_width: window.innerWidth,
-        position_x: window.screenX,
-        position_y: window.screenY,
-        zoom: zoomLevel.value,
-    };
+  const settingsToSave = {
+    window_height: window.innerHeight,
+    window_width: window.innerWidth,
+    position_x: window.screenX,
+    position_y: window.screenY,
+    zoom: zoomLevel.value,
+  };
 
-    try {
-        const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
-        if (result.success) {
-            ElMessage.success('当前快捷助手的窗口大小、位置及缩放已保存');
-            currentConfig.value.prompts[CODE.value] = {
-                ...currentConfig.value.prompts[CODE.value],
-                ...settingsToSave
-            };
-        } else {
-            ElMessage.error(`保存失败: ${result.message}`);
-        }
-    } catch (error) {
-        console.error("Error saving window settings:", error);
-        ElMessage.error('保存窗口设置时出错');
+  try {
+    const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
+    if (result.success) {
+      ElMessage.success('当前快捷助手的窗口大小、位置及缩放已保存');
+      currentConfig.value.prompts[CODE.value] = {
+        ...currentConfig.value.prompts[CODE.value],
+        ...settingsToSave
+      };
+    } else {
+      ElMessage.error(`保存失败: ${result.message}`);
     }
+  } catch (error) {
+    console.error("Error saving window settings:", error);
+    ElMessage.error('保存窗口设置时出错');
+  }
 }
 
 const getSessionDataAsObject = () => {
@@ -804,10 +805,10 @@ const saveSessionAsMarkdown = async () => {
     } else if (message.role === 'assistant') {
       let assistantHeader = `### 🤖 ${message.aiName || 'AI'}`;
       if (message.voiceName) {
-          assistantHeader += ` (${message.voiceName})`;
+        assistantHeader += ` (${message.voiceName})`;
       }
       if (message.completedTimestamp) {
-          assistantHeader += ` - *${formatTimestamp(message.completedTimestamp)}*`;
+        assistantHeader += ` - *${formatTimestamp(message.completedTimestamp)}*`;
       }
       markdownContent += `${assistantHeader}\n\n`;
 
@@ -954,13 +955,13 @@ const loadSession = async (jsonData) => {
     else AIAvart.value = currentConfig.value.prompts[CODE.value]?.icon || "ai.svg";
 
     if (chat_show.value && chat_show.value.length > 0) {
-        chat_show.value.forEach(msg => {
-            if (msg.id === undefined) {
-                msg.id = messageIdCounter.value++;
-            }
-        });
-        const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
-        messageIdCounter.value = maxId + 1;
+      chat_show.value.forEach(msg => {
+        if (msg.id === undefined) {
+          msg.id = messageIdCounter.value++;
+        }
+      });
+      const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
+      messageIdCounter.value = maxId + 1;
     }
 
     if (currentConfig.value.prompts[CODE.value]?.prompt) {
@@ -1083,7 +1084,7 @@ const askAI = async (forceSend = false) => {
     content: [{ type: "text", text: "" }],
     reasoning_content: "",
     status: "",
-    aiName: modelMap.value[model.value] || model.value.split('|')[1], 
+    aiName: modelMap.value[model.value] || model.value.split('|')[1],
     voiceName: selectedVoice.value
   });
 
@@ -1102,7 +1103,7 @@ const askAI = async (forceSend = false) => {
     const currentPromptConfig = currentConfig.value.prompts[CODE.value];
     let useStream = currentConfig.value.stream;
     if (currentPromptConfig && typeof currentPromptConfig.stream === 'boolean') {
-        useStream = currentPromptConfig.stream;
+      useStream = currentPromptConfig.stream;
     }
     const isVoiceReply = !!selectedVoice.value;
     const isStreamReply = useStream && !isVoiceReply;
@@ -1195,9 +1196,9 @@ const askAI = async (forceSend = false) => {
     loading.value = false; signalController.value = null;
     const lastChatMsg = chat_show.value[chat_show.value.length - 1];
     if (lastChatMsg && lastChatMsg.role === 'assistant' && thinking.value && !is_think_flag) { lastChatMsg.status = "end"; thinking.value = false; }
-    
+
     if (chat_show.value[aiMessageChatShowIndex] && chat_show.value[aiMessageChatShowIndex].role === 'assistant') {
-        chat_show.value[aiMessageChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
+      chat_show.value[aiMessageChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
     }
 
     is_think_flag = false; scrollToBottom();
@@ -1235,8 +1236,8 @@ const formatTimestamp = (dateString) => {
   if (!dateString) return '';
   try {
     const date = new Date(dateString);
-    const datePart = date.toLocaleDateString('sv-SE'); 
-    const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }); 
+    const datePart = date.toLocaleDateString('sv-SE');
+    const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
     return `${datePart}${timePart}`;
   } catch (e) {
     return '';
@@ -1252,53 +1253,42 @@ const formatTimestamp = (dateString) => {
         @toggle-pin="handleTogglePin" @toggle-memory="handleToggleMemory" @save-session="handleSaveSession" />
 
       <div class="main-area-wrapper">
-        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick" @scroll="handleScroll">
+        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
+          @scroll="handleScroll">
           <!-- [修改] 添加 :ref 来收集DOM元素 -->
-          <ChatMessage 
-            v-for="(message, index) in chat_show" 
-            :key="message.id" 
-            :ref="el => setMessageRef(el, index)"
-            :message="message" 
-            :index="index"
-            :isLastMessage="index === chat_show.length - 1" 
-            :isLoading="loading" 
-            :userAvatar="UserAvart"
-            :aiAvatar="AIAvart" 
-            :isCollapsed="isCollapsed(index)" 
-            @delete-message="handleDeleteMessage"
-            @copy-text="handleCopyText" 
-            @re-ask="handleReAsk" 
-            @toggle-collapse="handleToggleCollapse"
-            @show-system-prompt="handleShowSystemPrompt" 
-            @avatar-click="onAvatarClick" 
-          />
+          <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :ref="el => setMessageRef(el, index)"
+            :message="message" :index="index" :isLastMessage="index === chat_show.length - 1" :isLoading="loading"
+            :userAvatar="UserAvart" :aiAvatar="AIAvart" :isCollapsed="isCollapsed(index)"
+            @delete-message="handleDeleteMessage" @copy-text="handleCopyText" @re-ask="handleReAsk"
+            @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
+            @avatar-click="onAvatarClick" />
         </el-main>
-        
-        <!-- [修改] 更新为导航按钮组 -->
+
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
-          <el-tooltip content="查看上一条消息" placement="left">
-            <el-button class="scroll-nav-btn" @click="navigateToPreviousMessage">
-              <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                <path fill="currentColor" d="m488.832 344.32-339.84 335.872a32 32 0 0 0 0 45.248l.064.064a32 32 0 0 0 45.248 0L512 412.928l317.696 312.576a32 32 0 0 0 45.248 0l.064-.064a32 32 0 0 0 0-45.248L533.824 344.32a32 32 0 0 0-44.992 0z"></path>
-              </svg>
-            </el-button>
-          </el-tooltip>
-          <el-tooltip :content="nextButtonTooltip" placement="left">
-            <el-button class="scroll-nav-btn" @click="navigateToNextMessage">
-              <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                <path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z"></path>
-              </svg>
-            </el-button>
-          </el-tooltip>
+          <el-button class="scroll-nav-btn" @click="navigateToPreviousMessage">
+            <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20"
+              height="20">
+              <path fill="currentColor"
+                d="m488.832 344.32-339.84 335.872a32 32 0 0 0 0 45.248l.064.064a32 32 0 0 0 45.248 0L512 412.928l317.696 312.576a32 32 0 0 0 45.248 0l.064-.064a32 32 0 0 0 0-45.248L533.824 344.32a32 32 0 0 0-44.992 0z">
+              </path>
+            </svg>
+          </el-button>
+          <el-button class="scroll-nav-btn" @click="navigateToNextMessage">
+            <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20"
+              height="20">
+              <path fill="currentColor"
+                d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z">
+              </path>
+            </svg>
+          </el-button>
         </div>
       </div>
 
       <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
-        v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort"
-        :loading="loading" :ctrlEnterToSend="currentConfig.CtrlEnterToSend"
-        :layout="inputLayout" :voiceList="currentConfig.voiceList" @submit="handleSubmit" @cancel="handleCancel"
-        @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
-        @send-audio="handleSendAudio" />
+        v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
+        :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
+        @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
+        @remove-file="handleRemoveFile" @upload="handleUpload" @send-audio="handleSendAudio" />
 
     </el-container>
   </main>
@@ -1832,7 +1822,6 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   background-color: var(--el-bg-color);
 }
 
-// [修改] 更新为导航按钮组的容器样式
 .scroll-to-bottom-wrapper {
   position: absolute;
   bottom: 15px;
@@ -1840,10 +1829,11 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 8px; // 两个按钮之间的间距
+  align-items: center;
+  gap: 8px;
+  padding: 0px;
 }
 
-// [修改] 按钮的通用样式
 .scroll-nav-btn {
   width: 36px;
   height: 36px;
@@ -1857,6 +1847,7 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
+  margin: 0px !important;
 
   &:hover {
     background-color: var(--bg-tertiary);
@@ -1869,6 +1860,7 @@ html.dark .scroll-nav-btn {
   background-color: var(--bg-tertiary);
   border-color: var(--border-primary);
   color: var(--text-primary);
+
   &:hover {
     background-color: var(--bg-secondary);
   }
