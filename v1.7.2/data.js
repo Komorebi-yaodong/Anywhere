@@ -104,10 +104,14 @@ function checkConfig(config) {
     flag = true;
   }
 
-  if (!config.position_x || !config.position_y) {
+  if (config.position_x || config.position_y) {
+    delete config.position_x;
+    delete config.position_y;
+    flag = true;
+  }
+
+  if (config.fix_position == undefined) {
     config.fix_position = false;
-    config.position_x = 0;
-    config.position_y = 0;
     flag = true;
   }
 
@@ -647,7 +651,7 @@ async function sethotkey(prompt_name,auto_copy){
 }
 
 async function openWindow(config, msg) {
-  const { x, y, width, height } = getPosition(config, msg.code);
+  const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
   let channel = "window";
   
   const ubWindow = utools.createBrowserWindow(
@@ -665,6 +669,7 @@ async function openWindow(config, msg) {
       y: y,
       webPreferences: {
         preload: "./window_preload.js",
+        devTools: true
       },
     },
     () => {
@@ -674,6 +679,7 @@ async function openWindow(config, msg) {
       ubWindow.setFullScreen(false);
     }
   );
+  ubWindow.webContents.openDevTools({ mode: "detach" });
 }
 
 async function coderedirect(label, payload) {

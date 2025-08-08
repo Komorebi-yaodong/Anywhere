@@ -25,7 +25,7 @@ const setMessageRef = (el, index) => {
   if (el) {
     messageRefs.set(index, el);
   } else {
-    messageRefs.delete(index);
+    messageRefs.delete(index, el);
   }
 };
 
@@ -602,19 +602,24 @@ onMounted(async () => {
           scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' });
         }
       } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
+        // --- MODIFICATION START ---
+        // Session loading from local files is now handled by preload.js.
+        // This block now only needs to process files for regular quick assistants.
         try {
-          let sessionLoaded = false;
-          if (basic_msg.value.payload.length === 1 && basic_msg.value.payload[0].path.toLowerCase().endsWith('.json')) {
-            const fileObject = await window.api.handleFilePath(basic_msg.value.payload[0].path);
-            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); chatInputRef.value?.focus({ cursor: 'end' }); }
-          }
-          if (!sessionLoaded) {
             const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
             await Promise.all(fileProcessingPromises);
-            if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(); await askAI(false); }
-            else { chatInputRef.value?.focus({ cursor: 'end' }); scrollToBottom(); }
-          }
-        } catch (error) { console.error("Error during initial file processing:", error); ElMessage.error("文件处理失败: " + error.message); }
+            if (currentPromptConfig?.isDirectSend_file) {
+                scrollToBottom();
+                await askAI(false);
+            } else {
+                chatInputRef.value?.focus({ cursor: 'end' });
+                scrollToBottom();
+            }
+        } catch (error) {
+            console.error("Error during initial file processing:", error);
+            ElMessage.error("文件处理失败: " + error.message);
+        }
+        // --- MODIFICATION END ---
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
     });
@@ -989,24 +994,12 @@ const loadSession = async (jsonData) => {
   } finally { loading.value = false; }
 };
 
-const checkAndLoadSessionFromFile = async (file) => {
-  if (file && file.name.toLowerCase().endsWith('.json')) {
-    try {
-      const fileContent = await file.text();
-      const jsonData = JSON.parse(fileContent);
-      if (jsonData && jsonData.anywhere_history === true) {
-        defaultConversationName.value = file.name.replace(/\.json$/i, '');
-        await loadSession(jsonData);
-        return true;
-      }
-    } catch (e) { console.warn("一个JSON文件被检测到，但它不是一个有效的会话文件:", e.message); }
-  }
-  return false;
-};
-
 const file2fileList = async (file, idx) => {
-  const isSessionFile = await checkAndLoadSessionFromFile(file);
-  if (isSessionFile) { chatInputRef.value?.focus({ cursor: 'end' }); return; }
+  // --- MODIFICATION START ---
+  // The check for session files is no longer needed here as it's handled upstream in preload.js.
+  // const isSessionFile = await checkAndLoadSessionFromFile(file);
+  // if (isSessionFile) { chatInputRef.value?.focus({ cursor: 'end' }); return; }
+  // --- MODIFICATION END ---
   return new Promise((resolve, reject) => {
     const handler = getFileHandler(file.name);
     if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; ElMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }

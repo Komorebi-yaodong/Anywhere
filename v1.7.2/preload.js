@@ -58,28 +58,59 @@ const commandHandlers = {
     const config = getConfig().config;
     checkConfig(config);
 
-    if (type === "files" || type === "over") {
-      let sessionPayload = payload;
-      let filename = null;
+    let sessionPayloadString = null; // 统一存储会话内容的字符串
+    let sessionObject = null;        // 统一存储解析后的会话对象
+    let filename = null;
+    let originalCode = null;
 
-      try {
-        const parsed = JSON.parse(payload);
-        if (parsed && parsed.sessionData) {
-          sessionPayload = parsed.sessionData;
-          filename = parsed.filename || null;
+    try {
+      if (type === "files" && Array.isArray(payload) && payload.length > 0 && payload[0].path) {
+        // --- 处理本地文件类型 ---
+        const filePath = payload[0].path;
+        if (filePath.toLowerCase().endsWith('.json')) {
+          const fs = require('fs'); // 直接在 preload 中使用 Node.js fs 模块
+          sessionPayloadString = fs.readFileSync(filePath, 'utf-8');
+          sessionObject = JSON.parse(sessionPayloadString);
+          filename = payload[0].name;
+        } else {
+           // 如果不是json文件，则将其作为普通文件处理
+           sessionPayloadString = JSON.stringify(payload);
         }
-      } catch (e) {
+      } else if (type === "over") {
+        // --- 处理文本/云端类型 ---
+        sessionPayloadString = payload; // payload 本身就是字符串
+        const parsedPayload = JSON.parse(sessionPayloadString);
+        
+        if (parsedPayload && parsedPayload.sessionData) { // 云端对话格式
+            sessionObject = JSON.parse(parsedPayload.sessionData);
+            filename = parsedPayload.filename || null;
+        } else if (parsedPayload && parsedPayload.anywhere_history === true) { // 本地保存的会话格式
+            sessionObject = parsedPayload;
+        }
       }
-
-      const msg = {
-        os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
-        code: "Resume Conversation",
-        type,
-        payload: sessionPayload,
-        filename: filename
-      };
-      await openWindow(config, msg);
+    } catch (e) {
+      console.warn("Payload is not a valid session JSON or file is unreadable. It will be opened as plain text/file.", e);
+      // 如果解析失败，保持 sessionPayloadString/sessionObject 为 null，后续逻辑会处理
+      if (!sessionPayloadString) {
+          sessionPayloadString = (typeof payload === 'object') ? JSON.stringify(payload) : payload;
+      }
     }
+
+    // --- 统一提取原始 CODE ---
+    if (sessionObject && sessionObject.CODE) {
+      originalCode = sessionObject.CODE;
+    }
+
+    const msg = {
+      os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+      code: "Resume Conversation",
+      type: "over", //最终都变为了 json文本 格式
+      payload: sessionPayloadString || payload, // 确保传递给窗口的是字符串内容
+      filename: filename,
+      originalCode: originalCode // 将原始 CODE 传递给 openWindow
+    };
+    await openWindow(config, msg);
+    
     utools.outPlugin();
   },
 
