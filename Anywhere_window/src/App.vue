@@ -9,6 +9,10 @@ import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
 const chatInputRef = ref(null);
+// --- [滚动状态] ---
+const chatContainerRef = ref(null);
+const isAtBottom = ref(true);
+const showScrollToBottomButton = ref(false);
 
 const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
 const parseWord = async (base64Data) => {
@@ -105,7 +109,7 @@ const collapsedMessages = ref(new Set());
 const defaultConversationName = ref("");
 const selectedVoice = ref(null);
 const tempReasoningEffort = ref('default');
-const messageIdCounter = ref(0); // [BUG FIX] Add a counter for unique message keys
+const messageIdCounter = ref(0);
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 
@@ -119,20 +123,36 @@ const imageViewerInitialIndex = ref(0);
 
 const senderRef = ref();
 
-let lastHeight = 0;
-const scrollToBottom = async (force = false) => {
-  await nextTick();
-  const container = document.querySelector('.chat-main'); if (!container) return;
-  let nowHeight = container.scrollHeight; let Speed = nowHeight - lastHeight;
-  if (Speed < 0) Speed = 100; lastHeight = nowHeight;
-  if (force) {
-    container.scrollTop = container.scrollHeight;
-  } else {
-    const scrollThreshold = 2 * Speed;
-    const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (distanceToBottom <= scrollThreshold) container.scrollTop = container.scrollHeight;
+// --- [重构] 滚动逻辑 ---
+const scrollToBottom = async () => {
+  if (isAtBottom.value) {
+    await nextTick();
+    // 使用 ref 获取 ElMain 组件实例，然后通过 $el 获取其根 DOM 元素
+    const el = chatContainerRef.value?.$el;
+    if (el) {
+      el.style.scrollBehavior = 'auto';
+      el.scrollTop = el.scrollHeight;
+      el.style.scrollBehavior = 'smooth';
+    }
   }
 };
+
+const forceScrollToBottom = () => {
+  const el = chatContainerRef.value?.$el;
+  if (el) {
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }
+};
+
+// [修改] handleScroll 现在接收 event 对象
+const handleScroll = (event) => {
+  const el = event.target; // 直接使用事件的目标元素
+  if (!el) return;
+  const isScrolledToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 10;
+  isAtBottom.value = isScrolledToBottom;
+  showScrollToBottomButton.value = !isScrolledToBottom;
+};
+
 
 const isCollapsed = (index) => collapsedMessages.value.has(index);
 
@@ -188,7 +208,6 @@ const addDownloadButtonsToImages = async () => {
     document.querySelectorAll('.markdown-body img:not([data-download-processed])').forEach(img => {
         img.setAttribute('data-download-processed', 'true');
         
-        // Don't wrap if already in a wrapper
         if (img.parentElement.classList.contains('image-download-wrapper')) {
             return;
         }
@@ -212,7 +231,6 @@ const addDownloadButtonsToImages = async () => {
 
                 const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
                 
-                // --- FIX: Use Uint8Array instead of Buffer ---
                 await window.api.saveFile({
                     title: '保存图片',
                     defaultPath: defaultFilename,
@@ -286,7 +304,7 @@ const handleShowSystemPrompt = (content) => {
   systemPromptDialogVisible.value = true;
 };
 const handleToggleCollapse = async (index, event) => {
-  const chatContainer = document.querySelector('.chat-main');
+  const chatContainer = chatContainerRef.value?.$el;
   const buttonElement = event.currentTarget;
   const messageElement = buttonElement.closest('.chat-message');
   if (!chatContainer || !buttonElement || !messageElement) return;
@@ -300,7 +318,7 @@ const handleToggleCollapse = async (index, event) => {
     const newElementTop = messageElement.offsetTop;
     chatContainer.style.scrollBehavior = 'auto';
     chatContainer.scrollTop = newElementTop - originalVisualPosition;
-    chatContainer.style.scrollBehavior = '';
+    chatContainer.style.scrollBehavior = 'smooth';
   } else {
     const originalButtonTop = buttonElement.getBoundingClientRect().top;
     collapsedMessages.value.add(index);
@@ -308,11 +326,11 @@ const handleToggleCollapse = async (index, event) => {
     const newButtonTop = buttonElement.getBoundingClientRect().top;
     chatContainer.style.scrollBehavior = 'auto';
     chatContainer.scrollTop = originalScrollTop + (newButtonTop - originalButtonTop);
-    chatContainer.style.scrollBehavior = '';
+    chatContainer.style.scrollBehavior = 'smooth';
   }
 };
 const onAvatarClick = async (role, event) => {
-  const chatContainer = document.querySelector('.chat-main');
+  const chatContainer = chatContainerRef.value?.$el;
   const messageElement = event.currentTarget.closest('.chat-message');
   if (!chatContainer || !messageElement) return;
 
@@ -332,7 +350,7 @@ const onAvatarClick = async (role, event) => {
   const newElementTop = messageElement.offsetTop;
   chatContainer.style.scrollBehavior = 'auto';
   chatContainer.scrollTop = newElementTop - originalVisualPosition;
-  chatContainer.style.scrollBehavior = '';
+  chatContainer.style.scrollBehavior = 'smooth';
 };
 
 const handleSubmit = () => askAI(false);
@@ -378,7 +396,7 @@ onMounted(async () => {
   if (isInit.value) return; isInit.value = true;
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
-
+  
   try {
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
@@ -406,7 +424,6 @@ onMounted(async () => {
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
-      // 新增：初始化思考预算
       tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
       selectedVoice.value = currentPromptConfig?.voice || null;
@@ -437,23 +454,23 @@ onMounted(async () => {
           if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); chatInputRef.value?.focus(); }
         } catch (error) { }
         if (!sessionLoaded) {
-          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(true); chatInputRef.value?.focus(); }
+          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(); chatInputRef.value?.focus(); }
           else {
             if (currentPromptConfig?.isDirectSend_normal) {
               history.value.push({ role: "user", content: basic_msg.value.payload });
               chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
-              scrollToBottom(true); await askAI(true);
-            } else { prompt.value = basic_msg.value.payload; scrollToBottom(true); chatInputRef.value?.focus(); }
+              scrollToBottom(); await askAI(true);
+            } else { prompt.value = basic_msg.value.payload; scrollToBottom(); chatInputRef.value?.focus(); }
           }
         }
       } else if (basic_msg.value.type === "img" && basic_msg.value.payload) {
         if (currentPromptConfig?.isDirectSend_normal) {
           history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
           chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
-          scrollToBottom(true); await askAI(true);
+          scrollToBottom(); await askAI(true);
         } else {
           fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(basic_msg.value.payload) });
-          scrollToBottom(true); chatInputRef.value?.focus();
+          scrollToBottom(); chatInputRef.value?.focus();
         }
       } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
         try {
@@ -465,8 +482,8 @@ onMounted(async () => {
           if (!sessionLoaded) {
             const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
             await Promise.all(fileProcessingPromises);
-            if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(true); await askAI(false); }
-            else { chatInputRef.value?.focus(); scrollToBottom(true); }
+            if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(); await askAI(false); }
+            else { chatInputRef.value?.focus(); scrollToBottom(); }
           }
         } catch (error) { console.error("Error during initial file processing:", error); ElMessage.error("文件处理失败: " + error.message); }
       }
@@ -476,7 +493,6 @@ onMounted(async () => {
     basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
     document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
-    // 新增：初始化思考预算
     tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
     model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
     selectedVoice.value = currentPromptConfig?.voice || null;
@@ -500,12 +516,10 @@ onMounted(async () => {
       chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手", id: messageIdCounter.value++ }];
     } else { history.value = []; chat_show.value = []; }
 
-    scrollToBottom(true);
+    scrollToBottom();
     if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
   }
 
-  const chatMainElement = document.querySelector('.chat-main');
-  if (chatMainElement) chatMainElement.addEventListener('click', handleMarkdownImageClick);
   await addCopyButtonsToCodeBlocks();
   await attachImageErrorHandlers();
   await addDownloadButtonsToImages();
@@ -520,8 +534,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('focus', handleWindowFocus);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
 
-  const chatMainElement = document.querySelector('.chat-main');
-  if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
+  // [修改] 移除滚动和点击事件监听器
+  const chatMainElement = chatContainerRef.value?.$el;
+  if (chatMainElement) {
+    chatMainElement.removeEventListener('scroll', handleScroll);
+    chatMainElement.removeEventListener('click', handleMarkdownImageClick);
+  }
 });
 
 const saveConfig = async () => { try { await window.api.updateConfig({ config: JSON.parse(JSON.stringify(currentConfig.value)) }); } catch (error) { ElMessage.error('保存配置失败'); } }
@@ -757,7 +775,6 @@ const loadSession = async (jsonData) => {
     history.value = jsonData.history;
     chat_show.value = jsonData.chat_show;
     selectedVoice.value = jsonData.selectedVoice || null;
-    // 新增：加载会话时恢复思考预算
     tempReasoningEffort.value = jsonData.currentPromptConfig?.reasoning_effort || 'default';
 
 
@@ -790,7 +807,6 @@ const loadSession = async (jsonData) => {
     if (jsonData.currentPromptConfig?.icon) AIAvart.value = jsonData.currentPromptConfig.icon;
     else AIAvart.value = currentConfig.value.prompts[CODE.value]?.icon || "ai.svg";
 
-    // [BUG FIX] Ensure all loaded messages have a unique ID
     if (chat_show.value && chat_show.value.length > 0) {
         chat_show.value.forEach(msg => {
             if (msg.id === undefined) {
@@ -820,7 +836,7 @@ const loadSession = async (jsonData) => {
       ElMessage.error("没有可用的模型。请检查您的服务商配置。"); loading.value = false; return;
     }
 
-    await nextTick(); scrollToBottom(true);
+    await nextTick(); scrollToBottom();
   } catch (error) {
     console.error("加载会话失败:", error); ElMessage.error(`加载会话失败: ${error.message}`);
   } finally { loading.value = false; }
@@ -911,12 +927,12 @@ const askAI = async (forceSend = false) => {
   }
 
   loading.value = true; signalController.value = new AbortController();
-  let aiResponse = null; scrollToBottom(true);
+  let aiResponse = null; scrollToBottom();
   const aiMessageHistoryIndex = history.value.length; const aiMessageChatShowIndex = chat_show.value.length;
   history.value.push({ role: "assistant", content: "" });
 
   chat_show.value.push({
-    id: messageIdCounter.value++, // [BUG FIX] Assign ID to new AI message
+    id: messageIdCounter.value++,
     role: "assistant",
     content: [{ type: "text", text: "" }],
     reasoning_content: "",
@@ -966,7 +982,7 @@ const askAI = async (forceSend = false) => {
       }
 
     } else if (isStreamReply) {
-      scrollToBottom(true);
+      scrollToBottom();
       const reader = aiResponse.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
       while (true) {
         try {
@@ -1073,7 +1089,7 @@ const formatTimestamp = (dateString) => {
     const date = new Date(dateString);
     const datePart = date.toLocaleDateString('sv-SE'); 
     const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }); 
-    return `${datePart}${timePart}`;
+    return `${datePart} ${timePart}`;
   } catch (e) {
     return '';
   }
@@ -1087,16 +1103,26 @@ const formatTimestamp = (dateString) => {
         :temporary="temporary" @save-window-size="handleSaveWindowSize" @open-model-dialog="handleOpenModelDialog"
         @toggle-pin="handleTogglePin" @toggle-memory="handleToggleMemory" @save-session="handleSaveSession" />
 
-      <el-main class="chat-main custom-scrollbar" @click="handleMarkdownImageClick">
-        <!-- [BUG FIX] Use message.id for the key, but still pass index as a prop -->
-        <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :message="message" :index="index"
-          :isLastMessage="index === chat_show.length - 1" :isLoading="loading" :userAvatar="UserAvart"
-          :aiAvatar="AIAvart" :isCollapsed="isCollapsed(index)" @delete-message="handleDeleteMessage"
-          @copy-text="handleCopyText" @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse"
-          @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
-      </el-main>
+      <!-- [修改] 新增一个包裹层，用于正确定位悬浮按钮 -->
+      <div class="main-area-wrapper">
+        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick" @scroll="handleScroll">
+          <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :message="message" :index="index"
+            :isLastMessage="index === chat_show.length - 1" :isLoading="loading" :userAvatar="UserAvart"
+            :aiAvatar="AIAvart" :isCollapsed="isCollapsed(index)" @delete-message="handleDeleteMessage"
+            @copy-text="handleCopyText" @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse"
+            @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
+        </el-main>
+        
+        <!-- [修改] 将按钮移到 el-main 外部，作为其兄弟节点 -->
+        <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
+          <el-button class="scroll-to-bottom-btn" @click="forceScrollToBottom">
+            <svg class="scroll-down-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+              <path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z"></path>
+            </svg>
+          </el-button>
+        </div>
+      </div>
 
-      <!-- [修改] 添加 v-model:tempReasoningEffort -->
       <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
         v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort"
         :loading="loading" :ctrlEnterToSend="currentConfig.CtrlEnterToSend"
@@ -1616,7 +1642,17 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   color: var(--el-text-color-primary);
 }
 
+// [新增] 新的包裹层样式
+.main-area-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; // 隐藏任何可能溢出的部分
+}
+
 .chat-main {
+  // [修改] 移除了 position: relative
   flex-grow: 1;
   padding-left: 10px;
   padding-right: 10px;
@@ -1628,10 +1664,53 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   background-color: var(--el-bg-color);
 }
 
+.scroll-to-bottom-wrapper {
+  position: absolute;
+  bottom: 15px;
+  right: 15px;
+  z-index: 20;
+}
+
+.scroll-to-bottom-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+
+  &:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-accent);
+    transform: scale(1.1);
+  }
+}
+
+html.dark .scroll-to-bottom-btn {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-primary);
+  color: var(--text-primary);
+  &:hover {
+    background-color: var(--bg-secondary);
+  }
+}
+
+.scroll-down-icon {
+  transition: transform 0.2s ease;
+}
+
+.scroll-to-bottom-btn:hover .scroll-down-icon {
+  transform: translateY(2px);
+}
+
 .chat-message :deep(.markdown-body) {
-
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-
   font-size: var(--el-font-size-base);
   line-height: 1.7;
   word-wrap: break-word;
@@ -2020,5 +2099,4 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #999;
   background-clip: content-box;
 }
-
 </style>
