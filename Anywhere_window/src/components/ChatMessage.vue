@@ -285,14 +285,14 @@ const truncateFilename = (filename, maxLength = 30) => {
   margin: 0;
 
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background-color: #E7E7E7;
-    border: #DCDCDC 1px solid;
+    background-color: #F4F4F4;
+    border: #E6E6E6 1px solid;
   }
 }
 
 html.dark .chat-message .user-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background: #404045;
+    background: #393939;
     border: #383838 0px solid;
   }
 }
@@ -304,15 +304,15 @@ html.dark .chat-message .user-bubble {
   align-self: left;
 
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background-color: #E7E7E7;
-    border: #DCDCDC 1px solid;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
   }
 }
 
 html.dark .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background: #404045;
-    border: #383838 0px solid;
+    background: #191919;
+    border: 1px solid var(--border-primary);
   }
 }
 

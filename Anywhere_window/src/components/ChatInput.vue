@@ -68,6 +68,11 @@ const insertNewline = () => {
 
 // --- Event Handlers ---
 const handleKeyDown = (event) => {
+    // [BUG修复] 增加对输入法合成状态的判断，防止回车键冲突
+    if (event.isComposing) {
+        return;
+    }
+
     if (isRecording.value) {
         if (!((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c')) {
             event.preventDefault();
@@ -338,7 +343,7 @@ defineExpose({ focus });
                            </template>
                            <template v-else>
                                 <el-tooltip content="发送语音"><el-button :icon="Microphone" size="default" @click="startRecording" circle /></el-tooltip>
-                               <el-tooltip content="发送"><el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle :disabled="loading" /><el-button v-else :icon="Close" @click="onCancel" circle></el-button></el-tooltip>
+                               <el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle :disabled="loading" /><el-button v-else :icon="Close" @click="onCancel" circle></el-button>
                            </template>
                         </div>
                     </div>
@@ -378,7 +383,7 @@ html.dark .drag-overlay { background-color: rgba(20, 20, 20, 0.4); }
     box-sizing: border-box;
     overflow: hidden;
 }
-html.dark .waveform-display-area { background-color: #404045; }
+html.dark .waveform-display-area { background-color: #1F1F1F; }
 
 /* 修改：通用化选项选择器样式 */
 .option-selector-row {
@@ -391,7 +396,7 @@ html.dark .waveform-display-area { background-color: #404045; }
     max-height: 132px;
 }
 html.dark .option-selector-wrapper {
-    background-color: #404045;
+    background-color: #1F1F1F;
 }
 .option-selector-content {
     display: flex;
@@ -414,7 +419,7 @@ html.dark .option-selector-wrapper {
 
 /* Vertical Layout */
 .chat-input-area-vertical { display: flex; flex-direction: column; background-color: #F3F4F6; border-radius: 12px; padding: 10px 12px; }
-html.dark .chat-input-area-vertical { background-color: #404045; }
+html.dark .chat-input-area-vertical { background-color: #1F1F1F; }
 .chat-textarea-vertical { width: 100%; flex-grow: 1; }
 .chat-textarea-vertical:deep(.el-textarea__inner) { background-color: transparent; box-shadow: none !important; border: none !important; padding: 0; color: var(--el-text-color-primary); font-size: 14px; line-height: 1.5; resize: none; }
 .input-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; flex-shrink: 0; }

@@ -3,7 +3,7 @@ html.dark {
 
     /* --- 背景色 --- */
     --el-bg-color-page: #202123;  /* ChatGPT 最深背景 */
-    --el-bg-color: #292A2D;      /* ChatGPT 组件/元素背景 */
+    --el-bg-color: #181818;      /* ChatGPT 组件/元素背景 */
     --el-bg-color-overlay: #414158; /* ChatGPT 弹窗等背景 (可能同上) */
 
     /* --- 文字颜色 --- */

@@ -105,6 +105,7 @@ const collapsedMessages = ref(new Set());
 const defaultConversationName = ref("");
 const selectedVoice = ref(null);
 const tempReasoningEffort = ref('default');
+const messageIdCounter = ref(0); // [BUG FIX] Add a counter for unique message keys
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 
@@ -424,7 +425,7 @@ onMounted(async () => {
       currentProviderID.value = model.value.split("|")[0];
       base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
       api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
-      if (currentPromptConfig?.prompt) { history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }]; chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }]; }
+      if (currentPromptConfig?.prompt) { history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }]; chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "", id: messageIdCounter.value++ }]; }
       else { history.value = []; chat_show.value = []; }
       if (currentPromptConfig?.icon) AIAvart.value = currentPromptConfig.icon;
       else AIAvart.value = "ai.svg";
@@ -440,7 +441,7 @@ onMounted(async () => {
           else {
             if (currentPromptConfig?.isDirectSend_normal) {
               history.value.push({ role: "user", content: basic_msg.value.payload });
-              chat_show.value.push({ role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
+              chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
               scrollToBottom(true); await askAI(true);
             } else { prompt.value = basic_msg.value.payload; scrollToBottom(true); chatInputRef.value?.focus(); }
           }
@@ -448,7 +449,7 @@ onMounted(async () => {
       } else if (basic_msg.value.type === "img" && basic_msg.value.payload) {
         if (currentPromptConfig?.isDirectSend_normal) {
           history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
-          chat_show.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
+          chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
           scrollToBottom(true); await askAI(true);
         } else {
           fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(basic_msg.value.payload) });
@@ -496,7 +497,7 @@ onMounted(async () => {
     api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
     if (currentPromptConfig?.prompt) {
       history.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手" }];
-      chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手" }];
+      chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手", id: messageIdCounter.value++ }];
     } else { history.value = []; chat_show.value = []; }
 
     scrollToBottom(true);
@@ -789,13 +790,24 @@ const loadSession = async (jsonData) => {
     if (jsonData.currentPromptConfig?.icon) AIAvart.value = jsonData.currentPromptConfig.icon;
     else AIAvart.value = currentConfig.value.prompts[CODE.value]?.icon || "ai.svg";
 
+    // [BUG FIX] Ensure all loaded messages have a unique ID
+    if (chat_show.value && chat_show.value.length > 0) {
+        chat_show.value.forEach(msg => {
+            if (msg.id === undefined) {
+                msg.id = messageIdCounter.value++;
+            }
+        });
+        const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
+        messageIdCounter.value = maxId + 1;
+    }
+
     if (currentConfig.value.prompts[CODE.value]?.prompt) {
       if (history.value.length > 0 && history.value[0].role === "system") {
         history.value[0].content = currentConfig.value.prompts[CODE.value].prompt;
         chat_show.value[0].content = currentConfig.value.prompts[CODE.value].prompt;
       } else {
         history.value.unshift({ role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
-        chat_show.value.unshift({ role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
+        chat_show.value.unshift({ id: messageIdCounter.value++, role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
       }
     }
 
@@ -877,10 +889,10 @@ const askAI = async (forceSend = false) => {
 
       if (userContentList.length == 1 && userContentList[0].type === "text") {
         history.value.push({ role: "user", content: userContentList[0]["text"] });
-        chat_show.value.push({ role: "user", content: [{ type: "text", text: userContentList[0]["text"] }], timestamp: userTimestamp });
+        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: userContentList[0]["text"] }], timestamp: userTimestamp });
       } else if (userContentList.length > 0) {
         history.value.push({ role: "user", content: userContentList });
-        chat_show.value.push({ role: "user", content: userContentList, timestamp: userTimestamp });
+        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
       } else return;
     } else return;
     prompt.value = "";
@@ -904,6 +916,7 @@ const askAI = async (forceSend = false) => {
   history.value.push({ role: "assistant", content: "" });
 
   chat_show.value.push({
+    id: messageIdCounter.value++, // [BUG FIX] Assign ID to new AI message
     role: "assistant",
     content: [{ type: "text", text: "" }],
     reasoning_content: "",
@@ -1014,8 +1027,8 @@ const askAI = async (forceSend = false) => {
     let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
     if (error.name === 'AbortError') errorDisplay = "请求已取消";
     if (history.value[aiMessageHistoryIndex]) history.value[aiMessageHistoryIndex].content = `错误: ${errorDisplay}`;
-    if (chat_show.value[aiMessageChatShowIndex]) chat_show.value[aiMessageChatShowIndex] = { role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" };
-    else chat_show.value.push({ role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" });
+    if (chat_show.value[aiMessageChatShowIndex]) chat_show.value[aiMessageChatShowIndex] = { id: chat_show.value[aiMessageChatShowIndex].id, role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" };
+    else chat_show.value.push({ id: messageIdCounter.value++, role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" });
   } finally {
     loading.value = false; signalController.value = null;
     const lastChatMsg = chat_show.value[chat_show.value.length - 1];
@@ -1075,7 +1088,8 @@ const formatTimestamp = (dateString) => {
         @toggle-pin="handleTogglePin" @toggle-memory="handleToggleMemory" @save-session="handleSaveSession" />
 
       <el-main class="chat-main custom-scrollbar" @click="handleMarkdownImageClick">
-        <ChatMessage v-for="(message, index) in chat_show" :key="index" :message="message" :index="index"
+        <!-- [BUG FIX] Use message.id for the key, but still pass index as a prop -->
+        <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :message="message" :index="index"
           :isLastMessage="index === chat_show.length - 1" :isLoading="loading" :userAvatar="UserAvart"
           :aiAvatar="AIAvart" :isCollapsed="isCollapsed(index)" @delete-message="handleDeleteMessage"
           @copy-text="handleCopyText" @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse"
@@ -1302,7 +1316,7 @@ html.dark .katex-display::-webkit-scrollbar-thumb:hover {
 }
 
 html.dark .hljs {
-  background: #212327;
+  background: #1F1F1F;
   color: #d4d4d4;
 }
 
@@ -1417,13 +1431,13 @@ pre.hljs::-webkit-scrollbar-corner {
 }
 
 html.dark pre.hljs::-webkit-scrollbar-track {
-  background: #212327;
+  background: #1F1F1F;
 }
 
 html.dark pre.hljs::-webkit-scrollbar-thumb {
   background-color: #4f4f4f;
   border-radius: 6px;
-  border: 3px solid #212327;
+  border: 3px solid #1F1F1F;
 }
 
 html.dark pre.hljs::-webkit-scrollbar-thumb:hover {
@@ -1431,7 +1445,7 @@ html.dark pre.hljs::-webkit-scrollbar-thumb:hover {
 }
 
 html.dark pre.hljs::-webkit-scrollbar-corner {
-  background-color: #212327;
+  background-color: #1F1F1F;
 }
 
 .system-prompt-dialog .el-dialog__header {
