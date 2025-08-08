@@ -58,8 +58,8 @@ const commandHandlers = {
     const config = getConfig().config;
     checkConfig(config);
 
-    let sessionPayloadString = null; // 统一存储会话内容的字符串
-    let sessionObject = null;        // 统一存储解析后的会话对象
+    let sessionPayloadString = null; // 存储会话内容的字符串
+    let sessionObject = null;        // 存储解析后的会话对象
     let filename = null;
     let originalCode = null;
 
@@ -101,11 +101,16 @@ const commandHandlers = {
       originalCode = sessionObject.CODE;
     }
 
+    // [BUG修复] 
+    // 核心修复点：如果 sessionObject 已被成功解析，则应将其字符串化后作为 payload 传递。
+    // 否则，回退到使用原始的 payload 字符串（用于处理非会话内容的普通文本）。
+    const finalPayload = sessionObject ? JSON.stringify(sessionObject) : (sessionPayloadString || payload);
+
     const msg = {
       os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
       code: "Resume Conversation",
       type: "over", //最终都变为了 json文本 格式
-      payload: sessionPayloadString || payload, // 确保传递给窗口的是字符串内容
+      payload: finalPayload, // 使用修复后的 payload
       filename: filename,
       originalCode: originalCode // 将原始 CODE 传递给 openWindow
     };
