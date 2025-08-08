@@ -3,7 +3,7 @@ import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'v
 import { Attachments } from 'ant-design-x-vue';
 // 移除 ElPopover, 因为不再使用
 import { ElFooter, ElRow, ElCol, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
-import { Link, Delete, Promotion, Close, Microphone, Check, Headset } from '@element-plus/icons-vue';
+import { Link, Delete, Promotion, Close, Microphone, Check } from '@element-plus/icons-vue';
 import Recorder from 'recorder-core';
 import 'recorder-core/src/extensions/waveview.js';
 import 'recorder-core/src/engine/wav';
@@ -96,7 +96,7 @@ const handleKeyDown = (event) => {
                 emit('submit');
             }
         }
-    } 
+    }
     else {
         if (isCtrlOrMetaPressed) {
             event.preventDefault();
@@ -172,10 +172,10 @@ const startRecording = () => {
                     lineWidth: 3,
                 });
             }
-            recorder.start(); 
+            recorder.start();
         });
     },
-    (msg, isUserNotAllow) => { ElMessage.error((isUserNotAllow ? '用户拒绝了权限, ' : '') + '无法录音: ' + msg); recorder = null; });
+        (msg, isUserNotAllow) => { ElMessage.error((isUserNotAllow ? '用户拒绝了权限, ' : '') + '无法录音: ' + msg); recorder = null; });
 };
 
 const stopRecordingAndCleanup = () => {
@@ -247,14 +247,14 @@ defineExpose({ focus });
             </el-col>
             <el-col :span="1" />
         </el-row>
-        
+
         <el-row v-show="isRecording" class="waveform-row">
-             <el-col :span="1" />
-             <el-col :span="22">
-                <div ref="waveformCanvasContainer" class="waveform-display-area"> 
+            <el-col :span="1" />
+            <el-col :span="22">
+                <div ref="waveformCanvasContainer" class="waveform-display-area">
                 </div>
-             </el-col>
-             <el-col :span="1" />
+            </el-col>
+            <el-col :span="1" />
         </el-row>
 
         <!-- 新增：思考预算选择器行 -->
@@ -263,10 +263,14 @@ defineExpose({ focus });
             <el-col :span="22">
                 <div class="option-selector-wrapper">
                     <div class="option-selector-content">
-                        <el-button @click="handleReasoningSelection('default')" :type="tempReasoningEffort === 'default' ? 'primary' : 'default'" round>默认</el-button>
-                        <el-button @click="handleReasoningSelection('low')" :type="tempReasoningEffort === 'low' ? 'primary' : 'default'" round>快速</el-button>
-                        <el-button @click="handleReasoningSelection('medium')" :type="tempReasoningEffort === 'medium' ? 'primary' : 'default'" round>均衡</el-button>
-                        <el-button @click="handleReasoningSelection('high')" :type="tempReasoningEffort === 'high' ? 'primary' : 'default'" round>深入</el-button>
+                        <el-button @click="handleReasoningSelection('default')"
+                            :type="tempReasoningEffort === 'default' ? 'primary' : 'default'" round>默认</el-button>
+                        <el-button @click="handleReasoningSelection('low')"
+                            :type="tempReasoningEffort === 'low' ? 'primary' : 'default'" round>快速</el-button>
+                        <el-button @click="handleReasoningSelection('medium')"
+                            :type="tempReasoningEffort === 'medium' ? 'primary' : 'default'" round>均衡</el-button>
+                        <el-button @click="handleReasoningSelection('high')"
+                            :type="tempReasoningEffort === 'high' ? 'primary' : 'default'" round>深入</el-button>
                     </div>
                 </div>
             </el-col>
@@ -278,20 +282,12 @@ defineExpose({ focus });
             <el-col :span="22">
                 <el-scrollbar class="option-selector-wrapper">
                     <div class="option-selector-content">
-                        <el-button 
-                            @click="handleVoiceSelection(null)" 
-                            :type="!selectedVoice ? 'primary' : 'default'" 
-                            round
-                        >
+                        <el-button @click="handleVoiceSelection(null)" :type="!selectedVoice ? 'primary' : 'default'"
+                            round>
                             关闭语音
                         </el-button>
-                        <el-button 
-                            v-for="voice in props.voiceList" 
-                            :key="voice" 
-                            @click="handleVoiceSelection(voice)" 
-                            :type="selectedVoice === voice ? 'primary' : 'default'" 
-                            round
-                        >
+                        <el-button v-for="voice in props.voiceList" :key="voice" @click="handleVoiceSelection(voice)"
+                            :type="selectedVoice === voice ? 'primary' : 'default'" round>
                             {{ voice }}
                         </el-button>
                     </div>
@@ -304,47 +300,59 @@ defineExpose({ focus });
             <el-col :span="1" />
             <el-col :span="22">
                 <div class="chat-input-area-vertical">
-                     <div class="input-wrapper">
-                        <el-input v-if="!isRecording" ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
-                            placeholder="输入、粘贴、拖拽以发送内容"
-                            :autosize="{ minRows: 1, maxRows: 5 }" 
-                            resize="none"
-                            @keydown="handleKeyDown" />
-                     </div>
+                    <div class="input-wrapper">
+                        <el-input v-if="!isRecording" ref="senderRef" class="chat-textarea-vertical" v-model="prompt"
+                            type="textarea" placeholder="输入、粘贴、拖拽以发送内容" :autosize="{ minRows: 1, maxRows: 5 }"
+                            resize="none" @keydown="handleKeyDown" />
+                    </div>
                     <div class="input-actions-bar">
                         <div class="action-buttons-left">
-                           <el-tooltip content="清除聊天记录"><el-button :icon="Delete" size="default" @click="onClearHistory" circle :disabled="isRecording"/></el-tooltip>
-                           <el-tooltip content="添加附件"><el-button :icon="Link" size="default" @click="triggerFileUpload" circle :disabled="isRecording"/></el-tooltip>
-                           
-                           <el-tooltip :content="reasoningTooltipContent">
-                             <el-button :type="reasoningButtonType" size="default" circle :disabled="isRecording" @click="toggleReasoningSelector">
-                               <el-icon :size="18">
-                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M1 11h3v2H1zm18.1-7.5L17 5.6L18.4 7l2.1-2.1zM11 1h2v3h-2zM4.9 3.5L3.5 4.9L5.6 7L7 5.6zM10 22c0 .6.4 1 1 1h2c.6 0 1-.4 1-1v-1h-4zm2-16c-3.3 0-6 2.7-6 6c0 2.2 1.2 4.2 3 5.2V19c0 .6.4 1 1 1h4c.6 0 1-.4 1-1v-1.8c1.8-1 3-3 3-5.2c0-3.3-2.7-6-6-6m1 9.9V17h-2v-1.1c-1.7-.4-3-2-3-3.9c0-2.2 1.8-4 4-4s4 1.8 4 4c0 1.9-1.3 3.4-3 3.9m7-4.9h3v2h-3z"></path></svg>
-                               </el-icon>
-                             </el-button>
-                           </el-tooltip>
+                            <el-tooltip content="清除聊天记录"><el-button :icon="Delete" size="default"
+                                    @click="onClearHistory" circle :disabled="isRecording" /></el-tooltip>
+                            <el-tooltip content="添加附件"><el-button :icon="Link" size="default" @click="triggerFileUpload"
+                                    circle :disabled="isRecording" /></el-tooltip>
 
-                           <el-tooltip content="语音回复设置">
-                               <el-button 
-                                    :icon="Headset" 
-                                    size="default" 
-                                    circle 
-                                    :disabled="isRecording"
-                                    :type="selectedVoice ? 'primary' : ''"
-                                    :class="{ 'is-pulsing': selectedVoice }"
-                                    @click="toggleVoiceSelector"
-                                />
+                            <el-tooltip :content="reasoningTooltipContent">
+                                <el-button :type="reasoningButtonType" size="default" circle :disabled="isRecording"
+                                    @click="toggleReasoningSelector">
+                                    <el-icon :size="18">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                            <path fill="currentColor"
+                                                d="M1 11h3v2H1zm18.1-7.5L17 5.6L18.4 7l2.1-2.1zM11 1h2v3h-2zM4.9 3.5L3.5 4.9L5.6 7L7 5.6zM10 22c0 .6.4 1 1 1h2c.6 0 1-.4 1-1v-1h-4zm2-16c-3.3 0-6 2.7-6 6c0 2.2 1.2 4.2 3 5.2V19c0 .6.4 1 1 1h4c.6 0 1-.4 1-1v-1.8c1.8-1 3-3 3-5.2c0-3.3-2.7-6-6-6m1 9.9V17h-2v-1.1c-1.7-.4-3-2-3-3.9c0-2.2 1.8-4 4-4s4 1.8 4 4c0 1.9-1.3 3.4-3 3.9m7-4.9h3v2h-3z">
+                                            </path>
+                                        </svg>
+                                    </el-icon>
+                                </el-button>
+                            </el-tooltip>
+
+                            <el-tooltip content="语音回复设置">
+                                <el-button size="default" circle :disabled="isRecording"
+                                    :type="selectedVoice ? 'primary' : ''" :class="{ 'is-pulsing': selectedVoice }"
+                                    @click="toggleVoiceSelector"><el-icon :size="18">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path
+                                                d="M2 14c2.5-4.5 7-6 10-4c3-2 7.5-0.5 10 4c-2.5 4.5-7 6-10 4c-3 2-7.5 0.5-10-4z" />
+                                            <path d="M2 14h20" />
+                                        </svg>
+                                    </el-icon></el-button>
                             </el-tooltip>
                         </div>
                         <div class="action-buttons-right">
-                           <template v-if="isRecording">
-                                <el-tooltip content="取消录音"><el-button :icon="Close" size="default" @click="handleCancelRecording" circle /></el-tooltip>
-                                <el-tooltip content="结束并发送"><el-button :icon="Check" size="default" @click="handleConfirmAndSendRecording" circle /></el-tooltip>
-                           </template>
-                           <template v-else>
-                                <el-tooltip content="发送语音"><el-button :icon="Microphone" size="default" @click="startRecording" circle /></el-tooltip>
-                               <el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle :disabled="loading" /><el-button v-else :icon="Close" @click="onCancel" circle></el-button>
-                           </template>
+                            <template v-if="isRecording">
+                                <el-tooltip content="取消录音"><el-button :icon="Close" size="default"
+                                        @click="handleCancelRecording" circle /></el-tooltip>
+                                <el-tooltip content="结束并发送"><el-button :icon="Check" size="default"
+                                        @click="handleConfirmAndSendRecording" circle /></el-tooltip>
+                            </template>
+                            <template v-else>
+                                <el-tooltip content="发送语音"><el-button :icon="Microphone" size="default"
+                                        @click="startRecording" circle /></el-tooltip>
+                                <el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle
+                                    :disabled="loading" /><el-button v-else :icon="Close" @click="onCancel"
+                                    circle></el-button>
+                            </template>
                         </div>
                     </div>
                 </div>
@@ -358,19 +366,67 @@ defineExpose({ focus });
 
 <style scoped>
 /* Base Styles */
-.drag-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(90, 90, 90, 0.3); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 9999; display: flex; justify-content: center; align-items: center; pointer-events: none; }
-html.dark .drag-overlay { background-color: rgba(20, 20, 20, 0.4); }
-.drag-overlay-content { color: white; font-size: 20px; font-weight: bold; padding: 20px 40px; border: 2px dashed white; border-radius: 12px; background-color: rgba(0, 0, 0, 0.2); }
-.input-footer { padding: 10px 15px 15px 15px; height: auto; width: 100%; flex-shrink: 0; background-color: var(--el-bg-color); z-index: 10; }
-.file-card-container { margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
-.file-card-container :deep(.ant-attachments-file-card-item-image) { width: 56px; height: 56px; }
-.file-card-container :deep(.ant-image-img) { object-fit: cover; }
+.drag-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(90, 90, 90, 0.3);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+}
+
+html.dark .drag-overlay {
+    background-color: rgba(20, 20, 20, 0.4);
+}
+
+.drag-overlay-content {
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    padding: 20px 40px;
+    border: 2px dashed white;
+    border-radius: 12px;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.input-footer {
+    padding: 10px 15px 15px 15px;
+    height: auto;
+    width: 100%;
+    flex-shrink: 0;
+    background-color: var(--el-bg-color);
+    z-index: 10;
+}
+
+.file-card-container {
+    margin-bottom: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.file-card-container :deep(.ant-attachments-file-card-item-image) {
+    width: 56px;
+    height: 56px;
+}
+
+.file-card-container :deep(.ant-image-img) {
+    object-fit: cover;
+}
 
 /* Waveform Display Area Styles */
 .waveform-row {
     margin-bottom: 8px;
     transition: all 0.3s ease;
 }
+
 .waveform-display-area {
     width: 100%;
     height: 40px;
@@ -383,29 +439,37 @@ html.dark .drag-overlay { background-color: rgba(20, 20, 20, 0.4); }
     box-sizing: border-box;
     overflow: hidden;
 }
-html.dark .waveform-display-area { background-color: #1F1F1F; }
+
+html.dark .waveform-display-area {
+    background-color: #1F1F1F;
+}
 
 /* 修改：通用化选项选择器样式 */
 .option-selector-row {
     margin-bottom: 8px;
 }
+
 .option-selector-wrapper {
     background-color: #F3F4F6;
     border-radius: 12px;
     padding: 8px;
     max-height: 132px;
 }
+
 html.dark .option-selector-wrapper {
     background-color: #1F1F1F;
 }
+
 .option-selector-content {
     display: flex;
-    flex-wrap: wrap; 
+    flex-wrap: wrap;
     gap: 8px;
 }
+
 .option-selector-content .el-button {
     flex-shrink: 0;
 }
+
 .option-selector-wrapper :deep(.el-scrollbar__view) {
     padding-right: 8px;
 }
@@ -418,61 +482,148 @@ html.dark .option-selector-wrapper {
 }
 
 /* Vertical Layout */
-.chat-input-area-vertical { display: flex; flex-direction: column; background-color: #F3F4F6; border-radius: 12px; padding: 10px 12px; }
-html.dark .chat-input-area-vertical { background-color: #1F1F1F; }
-.chat-textarea-vertical { width: 100%; flex-grow: 1; }
-.chat-textarea-vertical:deep(.el-textarea__inner) { background-color: transparent; box-shadow: none !important; border: none !important; padding: 0; color: var(--el-text-color-primary); font-size: 14px; line-height: 1.5; resize: none; }
-.input-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; flex-shrink: 0; }
-.chat-input-area-vertical .action-buttons-left, .chat-input-area-vertical .action-buttons-right { display: flex; align-items: center; gap: 4px; }
-.chat-input-area-vertical .action-buttons-left { margin-left: -6px; }
-.chat-input-area-vertical .action-buttons-right { margin-right: -6px; }
-.chat-input-area-vertical .el-button { width: 32px; height: 32px; background: none; border: none; }
-.chat-input-area-vertical .el-button:hover { background-color: rgba(0, 0, 0, 0.05); }
-html.dark .chat-input-area-vertical .el-button:hover { background-color: rgba(255, 255, 255, 0.1); }
+.chat-input-area-vertical {
+    display: flex;
+    flex-direction: column;
+    background-color: #F3F4F6;
+    border-radius: 12px;
+    padding: 10px 12px;
+}
+
+html.dark .chat-input-area-vertical {
+    background-color: #1F1F1F;
+}
+
+.chat-textarea-vertical {
+    width: 100%;
+    flex-grow: 1;
+}
+
+.chat-textarea-vertical:deep(.el-textarea__inner) {
+    background-color: transparent;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0;
+    color: var(--el-text-color-primary);
+    font-size: 14px;
+    line-height: 1.5;
+    resize: none;
+}
+
+.input-actions-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    flex-shrink: 0;
+}
+
+.chat-input-area-vertical .action-buttons-left,
+.chat-input-area-vertical .action-buttons-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.chat-input-area-vertical .action-buttons-left {
+    margin-left: -6px;
+}
+
+.chat-input-area-vertical .action-buttons-right {
+    margin-right: -6px;
+}
+
+.chat-input-area-vertical .el-button {
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: none;
+}
+
+.chat-input-area-vertical .el-button:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+html.dark .chat-input-area-vertical .el-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
 
 /* Common Styles */
 :deep(.el-textarea.is-disabled .el-textarea__inner) {
     cursor: default !important;
     background-color: transparent !important;
 }
-:deep(.el-textarea__inner::-webkit-scrollbar) { width: 8px; height: 8px; }
-:deep(.el-textarea__inner::-webkit-scrollbar-track) { background: transparent; border-radius: 4px; }
-:deep(.el-textarea__inner::-webkit-scrollbar-thumb) { background: var(--el-text-color-disabled, #c0c4cc); border-radius: 4px; border: 2px solid transparent; background-clip: content-box; }
-:deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) { background: var(--el-text-color-secondary, #909399); background-clip: content-box; }
-html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb) { background: #6b6b6b; background-clip: content-box; }
-html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) { background: #999; background-clip: content-box; }
+
+:deep(.el-textarea__inner::-webkit-scrollbar) {
+    width: 8px;
+    height: 8px;
+}
+
+:deep(.el-textarea__inner::-webkit-scrollbar-track) {
+    background: transparent;
+    border-radius: 4px;
+}
+
+:deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+    background: var(--el-text-color-disabled, #c0c4cc);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+:deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+    background: var(--el-text-color-secondary, #909399);
+    background-clip: content-box;
+}
+
+html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+    background: #6b6b6b;
+    background-clip: content-box;
+}
+
+html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+    background: #999;
+    background-clip: content-box;
+}
 
 /* --- FINAL UI FIX for Buttons --- */
 .el-button.is-circle {
     color: var(--el-text-color-regular);
 }
-.el-button.is-circle:hover, .el-button.is-circle:focus {
+
+.el-button.is-circle:hover,
+.el-button.is-circle:focus {
     color: var(--el-color-primary);
     background-color: var(--el-color-primary-light-9);
 }
+
 .el-button.is-circle[type="primary"] {
     background-color: var(--el-color-primary);
     color: #ffffff;
 }
-.el-button.is-circle[type="primary"]:hover, .el-button.is-circle[type="primary"]:focus {
+
+.el-button.is-circle[type="primary"]:hover,
+.el-button.is-circle[type="primary"]:focus {
     background-color: var(--el-color-primary-light-3);
 }
 
 /* Pulsing glow animation */
 @keyframes pulse-glow {
-  0% {
-    box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(var(--el-color-primary-rgb), 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0);
-  }
+    0% {
+        box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 8px rgba(var(--el-color-primary-rgb), 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0);
+    }
 }
 
 .el-button.is-pulsing {
-  animation: pulse-glow 2s infinite;
+    animation: pulse-glow 2s infinite;
 }
 
 html.dark .el-button--danger.is-plain {
@@ -480,7 +631,8 @@ html.dark .el-button--danger.is-plain {
     background-color: var(--el-color-danger);
     border-color: var(--el-color-danger);
 }
-html.dark .el-button--danger.is-plain:hover, 
+
+html.dark .el-button--danger.is-plain:hover,
 html.dark .el-button--danger.is-plain:focus {
     background-color: var(--el-color-danger-light-3);
     border-color: var(--el-color-danger-light-3);
@@ -492,7 +644,8 @@ html.dark .el-button--success.is-plain {
     background-color: var(--el-color-success);
     border-color: var(--el-color-success);
 }
-html.dark .el-button--success.is-plain:hover, 
+
+html.dark .el-button--success.is-plain:hover,
 html.dark .el-button--success.is-plain:focus {
     background-color: var(--el-color-success-light-3);
     border-color: var(--el-color-success-light-3);

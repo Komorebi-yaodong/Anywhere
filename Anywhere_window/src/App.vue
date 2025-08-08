@@ -9,10 +9,22 @@ import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
 const chatInputRef = ref(null);
-// --- [滚动状态] ---
+// --- 滚动与导航状态 ---
 const chatContainerRef = ref(null);
 const isAtBottom = ref(true);
-const showScrollToBottomButton = ref(false);
+const showScrollToBottomButton = ref(false); // 现在控制导航按钮组的显示
+const isForcingScroll = ref(false);
+const messageRefs = new Map(); // [新增] 存储消息组件的引用
+const focusedMessageIndex = ref(null); // [新增] 当前导航聚焦的消息索引
+
+// [新增] 用于在模板中收集消息组件的引用
+const setMessageRef = (el, index) => {
+  if (el) {
+    messageRefs.set(index, el);
+  } else {
+    messageRefs.delete(index);
+  }
+};
 
 const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
 const parseWord = async (base64Data) => {
@@ -123,11 +135,20 @@ const imageViewerInitialIndex = ref(0);
 
 const senderRef = ref();
 
-// --- [重构] 滚动逻辑 ---
+// [新增] 计算属性判断下一个是否为最后一条消息
+const isNextMessageLast = computed(() => {
+    if (focusedMessageIndex.value === null) return true;
+    // 如果当前聚焦的是倒数第二条，那么下一条就是最后一条
+    return focusedMessageIndex.value >= chat_show.value.length - 2;
+});
+
+const nextButtonTooltip = computed(() => {
+    return isNextMessageLast.value ? '滚动到底部' : '查看下一条消息';
+});
+
 const scrollToBottom = async () => {
   if (isAtBottom.value) {
     await nextTick();
-    // 使用 ref 获取 ElMain 组件实例，然后通过 $el 获取其根 DOM 元素
     const el = chatContainerRef.value?.$el;
     if (el) {
       el.style.scrollBehavior = 'auto';
@@ -138,21 +159,101 @@ const scrollToBottom = async () => {
 };
 
 const forceScrollToBottom = () => {
+  isForcingScroll.value = true;
+  isAtBottom.value = true;
+  showScrollToBottomButton.value = false;
+  focusedMessageIndex.value = null; // [新增] 退出导航模式
+
   const el = chatContainerRef.value?.$el;
   if (el) {
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }
+
+  setTimeout(() => {
+    isForcingScroll.value = false;
+  }, 500);
 };
 
-// [修改] handleScroll 现在接收 event 对象
+// [新增] 在滚动时，找到当前视口顶部的消息
+const findFocusedMessageIndex = () => {
+    const container = chatContainerRef.value?.$el;
+    if (!container) return;
+    
+    const scrollTop = container.scrollTop;
+    let closestIndex = -1;
+    let smallestDistance = Infinity;
+
+    // 倒序遍历，优先找到视口内的消息
+    for (let i = chat_show.value.length - 1; i >= 0; i--) {
+        const msgComponent = messageRefs.get(i);
+        if (msgComponent) {
+            const el = msgComponent.$el;
+            const elTop = el.offsetTop;
+            const elBottom = elTop + el.clientHeight;
+            // 如果消息在视口内
+            if (elTop < scrollTop + container.clientHeight && elBottom > scrollTop) {
+                // 找到视口中最顶部的消息
+                const distance = Math.abs(elTop - scrollTop);
+                if (distance < smallestDistance) {
+                    smallestDistance = distance;
+                    closestIndex = i;
+                }
+            }
+        }
+    }
+    
+    if (closestIndex !== -1) {
+        focusedMessageIndex.value = closestIndex;
+    }
+};
+
 const handleScroll = (event) => {
-  const el = event.target; // 直接使用事件的目标元素
+  if (isForcingScroll.value) { return; }
+  const el = event.target;
   if (!el) return;
   const isScrolledToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 10;
+  
+  if (isAtBottom.value && !isScrolledToBottom) {
+    // 刚从底部向上滚动，激活导航模式
+    findFocusedMessageIndex();
+  }
+
   isAtBottom.value = isScrolledToBottom;
   showScrollToBottomButton.value = !isScrolledToBottom;
+  if (isScrolledToBottom) {
+    focusedMessageIndex.value = null; // 回到底部，退出导航模式
+  }
 };
 
+// [新增] 导航到上一条消息
+const navigateToPreviousMessage = () => {
+    if (focusedMessageIndex.value === null) {
+        findFocusedMessageIndex();
+        return;
+    }
+    if (focusedMessageIndex.value > 0) {
+        focusedMessageIndex.value--;
+        const targetComponent = messageRefs.get(focusedMessageIndex.value);
+        if (targetComponent) {
+            targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+};
+
+// [新增] 导航到下一条消息
+const navigateToNextMessage = () => {
+    if (isNextMessageLast.value) {
+        forceScrollToBottom();
+        return;
+    }
+    if (focusedMessageIndex.value < chat_show.value.length - 1) {
+        focusedMessageIndex.value++;
+        const targetComponent = messageRefs.get(focusedMessageIndex.value);
+        if (targetComponent) {
+            targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+};
 
 const isCollapsed = (index) => collapsedMessages.value.has(index);
 
@@ -397,6 +498,11 @@ onMounted(async () => {
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
   
+  const chatMainElement = chatContainerRef.value?.$el;
+  if (chatMainElement) {
+    chatMainElement.addEventListener('click', handleMarkdownImageClick);
+  }
+
   try {
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
@@ -534,10 +640,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('focus', handleWindowFocus);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
 
-  // [修改] 移除滚动和点击事件监听器
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) {
-    chatMainElement.removeEventListener('scroll', handleScroll);
     chatMainElement.removeEventListener('click', handleMarkdownImageClick);
   }
 });
@@ -690,7 +794,7 @@ const saveSessionAsMarkdown = async () => {
         if (action === 'confirm') {
           let finalBasename = inputValue.value.trim();
           if (!finalBasename) { ElMessage.error('文件名不能为空'); return; }
-          if (finalBasename.toLowerCase().endsWith('.md')) finalBasename = finalBasename.slice(0, -3);
+          if (finalBasename.toLowerCase().endsWith('.md')) finalBasname = finalBasename.slice(0, -3);
           const finalFilename = finalBasename + '.md';
           instance.confirmButtonLoading = true;
           try {
@@ -765,6 +869,8 @@ const handleSaveAction = async () => {
 const loadSession = async (jsonData) => {
   loading.value = true;
   collapsedMessages.value.clear();
+  messageRefs.clear(); // [修改] 清空 refs
+  focusedMessageIndex.value = null; // [修改] 重置聚焦索引
   try {
     CODE.value = jsonData.CODE;
     document.title = CODE.value;
@@ -1080,6 +1186,8 @@ const clearHistory = () => {
   if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
   else { history.value = []; chat_show.value = []; }
   collapsedMessages.value.clear();
+  messageRefs.clear(); // [修改] 清空 refs
+  focusedMessageIndex.value = null; // [修改] 重置聚焦索引
   defaultConversationName.value = "";
   chatInputRef.value?.focus(); ElMessage.success('历史记录已清除');
 };
@@ -1103,23 +1211,45 @@ const formatTimestamp = (dateString) => {
         :temporary="temporary" @save-window-size="handleSaveWindowSize" @open-model-dialog="handleOpenModelDialog"
         @toggle-pin="handleTogglePin" @toggle-memory="handleToggleMemory" @save-session="handleSaveSession" />
 
-      <!-- [修改] 新增一个包裹层，用于正确定位悬浮按钮 -->
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick" @scroll="handleScroll">
-          <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :message="message" :index="index"
-            :isLastMessage="index === chat_show.length - 1" :isLoading="loading" :userAvatar="UserAvart"
-            :aiAvatar="AIAvart" :isCollapsed="isCollapsed(index)" @delete-message="handleDeleteMessage"
-            @copy-text="handleCopyText" @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse"
-            @show-system-prompt="handleShowSystemPrompt" @avatar-click="onAvatarClick" />
+          <!-- [修改] 添加 :ref 来收集DOM元素 -->
+          <ChatMessage 
+            v-for="(message, index) in chat_show" 
+            :key="message.id" 
+            :ref="el => setMessageRef(el, index)"
+            :message="message" 
+            :index="index"
+            :isLastMessage="index === chat_show.length - 1" 
+            :isLoading="loading" 
+            :userAvatar="UserAvart"
+            :aiAvatar="AIAvart" 
+            :isCollapsed="isCollapsed(index)" 
+            @delete-message="handleDeleteMessage"
+            @copy-text="handleCopyText" 
+            @re-ask="handleReAsk" 
+            @toggle-collapse="handleToggleCollapse"
+            @show-system-prompt="handleShowSystemPrompt" 
+            @avatar-click="onAvatarClick" 
+          />
         </el-main>
         
-        <!-- [修改] 将按钮移到 el-main 外部，作为其兄弟节点 -->
+        <!-- [修改] 更新为导航按钮组 -->
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
-          <el-button class="scroll-to-bottom-btn" @click="forceScrollToBottom">
-            <svg class="scroll-down-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-              <path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z"></path>
-            </svg>
-          </el-button>
+          <el-tooltip content="查看上一条消息" placement="left">
+            <el-button class="scroll-nav-btn" @click="navigateToPreviousMessage">
+              <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                <path fill="currentColor" d="m488.832 344.32-339.84 335.872a32 32 0 0 0 0 45.248l.064.064a32 32 0 0 0 45.248 0L512 412.928l317.696 312.576a32 32 0 0 0 45.248 0l.064-.064a32 32 0 0 0 0-45.248L533.824 344.32a32 32 0 0 0-44.992 0z"></path>
+              </svg>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip :content="nextButtonTooltip" placement="left">
+            <el-button class="scroll-nav-btn" @click="navigateToNextMessage">
+              <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                <path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z"></path>
+              </svg>
+            </el-button>
+          </el-tooltip>
         </div>
       </div>
 
@@ -1642,17 +1772,15 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   color: var(--el-text-color-primary);
 }
 
-// [新增] 新的包裹层样式
 .main-area-wrapper {
   position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden; // 隐藏任何可能溢出的部分
+  overflow: hidden;
 }
 
 .chat-main {
-  // [修改] 移除了 position: relative
   flex-grow: 1;
   padding-left: 10px;
   padding-right: 10px;
@@ -1664,14 +1792,19 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   background-color: var(--el-bg-color);
 }
 
+// [修改] 更新为导航按钮组的容器样式
 .scroll-to-bottom-wrapper {
   position: absolute;
   bottom: 15px;
   right: 15px;
   z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px; // 两个按钮之间的间距
 }
 
-.scroll-to-bottom-btn {
+// [修改] 按钮的通用样式
+.scroll-nav-btn {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -1692,7 +1825,7 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   }
 }
 
-html.dark .scroll-to-bottom-btn {
+html.dark .scroll-nav-btn {
   background-color: var(--bg-tertiary);
   border-color: var(--border-primary);
   color: var(--text-primary);
@@ -1701,13 +1834,14 @@ html.dark .scroll-to-bottom-btn {
   }
 }
 
-.scroll-down-icon {
+.scroll-nav-icon {
   transition: transform 0.2s ease;
 }
 
-.scroll-to-bottom-btn:hover .scroll-down-icon {
-  transform: translateY(2px);
+.scroll-nav-btn:hover .scroll-nav-icon {
+  transform: translateY(0); // 移除之前的动画，或者可以自定义
 }
+
 
 .chat-message :deep(.markdown-body) {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
