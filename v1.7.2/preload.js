@@ -13,6 +13,7 @@ const {
   setZoomFactor,
   feature_suffix,
   defaultConfig,
+  savePromptWindowSettings,
 } = require('./data.js');
 
 const {
@@ -41,6 +42,7 @@ window.api = {
   coderedirect,
   setZoomFactor,
   defaultConfig,
+  savePromptWindowSettings,
 };
 
 // --- Command Handlers ---

@@ -107,7 +107,8 @@
       "removeFromTag": "このタグからクイックアシスタントを削除",
       "sendDirect": "有効にすると、選択したテキストやスクリーンショットが直接AIに送信されます。",
       "sendFile": "有効にすると、選択したファイルが直接AIに送信されて処理されます。",
-      "ifTextNecessary": "有効にすると、一部のプロバイダー（例: Vertex）の要件を満たすため、リクエストにテキストが含まれるように、テキストの前にタイムスタンプを自動的に追加します。"
+      "ifTextNecessary": "有効にすると、一部のプロバイダー（例: Vertex）の要件を満たすため、リクエストにテキストが含まれるように、テキストの前にタイムスタンプを自動的に追加します。",
+      "reasoningEffort": "モデルの思考プロセスの計算予算を設定します。高い値はより詳細な回答をもたらす可能性がありますが、遅延とコストが増加します。"
     },
     "voiceLabel": "デフォルト音声",
     "voicePlaceholder": "音声を選択または無効化",
@@ -188,7 +189,6 @@
       "editPromptTitle": "音声名の編集",
       "editPromptMessage": "新しい音声名を入力してください",
       "editSuccess": "音声が正常に修正されました"
-
     },
     "title": "一般設定",
     "stream": {
@@ -304,7 +304,8 @@
     "close": "閉じる",
     "assignSelected": "選択を割り当て",
     "addTag": "タグを追加",
-    "removeIcon": "アイコンを削除",
+    "removeIcon": "削除",
+    "downloadIcon": "ダウンロード",
     "warningTitle": "警告",
     "refresh": "更新",
     "deleteSelected": "選択を削除",

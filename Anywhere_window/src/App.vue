@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElTooltip, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton } from 'element-plus';
 import { createClient } from "webdav/web";
 
 import ChatHeader from './components/ChatHeader.vue';
@@ -669,19 +669,35 @@ onBeforeUnmount(() => {
   }
 });
 
-const saveConfig = async () => { try { await window.api.updateConfig({ config: JSON.parse(JSON.stringify(currentConfig.value)) }); } catch (error) { ElMessage.error('保存配置失败'); } }
 const saveWindowSize = async () => {
-  try {
-    const configData = await window.api.getConfig();
-    currentConfig.value = configData.config;
-  } catch (err) { }
-  currentConfig.value.window_height = window.innerHeight;
-  currentConfig.value.window_width = window.innerWidth;
-  currentConfig.value.position_x = window.screenX;
-  currentConfig.value.position_y = window.screenY;
-  currentConfig.value.zoom = zoomLevel.value;
-  await saveConfig();
-  ElMessage.success('窗口大小、位置及缩放已保存');
+    if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
+        ElMessage.warning('无法保存窗口设置，因为当前不是一个已定义的快捷助手。');
+        return;
+    }
+
+    const settingsToSave = {
+        window_height: window.innerHeight,
+        window_width: window.innerWidth,
+        position_x: window.screenX,
+        position_y: window.screenY,
+        zoom: zoomLevel.value,
+    };
+
+    try {
+        const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
+        if (result.success) {
+            ElMessage.success('当前快捷助手的窗口大小、位置及缩放已保存');
+            currentConfig.value.prompts[CODE.value] = {
+                ...currentConfig.value.prompts[CODE.value],
+                ...settingsToSave
+            };
+        } else {
+            ElMessage.error(`保存失败: ${result.message}`);
+        }
+    } catch (error) {
+        console.error("Error saving window settings:", error);
+        ElMessage.error('保存窗口设置时出错');
+    }
 }
 
 const getSessionDataAsObject = () => {
@@ -704,7 +720,7 @@ const saveSessionToCloud = async () => {
   const now = new Date();
   const year = String(now.getFullYear()).slice(-2);
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
+  const day = String(now.getDate()).toString().padStart(2, '0');
   const hours = String(now.getHours()).toString().padStart(2, '0');
   const minutes = String(now.getMinutes()).toString().padStart(2, '0');
   const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}`;
@@ -817,7 +833,7 @@ const saveSessionAsMarkdown = async () => {
         if (action === 'confirm') {
           let finalBasename = inputValue.value.trim();
           if (!finalBasename) { ElMessage.error('文件名不能为空'); return; }
-          if (finalBasename.toLowerCase().endsWith('.md')) finalBasname = finalBasename.slice(0, -3);
+          if (finalBasename.toLowerCase().endsWith('.md')) finalBasename = finalBasename.slice(0, -3);
           const finalFilename = finalBasename + '.md';
           instance.confirmButtonLoading = true;
           try {
@@ -889,11 +905,12 @@ const handleSaveAction = async () => {
   ElMessageBox({ title: '选择保存方式', message: messageVNode, showConfirmButton: false, showCancelButton: false, customClass: 'save-options-dialog', width: '450px' }).catch(() => { });
 };
 
+
 const loadSession = async (jsonData) => {
   loading.value = true;
   collapsedMessages.value.clear();
-  messageRefs.clear(); // [修改] 清空 refs
-  focusedMessageIndex.value = null; // [修改] 重置聚焦索引
+  messageRefs.clear();
+  focusedMessageIndex.value = null;
   try {
     CODE.value = jsonData.CODE;
     document.title = CODE.value;
@@ -903,7 +920,7 @@ const loadSession = async (jsonData) => {
     temporary.value = jsonData.temporary;
     history.value = jsonData.history;
     chat_show.value = jsonData.chat_show;
-    selectedVoice.value = jsonData.selectedVoice || null;
+    selectedVoice.value = jsonData.selectedVoice || ''; // FIX: Fallback to empty string
     tempReasoningEffort.value = jsonData.currentPromptConfig?.reasoning_effort || 'default';
 
 
@@ -1220,7 +1237,7 @@ const formatTimestamp = (dateString) => {
     const date = new Date(dateString);
     const datePart = date.toLocaleDateString('sv-SE'); 
     const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }); 
-    return `${datePart} ${timePart}`;
+    return `${datePart}${timePart}`;
   } catch (e) {
     return '';
   }

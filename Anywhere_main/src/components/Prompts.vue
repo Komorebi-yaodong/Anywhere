@@ -1,11 +1,10 @@
 <script setup>
-import { ref, reactive, computed, inject } from 'vue'; // [修改] 移除 onMounted, nextTick; 引入 inject
-import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled } from '@element-plus/icons-vue'; // [修改] 引入 QuestionFilled
+import { ref, reactive, computed, inject } from 'vue';
+import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
-// [修改] 注入来自 App.vue 的响应式 config，修复数据流问题
 const currentConfig = inject('config'); 
 const activeCollapseNames = ref([]);
 
@@ -26,8 +25,10 @@ const editingPrompt = reactive({
   isDirectSend_file: false,
   isDirectSend_normal: true,
   ifTextNecessary: false,
-  voice: null,
+  voice: '', // FIX: Default to empty string instead of null
   reasoning_effort: "default", 
+  window_width: 540,
+  window_height: 700,
 });
 const isNewPrompt = ref(false);
 
@@ -61,7 +62,7 @@ const availableModels = computed(() => {
 const availableVoices = computed(() => {
   const voices = currentConfig.value?.voiceList || [];
   return [
-    { label: t('prompts.voiceOptions.off'), value: null },
+    { label: t('prompts.voiceOptions.off'), value: '' }, // FIX: Use empty string for "off" state
     ...voices.map(v => ({ label: v, value: v }))
   ];
 });
@@ -202,8 +203,12 @@ function prepareAddPrompt() {
     isDirectSend_file: false,
     isDirectSend_normal: true,
     ifTextNecessary: false,
-    voice: null,
+    voice: '', // FIX: Change null to empty string
     reasoning_effort: "default", 
+    window_width: 540,
+    window_height: 700,
+    position_x: 0, 
+    position_y: 0,
   });
   showPromptEditDialog.value = true;
 }
@@ -228,8 +233,10 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
     isDirectSend_file: p.isDirectSend_file ?? false,
     isDirectSend_normal: p.isDirectSend_normal ?? true,
     ifTextNecessary: p.ifTextNecessary ?? false,
-    voice: p.voice ?? null,
+    voice: p.voice ?? '', // FIX: Use empty string as fallback
     reasoning_effort: p.reasoning_effort ?? "default", 
+    window_width: p.window_width ?? 540,
+    window_height: p.window_height ?? 700,
   });
   showPromptEditDialog.value = true;
 }
@@ -260,9 +267,13 @@ function savePrompt() {
     ifTextNecessary: editingPrompt.ifTextNecessary,
     voice: editingPrompt.voice,
     reasoning_effort: editingPrompt.reasoning_effort, 
+    window_width: editingPrompt.window_width,
+    window_height: editingPrompt.window_height,
   };
 
   if (isNewPrompt.value) {
+    promptData.position_x = 0;
+    promptData.position_y = 0;
     currentConfig.value.prompts[newKey] = promptData;
     const targetTag = editingPrompt.selectedTag;
     if (targetTag) {
@@ -274,8 +285,12 @@ function savePrompt() {
       }
     }
   } else {
+    const existingPrompt = currentConfig.value.prompts[oldKey] || {};
+    promptData.position_x = existingPrompt.position_x || 0;
+    promptData.position_y = existingPrompt.position_y || 0;
+
     if (newKey !== oldKey) {
-      currentConfig.value.prompts[newKey] = { ...(currentConfig.value.prompts[oldKey] || {}), ...promptData };
+      currentConfig.value.prompts[newKey] = { ...existingPrompt, ...promptData };
       delete currentConfig.value.prompts[oldKey];
       Object.keys(currentConfig.value.tags).forEach(tagName => {
         const index = currentConfig.value.tags[tagName].indexOf(oldKey);
@@ -392,6 +407,21 @@ const handleIconUpload = (file) => {
 const removeEditingIcon = () => {
   editingPrompt.icon = "";
 };
+
+const downloadEditingIcon = () => {
+    if (!editingPrompt.icon) {
+        ElMessage.warning('没有可供下载的图标。');
+        return;
+    }
+    const link = document.createElement('a');
+    link.href = editingPrompt.icon;
+    const matches = editingPrompt.icon.match(/^data:image\/([a-zA-Z+]+);base64,/);
+    const extension = matches && matches[1] ? matches[1].replace('svg+xml', 'svg') : 'png';
+    link.download = `icon.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
 </script>
 
 <template>
@@ -499,7 +529,10 @@ const removeEditingIcon = () => {
                   </template>
                 </el-upload>
                 <div class="el-upload__tip">{{ t('prompts.iconUploadTip', { formats: 'JPG, PNG', maxSize: '100KB' }) }}</div>
-                <el-button v-if="editingPrompt.icon" class="remove-icon-button" type="danger" plain size="small" @click="removeEditingIcon">{{ t('common.removeIcon') }}</el-button>
+                <div v-if="editingPrompt.icon" class="icon-button-group">
+                  <el-button class="icon-action-button" type="primary" plain size="small" @click="downloadEditingIcon">{{ t('common.downloadIcon') }}</el-button>
+                  <el-button class="icon-action-button" type="danger" plain size="small" @click="removeEditingIcon">{{ t('common.removeIcon') }}</el-button>
+                </div>
               </div>
             </el-form-item>
           </el-col>
@@ -555,9 +588,10 @@ const removeEditingIcon = () => {
             />
           </el-scrollbar>
         </el-form-item>
+        
         <el-form-item :label="t('prompts.llmParametersLabel')">
           <div class="llm-params-container">
-            <div class="param-item">
+            <div class="param-item" v-if="editingPrompt.showMode === 'window'">
                 <span class="param-label">{{ t('prompts.streamLabel') }}</span>
                 <div class="spacer"></div>
                 <el-switch v-model="editingPrompt.stream" />
@@ -567,7 +601,6 @@ const removeEditingIcon = () => {
                 <div class="spacer"></div>
                 <el-switch v-model="editingPrompt.isTemperature" />
             </div>
-            <!-- 思考预算选择器已移动到此处 -->
             <div class="param-item reasoning-effort-param">
                 <span class="param-label">{{ t('prompts.reasoningEffortLabel') }}</span>
                 <el-tooltip :content="t('prompts.tooltips.reasoningEffort')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
@@ -581,9 +614,11 @@ const removeEditingIcon = () => {
             </div>
           </div>
         </el-form-item>
+
         <el-form-item v-if="editingPrompt.isTemperature" :label="t('prompts.temperatureLabel')">
           <el-slider v-model="editingPrompt.temperature" :min="0" :max="2" :step="0.1" show-input />
         </el-form-item>
+
         <el-form-item :label="t('prompts.AssistantParametersLabel')">
           <div class="llm-params-container">
               <div class="param-item">
@@ -612,8 +647,21 @@ const removeEditingIcon = () => {
                       <el-option v-for="item in availableVoices" :key="item.value" :label="item.label" :value="item.value" />
                   </el-select>
               </div>
+              <el-row :gutter="20" v-if="editingPrompt.showMode === 'window'" class="dimensions-group-row">
+                <el-col :span="12">
+                  <el-form-item :label="t('setting.dimensions.widthLabel')">
+                      <el-input-number v-model="editingPrompt.window_width" :min="200" :max="1200" controls-position="right" style="width: 100%;" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item :label="t('setting.dimensions.heightLabel')">
+                      <el-input-number v-model="editingPrompt.window_height" :min="150" :max="900" controls-position="right" style="width: 100%;" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
           </div>
         </el-form-item>
+
         <el-form-item v-if="isNewPrompt" :label="t('prompts.addToTagLabel')">
           <el-select v-model="editingPrompt.selectedTag" :placeholder="t('prompts.addToTagPlaceholder')" style="width: 100%;" clearable>
             <el-option v-for="tagNameItem in sortedTagNames" :key="tagNameItem" :label="tagNameItem" :value="tagNameItem" />
@@ -975,8 +1023,15 @@ html.dark .bottom-actions-container {
   font-style: normal;
 }
 
-.remove-icon-button {
-  width: 120px;
+.icon-button-group {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  justify-content: center;
+}
+
+.icon-action-button {
+  flex-grow: 1;
 }
 
 .llm-params-container {
@@ -1027,4 +1082,18 @@ html.dark .bottom-actions-container {
 :deep(.el-slider .el-input-number) {
     width: 130px;
 }
+
+/* [NEW] Styles for dimensions group */
+.dimensions-group-row {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-primary);
+}
+.dimensions-group-row .el-form-item {
+    margin-bottom: 0;
+}
+.dimensions-group-row :deep(.el-form-item__label) {
+    margin-bottom: 8px !important;
+}
+
 </style>

@@ -107,7 +107,8 @@
       "removeFromTag": "从此标签移除快捷助手",
       "sendDirect": "开启后，选中文字或截图后将直接发送给AI",
       "sendFile": "开启后，选中文件后将直接发送给AI并处理结果",
-      "ifTextNecessary": "开启后，将自动在文本前添加当前时间戳，以确保每次请求都包含文本，满足部分服务商要求（vertex）"
+      "ifTextNecessary": "开启后，将自动在文本前添加当前时间戳，以确保每次请求都包含文本，满足部分服务商要求（vertex）",
+      "reasoningEffort": "设置模型思考过程的计算预算。更高的值可能会产生更详尽的回答，但会增加延迟和成本。"
     },
     "voiceLabel": "默认声音",
     "voicePlaceholder": "选择一个声音或关闭",
@@ -303,7 +304,8 @@
     "close": "关闭",
     "assignSelected": "分配选中",
     "addTag": "添加标签",
-    "removeIcon": "移除图标",
+    "removeIcon": "移除",
+    "downloadIcon": "下载",
     "warningTitle": "警告",
     "refresh": "刷新",
     "deleteSelected": "删除选中",

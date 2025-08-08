@@ -441,13 +441,6 @@ const handleSelectionChange = (val) => {
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
-              <span class="setting-option-label">{{ t('setting.stream.label') }}</span>
-              <span class="setting-option-description">{{ t('setting.stream.description') }}</span>
-            </div>
-            <el-switch v-model="currentConfig.stream" @change="saveConfig" />
-          </div>
-          <div class="setting-option-item">
-            <div class="setting-text-content">
               <span class="setting-option-label">{{ t('setting.autoClose.label') }}</span>
               <span class="setting-option-description">{{ t('setting.autoClose.description') }}</span>
             </div>
@@ -561,21 +554,6 @@ const handleSelectionChange = (val) => {
             </el-form-item>
           </el-form>
         </el-card>
-
-        <!-- 窗口尺寸卡片 -->
-        <el-card class="settings-card" shadow="never">
-            <template #header>
-                <div class="card-header"><span>{{ t('setting.dimensions.title') }}</span></div>
-            </template>
-            <div class="dimensions-group">
-                <el-form-item :label="t('setting.dimensions.widthLabel')">
-                    <el-input-number v-model="currentConfig.window_width" :min="200" :max="1200" @change="saveConfig" controls-position="right" />
-                </el-form-item>
-                <el-form-item :label="t('setting.dimensions.heightLabel')">
-                    <el-input-number v-model="currentConfig.window_height" :min="150" :max="900" @change="saveConfig" controls-position="right" />
-                </el-form-item>
-            </div>
-        </el-card>
       </div>
     </el-scrollbar>
 
@@ -624,7 +602,7 @@ const handleSelectionChange = (val) => {
 </template>
 
 <style scoped>
-/* [MODIFIED] 语音设置样式 */
+/* [MODIFIED] Voice settings styles */
 .voice-list-container {
   display: flex;
   flex-wrap: wrap;
@@ -737,19 +715,7 @@ const handleSelectionChange = (val) => {
   flex-shrink: 0;
 }
 
-.dimensions-group {
-    display: flex;
-    gap: 40px;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    padding: 20px 0;
-}
-
-.dimensions-group .el-form-item {
-    margin-bottom: 0;
-    flex: 1;
-    min-width: 200px;
-}
+/* [REMOVED] Dimensions group styles are no longer needed here */
 
 :deep(.el-form-item__label) {
   line-height: 1.5;
