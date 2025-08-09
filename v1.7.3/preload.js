@@ -45,6 +45,7 @@ window.api = {
   setZoomFactor,
   defaultConfig,
   savePromptWindowSettings,
+  desktopCaptureSources: utools.desktopCaptureSources,
 };
 
 // --- Command Handlers ---

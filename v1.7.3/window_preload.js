@@ -10,7 +10,7 @@ const {
     sethotkey,
     setZoomFactor,
     defaultConfig,
-    savePromptWindowSettings, // [MODIFIED] import new function
+    savePromptWindowSettings,
 } = require('./data.js');
 
 const {
@@ -58,4 +58,5 @@ window.api = {
     setZoomFactor,
     defaultConfig,
     savePromptWindowSettings,
+    desktopCaptureSources: utools.desktopCaptureSources,
 };

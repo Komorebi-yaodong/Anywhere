@@ -469,13 +469,15 @@ const handleUpload = async ({ fileList: newFiles }) => {
   chatInputRef.value?.focus({ cursor: 'end' });
 };
 
+// [MODIFIED] handleSendAudio to handle new payload if needed, but primarily simplifies
 const handleSendAudio = async (audioFile) => {
-  prompt.value = '';
-  fileList.value = [];
+    // The prompt.value is already up-to-date from the v-model binding.
+    // We just need to handle the audio file.
+    fileList.value = []; // Clear any other pending files
+    await file2fileList(audioFile, 0);
+    await askAI(false); // This will now send both the text in prompt.value and the audio in fileList
+};
 
-  await file2fileList(audioFile, 0);
-  await askAI(false);
-}
 
 const handleWindowBlur = () => {
   const textarea = chatInputRef.value?.senderRef?.$refs.textarea;

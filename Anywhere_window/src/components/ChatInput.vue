@@ -1,9 +1,9 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
 import { Attachments } from 'ant-design-x-vue';
-// 移除 ElPopover, 因为不再使用
-import { ElFooter, ElRow, ElCol, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
+import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
 import { Link, Delete, Promotion, Close, Microphone, Check } from '@element-plus/icons-vue';
+// [恢复] 重新引入 recorder-core 以实现声波
 import Recorder from 'recorder-core';
 import 'recorder-core/src/extensions/waveview.js';
 import 'recorder-core/src/engine/wav';
@@ -29,14 +29,20 @@ const waveformCanvasContainer = ref(null);
 const isDragging = ref(false);
 const dragCounter = ref(0);
 const isRecording = ref(false);
-let recorder = null;
 
-// 移除 reasoningPopoverVisible, 新增 isReasoningSelectorVisible
+// [修改] 同时管理两种录音器状态
+let recorder = null; // for recorder-core (microphone with waveform)
+let wave = null;
+let mediaRecorder = null; // for MediaRecorder (system audio)
+let audioChunks = [];
+let audioStream = null;
+const currentRecordingSource = ref(null); // 'microphone' or 'system'
+const isCancelledByButton = ref(false); // [新增] 修复取消Bug的关键
+
+const isAudioSourceSelectorVisible = ref(false);
 const isReasoningSelectorVisible = ref(false);
 const isVoiceSelectorVisible = ref(false);
 
-// --- Waveform Visualization State ---
-let wave = null;
 
 // --- Computed Properties ---
 const reasoningButtonType = computed(() => {
@@ -68,7 +74,6 @@ const insertNewline = () => {
 
 // --- Event Handlers ---
 const handleKeyDown = (event) => {
-    // [BUG修复] 增加对输入法合成状态的判断，防止回车键冲突
     if (event.isComposing) {
         return;
     }
@@ -111,12 +116,12 @@ const onCancel = () => emit('cancel');
 const onClearHistory = () => emit('clear-history');
 const onRemoveFile = (index) => emit('remove-file', index);
 
-// 新增：切换思考预算选择器的可见性，并确保与语音选择器互斥
 const toggleReasoningSelector = () => {
     if (isRecording.value) return;
     isReasoningSelectorVisible.value = !isReasoningSelectorVisible.value;
     if (isReasoningSelectorVisible.value) {
         isVoiceSelectorVisible.value = false;
+        isAudioSourceSelectorVisible.value = false;
     }
 };
 
@@ -125,12 +130,12 @@ const handleReasoningSelection = (effort) => {
     isReasoningSelectorVisible.value = false;
 };
 
-// 修改：确保与思考预算选择器互斥
 const toggleVoiceSelector = () => {
     if (isRecording.value) return;
     isVoiceSelectorVisible.value = !isVoiceSelectorVisible.value;
     if (isVoiceSelectorVisible.value) {
         isReasoningSelectorVisible.value = false;
+        isAudioSourceSelectorVisible.value = false;
     }
 };
 
@@ -148,34 +153,90 @@ const handleDragLeave = (event) => { preventDefaults(event); dragCounter.value--
 const handleDrop = (event) => { preventDefaults(event); isDragging.value = false; dragCounter.value = 0; const files = event.dataTransfer.files; if (files && files.length > 0) { emit('upload', { file: files[0], fileList: Array.from(files) }); focus(); } };
 const handlePasteEvent = (event) => { const clipboardData = event.clipboardData || window.clipboardData; if (!clipboardData) return; const items = Array.from(clipboardData.items).filter(item => item.kind === 'file'); if (items.length > 0) { preventDefaults(event); const files = items.map(item => item.getAsFile()); emit('upload', { file: files[0], fileList: files }); focus(); } };
 
-// --- Audio Recording and Visualization Logic ---
-const startRecording = () => {
-    if (isRecording.value) return;
-    isVoiceSelectorVisible.value = false;
-    isReasoningSelectorVisible.value = false; // 开始录音时关闭选择器
-    Recorder.TrafficFree = true;
-    recorder = Recorder({
-        type: 'wav', sampleRate: 16000, bitRate: 16,
-        onProcess: (buffers, powerLevel, bufferDuration, bufferSampleRate) => {
-            if (wave) {
-                wave.input(buffers[buffers.length - 1], powerLevel, bufferSampleRate);
-            }
-        }
-    });
+// --- [重构] Audio Recording Logic ---
 
-    recorder.open(() => {
-        isRecording.value = true;
-        nextTick(() => {
-            if (waveformCanvasContainer.value) {
-                wave = Recorder.WaveView({
-                    elem: waveformCanvasContainer.value,
-                    lineWidth: 3,
+const toggleAudioSourceSelector = () => {
+    if (isRecording.value) return;
+    isAudioSourceSelectorVisible.value = !isAudioSourceSelectorVisible.value;
+    if (isAudioSourceSelectorVisible.value) {
+        isVoiceSelectorVisible.value = false;
+        isReasoningSelectorVisible.value = false;
+    }
+}
+
+const startRecordingFromSource = async (sourceType) => {
+    isAudioSourceSelectorVisible.value = false;
+    if (isRecording.value) return;
+
+    // [修改] 1. 立即更新UI
+    isRecording.value = true;
+    currentRecordingSource.value = sourceType;
+    isCancelledByButton.value = false;
+
+    try {
+        if (sourceType === 'microphone') {
+            // [修改] 2. 异步准备录音
+            await new Promise((resolve, reject) => {
+                Recorder.TrafficFree = true;
+                recorder = Recorder({
+                    type: 'wav', sampleRate: 16000, bitRate: 16,
+                    onProcess: (buffers, powerLevel, bufferDuration, bufferSampleRate) => {
+                        if (wave) {
+                            wave.input(buffers[buffers.length - 1], powerLevel, bufferSampleRate);
+                        }
+                    }
                 });
+                recorder.open(() => {
+                    nextTick(() => {
+                        if (waveformCanvasContainer.value) {
+                            wave = Recorder.WaveView({ elem: waveformCanvasContainer.value, lineWidth: 3 });
+                        }
+                        recorder.start();
+                        resolve();
+                    });
+                }, (msg, isUserNotAllow) => {
+                    const errorMsg = (isUserNotAllow ? '用户拒绝了权限, ' : '') + '无法录音: ' + msg;
+                    ElMessage.error(errorMsg);
+                    recorder = null;
+                    reject(new Error(errorMsg));
+                });
+            });
+        } else if (sourceType === 'system') {
+            // [修改] 2. 异步准备录音
+            const sources = await window.api.desktopCaptureSources({ types: ['screen', 'window'] });
+            if (!sources || sources.length === 0) {
+                throw new Error('未找到可用的系统音频源');
             }
-            recorder.start();
-        });
-    },
-        (msg, isUserNotAllow) => { ElMessage.error((isUserNotAllow ? '用户拒绝了权限, ' : '') + '无法录音: ' + msg); recorder = null; });
+            audioStream = await navigator.mediaDevices.getUserMedia({
+                audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } },
+                video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } },
+            });
+
+            audioChunks = [];
+            mediaRecorder = new MediaRecorder(audioStream);
+
+            mediaRecorder.ondataavailable = (event) => audioChunks.push(event.data);
+            mediaRecorder.onstop = () => {
+                if (isCancelledByButton.value) {
+                    stopRecordingAndCleanup();
+                    return;
+                }
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const now = new Date();
+                const timestamp = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+                const audioFile = new File([audioBlob], `audio-${timestamp}.wav`, { type: 'audio/wav' });
+                emit('send-audio', audioFile);
+                stopRecordingAndCleanup();
+            };
+
+            mediaRecorder.start();
+        }
+    } catch (err) {
+        // [修改] 3. 如果准备失败，恢复UI状态
+        console.error("录音启动失败:", err);
+        ElMessage.error(err.message || '无法开始录音');
+        stopRecordingAndCleanup(); // This will set isRecording to false
+    }
 };
 
 const stopRecordingAndCleanup = () => {
@@ -184,28 +245,62 @@ const stopRecordingAndCleanup = () => {
         recorder = null;
     }
     if (wave) {
-        wave.elem.innerHTML = "";
+        if (waveformCanvasContainer.value) waveformCanvasContainer.value.innerHTML = "";
         wave = null;
     }
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+    if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+    }
+    mediaRecorder = null;
+    audioStream = null;
+    audioChunks = [];
     isRecording.value = false;
+    currentRecordingSource.value = null;
 };
 
 const handleCancelRecording = () => {
-    if (!recorder) return;
-    recorder.stop(() => { ElMessage.info('录音已取消'); }, (msg) => { ElMessage.error('停止失败: ' + msg); });
-    stopRecordingAndCleanup();
+    isCancelledByButton.value = true;
+    ElMessage.info('录音已取消');
+    
+    if (currentRecordingSource.value === 'microphone' && recorder) {
+        recorder.stop(() => {
+            stopRecordingAndCleanup();
+        }, () => {
+            stopRecordingAndCleanup();
+        });
+    } else if (currentRecordingSource.value === 'system' && mediaRecorder) {
+        // onstop will handle cleanup because of the flag
+        mediaRecorder.stop();
+    }
 };
 
 const handleConfirmAndSendRecording = () => {
-    if (!recorder) return;
-    recorder.stop((blob) => {
-        const now = new Date();
-        const timestamp = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-        const audioFile = new File([blob], `audio-${timestamp}.wav`, { type: 'audio/wav' });
-        emit('send-audio', audioFile);
-        stopRecordingAndCleanup();
-    }, (msg) => { ElMessage.error('录音失败: ' + msg); stopRecordingAndCleanup(); });
+    isCancelledByButton.value = false;
+
+    if (currentRecordingSource.value === 'microphone' && recorder) {
+        recorder.stop((blob) => {
+            if (isCancelledByButton.value) {
+                 stopRecordingAndCleanup();
+                 return;
+            }
+            const now = new Date();
+            const timestamp = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+            const audioFile = new File([blob], `audio-${timestamp}.wav`, { type: 'audio/wav' });
+            emit('send-audio', audioFile);
+            stopRecordingAndCleanup();
+        }, (msg) => {
+            ElMessage.error('录音失败: ' + msg);
+            stopRecordingAndCleanup();
+        });
+    } else if (currentRecordingSource.value === 'system' && mediaRecorder) {
+        // onstop will handle sending because flag is false
+        mediaRecorder.stop();
+    }
 };
+
 
 // --- Lifecycle & Focus ---
 onMounted(() => {
@@ -222,8 +317,7 @@ onBeforeUnmount(() => {
     window.removeEventListener('dragover', preventDefaults);
     window.removeEventListener('drop', handleDrop);
     window.removeEventListener('paste', handlePasteEvent);
-    if (recorder) { recorder.close(); }
-    if (wave) { wave.elem.innerHTML = ""; wave = null; }
+    stopRecordingAndCleanup();
 });
 
 const focus = (options = {}) => {
@@ -242,7 +336,6 @@ const focus = (options = {}) => {
             const textLength = prompt.value?.length || 0;
             textarea.setSelectionRange(textLength, textLength);
         }
-        // If no options, just focuses without changing selection.
     });
 };
 
@@ -271,18 +364,39 @@ defineExpose({ focus, senderRef });
         <el-row v-show="isRecording" class="waveform-row">
             <el-col :span="1" />
             <el-col :span="22">
-                <div ref="waveformCanvasContainer" class="waveform-display-area">
+                <div class="waveform-display-area">
+                    <!-- [MODIFIED] Conditionally render waveform or text -->
+                    <div v-if="currentRecordingSource === 'microphone'" ref="waveformCanvasContainer" class="waveform-canvas"></div>
+                    <span v-else class="recording-status-text">正在录制系统音频...</span>
+                </div>
+            </el-col>
+            <el-col :span="1" />
+        </el-row>
+        
+        <!-- [MODIFIED] Redesigned Audio Source Selector -->
+        <el-row v-if="isAudioSourceSelectorVisible" class="option-selector-row">
+            <el-col :span="1" />
+            <el-col :span="22">
+                <div class="option-selector-wrapper">
+                    <div class="option-selector-content">
+                        <el-text tag="b" class="selector-label">选择音源</el-text>
+                        <el-divider direction="vertical" />
+                        <el-button @click="startRecordingFromSource('microphone')" round>🎙️ 麦克风</el-button>
+                        <el-button @click="startRecordingFromSource('system')" round>💻 系统音频</el-button>
+                    </div>
                 </div>
             </el-col>
             <el-col :span="1" />
         </el-row>
 
-        <!-- 新增：思考预算选择器行 -->
+
         <el-row v-if="isReasoningSelectorVisible" class="option-selector-row">
             <el-col :span="1" />
             <el-col :span="22">
                 <div class="option-selector-wrapper">
                     <div class="option-selector-content">
+                        <el-text tag="b" class="selector-label">思考预算</el-text>
+                        <el-divider direction="vertical" />
                         <el-button @click="handleReasoningSelection('default')"
                             :type="tempReasoningEffort === 'default' ? 'primary' : 'default'" round>默认</el-button>
                         <el-button @click="handleReasoningSelection('low')"
@@ -302,6 +416,8 @@ defineExpose({ focus, senderRef });
             <el-col :span="22">
                 <el-scrollbar class="option-selector-wrapper">
                     <div class="option-selector-content">
+                        <el-text tag="b" class="selector-label">选择音色</el-text>
+                        <el-divider direction="vertical" />
                         <el-button @click="handleVoiceSelection(null)" :type="!selectedVoice ? 'primary' : 'default'"
                             round>
                             关闭语音
@@ -321,9 +437,13 @@ defineExpose({ focus, senderRef });
             <el-col :span="22">
                 <div class="chat-input-area-vertical">
                     <div class="input-wrapper">
-                        <el-input v-if="!isRecording" ref="senderRef" class="chat-textarea-vertical" v-model="prompt"
-                            type="textarea" placeholder="输入、粘贴、拖拽以发送内容" :autosize="{ minRows: 1, maxRows: 5 }"
-                            resize="none" @keydown="handleKeyDown" />
+                        <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt"
+                            type="textarea" 
+                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容'"
+                            :autosize="{ minRows: 1, maxRows: 5 }"
+                            resize="none" 
+                            @keydown="handleKeyDown"
+                            :disabled="isRecording" />
                     </div>
                     <div class="input-actions-bar">
                         <div class="action-buttons-left">
@@ -368,7 +488,7 @@ defineExpose({ focus, senderRef });
                             </template>
                             <template v-else>
                                 <el-tooltip content="发送语音"><el-button :icon="Microphone" size="default"
-                                        @click="startRecording" circle /></el-tooltip>
+                                        @click="toggleAudioSourceSelector" circle /></el-tooltip>
                                 <el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle
                                     :disabled="loading" /><el-button v-else :icon="Close" @click="onCancel"
                                     circle></el-button>
@@ -460,11 +580,28 @@ html.dark .drag-overlay {
     overflow: hidden;
 }
 
+.waveform-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.recording-status-text {
+    color: var(--el-text-color-secondary);
+    font-size: 14px;
+    animation: pulse-text 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-text {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
 html.dark .waveform-display-area {
     background-color: #1F1F1F;
 }
 
-/* 修改：通用化选项选择器样式 */
+/* MODIFIED: Universal Option Selector Styles */
 .option-selector-row {
     margin-bottom: 8px;
 }
@@ -484,6 +621,7 @@ html.dark .option-selector-wrapper {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    align-items: center; /* Vertically align items */
 }
 
 .option-selector-content .el-button {
@@ -494,6 +632,23 @@ html.dark .option-selector-wrapper {
     padding-right: 8px;
 }
 
+/* [新增] 新的选择器标签和分隔线样式 */
+.selector-label {
+    font-size: 14px;
+    color: var(--el-text-color);
+    margin: 0 4px 0 8px; /* Added left margin */
+    white-space: nowrap;
+}
+
+.el-divider--vertical {
+    height: 1.2em;
+    border-left: 1px solid var(--el-border-color-lighter);
+    margin: 0 4px; /* Space around divider */
+}
+
+html.dark .el-divider--vertical {
+    border-left-color: var(--el-border-color);
+}
 
 .input-wrapper {
     position: relative;
