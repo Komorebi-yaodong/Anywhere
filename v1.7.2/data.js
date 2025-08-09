@@ -424,6 +424,41 @@ function checkConfig(config) {
 
 }
 
+function saveSetting(keyPath, value) {
+  const configDoc = utools.db.get("config");
+  if (!configDoc || !configDoc.data || !configDoc.data.config) {
+    console.error("Config not found, cannot save setting.");
+    return { success: false, message: "Config not found" };
+  }
+
+  const config = configDoc.data.config;
+  
+  // 使用路径字符串来设置嵌套属性
+  const keys = keyPath.split('.');
+  let current = config;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    if (!current[key] || typeof current[key] !== 'object') {
+      current[key] = {}; // 如果路径不存在，则创建它
+    }
+    current = current[key];
+  }
+  current[keys[keys.length - 1]] = value;
+
+  // 将更新后的完整配置写回数据库
+  const result = utools.db.put({
+    _id: "config",
+    data: { config },
+    _rev: configDoc._rev
+  });
+
+  if (result.ok) {
+    return { success: true };
+  } else {
+    return { success: false, message: result.message };
+  }
+}
+
 function updateConfigWithoutFeatures(newConfig) {
   let configDoc = utools.db.get("config");
   if (configDoc) {
@@ -777,6 +812,7 @@ module.exports = {
   getConfig,
   checkConfig,
   updateConfig,
+  saveSetting,
   updateConfigWithoutFeatures,
   savePromptWindowSettings,
   getUser,

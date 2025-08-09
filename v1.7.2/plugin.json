@@ -35,5 +35,8 @@
 			"mainHide": true,
 			"icon":"history.png"
 		}
-	]
+	],
+	"development":{
+		"main": "http://localhost:5173/index.html"
+	}
 }

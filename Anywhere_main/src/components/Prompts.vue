@@ -2,6 +2,7 @@
 import { ref, reactive, computed, inject } from 'vue';
 import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
+import { ElMessage } from 'element-plus';
 
 const { t } = useI18n();
 
@@ -29,8 +30,8 @@ const editingPrompt = reactive({
   reasoning_effort: "default", 
   window_width: 540,
   window_height: 700,
-  isAlwaysOnTop: true,      // 新增
-  autoCloseOnBlur: true,   // 新增
+  isAlwaysOnTop: true,
+  autoCloseOnBlur: true,
 });
 const isNewPrompt = ref(false);
 
@@ -74,19 +75,11 @@ const allPrompts = computed(() => {
     return Object.entries(currentConfig.value.prompts).map(([key, value]) => ({ key, ...value }));
 });
 
-const allPromptsCount = computed(() => {
-  return allPrompts.value.length;
-});
+const allPromptsCount = computed(() => allPrompts.value.length);
 
 const allEnabledPromptsCount = computed(() => {
-  let count = 0;
-  if (!currentConfig.value.prompts) return count;
-  Object.keys(currentConfig.value.prompts).forEach(key => {
-    if (currentConfig.value.prompts[key].enable) {
-      count++;
-    }
-  });
-  return count;
+  if (!currentConfig.value.prompts) return 0;
+  return Object.values(currentConfig.value.prompts).filter(p => p.enable).length;
 });
 
 const tagEabledPromptsCount = computed(() => (tagName) => {
@@ -124,18 +117,29 @@ const promptsAvailableToAssign = computed(() => (tagName) => {
     .map(key => ({ key, label: key, data: currentConfig.value.prompts[key] }));
 });
 
-async function saveConfig() {
+async function atomicSave(updateFunction, syncFeatures = false) {
   try {
-    const configToSave = {
-      config: JSON.parse(JSON.stringify(currentConfig.value))
-    };
-    if (window.api && window.api.updateConfig) {
+    const latestConfigData = await window.api.getConfig();
+    if (!latestConfigData || !latestConfigData.config) {
+      throw new Error("Failed to get latest config from DB.");
+    }
+    const latestConfig = latestConfigData.config;
+
+    updateFunction(latestConfig);
+    
+    const configToSave = { config: latestConfig };
+    
+    if (syncFeatures) {
       await window.api.updateConfig(configToSave);
     } else {
-      // console.warn("window.api.updateConfig is not available. Config not saved.");
+      await window.api.updateConfigWithoutFeatures(configToSave);
     }
+
+    currentConfig.value = latestConfig;
+    
   } catch (error) {
-    console.error("Error saving config:", error);
+    console.error("Atomic save failed:", error);
+    ElMessage.error('配置保存失败');
   }
 }
 
@@ -152,30 +156,31 @@ function addTag() {
   if (currentConfig.value.tags[tagName]) {
     ElMessage.warning(t('prompts.alerts.tagExists', { tagName })); return;
   }
-  currentConfig.value.tags[tagName] = [];
-  saveConfig();
+  
+  atomicSave(config => {
+    config.tags[tagName] = [];
+    activeCollapseNames.value = [tagName];
+  });
+  
   showAddTagDialog.value = false;
-  activeCollapseNames.value = [tagName];
 }
 
 function deleteTag(tagName) {
-  if (!currentConfig.value.tags[tagName]) {
-    ElMessage.warning("Tag not found.");
-    return;
-  }
-  delete currentConfig.value.tags[tagName];
-  activeCollapseNames.value = activeCollapseNames.value.filter(name => name !== tagName);
-  saveConfig();
+  atomicSave(config => {
+    delete config.tags[tagName];
+    activeCollapseNames.value = activeCollapseNames.value.filter(name => name !== tagName);
+  });
 }
 
 function toggleAllPromptsInTag(tagName, enableState) {
-  if (!currentConfig.value.tags[tagName]) return;
-  currentConfig.value.tags[tagName].forEach(promptKey => {
-    if (currentConfig.value.prompts[promptKey]) {
-      currentConfig.value.prompts[promptKey].enable = enableState;
-    }
-  });
-  saveConfig();
+  atomicSave(config => {
+    if (!config.tags[tagName]) return;
+    config.tags[tagName].forEach(promptKey => {
+      if (config.prompts[promptKey]) {
+        config.prompts[promptKey].enable = enableState;
+      }
+    });
+  }, true);
 }
 
 function areAllPromptsInTagEnabled(tagName) {
@@ -190,59 +195,48 @@ function areAllPromptsInTagEnabled(tagName) {
 function prepareAddPrompt() {
   isNewPrompt.value = true;
   Object.assign(editingPrompt, {
-    originalKey: null,
-    key: "",
-    type: "general",
-    prompt: "",
-    showMode: "window",
-    model: "",
-    enable: true,
-    selectedTag: "",
-    icon: "",
-    stream: true,
-    isTemperature: false,
-    temperature: 0.7,
-    isDirectSend_file: false,
-    isDirectSend_normal: true,
-    ifTextNecessary: false,
-    voice: '',
-    reasoning_effort: "default", 
-    window_width: 540,
-    window_height: 700,
-    position_x: 0, 
-    position_y: 0,
-    isAlwaysOnTop: true,      // 新增
-    autoCloseOnBlur: true,   // 新增
+    originalKey: null, key: "", type: "general", prompt: "", showMode: "window", model: "",
+    enable: true, selectedTag: "", icon: "", stream: true, isTemperature: false, temperature: 0.7,
+    isDirectSend_file: false, isDirectSend_normal: true, ifTextNecessary: false,
+    voice: '', reasoning_effort: "default", window_width: 540, window_height: 700,
+    position_x: 0, position_y: 0, isAlwaysOnTop: true, autoCloseOnBlur: true,
   });
   showPromptEditDialog.value = true;
 }
 
-function prepareEditPrompt(promptKey, currentTagName = null) {
+// [修改] 核心修复点：将函数改为 async 并在打开弹窗前刷新配置
+async function prepareEditPrompt(promptKey, currentTagName = null) {
   isNewPrompt.value = false;
+
+  // [新增] 从数据库获取最新配置
+  try {
+    const latestConfigData = await window.api.getConfig();
+    if (latestConfigData && latestConfigData.config) {
+      // [新增] 更新本地的响应式 `config` 对象
+      currentConfig.value = latestConfigData.config;
+    }
+  } catch (error) {
+    console.error("Failed to refresh config before editing prompt:", error);
+    ElMessage.error("无法获取最新的快捷助手设置，可能显示旧数据。");
+  }
+
+  // [修改] 现在 `currentConfig.value` 是最新的了
   const p = currentConfig.value.prompts[promptKey];
-  if (!p) return;
+  if (!p) {
+    ElMessage.error("快捷助手不存在，可能已被删除。");
+    return;
+  }
+
+  // 后续逻辑保持不变，现在使用的是最新数据
   Object.assign(editingPrompt, {
-    originalKey: promptKey,
-    key: promptKey,
-    type: p.type,
-    prompt: p.prompt,
-    showMode: p.showMode,
-    model: p.model,
-    enable: p.enable,
-    icon: p.icon || "",
-    selectedTag: currentTagName,
-    stream: p.stream ?? true,
-    isTemperature: p.isTemperature ?? false,
-    temperature: p.temperature ?? 0.7,
-    isDirectSend_file: p.isDirectSend_file ?? false,
-    isDirectSend_normal: p.isDirectSend_normal ?? true,
-    ifTextNecessary: p.ifTextNecessary ?? false,
-    voice: p.voice ?? '',
-    reasoning_effort: p.reasoning_effort ?? "default", 
-    window_width: p.window_width ?? 540,
-    window_height: p.window_height ?? 700,
-    isAlwaysOnTop: p.isAlwaysOnTop ?? true,        // 新增
-    autoCloseOnBlur: p.autoCloseOnBlur ?? true,  // 新增
+    originalKey: promptKey, key: promptKey, type: p.type, prompt: p.prompt,
+    showMode: p.showMode, model: p.model, enable: p.enable, icon: p.icon || "",
+    selectedTag: currentTagName, stream: p.stream ?? true, isTemperature: p.isTemperature ?? false,
+    temperature: p.temperature ?? 0.7, isDirectSend_file: p.isDirectSend_file ?? false,
+    isDirectSend_normal: p.isDirectSend_normal ?? true, ifTextNecessary: p.ifTextNecessary ?? false,
+    voice: p.voice ?? '', reasoning_effort: p.reasoning_effort ?? "default", 
+    window_width: p.window_width ?? 540, window_height: p.window_height ?? 700,
+    isAlwaysOnTop: p.isAlwaysOnTop ?? true, autoCloseOnBlur: p.autoCloseOnBlur ?? true,
   });
   showPromptEditDialog.value = true;
 }
@@ -250,103 +244,92 @@ function prepareEditPrompt(promptKey, currentTagName = null) {
 function savePrompt() {
   const newKey = editingPrompt.key.trim();
   const oldKey = editingPrompt.originalKey;
-
-  if (!newKey) {
-    ElMessage.warning(t('prompts.alerts.promptKeyEmpty')); return;
-  }
-  if (newKey !== oldKey && currentConfig.value.prompts[newKey]) {
-    ElMessage.warning(t('prompts.alerts.promptKeyExists', { newKey })); return;
-  }
-
-  const promptData = {
-    type: editingPrompt.type,
-    prompt: editingPrompt.prompt,
-    showMode: editingPrompt.showMode,
-    model: editingPrompt.model,
-    enable: editingPrompt.enable,
-    icon: editingPrompt.icon || "",
-    stream: editingPrompt.stream,
-    isTemperature: editingPrompt.isTemperature,
-    temperature: editingPrompt.temperature,
-    isDirectSend_file: editingPrompt.isDirectSend_file,
-    isDirectSend_normal: editingPrompt.isDirectSend_normal,
-    ifTextNecessary: editingPrompt.ifTextNecessary,
-    voice: editingPrompt.voice,
-    reasoning_effort: editingPrompt.reasoning_effort, 
-    window_width: editingPrompt.window_width,
-    window_height: editingPrompt.window_height,
-    isAlwaysOnTop: editingPrompt.isAlwaysOnTop,        // 新增
-    autoCloseOnBlur: editingPrompt.autoCloseOnBlur,  // 新增
-  };
-
-  if (isNewPrompt.value) {
-    promptData.position_x = 0;
-    promptData.position_y = 0;
-    currentConfig.value.prompts[newKey] = promptData;
-    const targetTag = editingPrompt.selectedTag;
-    if (targetTag) {
-      if (!currentConfig.value.tags[targetTag]) {
-        currentConfig.value.tags[targetTag] = [];
-      }
-      if (!currentConfig.value.tags[targetTag].includes(newKey)) {
-        currentConfig.value.tags[targetTag].push(newKey);
-      }
+  if (!newKey) { ElMessage.warning(t('prompts.alerts.promptKeyEmpty')); return; }
+  
+  atomicSave(config => {
+    if (newKey !== oldKey && config.prompts[newKey]) {
+      ElMessage.warning(t('prompts.alerts.promptKeyExists', { newKey }));
+      throw new Error("Prompt key exists");
     }
-  } else {
-    const existingPrompt = currentConfig.value.prompts[oldKey] || {};
-    promptData.position_x = existingPrompt.position_x || 0;
-    promptData.position_y = existingPrompt.position_y || 0;
 
-    if (newKey !== oldKey) {
-      currentConfig.value.prompts[newKey] = { ...existingPrompt, ...promptData };
-      delete currentConfig.value.prompts[oldKey];
-      Object.keys(currentConfig.value.tags).forEach(tagName => {
-        const index = currentConfig.value.tags[tagName].indexOf(oldKey);
-        if (index !== -1) {
-          currentConfig.value.tags[tagName][index] = newKey;
-        }
-      });
+    const promptData = {
+      type: editingPrompt.type, prompt: editingPrompt.prompt, showMode: editingPrompt.showMode,
+      model: editingPrompt.model, enable: editingPrompt.enable, icon: editingPrompt.icon || "",
+      stream: editingPrompt.stream, isTemperature: editingPrompt.isTemperature,
+      temperature: editingPrompt.temperature, isDirectSend_file: editingPrompt.isDirectSend_file,
+      isDirectSend_normal: editingPrompt.isDirectSend_normal, ifTextNecessary: editingPrompt.ifTextNecessary,
+      voice: editingPrompt.voice, reasoning_effort: editingPrompt.reasoning_effort,
+      window_width: editingPrompt.window_width, window_height: editingPrompt.window_height,
+      isAlwaysOnTop: editingPrompt.isAlwaysOnTop, autoCloseOnBlur: editingPrompt.autoCloseOnBlur,
+    };
+
+    if (isNewPrompt.value) {
+      promptData.position_x = 0; promptData.position_y = 0;
+      config.prompts[newKey] = promptData;
+      const targetTag = editingPrompt.selectedTag;
+      if (targetTag && config.tags[targetTag] && !config.tags[targetTag].includes(newKey)) {
+        config.tags[targetTag].push(newKey);
+      }
     } else {
-      currentConfig.value.prompts[newKey] = { ...currentConfig.value.prompts[newKey], ...promptData };
+      const existingPrompt = config.prompts[oldKey] || {};
+      promptData.position_x = existingPrompt.position_x || 0;
+      promptData.position_y = existingPrompt.position_y || 0;
+      if (newKey !== oldKey) {
+        config.prompts[newKey] = { ...existingPrompt, ...promptData };
+        delete config.prompts[oldKey];
+        Object.keys(config.tags).forEach(tagName => {
+          const index = config.tags[tagName].indexOf(oldKey);
+          if (index !== -1) config.tags[tagName][index] = newKey;
+        });
+      } else {
+        config.prompts[newKey] = { ...config.prompts[newKey], ...promptData };
+      }
     }
-  }
-  saveConfig();
+  }, true);
+
   showPromptEditDialog.value = false;
 }
 
 function deletePrompt(promptKeyToDelete) {
-  if (!currentConfig.value.prompts[promptKeyToDelete]) return;
-  delete currentConfig.value.prompts[promptKeyToDelete];
-  Object.keys(currentConfig.value.tags).forEach(tagName => {
-    currentConfig.value.tags[tagName] = currentConfig.value.tags[tagName].filter(
-      pk => pk !== promptKeyToDelete
-    );
-  });
-  saveConfig();
+  atomicSave(config => {
+    if (!config.prompts[promptKeyToDelete]) return;
+    delete config.prompts[promptKeyToDelete];
+    Object.keys(config.tags).forEach(tagName => {
+      config.tags[tagName] = config.tags[tagName].filter(pk => pk !== promptKeyToDelete);
+    });
+  }, true);
 }
 
 function removePromptFromTag(tagName, promptKey) {
-  if (currentConfig.value.tags[tagName]) {
-    currentConfig.value.tags[tagName] = currentConfig.value.tags[tagName].filter(pk => pk !== promptKey);
-    saveConfig();
-  }
+  atomicSave(config => {
+    if (config.tags[tagName]) {
+      config.tags[tagName] = config.tags[tagName].filter(pk => pk !== promptKey);
+    }
+  });
 }
 
 function changePromptOrderInTag(tagName, promptKey, direction) {
-  const tagPrompts = currentConfig.value.tags[tagName];
-  if (!tagPrompts) return;
-  const currentIndex = tagPrompts.indexOf(promptKey);
+  atomicSave(config => {
+    const tagPrompts = config.tags[tagName];
+    if (!tagPrompts) return;
+    const currentIndex = tagPrompts.indexOf(promptKey);
 
-  if (direction === 'left' && currentIndex > 0) {
-    [tagPrompts[currentIndex], tagPrompts[currentIndex - 1]] = [tagPrompts[currentIndex - 1], tagPrompts[currentIndex]];
-  } else if (direction === 'right' && currentIndex < tagPrompts.length - 1) {
-    [tagPrompts[currentIndex], tagPrompts[currentIndex + 1]] = [tagPrompts[currentIndex + 1], tagPrompts[currentIndex]];
-  }
-  saveConfig();
+    if (direction === 'left' && currentIndex > 0) {
+      [tagPrompts[currentIndex], tagPrompts[currentIndex - 1]] = [tagPrompts[currentIndex - 1], tagPrompts[currentIndex]];
+    } else if (direction === 'right' && currentIndex < tagPrompts.length - 1) {
+      [tagPrompts[currentIndex], tagPrompts[currentIndex + 1]] = [tagPrompts[currentIndex + 1], tagPrompts[currentIndex]];
+    }
+  });
 }
 
-function handlePromptEnableChange() {
-  saveConfig();
+async function handlePromptEnableChange(promptKey, value) {
+  try {
+    await window.api.saveSetting(`prompts.${promptKey}.enable`, value);
+    atomicSave(config => {}, true);
+  } catch(e) {
+    ElMessage.error('保存失败');
+    currentConfig.value.prompts[promptKey].enable = !value;
+  }
 }
 
 const isFirstInTag = (tagName, promptKey) => {
@@ -366,16 +349,17 @@ function openAssignPromptDialog(tagName) {
 
 function assignSelectedPromptsToTag() {
   const tagName = assignPromptForm.targetTagName;
-  if (!tagName || !currentConfig.value.tags[tagName]) {
-    ElMessage.warning(t('prompts.alerts.targetTagNotFound'));
-    return;
-  }
-  assignPromptForm.selectedPromptKeys.forEach(promptKey => {
-    if (!currentConfig.value.tags[tagName].includes(promptKey)) {
-      currentConfig.value.tags[tagName].push(promptKey);
+  atomicSave(config => {
+    if (!tagName || !config.tags[tagName]) {
+      ElMessage.warning(t('prompts.alerts.targetTagNotFound'));
+      return;
     }
+    assignPromptForm.selectedPromptKeys.forEach(promptKey => {
+      if (!config.tags[tagName].includes(promptKey)) {
+        config.tags[tagName].push(promptKey);
+      }
+    });
   });
-  saveConfig();
   showAssignPromptDialog.value = false;
 }
 
@@ -412,23 +396,16 @@ const handleIconUpload = (file) => {
   return false;
 };
 
-const removeEditingIcon = () => {
-  editingPrompt.icon = "";
-};
+const removeEditingIcon = () => { editingPrompt.icon = ""; };
 
 const downloadEditingIcon = () => {
-    if (!editingPrompt.icon) {
-        ElMessage.warning('没有可供下载的图标。');
-        return;
-    }
+    if (!editingPrompt.icon) { ElMessage.warning('没有可供下载的图标。'); return; }
     const link = document.createElement('a');
     link.href = editingPrompt.icon;
     const matches = editingPrompt.icon.match(/^data:image\/([a-zA-Z+]+);base64,/);
     const extension = matches && matches[1] ? matches[1].replace('svg+xml', 'svg') : 'png';
     link.download = `icon.${extension}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
 };
 </script>
 
@@ -455,7 +432,8 @@ const downloadEditingIcon = () => {
                     <span class="prompt-name" @click="prepareEditPrompt(item.key)">{{ item.key }}</span>
                   </el-tooltip>
                   <div class="prompt-actions-header">
-                    <el-switch v-model="currentConfig.prompts[item.key].enable" @change="handlePromptEnableChange" size="small" class="prompt-enable-toggle" />
+                    <!-- [修改] 使用新的保存方式 -->
+                    <el-switch v-model="item.enable" @change="(value) => handlePromptEnableChange(item.key, value)" size="small" class="prompt-enable-toggle" />
                     <el-button type="danger" :icon="Delete" circle plain size="small" @click="deletePrompt(item.key)" />
                   </div>
                 </div>
@@ -492,7 +470,8 @@ const downloadEditingIcon = () => {
                   <div class="prompt-card-tag-actions">
                     <el-button :icon="ArrowLeft" plain size="small" :disabled="isFirstInTag(tagName, item.key)" @click="changePromptOrderInTag(tagName, item.key, 'left')" :title="t('prompts.tooltips.moveLeft')" />
                     <el-button :icon="ArrowRight" plain size="small" :disabled="isLastInTag(tagName, item.key)" @click="changePromptOrderInTag(tagName, item.key, 'right')" :title="t('prompts.tooltips.moveRight')" />
-                    <el-switch v-model="currentConfig.prompts[item.key].enable" @change="handlePromptEnableChange" size="small" class="prompt-enable-toggle" />
+                    <!-- [修改] 使用新的保存方式 -->
+                    <el-switch v-model="item.enable" @change="(value) => handlePromptEnableChange(item.key, value)" size="small" class="prompt-enable-toggle" />
                     <el-button type="danger" :icon="Close" circle plain size="small" @click="removePromptFromTag(tagName, item.key)" :title="t('prompts.tooltips.removeFromTag')" />
                   </div>
                 </div>
@@ -509,6 +488,7 @@ const downloadEditingIcon = () => {
       </div>
     </el-scrollbar>
 
+    <!-- 底部按钮和所有 Dialog 保持不变 -->
     <div class="bottom-actions-container">
       <el-button class="action-btn" @click="prepareAddPrompt" :icon="Plus" type="primary">
         {{ t('prompts.addNewPrompt') }}
@@ -518,7 +498,6 @@ const downloadEditingIcon = () => {
       </el-button>
     </div>
 
-    <!-- Dialogs -->
     <el-dialog v-model="showPromptEditDialog" :title="isNewPrompt ? t('prompts.addNewPrompt') : t('prompts.editPrompt')" width="700px" :close-on-click-modal="false">
       <el-form :model="editingPrompt" label-position="top" @submit.prevent="savePrompt">
         <el-row :gutter="20">
@@ -655,7 +634,6 @@ const downloadEditingIcon = () => {
                       <el-option v-for="item in availableVoices" :key="item.value" :label="item.label" :value="item.value" />
                   </el-select>
               </div>
-               <!-- 新增的窗口行为设置 -->
               <div v-if="editingPrompt.showMode === 'window'" class="param-item">
                 <span class="param-label">{{ t('prompts.isAlwaysOnTopLabel') }}</span>
                 <el-tooltip :content="t('prompts.tooltips.isAlwaysOnTopTooltip')" placement="top"><el-icon class="tip-icon"><QuestionFilled /></el-icon></el-tooltip>
@@ -668,7 +646,6 @@ const downloadEditingIcon = () => {
                 <div class="spacer"></div>
                 <el-switch v-model="editingPrompt.autoCloseOnBlur" />
               </div>
-              <!-- 结束新增 -->
               <el-row :gutter="20" v-if="editingPrompt.showMode === 'window'" class="dimensions-group-row">
                 <el-col :span="12">
                   <el-form-item :label="t('setting.dimensions.widthLabel')">
@@ -695,7 +672,7 @@ const downloadEditingIcon = () => {
         <el-button type="primary" @click="savePrompt">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
-    <!-- 其他 Dialogs 保持不变 -->
+
     <el-dialog v-model="showAddTagDialog" :title="t('prompts.addNewTag')" width="400px" :close-on-click-modal="false">
       <el-form @submit.prevent="addTag">
         <el-form-item :label="t('prompts.tagNameLabel')" required>

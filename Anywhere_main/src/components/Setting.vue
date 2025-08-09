@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, nextTick, computed, inject } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
 import { Upload, FolderOpened, Refresh, Delete as DeleteIcon, Download, Plus } from '@element-plus/icons-vue'
@@ -7,7 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t, locale } = useI18n()
 
-const currentConfig = inject('config'); 
+const currentConfig = inject('config');
 const selectedLanguage = ref(locale.value);
 
 
@@ -47,14 +47,32 @@ onMounted(() => {
   selectedLanguage.value = locale.value;
 });
 
-async function saveConfig() {
+// [修改] 新的、更精确的保存函数
+async function saveSingleSetting(keyPath, value) {
+  try {
+    if (window.api && window.api.saveSetting) {
+      // 调用 preload 暴露的新 API，只传递变更
+      await window.api.saveSetting(keyPath, value);
+    } else {
+      console.warn("window.api.saveSetting is not available.");
+    }
+  } catch (error) {
+    console.error(`Error saving setting for ${keyPath}:`, error);
+    ElMessage.error(`保存设置失败: ${keyPath}`);
+  }
+}
+
+// [修改] 保存整个配置的函数，仅用于语音列表等复杂操作
+async function saveFullConfig() {
   if (!currentConfig.value) return;
   try {
     const configToSave = { config: JSON.parse(JSON.stringify(currentConfig.value)) };
+    // 注意：这里我们仍然使用旧的保存方式，因为它适用于整个列表的修改
+    // 更好的做法是也为列表创建增删改的原子操作，但为了节省工作量，这里暂时保留
     if (window.api && window.api.updateConfigWithoutFeatures) {
        await window.api.updateConfigWithoutFeatures(configToSave);
     } else {
-      console.warn("window.api.updateConfigWithoutFeatures is not available. Settings not saved.");
+      console.warn("window.api.updateConfigWithoutFeatures is not available.");
     }
   } catch (error) {
     console.error("Error saving settings config:", error);
@@ -65,6 +83,7 @@ function handleLanguageChange(lang) {
   locale.value = lang;
   localStorage.setItem('language', lang);
   selectedLanguage.value = lang;
+  // 语言设置不属于config，所以不需要保存到utools数据库
 }
 
 async function exportConfig() {
@@ -122,7 +141,7 @@ function importConfig() {
 }
 
 
-// --- [MODIFIED] Voice Management ---
+// --- Voice Management (使用 saveFullConfig 因为它修改的是一个数组) ---
 const addNewVoice = () => {
   ElMessageBox.prompt(t('setting.voice.addPromptMessage'), t('setting.voice.addPromptTitle'), {
     confirmButtonText: t('common.confirm'),
@@ -138,14 +157,11 @@ const addNewVoice = () => {
       currentConfig.value.voiceList = [];
     }
     currentConfig.value.voiceList.push(newVoice);
-    saveConfig();
+    saveFullConfig();
     ElMessage.success(t('setting.voice.addSuccess'));
-  }).catch(() => {
-    // User cancelled
-  });
+  }).catch(() => {});
 };
 
-// [ADDED] Function to edit a voice
 const editVoice = (oldVoice) => {
   ElMessageBox.prompt(t('setting.voice.editPromptMessage'), t('setting.voice.editPromptTitle'), {
     confirmButtonText: t('common.confirm'),
@@ -161,42 +177,31 @@ const editVoice = (oldVoice) => {
     },
   }).then(({ value }) => {
     const newVoice = value.trim();
-    if (newVoice === oldVoice) return; // No change
-
-    // Update voice in the main list
+    if (newVoice === oldVoice) return;
     const index = currentConfig.value.voiceList.indexOf(oldVoice);
     if (index > -1) {
       currentConfig.value.voiceList[index] = newVoice;
-
-      // Update voice in all prompts that use it
       Object.values(currentConfig.value.prompts).forEach(prompt => {
         if (prompt.voice === oldVoice) {
           prompt.voice = newVoice;
         }
       });
-
-      saveConfig();
+      saveFullConfig();
       ElMessage.success(t('setting.voice.editSuccess'));
     }
-  }).catch(() => {
-    // User cancelled
-  });
+  }).catch(() => {});
 };
 
-// [MODIFIED] Function to delete a voice without confirmation
 const deleteVoice = (voiceToDelete) => {
   const index = currentConfig.value.voiceList.indexOf(voiceToDelete);
   if (index > -1) {
     currentConfig.value.voiceList.splice(index, 1);
-    
-    // Set voice to null in all prompts that use it
     Object.values(currentConfig.value.prompts).forEach(prompt => {
       if (prompt.voice === voiceToDelete) {
         prompt.voice = null;
       }
     });
-
-    saveConfig();
+    saveFullConfig();
   }
 };
 
@@ -437,35 +442,35 @@ const handleSelectionChange = (val) => {
               <span class="setting-option-label">{{ t('setting.darkMode.label') }}</span>
               <span class="setting-option-description">{{ t('setting.darkMode.description') }}</span>
             </div>
-            <el-switch v-model="currentConfig.isDarkMode" @change="saveConfig" inline-prompt :active-text="t('setting.darkMode.dark')" :inactive-text="t('setting.darkMode.light')" />
+            <el-switch v-model="currentConfig.isDarkMode" @change="(value) => saveSingleSetting('isDarkMode', value)" inline-prompt :active-text="t('setting.darkMode.dark')" :inactive-text="t('setting.darkMode.light')" />
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
               <span class="setting-option-label">{{ t('setting.skipLineBreak.label') }}</span>
               <span class="setting-option-description">{{ t('setting.skipLineBreak.description') }}</span>
             </div>
-            <el-switch v-model="currentConfig.skipLineBreak" @change="saveConfig" />
+            <el-switch v-model="currentConfig.skipLineBreak" @change="(value) => saveSingleSetting('skipLineBreak', value)" />
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
               <span class="setting-option-label">{{ t('setting.ctrlEnter.label') }}</span>
               <span class="setting-option-description">{{ t('setting.ctrlEnter.description') }}</span>
             </div>
-            <el-switch v-model="currentConfig.CtrlEnterToSend" @change="saveConfig" />
+            <el-switch v-model="currentConfig.CtrlEnterToSend" @change="(value) => saveSingleSetting('CtrlEnterToSend', value)" />
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
               <span class="setting-option-label">{{ t('setting.notification.label') }}</span>
               <span class="setting-option-description">{{ t('setting.notification.description') }}</span>
             </div>
-            <el-switch v-model="currentConfig.showNotification" @change="saveConfig" />
+            <el-switch v-model="currentConfig.showNotification" @change="(value) => saveSingleSetting('showNotification', value)" />
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
               <span class="setting-option-label">{{ t('setting.fixPosition.label') }}</span>
               <span class="setting-option-description">{{ t('setting.fixPosition.description') }}</span>
             </div>
-            <el-switch v-model="currentConfig.fix_position" @change="saveConfig" />
+            <el-switch v-model="currentConfig.fix_position" @change="(value) => saveSingleSetting('fix_position', value)" />
           </div>
         </el-card>
 
@@ -529,11 +534,11 @@ const handleSelectionChange = (val) => {
             <div class="card-header"><span>WebDAV</span></div>
           </template>
           <el-form label-width="200px" label-position="left" size="default">
-            <el-form-item :label="t('setting.webdav.url')"><el-input v-model="currentConfig.webdav.url" @change="saveConfig" :placeholder="t('setting.webdav.urlPlaceholder')" /></el-form-item>
-            <el-form-item :label="t('setting.webdav.username')"><el-input v-model="currentConfig.webdav.username" @change="saveConfig" :placeholder="t('setting.webdav.usernamePlaceholder')" /></el-form-item>
-            <el-form-item :label="t('setting.webdav.password')"><el-input v-model="currentConfig.webdav.password" @change="saveConfig" type="password" show-password :placeholder="t('setting.webdav.passwordPlaceholder')" /></el-form-item>
-            <el-form-item :label="t('setting.webdav.path')"><el-input v-model="currentConfig.webdav.path" @change="saveConfig" :placeholder="t('setting.webdav.pathPlaceholder')" /></el-form-item>
-            <el-form-item :label="t('setting.webdav.dataPath')"><el-input v-model="currentConfig.webdav.data_path" @change="saveConfig" :placeholder="t('setting.webdav.dataPathPlaceholder')" /></el-form-item>
+            <el-form-item :label="t('setting.webdav.url')"><el-input v-model="currentConfig.webdav.url" @change="(value) => saveSingleSetting('webdav.url', value)" :placeholder="t('setting.webdav.urlPlaceholder')" /></el-form-item>
+            <el-form-item :label="t('setting.webdav.username')"><el-input v-model="currentConfig.webdav.username" @change="(value) => saveSingleSetting('webdav.username', value)" :placeholder="t('setting.webdav.usernamePlaceholder')" /></el-form-item>
+            <el-form-item :label="t('setting.webdav.password')"><el-input v-model="currentConfig.webdav.password" @change="(value) => saveSingleSetting('webdav.password', value)" type="password" show-password :placeholder="t('setting.webdav.passwordPlaceholder')" /></el-form-item>
+            <el-form-item :label="t('setting.webdav.path')"><el-input v-model="currentConfig.webdav.path" @change="(value) => saveSingleSetting('webdav.path', value)" :placeholder="t('setting.webdav.pathPlaceholder')" /></el-form-item>
+            <el-form-item :label="t('setting.webdav.dataPath')"><el-input v-model="currentConfig.webdav.data_path" @change="(value) => saveSingleSetting('webdav.data_path', value)" :placeholder="t('setting.webdav.dataPathPlaceholder')" /></el-form-item>
             <el-form-item :label="t('setting.webdav.backupRestoreTitle')" class="no-margin-bottom">
               <el-button @click="backupToWebdav" :icon="Upload">{{ t('setting.webdav.backupButton') }}</el-button>
               <el-button @click="openBackupManager" :icon="FolderOpened">{{ t('setting.webdav.restoreButton') }}</el-button>

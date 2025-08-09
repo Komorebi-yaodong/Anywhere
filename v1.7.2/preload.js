@@ -1,6 +1,7 @@
 const {
   getConfig,
   updateConfig,
+  saveSetting,
   updateConfigWithoutFeatures,
   checkConfig,
   getUser,
@@ -30,6 +31,7 @@ const {
 window.api = {
   getConfig,
   updateConfig,
+  saveSetting,
   updateConfigWithoutFeatures,
   getUser,
   getRandomItem,

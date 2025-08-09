@@ -1,16 +1,15 @@
 <script setup>
-// The <script setup> block remains unchanged.
-import { ref, reactive, onMounted, computed, inject } from 'vue' // [MODIFIED] Added inject
+import { ref, reactive, onMounted, computed, inject } from 'vue'
 import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove, Search } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
+import { ElMessage } from 'element-plus';
 
 const { t } = useI18n();
 
-const currentConfig = inject('config'); // [MODIFIED] Inject config from App.vue
+const currentConfig = inject('config');
 const provider_key = ref(null);
 
-onMounted(async () => {
-    // [MODIFIED] Simplified onMounted since config is injected
+onMounted(() => {
     if (currentConfig.value.providerOrder && currentConfig.value.providerOrder.length > 0) {
       provider_key.value = currentConfig.value.providerOrder[0];
     } else if (currentConfig.value.providers && Object.keys(currentConfig.value.providers).length > 0) {
@@ -27,25 +26,53 @@ const selectedProvider = computed(() => {
   return null;
 });
 
+// [修改] 新的原子化保存函数
+async function atomicSave(updateFunction) {
+  try {
+    // 1. 从数据库读取最新配置
+    const latestConfigData = await window.api.getConfig();
+    if (!latestConfigData || !latestConfigData.config) {
+      throw new Error("Failed to get latest config from DB.");
+    }
+    const latestConfig = latestConfigData.config;
+
+    // 2. 在最新配置上执行修改逻辑
+    updateFunction(latestConfig);
+    
+    // 3. 将修改后的完整配置写回
+    // 使用 updateConfigWithoutFeatures 是因为它不触碰 features，适合这种场景
+    await window.api.updateConfigWithoutFeatures({ config: latestConfig });
+    
+    // 4. 更新当前组件的本地状态以反映变化
+    currentConfig.value = latestConfig;
+    
+  } catch (error) {
+    console.error("Atomic save failed:", error);
+    ElMessage.error(t('providers.alerts.configSaveFailed'));
+  }
+}
 
 function delete_provider() {
-  if (!provider_key.value || !currentConfig.value.providers[provider_key.value]) return;
+  if (!provider_key.value) return;
 
-  const index = currentConfig.value.providerOrder.indexOf(provider_key.value);
-  delete currentConfig.value.providers[provider_key.value];
-  currentConfig.value.providerOrder = currentConfig.value.providerOrder.filter(key => key !== provider_key.value);
+  atomicSave(config => {
+    const keyToDelete = provider_key.value;
+    const index = config.providerOrder.indexOf(keyToDelete);
+    
+    delete config.providers[keyToDelete];
+    config.providerOrder = config.providerOrder.filter(key => key !== keyToDelete);
 
-  saveConfig(); // This will be a lightweight save
-
-  if (currentConfig.value.providerOrder.length > 0) {
-    if (index > 0 && index <= currentConfig.value.providerOrder.length) {
-      provider_key.value = currentConfig.value.providerOrder[index - 1];
+    // 更新 provider_key 以选择一个新的服务商
+    if (config.providerOrder.length > 0) {
+      if (index > 0 && index <= config.providerOrder.length) {
+        provider_key.value = config.providerOrder[index - 1];
+      } else {
+        provider_key.value = config.providerOrder[0];
+      }
     } else {
-      provider_key.value = currentConfig.value.providerOrder[0];
+      provider_key.value = null;
     }
-  } else {
-    provider_key.value = null;
-  }
+  });
 }
 
 const addProvider_page = ref(false);
@@ -53,14 +80,18 @@ const addprovider_form = reactive({ name: "" });
 
 function add_prvider_function() {
   const timestamp = String(Date.now());
-  currentConfig.value.providers[timestamp] = {
-    name: addprovider_form.name || `${t('providers.unnamedProvider')} ${timestamp.slice(-4)}`,
-    url: "", api_key: "", modelList: [], enable: true,
-  };
-  currentConfig.value.providerOrder.push(timestamp);
-  saveConfig(); // This will be a lightweight save
+  const newName = addprovider_form.name || `${t('providers.unnamedProvider')} ${timestamp.slice(-4)}`;
+
+  atomicSave(config => {
+    config.providers[timestamp] = {
+      name: newName,
+      url: "", api_key: "", modelList: [], enable: true,
+    };
+    config.providerOrder.push(timestamp);
+    provider_key.value = timestamp; // 设置新添加的为当前选中
+  });
+
   addprovider_form.name = "";
-  provider_key.value = timestamp;
   addProvider_page.value = false;
 }
 
@@ -73,32 +104,52 @@ function openChangeProviderNameDialog(){
     change_provider_name_page.value = true;
   }
 }
+
 function change_provider_name_function() {
-  if (selectedProvider.value) {
-    selectedProvider.value.name = change_provider_name_form.name;
-    saveConfig(); // This will be a lightweight save
-  }
+  if (!provider_key.value) return;
+  const keyToUpdate = provider_key.value;
+  const newName = change_provider_name_form.name;
+
+  atomicSave(config => {
+    if (config.providers[keyToUpdate]) {
+      config.providers[keyToUpdate].name = newName;
+    }
+  });
+
   change_provider_name_form.name = "";
   change_provider_name_page.value = false;
 }
 
 function delete_model(model) {
-  if (selectedProvider.value) {
-    selectedProvider.value.modelList = selectedProvider.value.modelList.filter(m => m !== model);
-    saveConfig(); // This will be a lightweight save
-  }
+  if (!provider_key.value) return;
+  const keyToUpdate = provider_key.value;
+  
+  atomicSave(config => {
+    const provider = config.providers[keyToUpdate];
+    if (provider) {
+      provider.modelList = provider.modelList.filter(m => m !== model);
+    }
+  });
 }
 
 const addModel_page = ref(false);
 const addModel_form = reactive({ name: "" })
+
 function add_model_function() {
-  if (selectedProvider.value && addModel_form.name.trim()) {
-    if (!selectedProvider.value.modelList) {
-        selectedProvider.value.modelList = [];
+  if (!provider_key.value || !addModel_form.name.trim()) return;
+  const keyToUpdate = provider_key.value;
+  const newModelName = addModel_form.name.trim();
+  
+  atomicSave(config => {
+    const provider = config.providers[keyToUpdate];
+    if (provider) {
+      if (!provider.modelList) {
+          provider.modelList = [];
+      }
+      provider.modelList.push(newModelName);
     }
-    selectedProvider.value.modelList.push(addModel_form.name.trim());
-    saveConfig(); // This will be a lightweight save
-  }
+  });
+
   addModel_form.name = "";
   addModel_page.value = false;
 }
@@ -166,58 +217,57 @@ async function activate_get_model_function() {
 }
 
 function get_model_function(add, modelId) {
-  if (selectedProvider.value) {
-    if (!selectedProvider.value.modelList) {
-        selectedProvider.value.modelList = [];
+  if (!provider_key.value) return;
+  const keyToUpdate = provider_key.value;
+
+  atomicSave(config => {
+    const provider = config.providers[keyToUpdate];
+    if (provider) {
+        if (!provider.modelList) {
+            provider.modelList = [];
+        }
+        if (add) {
+          if (!provider.modelList.includes(modelId)) {
+            provider.modelList.push(modelId);
+          }
+        } else {
+          provider.modelList = provider.modelList.filter(m => m !== modelId);
+        }
     }
-    if (add) {
-      if (!selectedProvider.value.modelList.includes(modelId)) {
-        selectedProvider.value.modelList.push(modelId);
-      }
-    } else {
-      selectedProvider.value.modelList = selectedProvider.value.modelList.filter(m => m !== modelId);
-    }
-    saveConfig(); // This will be a lightweight save
-  }
+  });
 }
 
 function change_order(flag) {
   if (!provider_key.value) return;
-  let index = currentConfig.value.providerOrder.indexOf(provider_key.value);
-  if (index === -1) return;
+  const keyToMove = provider_key.value;
 
-  let newOrder = [...currentConfig.value.providerOrder];
-  const item = newOrder.splice(index, 1)[0];
+  atomicSave(config => {
+    let index = config.providerOrder.indexOf(keyToMove);
+    if (index === -1) return;
 
-  if (flag === "up" && index > 0) {
-    newOrder.splice(index - 1, 0, item);
-  } else if (flag === "down" && index < currentConfig.value.providerOrder.length - 1) {
-    newOrder.splice(index + 1, 0, item);
-  } else {
-    return;
-  }
-  currentConfig.value.providerOrder = newOrder;
-  saveConfig(); // This will be a lightweight save
-}
+    let newOrder = [...config.providerOrder];
+    const item = newOrder.splice(index, 1)[0];
 
-async function change_enable(){
-  saveConfig(); // This will be a lightweight save
-}
-
-// [MODIFIED] Now uses the new lightweight save function
-async function saveConfig() {
-  if (!currentConfig.value) return;
-  try {
-    const configToSave = { config: JSON.parse(JSON.stringify(currentConfig.value)) };
-    if (window.api && window.api.updateConfigWithoutFeatures) {
-      await window.api.updateConfigWithoutFeatures(configToSave);
+    if (flag === "up" && index > 0) {
+      newOrder.splice(index - 1, 0, item);
+    } else if (flag === "down" && index < newOrder.length) {
+      newOrder.splice(index + 1, 0, item);
     } else {
-      console.warn("window.api.updateConfigWithoutFeatures is not available. Config not saved.");
+      return;
     }
-  } catch (error) {
-    console.error("Error saving config:", error);
-    ElMessage.error(t('providers.alerts.configSaveFailed'));
-  }
+    config.providerOrder = newOrder;
+  });
+}
+
+// [修改] 对于简单的开关和输入框，使用精确的 saveSetting
+async function saveSingleProviderSetting(key, value) {
+    if (!provider_key.value) return;
+    const keyPath = `providers.${provider_key.value}.${key}`;
+    try {
+        await window.api.saveSetting(keyPath, value);
+    } catch(e) {
+        ElMessage.error('保存失败');
+    }
 }
 </script>
 
@@ -246,7 +296,6 @@ async function saveConfig() {
         </el-aside>
 
         <el-main class="provider-main-content">
-          <!-- 使用 el-scrollbar 包裹内容 -->
           <el-scrollbar class="provider-details-scrollbar">
             <div v-if="selectedProvider" class="provider-details">
               <div class="provider-header">
@@ -266,18 +315,21 @@ async function saveConfig() {
                       :title="t('providers.deleteProviderTooltip')" />
                   </div>
                 </div>
-                <el-switch v-model="selectedProvider.enable" @change="change_enable" size="large" />
+                <!-- [修改] 使用新的保存方式 -->
+                <el-switch v-model="selectedProvider.enable" @change="(value) => saveSingleProviderSetting('enable', value)" size="large" />
               </div>
 
               <el-form label-position="top" class="provider-form">
                 <el-form-item :label="t('providers.apiKeyLabel')">
+                  <!-- [修改] 使用新的保存方式 -->
                   <el-input v-model="selectedProvider.api_key" type="password" :placeholder="t('providers.apiKeyPlaceholder')"
-                    show-password clearable @change="saveConfig" />
+                    show-password clearable @change="(value) => saveSingleProviderSetting('api_key', value)" />
                   <div class="form-item-description">{{ t('providers.apiKeyDescription') }}</div>
                 </el-form-item>
                 <el-form-item :label="t('providers.apiUrlLabel')">
+                  <!-- [修改] 使用新的保存方式 -->
                   <el-input v-model="selectedProvider.url" :placeholder="t('providers.apiUrlPlaceholder')" clearable
-                    @change="saveConfig" />
+                    @change="(value) => saveSingleProviderSetting('url', value)" />
                 </el-form-item>
 
                 <el-form-item :label="t('providers.modelsLabel')" class="models-form-item">
@@ -304,7 +356,7 @@ async function saveConfig() {
       </el-container>
     </div>
 
-    <!-- Dialogs remain largely unchanged but will inherit some global styles -->
+    <!-- Dialogs 不变 -->
     <el-dialog v-model="addProvider_page" :title="t('providers.addProviderDialogTitle')" width="500px" :close-on-click-modal="false">
       <el-form :model="addprovider_form" @submit.prevent="add_prvider_function" label-position="top">
         <el-form-item :label="t('providers.providerNameLabel')" required>
