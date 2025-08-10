@@ -86,6 +86,31 @@ function handleLanguageChange(lang) {
   // 语言设置不属于config，所以不需要保存到utools数据库
 }
 
+// --- [新增] 全局开关处理函数 ---
+async function handleGlobalToggleChange(key, value) {
+  if (!currentConfig.value || !currentConfig.value.prompts) return;
+
+  // 1. 更新全局开关自身的状态
+  if (key === 'isAlwaysOnTop') {
+    currentConfig.value.isAlwaysOnTop_global = value;
+  } else if (key === 'autoCloseOnBlur') {
+    currentConfig.value.autoCloseOnBlur_global = value;
+  }
+
+  // 2. 批量更新所有快捷助手的对应设置
+  Object.keys(currentConfig.value.prompts).forEach(promptKey => {
+    const prompt = currentConfig.value.prompts[promptKey];
+    if (prompt) {
+      prompt[key] = value;
+    }
+  });
+
+  // 3. 保存整个更新后的配置
+  await saveFullConfig();
+  ElMessage.success(t('common.save') + '成功！');
+}
+// --- [新增结束] ---
+
 async function exportConfig() {
   if (!currentConfig.value) return;
   try {
@@ -443,6 +468,20 @@ const handleSelectionChange = (val) => {
               <span class="setting-option-description">{{ t('setting.darkMode.description') }}</span>
             </div>
             <el-switch v-model="currentConfig.isDarkMode" @change="(value) => saveSingleSetting('isDarkMode', value)" inline-prompt :active-text="t('setting.darkMode.dark')" :inactive-text="t('setting.darkMode.light')" />
+          </div>
+          <div class="setting-option-item">
+            <div class="setting-text-content">
+              <span class="setting-option-label">{{ t('setting.isAlwaysOnTop_global.label') }}</span>
+              <span class="setting-option-description">{{ t('setting.isAlwaysOnTop_global.description') }}</span>
+            </div>
+            <el-switch v-model="currentConfig.isAlwaysOnTop_global" @change="(value) => handleGlobalToggleChange('isAlwaysOnTop', value)" />
+          </div>
+          <div class="setting-option-item">
+            <div class="setting-text-content">
+              <span class="setting-option-label">{{ t('setting.autoCloseOnBlur_global.label') }}</span>
+              <span class="setting-option-description">{{ t('setting.autoCloseOnBlur_global.description') }}</span>
+            </div>
+            <el-switch v-model="currentConfig.autoCloseOnBlur_global" @change="(value) => handleGlobalToggleChange('autoCloseOnBlur', value)" />
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">

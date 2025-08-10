@@ -168,7 +168,13 @@ function addTag() {
 function deleteTag(tagName) {
   atomicSave(config => {
     delete config.tags[tagName];
-    activeCollapseNames.value = activeCollapseNames.value.filter(name => name !== tagName);
+    // --- BUG FIX START ---
+    // In accordion mode, activeCollapseNames.value is a string.
+    // If we delete the currently active tag, we should close it.
+    if (activeCollapseNames.value === tagName) {
+        activeCollapseNames.value = '';
+    }
+    // --- BUG FIX END ---
   });
 }
 

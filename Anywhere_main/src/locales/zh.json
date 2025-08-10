@@ -195,6 +195,14 @@
       "editSuccess": "声音修改成功"
     },
     "title": "通用设置",
+    "isAlwaysOnTop_global": {
+      "label": "全局窗口置顶",
+      "description": "统一控制所有快捷助手的窗口是否置顶"
+    },
+    "autoCloseOnBlur_global": {
+      "label": "全局失焦关闭",
+      "description": "统一控制所有快捷助手的窗口是否在失焦后自动关闭"
+    },
     "skipLineBreak": {
       "label": "发送时跳过换行符",
       "description": "启用以在划词时跳过换行符"

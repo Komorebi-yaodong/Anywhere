@@ -195,6 +195,14 @@
       "editSuccess": "音声が正常に修正されました"
     },
     "title": "一般設定",
+    "isAlwaysOnTop_global": {
+      "label": "ウィンドウを常に最前面に表示 (グローバル)",
+      "description": "すべてのアシスタントウィンドウを常に最前面に表示するかどうかをまとめて制御します"
+    },
+    "autoCloseOnBlur_global": {
+      "label": "フォーカスが外れたら閉じる (グローバル)",
+      "description": "すべてのアシスタントウィンドウがフォーカスを失ったときに自動的に閉じるかどうかをまとめて制御します"
+    },
     "skipLineBreak": {
       "label": "送信時に改行をスキップ",
       "description": "テキスト選択時に改行をスキップするようにします。"

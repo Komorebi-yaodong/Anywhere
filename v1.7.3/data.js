@@ -37,8 +37,8 @@ const defaultConfig = {
         window_height: 700,
         position_x: 0,
         position_y: 0,
-        autoCloseOnBlur: false,
-        isAlwaysOnTop: false,
+        autoCloseOnBlur: true,
+        isAlwaysOnTop: true,
       },
     },
     language:"zh",
@@ -48,6 +48,8 @@ const defaultConfig = {
     showNotification: true,
     isDarkMode: false,
     fix_position: false,
+    isAlwaysOnTop_global: true,
+    autoCloseOnBlur_global: true,
     zoom:1,
     webdav: {
       url: "",
@@ -114,11 +116,18 @@ function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  if (config.version !== "1.7.1") {
-    config.version = "1.7.1";
+  if (config.version !== "1.7.3") {
+    config.version = "1.7.3";
     flag = true;
   }
-
+  if (config.isAlwaysOnTop_global === undefined) {
+    config.isAlwaysOnTop_global = true;
+    flag = true;
+  }
+  if (config.autoCloseOnBlur_global === undefined) {
+    config.autoCloseOnBlur_global = true;
+    flag = true;
+  }
   if (config.window_width || config.window_height) {
     delete config.window_width;
     delete config.window_height;
@@ -228,7 +237,7 @@ function checkConfig(config) {
     config.webdav.dataPath = "/anywhere_data";
     flag = true;
   }
-  // 更新默认配置的存储方式
+  
   if (config.apiUrl) {
     config.providers["0"] = {
       name: "default",

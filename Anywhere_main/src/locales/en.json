@@ -195,6 +195,14 @@
       "editSuccess": "Voice modified successfully"
     },
     "title": "General Settings",
+    "isAlwaysOnTop_global": {
+      "label": "Global Always on Top",
+      "description": "Globally control whether all assistant windows are always on top"
+    },
+    "autoCloseOnBlur_global": {
+      "label": "Global Auto-close on Blur",
+      "description": "Globally control whether all assistant windows close automatically on blur"
+    },
     "skipLineBreak": {
       "label": "Skip Line Breaks on Send",
       "description": "Enable to skip line breaks when selecting text."
