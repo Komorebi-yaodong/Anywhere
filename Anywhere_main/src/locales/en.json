@@ -256,7 +256,8 @@
         "confirmTitle": "Confirm Backup Filename",
         "confirmMessage": "Please enter the backup filename. It is recommended to use the default name to keep the timestamp.",
         "invalidFilename": "Invalid filename, must end with .json.",
-        "cancelled": "Backup cancelled."
+        "cancelled": "Backup cancelled.",
+        "emptyFilenameError": "Filename cannot be empty."
       },
       "manager": {
         "title": "Backup Data Management",

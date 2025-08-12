@@ -256,7 +256,8 @@
         "confirmTitle": "确认备份文件名",
         "confirmMessage": "请输入备份文件名建议使用默认文件名以保留时间戳",
         "invalidFilename": "文件名无效，必须以 .json 结尾",
-        "cancelled": "备份已取消"
+        "cancelled": "备份已取消",
+        "emptyFilenameError": "文件名不能为空"
       },
       "manager": {
         "title": "备份数据管理",

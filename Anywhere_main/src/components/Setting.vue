@@ -1,9 +1,9 @@
 <script setup>
-import { ref, onMounted, computed, inject } from 'vue'
+import { ref, onMounted, computed, inject, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
 import { Upload, FolderOpened, Refresh, Delete as DeleteIcon, Download, Plus } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElInput } from 'element-plus'
 
 const { t, locale } = useI18n()
 
@@ -233,56 +233,82 @@ const deleteVoice = (voiceToDelete) => {
 
 // --- WebDAV 功能 ---
 async function backupToWebdav() {
-  if (!currentConfig.value) return;
-  const { url, username, password, path } = currentConfig.value.webdav;
-  if (!url) {
-    ElMessage.error(t('setting.webdav.alerts.urlRequired'));
-    return;
-  }
+    if (!currentConfig.value) return;
+    const { url, username, password, path } = currentConfig.value.webdav;
+    if (!url) {
+        ElMessage.error(t('setting.webdav.alerts.urlRequired'));
+        return;
+    }
 
-  const now = new Date();
-  const timestamp = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-  const defaultFilename = `Anywhere-${timestamp}.json`;
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+    const defaultBasename = `Anywhere-${timestamp}`;
+    
+    const inputValue = ref(defaultBasename);
 
-  try {
-    const { value: filename } = await ElMessageBox.prompt(
-      t('setting.webdav.backup.confirmMessage'),
-      t('setting.webdav.backup.confirmTitle'),
-      {
-        confirmButtonText: t('common.confirm'),
-        cancelButtonText: t('common.cancel'),
-        inputValue: defaultFilename,
-        inputValidator: (val) => val && val.endsWith('.json'),
-        inputErrorMessage: t('setting.webdav.backup.invalidFilename'),
-      }
-    );
+    try {
+        await ElMessageBox({
+            title: t('setting.webdav.backup.confirmTitle'),
+            message: () => h('div', null, [
+                h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--text-secondary);' }, t('setting.webdav.backup.confirmMessage')),
+                h(ElInput, {
+                    modelValue: inputValue.value,
+                    'onUpdate:modelValue': (val) => { inputValue.value = val; },
+                    placeholder: '请输入文件名',
+                    autofocus: true,
+                }, {
+                    append: () => h('div', { class: 'input-suffix-display' }, '.json')
+                })
+            ]),
+            showCancelButton: true,
+            confirmButtonText: t('common.confirm'),
+            cancelButtonText: t('common.cancel'),
+            customClass: 'filename-prompt-dialog',
+            beforeClose: async (action, instance, done) => {
+                if (action === 'confirm') {
+                    let finalBasename = inputValue.value.trim();
+                    if (!finalBasename) {
+                        ElMessage.error(t('setting.webdav.backup.emptyFilenameError'));
+                        return;
+                    }
+                    const filename = finalBasename + '.json';
 
-    if (filename) {
-      try {
-        ElMessage.info(t('setting.webdav.alerts.backupInProgress'));
-        const client = createClient(url, { username, password });
-        const remoteDir = path.endsWith('/') ? path.slice(0, -1) : path;
-        const remoteFilePath = `${remoteDir}/${filename}`;
+                    instance.confirmButtonLoading = true;
+                    ElMessage.info(t('setting.webdav.alerts.backupInProgress'));
 
-        if (!(await client.exists(remoteDir))) {
-          await client.createDirectory(remoteDir, { recursive: true });
+                    try {
+                        const client = createClient(url, { username, password });
+                        const remoteDir = path.endsWith('/') ? path.slice(0, -1) : path;
+                        const remoteFilePath = `${remoteDir}/${filename}`;
+
+                        if (!(await client.exists(remoteDir))) {
+                            await client.createDirectory(remoteDir, { recursive: true });
+                        }
+
+                        const configToBackup = JSON.parse(JSON.stringify(currentConfig.value));
+                        const jsonString = JSON.stringify(configToBackup, null, 2);
+                        await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
+
+                        ElMessage.success(t('setting.webdav.alerts.backupSuccess'));
+                        done();
+                    } catch (error) {
+                        console.error("WebDAV backup failed:", error);
+                        ElMessage.error(`${t('setting.webdav.alerts.backupFailed')}: ${error.message}`);
+                    } finally {
+                        instance.confirmButtonLoading = false;
+                    }
+                } else {
+                    done();
+                }
+            }
+        });
+    } catch (error) {
+        if (error === 'cancel' || error === 'close') {
+             ElMessage.info(t('setting.webdav.backup.cancelled'));
+        } else {
+            console.error("MessageBox error:", error);
         }
-
-        const configToBackup = JSON.parse(JSON.stringify(currentConfig.value));
-        const jsonString = JSON.stringify(configToBackup, null, 2);
-        await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
-
-        ElMessage.success(t('setting.webdav.alerts.backupSuccess'));
-      } catch (error) {
-        console.error("WebDAV backup failed:", error);
-        ElMessage.error(`${t('setting.webdav.alerts.backupFailed')}: ${error.message}`);
-      }
     }
-  } catch (action) {
-    if (action === 'cancel') {
-      ElMessage.info(t('setting.webdav.backup.cancelled'));
-    }
-  }
 }
 
 async function openBackupManager() {
