@@ -4,7 +4,7 @@ const path = require('path');
 
 const feature_suffix = "anywhere助手^_^"
 
-// 默认配置
+// 默认配置 (保持不变)
 const defaultConfig = {
   config: {
     providers: {
@@ -104,15 +104,76 @@ const defaultConfig = {
   }
 };
 
-// 读取配置文件，如果不存在则返回默认配置
+/**
+ * [已重构] 拆分完整的 config 对象以便于分块存储
+ * @param {object} fullConfig - 包含 prompts 和 providers 的完整 config 对象
+ * @returns {{baseConfigPart: object, promptsPart: object, providersPart: object}} - 拆分后的三部分
+ */
+function splitConfigForStorage(fullConfig) {
+  const { prompts, providers, ...restOfConfig } = fullConfig;
+
+  return {
+    baseConfigPart: { config: restOfConfig }, // 基础配置保持原始结构 { config: {...} }
+    promptsPart: prompts,
+    providersPart: providers,
+  };
+}
+
+/**
+ * [已重构] 从数据库读取配置，合并三部分数据，并处理旧版本数据迁移
+ * @returns {object} - 返回合并后的完整配置对象
+ */
 function getConfig() {
-  const configDoc = utools.db.get("config");
-  if (configDoc) {
-    return configDoc.data;
-  } else {
+  let configDoc = utools.db.get("config");
+
+  // --- 1. 新用户初始化 ---
+  if (!configDoc) {
+    console.log("Anywhere: Initializing configuration for a new user.");
+    const { baseConfigPart, promptsPart, providersPart } = splitConfigForStorage(defaultConfig.config);
+    utools.db.put({ _id: "config", data: baseConfigPart });
+    utools.db.put({ _id: "prompts", data: promptsPart });
+    utools.db.put({ _id: "providers", data: providersPart });
     return defaultConfig;
   }
+
+  // --- 2. 旧版本数据自动迁移 ---
+  if (configDoc.data.config && configDoc.data.config.prompts) {
+    console.warn("Anywhere: Old configuration format detected. Starting migration.");
+    const oldFullConfig = configDoc.data.config;
+    const { baseConfigPart, promptsPart, providersPart } = splitConfigForStorage(oldFullConfig);
+    
+    // 写入新的分块文档
+    utools.db.put({ _id: "prompts", data: promptsPart });
+    utools.db.put({ _id: "providers", data: providersPart });
+    
+    // 更新并清理旧的 config 文档
+    const updateResult = utools.db.put({
+      _id: "config",
+      data: baseConfigPart,
+      _rev: configDoc._rev
+    });
+
+    if (updateResult.ok) {
+        console.log("Anywhere: Migration successful. Old config cleaned.");
+    } else {
+        console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
+        // 即使清理失败，也继续使用新数据，避免阻塞用户
+    }
+    configDoc = utools.db.get("config"); // 重新获取清理后的 config 文档
+  }
+
+  // --- 3. 读取新版分块数据并合并 ---
+  const fullConfigData = configDoc.data;
+
+  const promptsDoc = utools.db.get("prompts");
+  fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig.config.prompts;
+
+  const providersDoc = utools.db.get("providers");
+  fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig.config.providers;
+  
+  return fullConfigData;
 }
+
 
 function checkConfig(config) {
   let flag = false;
@@ -433,18 +494,46 @@ function checkConfig(config) {
 
 }
 
+/**
+ * [已重构] 保存单个设置项，自动判断应写入哪个文档
+ * @param {string} keyPath - 属性路径，如 "prompts.AI.enable" 或 "isDarkMode"
+ * @param {*} value - 要设置的值
+ * @returns {{success: boolean, message?: string}} - 返回操作结果
+ */
 function saveSetting(keyPath, value) {
-  const configDoc = utools.db.get("config");
-  if (!configDoc || !configDoc.data || !configDoc.data.config) {
-    console.error("Config not found, cannot save setting.");
-    return { success: false, message: "Config not found" };
+  const rootKey = keyPath.split('.')[0];
+  let docId;
+  let targetKeyPath = keyPath;
+  let isBaseConfig = false;
+
+  // 根据 keyPath 的第一部分确定目标文档
+  if (rootKey === 'prompts') {
+    docId = 'prompts';
+    targetKeyPath = keyPath.substring('prompts.'.length); // 移除 "prompts." 前缀
+  } else if (rootKey === 'providers') {
+    docId = 'providers';
+    targetKeyPath = keyPath.substring('providers.'.length); // 移除 "providers." 前缀
+  } else {
+    docId = 'config';
+    isBaseConfig = true; // 目标是基础配置
   }
 
-  const config = configDoc.data.config;
+  const doc = utools.db.get(docId);
+  if (!doc) {
+    console.error(`Config document "${docId}" not found, cannot save setting.`);
+    return { success: false, message: `Config document "${docId}" not found` };
+  }
+
+  // 获取要更新的数据部分
+  let dataToUpdate = doc.data;
+  // 基础配置有额外的 .config 层级
+  if (isBaseConfig) {
+    dataToUpdate = dataToUpdate.config;
+  }
   
   // 使用路径字符串来设置嵌套属性
-  const keys = keyPath.split('.');
-  let current = config;
+  const keys = targetKeyPath.split('.');
+  let current = dataToUpdate;
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i];
     if (!current[key] || typeof current[key] !== 'object') {
@@ -454,11 +543,14 @@ function saveSetting(keyPath, value) {
   }
   current[keys[keys.length - 1]] = value;
 
-  // 将更新后的完整配置写回数据库
+  // 准备最终要写入的数据
+  const finalData = isBaseConfig ? { config: dataToUpdate } : dataToUpdate;
+  
+  // 将更新后的数据写回对应的数据库文档
   const result = utools.db.put({
-    _id: "config",
-    data: { config },
-    _rev: configDoc._rev
+    _id: docId,
+    data: finalData,
+    _rev: doc._rev
   });
 
   if (result.ok) {
@@ -468,17 +560,36 @@ function saveSetting(keyPath, value) {
   }
 }
 
+/**
+ * [已重构] 更新完整的配置，将其拆分为三部分并分别存储
+ * @param {object} newConfig - 完整的配置对象，结构为 { config: {...} }
+ */
 function updateConfigWithoutFeatures(newConfig) {
+  const { baseConfigPart, promptsPart, providersPart } = splitConfigForStorage(newConfig.config);
+
+  // 1. 更新基础配置 (config)
   let configDoc = utools.db.get("config");
-  if (configDoc) {
-    configDoc.data = { ...configDoc.data, ...newConfig };
-    return utools.db.put(configDoc);
-  } else {
-    return utools.db.put({
-      _id: "config",
-      data: newConfig,
-    });
-  }
+  utools.db.put({
+    _id: "config",
+    data: baseConfigPart,
+    _rev: configDoc ? configDoc._rev : undefined,
+  });
+
+  // 2. 更新快捷助手配置 (prompts)
+  let promptsDoc = utools.db.get("prompts");
+  utools.db.put({
+    _id: "prompts",
+    data: promptsPart,
+    _rev: promptsDoc ? promptsDoc._rev : undefined,
+  });
+
+  // 3. 更新服务商配置 (providers)
+  let providersDoc = utools.db.get("providers");
+  utools.db.put({
+    _id: "providers",
+    data: providersPart,
+    _rev: providersDoc ? providersDoc._rev : undefined,
+  });
 }
 
 function updateConfig(newConfig) {
@@ -787,26 +898,34 @@ function setZoomFactor(factor){
     webFrame.setZoomFactor(factor);
 }
 
+/**
+ * [已重构] 保存单个快捷助手的窗口设置，直接操作 "prompts" 文档
+ * @param {string} promptKey - 快捷助手的 key
+ * @param {object} settings - 要保存的窗口设置
+ * @returns {Promise<{success: boolean, message?: string}>}
+ */
 async function savePromptWindowSettings(promptKey, settings) {
-    const configDoc = utools.db.get("config");
-    if (!configDoc || !configDoc.data || !configDoc.data.config) return { success: false, message: "Config not found" };
+    const promptsDoc = utools.db.get("prompts");
+    if (!promptsDoc || !promptsDoc.data) {
+        return { success: false, message: "Prompts document not found" };
+    }
 
-    const config = configDoc.data.config;
-    if (!config.prompts || !config.prompts[promptKey]) {
-        return { success: false, message: "Prompt not found" };
+    const promptsData = promptsDoc.data;
+    if (!promptsData[promptKey]) {
+        return { success: false, message: "Prompt not found in document" };
     }
     
-    // Update settings for the specific prompt
-    config.prompts[promptKey] = {
-        ...config.prompts[promptKey],
+    // 更新指定快捷助手的设置
+    promptsData[promptKey] = {
+        ...promptsData[promptKey],
         ...settings
     };
 
-    // Save the updated config back to the database
+    // 将更新后的整个 prompts 对象写回
     const result = utools.db.put({
-        _id: "config",
-        data: { config },
-        _rev: configDoc._rev
+        _id: "prompts",
+        data: promptsData,
+        _rev: promptsDoc._rev
     });
 
     if (result.ok) {
