@@ -315,19 +315,16 @@ async function saveSingleProviderSetting(key, value) {
                       :title="t('providers.deleteProviderTooltip')" />
                   </div>
                 </div>
-                <!-- [修改] 使用新的保存方式 -->
                 <el-switch v-model="selectedProvider.enable" @change="(value) => saveSingleProviderSetting('enable', value)" size="large" />
               </div>
 
               <el-form label-position="top" class="provider-form">
                 <el-form-item :label="t('providers.apiKeyLabel')">
-                  <!-- [修改] 使用新的保存方式 -->
                   <el-input v-model="selectedProvider.api_key" type="password" :placeholder="t('providers.apiKeyPlaceholder')"
-                    show-password clearable @change="(value) => saveSingleProviderSetting('api_key', value)" />
+                    show-password @change="(value) => saveSingleProviderSetting('api_key', value)" />
                   <div class="form-item-description">{{ t('providers.apiKeyDescription') }}</div>
                 </el-form-item>
                 <el-form-item :label="t('providers.apiUrlLabel')">
-                  <!-- [修改] 使用新的保存方式 -->
                   <el-input v-model="selectedProvider.url" :placeholder="t('providers.apiUrlPlaceholder')" clearable
                     @change="(value) => saveSingleProviderSetting('url', value)" />
                 </el-form-item>
