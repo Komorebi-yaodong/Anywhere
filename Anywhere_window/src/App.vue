@@ -228,33 +228,51 @@ const handleScroll = (event) => {
   }
 };
 
-// [新增] 导航到上一条消息
+// 导航到上一条消息
 const navigateToPreviousMessage = () => {
-  if (focusedMessageIndex.value === null) {
-    findFocusedMessageIndex();
-    return;
-  }
-  if (focusedMessageIndex.value > 0) {
-    focusedMessageIndex.value--;
-    const targetComponent = messageRefs.get(focusedMessageIndex.value);
-    if (targetComponent) {
-      targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // 1. 总是先找到当前视口顶部的消息
+  findFocusedMessageIndex();
+  const currentIndex = focusedMessageIndex.value;
+
+  if (currentIndex === null) return;
+
+  const targetComponent = messageRefs.get(currentIndex);
+  const container = chatContainerRef.value?.$el;
+
+  if (!targetComponent || !container) return;
+  const element = targetComponent.$el;
+
+  // 2. 计算当前滚动位置与消息顶部的差距
+  const scrollDifference = container.scrollTop - element.offsetTop;
+
+  // 3. 如果消息顶部在视口上方（即我们正在看消息的中间或下半部分），
+  //    则优先滚动到这条消息的顶部。
+  //    设置一个小的容差（例如5px）以避免浮点数问题。
+  if (scrollDifference > 5) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } 
+  // 4. 否则（我们已经看到了消息的顶部），就跳转到上一条消息。
+  else if (currentIndex > 0) {
+    const newIndex = currentIndex - 1;
+    focusedMessageIndex.value = newIndex;
+    const previousComponent = messageRefs.get(newIndex);
+    if (previousComponent) {
+      previousComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 };
 
-// [BUG修复] 3. 修正导航到下一条消息的逻辑
+// 导航到下一条消息的逻辑
 const navigateToNextMessage = () => {
-  // 检查是否可以向下导航（即当前不是最后一条消息）
+  findFocusedMessageIndex(); // 总是先找到当前位置
+  
   if (focusedMessageIndex.value !== null && focusedMessageIndex.value < chat_show.value.length - 1) {
-    // 如果可以，则移动到下一条消息的顶部
     focusedMessageIndex.value++;
     const targetComponent = messageRefs.get(focusedMessageIndex.value);
     if (targetComponent) {
       targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   } else {
-    // 如果已经是最后一条消息，或者未处于导航模式，则滚动到底部
     forceScrollToBottom();
   }
 };
