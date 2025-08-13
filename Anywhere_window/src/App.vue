@@ -558,7 +558,7 @@ onMounted(async () => {
   if (window.api && typeof window.api.setZoomFactor === 'function') {
     window.api.setZoomFactor(zoomLevel.value);
   }
-  if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); favicon.value = "favicon-b.png"; }
+  if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); }
   try { const userInfo = await window.api.getUser(); UserAvart.value = userInfo.avatar; }
   catch (err) { UserAvart.value = "user.png"; }
 
@@ -572,6 +572,15 @@ onMounted(async () => {
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
+      
+      if (currentPromptConfig && currentPromptConfig.icon) {
+        AIAvart.value = currentPromptConfig.icon;
+        favicon.value = currentPromptConfig.icon;
+      } else {
+        AIAvart.value = "ai.svg"; // 默认AI头像
+        favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png"; // 根据主题设置默认图标
+      }
+
       autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
       tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
@@ -593,8 +602,6 @@ onMounted(async () => {
       api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
       if (currentPromptConfig?.prompt) { history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }]; chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "", id: messageIdCounter.value++ }]; }
       else { history.value = []; chat_show.value = []; }
-      if (currentPromptConfig?.icon) AIAvart.value = currentPromptConfig.icon;
-      else AIAvart.value = "ai.svg";
 
       if (basic_msg.value.type === "over" && basic_msg.value.payload) {
         let sessionLoaded = false;
@@ -642,6 +649,16 @@ onMounted(async () => {
     basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
     document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
+
+    // --- 图标设置逻辑 (Catch块) ---
+    if (currentPromptConfig && currentPromptConfig.icon) {
+      AIAvart.value = currentPromptConfig.icon;
+      favicon.value = currentPromptConfig.icon;
+    } else {
+      AIAvart.value = "ai.svg";
+      favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
+    }
+
     autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
     tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
     model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
@@ -950,7 +967,17 @@ const loadSession = async (jsonData) => {
     currentConfig.value = configData.config;
     zoomLevel.value = currentConfig.value.zoom || 1;
     if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(zoomLevel.value);
-    if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); favicon.value = "favicon-b.png"; } else { document.documentElement.classList.remove('dark'); favicon.value = "favicon.png"; }
+    if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); }
+
+    // --- 图标设置逻辑 (loadSession) ---
+    const currentPromptConfigFromLoad = jsonData.currentPromptConfig || currentConfig.value.prompts[CODE.value];
+    if (currentPromptConfigFromLoad && currentPromptConfigFromLoad.icon) {
+      AIAvart.value = currentPromptConfigFromLoad.icon;
+      favicon.value = currentPromptConfigFromLoad.icon;
+    } else {
+      AIAvart.value = "ai.svg";
+      favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
+    }
 
     modelList.value = []; modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
@@ -972,9 +999,7 @@ const loadSession = async (jsonData) => {
       restoredModel = (currentPromptConfig?.model && modelMap.value[currentPromptConfig.model]) ? currentPromptConfig.model : (modelList.value[0]?.value || '');
     }
     model.value = restoredModel;
-    if (jsonData.currentPromptConfig?.icon) AIAvart.value = jsonData.currentPromptConfig.icon;
-    else AIAvart.value = currentConfig.value.prompts[CODE.value]?.icon || "ai.svg";
-
+    
     if (chat_show.value && chat_show.value.length > 0) {
       chat_show.value.forEach(msg => {
         if (msg.id === undefined) {

@@ -1,6 +1,4 @@
 const webFrame = require('electron').webFrame;
-const fs = require('fs/promises');
-const path = require('path');
 
 const feature_suffix = "anywhere助手^_^"
 
