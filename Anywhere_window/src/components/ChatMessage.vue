@@ -271,6 +271,631 @@ const truncateFilename = (filename, maxLength = 30) => {
   </div>
 </template>
 
+<style>
+html.dark .katex {
+  color: var(--el-text-color-regular) !important;
+}
+
+.katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.5em;
+}
+
+.katex-display::-webkit-scrollbar {
+  height: 6px;
+}
+
+.katex-display::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.katex-display::-webkit-scrollbar-thumb {
+  background-color: var(--el-text-color-disabled);
+  border-radius: 3px;
+  border: 1px solid transparent;
+  background-clip: content-box;
+}
+
+.katex-display::-webkit-scrollbar-thumb:hover {
+  background-color: var(--el-text-color-secondary);
+}
+
+html.dark .katex-display::-webkit-scrollbar-thumb {
+  background-color: #6b6b6b;
+}
+
+html.dark .katex-display::-webkit-scrollbar-thumb:hover {
+  background-color: #999;
+}
+
+.hljs {
+  color: #24292e;
+  background: #FFFFFF
+}
+
+.hljs-doctag,
+.hljs-keyword,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  color: #d73a49
+}
+
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__,
+.hljs-title.function_ {
+  color: #6f42c1
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-variable {
+  color: #005cc5
+}
+
+.hljs-meta .hljs-string,
+.hljs-regexp,
+.hljs-string {
+  color: #032f62
+}
+
+.hljs-built_in,
+.hljs-symbol {
+  color: #e36209
+}
+
+.hljs-code,
+.hljs-comment,
+.hljs-formula {
+  color: #6a737d
+}
+
+.hljs-name,
+.hljs-quote,
+.hljs-selector-pseudo,
+.hljs-selector-tag {
+  color: #22863a
+}
+
+.hljs-subst {
+  color: #24292e
+}
+
+.hljs-section {
+  color: #005cc5;
+  font-weight: 700
+}
+
+.hljs-bullet {
+  color: #735c0f
+}
+
+.hljs-emphasis {
+  color: #24292e;
+  font-style: italic
+}
+
+.hljs-strong {
+  color: #24292e;
+  font-weight: 700
+}
+
+.hljs-addition {
+  color: #22863a;
+  background-color: #f0fff4
+}
+
+.hljs-deletion {
+  color: #b31d28;
+  background-color: #ffeef0
+}
+
+html.dark .hljs {
+  background: #1F1F1F;
+  color: #d4d4d4;
+}
+
+html.dark .hljs-doctag,
+html.dark .hljs-keyword,
+html.dark .hljs-meta .hljs-keyword,
+html.dark .hljs-template-tag,
+html.dark .hljs-template-variable,
+html.dark .hljs-type,
+html.dark .hljs-variable.language_ {
+  color: #569cd6;
+}
+
+html.dark .hljs-title,
+html.dark .hljs-title.class_,
+html.dark .hljs-title.class_.inherited__,
+html.dark .hljs-title.function_ {
+  color: #dcdcaa;
+}
+
+html.dark .hljs-attr,
+html.dark .hljs-attribute,
+html.dark .hljs-literal,
+html.dark .hljs-meta,
+html.dark .hljs-number,
+html.dark .hljs-operator,
+html.dark .hljs-selector-attr,
+html.dark .hljs-selector-class,
+html.dark .hljs-selector-id,
+html.dark .hljs-variable {
+  color: #9cdcfe;
+}
+
+html.dark .hljs-meta .hljs-string,
+html.dark .hljs-regexp,
+html.dark .hljs-string {
+  color: #ce9178;
+}
+
+html.dark .hljs-built_in,
+html.dark .hljs-symbol {
+  color: #4ec9b0;
+}
+
+html.dark .hljs-code,
+html.dark .hljs-comment,
+html.dark .hljs-formula {
+  color: #6a9955;
+}
+
+html.dark .hljs-name,
+html.dark .hljs-quote,
+html.dark .hljs-selector-pseudo,
+html.dark .hljs-selector-tag {
+  color: #c586c0;
+}
+
+html.dark .hljs-subst {
+  color: #d4d4d4;
+}
+
+html.dark .hljs-section {
+  color: #569cd6;
+  font-weight: 700;
+}
+
+html.dark .hljs-bullet {
+  color: #ce9178;
+}
+
+html.dark .hljs-emphasis {
+  color: #d4d4d4;
+  font-style: italic;
+}
+
+html.dark .hljs-strong {
+  color: #d4d4d4;
+  font-weight: 700;
+}
+
+html.dark .hljs-addition {
+  color: #aff5b4;
+  background-color: #043927;
+}
+
+html.dark .hljs-deletion {
+  color: #ffdcd7;
+  background-color: #67060c;
+}
+
+pre.hljs::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+pre.hljs::-webkit-scrollbar-track {
+  background: #FFFFFF;
+}
+
+pre.hljs::-webkit-scrollbar-thumb {
+  background-color: #d0d7de;
+  border-radius: 6px;
+  border: 3px solid #FFFFFF;
+}
+
+pre.hljs::-webkit-scrollbar-thumb:hover {
+  background-color: #afb8c1;
+}
+
+pre.hljs::-webkit-scrollbar-corner {
+  background-color: #FFFFFF;
+}
+
+html.dark pre.hljs::-webkit-scrollbar-track {
+  background: #1F1F1F;
+}
+
+html.dark pre.hljs::-webkit-scrollbar-thumb {
+  background-color: #4f4f4f;
+  border-radius: 6px;
+  border: 3px solid #1F1F1F;
+}
+
+html.dark pre.hljs::-webkit-scrollbar-thumb:hover {
+  background-color: #6a6a6a;
+}
+
+html.dark pre.hljs::-webkit-scrollbar-corner {
+  background-color: #1F1F1F;
+}
+
+.chat-message .markdown-body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-size: var(--el-font-size-base);
+  line-height: 1.7;
+  word-wrap: break-word;
+  color: var(--el-text-color-primary);
+  max-width: 80vw;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  transition: max-height 0.3s ease-in-out;
+}
+
+.chat-message .markdown-body.collapsed {
+  max-height: 3.4em;
+  position: relative;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}
+
+.chat-message .markdown-body p {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.chat-message .markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message .markdown-body pre.hljs,
+.chat-message .markdown-body p>code:not(.hljs),
+.chat-message .markdown-body li>code:not(.hljs) {
+  &,
+  * {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  }
+}
+
+.chat-message .markdown-body pre.hljs {
+  display: block;
+  overflow: auto;
+  padding: 1em;
+  border-radius: var(--el-border-radius-base);
+  max-height: 400px;
+  margin: .5em 0 1em 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.chat-message .markdown-body .code-block-wrapper pre.hljs {
+  background-color: #F9F9F9;
+}
+
+html.dark .chat-message .markdown-body .code-block-wrapper pre.hljs {
+  background-color: #171717;
+}
+
+.chat-message .markdown-body code.hljs {
+  font-size: 0.9em;
+  padding: 0;
+  background-color: transparent !important;
+}
+
+.chat-message .markdown-body strong,
+.chat-message .markdown-body b {
+  font-weight: 600;
+  color: inherit;
+}
+
+.ai-bubble .markdown-body {
+  color: var(--el-text-color-regular);
+}
+
+.chat-message .markdown-body h1,
+.chat-message .markdown-body h2,
+.chat-message .markdown-body h3,
+.chat-message .markdown-body h4,
+.chat-message .markdown-body h5,
+.chat-message .markdown-body h6 {
+  margin-top: 1.2em;
+  margin-bottom: 0.6em;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--el-text-color-primary);
+}
+
+html.dark .chat-message .markdown-body h1,
+html.dark .chat-message .markdown-body h2,
+html.dark .chat-message .markdown-body h3,
+html.dark .chat-message .markdown-body h4,
+html.dark .chat-message .markdown-body h5,
+html.dark .chat-message .markdown-body h6 {
+  color: var(--el-text-color-primary);
+}
+
+.chat-message .markdown-body h1 {
+  font-size: 1.8em;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding-bottom: 0.3em;
+}
+
+.chat-message .markdown-body h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding-bottom: 0.3em;
+}
+
+.chat-message .markdown-body h3 {
+  font-size: 1.3em;
+}
+
+.chat-message .markdown-body h4 {
+  font-size: 1.15em;
+}
+
+.chat-message .markdown-body h5 {
+  font-size: 1em;
+}
+
+.chat-message .markdown-body h6 {
+  font-size: 0.9em;
+  color: var(--el-text-color-secondary);
+}
+
+html.dark .chat-message .markdown-body h1,
+html.dark .chat-message .markdown-body h2 {
+  border-bottom-color: var(--el-border-color-light);
+}
+
+.chat-message .markdown-body ul,
+.chat-message .markdown-body ol {
+  padding-left: 2em;
+}
+
+.chat-message .markdown-body li {
+  margin-bottom: 0.3em;
+}
+
+.chat-message .markdown-body li > p {
+  margin-bottom: 0.5em;
+}
+
+.chat-message .markdown-body blockquote {
+  padding: 0.5em 1em;
+  margin-left: 0;
+  color: var(--el-text-color-secondary);
+  border-left: 0.25em solid var(--el-border-color-lighter);
+  background-color: var(--el-fill-color-lightest);
+}
+
+html.dark .chat-message .markdown-body blockquote {
+  color: var(--el-color-info);
+  border-left-color: var(--el-border-color-darker);
+  background-color: var(--el-fill-color-dark);
+}
+
+.chat-message .markdown-body blockquote p {
+  margin-bottom: 0.5em;
+}
+
+.chat-message .markdown-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message .markdown-body a {
+  color: var(--el-color-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.chat-message .markdown-body a:hover {
+  text-decoration: underline;
+  color: var(--el-color-primary-light-3);
+}
+
+html.dark .chat-message .markdown-body a {
+  color: var(--el-color-primary-light-5);
+}
+
+html.dark .chat-message .markdown-body a:hover {
+  color: var(--el-color-primary-light-7);
+}
+
+.chat-message .markdown-body hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background-color: var(--el-border-color-lighter);
+  border: 0;
+}
+
+html.dark .chat-message .markdown-body hr {
+  background-color: var(--el-border-color-light);
+}
+
+.chat-message .markdown-body table {
+  border-collapse: collapse;
+  width: auto;
+  max-width: 100%;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  display: table;
+  overflow-x: auto;
+}
+
+.chat-message .markdown-body th,
+.chat-message .markdown-body td {
+  border: 1px solid var(--el-border-color-lighter);
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--el-text-color-regular);
+  background-color: var(--el-bg-color);
+}
+
+.chat-message .markdown-body th {
+  font-weight: 600;
+  background-color: var(--el-fill-color-lighter);
+  color: var(--el-text-color-primary);
+}
+
+html.dark .chat-message .markdown-body th {
+  background-color: var(--el-fill-color-dark);
+}
+
+html.dark .chat-message .markdown-body td {
+  border-color: var(--el-border-color-darker);
+}
+
+.chat-message .markdown-body .code-block-wrapper {
+  position: relative;
+  margin: .5em 0 1em 0;
+}
+
+.chat-message .markdown-body .code-block-wrapper pre.hljs {
+  margin: 0;
+}
+
+.chat-message .markdown-body .code-block-wrapper .code-block-copy-button {
+  position: absolute;
+  padding: 4px 6px;
+  background-color: rgba(200, 200, 200, .7);
+  border: 1px solid rgba(150, 150, 150, .5);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .2s ease-in-out, background-color .2s ease-in-out;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+}
+
+.chat-message .markdown-body .code-block-wrapper .code-block-copy-button svg {
+  display: block;
+}
+
+.chat-message .markdown-body .code-block-wrapper:hover .code-block-copy-button {
+  opacity: 1;
+}
+
+.chat-message .markdown-body .code-block-wrapper .code-block-copy-button:hover {
+  background-color: rgba(180, 180, 180, .9);
+}
+
+.chat-message .markdown-body .code-block-wrapper .code-block-copy-button-top {
+  top: 8px;
+  right: 8px;
+}
+
+.chat-message .markdown-body .code-block-wrapper .code-block-copy-button-bottom {
+  bottom: 8px;
+  right: 8px;
+}
+
+html.dark .chat-message .markdown-body .code-block-wrapper .code-block-copy-button {
+  background-color: rgba(80, 80, 80, .7);
+  border-color: rgba(120, 120, 120, .5);
+  color: #ccc;
+}
+
+html.dark .chat-message .markdown-body .code-block-wrapper .code-block-copy-button:hover {
+  background-color: rgba(100, 100, 100, .9);
+}
+
+.chat-message .markdown-body p > code:not(.hljs),
+.chat-message .markdown-body li > code:not(.hljs) {
+  background-color: var(--el-color-info-light-9);
+  color: var(--el-text-color-regular);
+  padding: .2em .4em;
+  border-radius: var(--el-border-radius-small);
+  font-size: 85%;
+}
+
+.chat-message .markdown-body img {
+  max-width: 80%;
+  max-height: 300px;
+  height: auto;
+  display: block;
+  cursor: pointer;
+  border-radius: var(--el-border-radius-base);
+  margin-top: .8em;
+  margin-bottom: .8em;
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+html.dark .chat-message .markdown-body img {
+  border-color: var(--el-border-color-darker);
+}
+
+.chat-message .image-error-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100px;
+  min-width: 150px;
+  border: 1px dashed var(--el-border-color-light);
+  border-radius: var(--el-border-radius-base);
+  background-color: var(--el-fill-color-lightest);
+  margin: .8em 0;
+  cursor: default;
+}
+
+.chat-message .image-retry-button {
+  padding: 8px 16px;
+  border: none;
+  background-color: transparent;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  border-radius: var(--el-border-radius-small);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.chat-message .image-retry-button:hover {
+  background-color: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+html.dark .chat-message .image-error-container {
+  border-color: var(--el-border-color-darker);
+  background-color: var(--el-fill-color-dark);
+}
+
+html.dark .chat-message .image-retry-button:hover {
+  background-color: var(--el-color-primary-dark-2);
+  color: var(--el-color-primary-light-7);
+}
+
+
+html.dark .chat-message .markdown-body {
+  color: var(--el-text-color-regular);
+}
+
+html.dark .chat-message .markdown-body p > code:not(.hljs),
+html.dark .chat-message .markdown-body li > code:not(.hljs) {
+  background-color: var(--el-fill-color-darker);
+  color: var(--el-color-info-light-3);
+}
+</style>
+
 <style scoped lang="less">
 .chat-message {
   margin: 10px 0 0 0;
@@ -374,7 +999,8 @@ html.dark .system-prompt-container:hover {
   word-wrap: break-word;
   color: var(--el-text-color-primary);
   max-width: 80vw;
-  overflow-x: auto;
+  overflow-x: hidden;
+  overflow-y: hidden;
   transition: max-height 0.3s ease-in-out;
 }
 
@@ -384,6 +1010,14 @@ html.dark .system-prompt-container:hover {
   overflow: hidden;
   -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
   mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}
+
+.chat-message :deep(.markdown-body .code-block-wrapper pre.hljs) {
+  background-color: #F9F9F9;
+}
+
+html.dark .chat-message :deep(.markdown-body .code-block-wrapper pre.hljs) {
+  background-color: #171717;
 }
 
 .file-list-container {
