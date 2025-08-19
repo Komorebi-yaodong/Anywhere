@@ -149,7 +149,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                 :enable-latex="true"
                 :mermaid-config="mermaidConfig"
                 :default-theme-mode="isDarkMode ? 'dark' : 'light'"  
-                github-style 
+                :themes="{light:'github-light', dark:'github-dark-default'}"
                 :allow-html="true" />
         </div>
       </template>
@@ -173,7 +173,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     </Bubble>
 
     <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner" variant="shadow"
-      maxWidth="90%" avatar-size="40px">
+      maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading">
       <template #avatar>
         <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar">
       </template>
@@ -210,7 +210,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                 :enable-latex="true"
                 :mermaid-config="mermaidConfig"
                 :default-theme-mode="isDarkMode ? 'dark' : 'light'"
-                github-style 
+                :themes="{light:'github-light', dark:'github-dark-default'}"
                 :allow-html="true" />
         </div>
       </template>
@@ -337,6 +337,34 @@ html.dark .system-prompt-container:hover {
     word-break: break-word;
   }
 
+  :deep(.katex) {
+    font-size: 1.2em !important;
+  }
+
+  /* [新增] 针对 KaTeX 内部滚动条的样式优化 */
+  :deep(.katex-display > .katex > .katex-html) {
+    padding-bottom: 8px !important; /* 为滚动条留出空间，避免遮挡公式 */
+
+    /* For Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: var(--el-text-color-disabled) transparent;
+
+    /* For Webkit Browsers (Chrome, Edge, Safari) */
+    &::-webkit-scrollbar {
+      height: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background-color: var(--el-text-color-disabled);
+      border-radius: 3px;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+      background-color: var(--el-text-color-secondary);
+    }
+  }
+
   :deep(img){
     max-width: 50vw;
     max-height: 50vh;
@@ -368,25 +396,13 @@ html.dark .system-prompt-container:hover {
 
   :deep(pre code), :deep(.inline-code-tag) {
     font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-    font-size: 0.9em;
+    font-size: 1em;
   }
   :deep(.inline-code-tag) {
     padding: 0.2em 0.4em;
     margin: 0;
     border-radius: 4px;
     background-color: rgba(175, 184, 193, 0.2);
-  }
-
-  :deep(.katex) { font-size: 1em; color: inherit; }
-  :deep(.katex-display) {
-    overflow-x: auto;
-    padding: 0.5em 0;
-    scrollbar-width: thin;
-    scrollbar-color: var(--el-text-color-disabled) transparent;
-    &::-webkit-scrollbar { height: 6px; }
-    &::-webkit-scrollbar-track { background: transparent; border-radius: 3px; }
-    &::-webkit-scrollbar-thumb { background-color: var(--el-text-color-disabled); border-radius: 3px; }
-    &::-webkit-scrollbar-thumb:hover { background-color: var(--el-text-color-secondary); }
   }
 
   html:not(.dark) & :deep(pre.shiki) {
