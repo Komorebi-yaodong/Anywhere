@@ -8,6 +8,9 @@ import ChatMessage from './components/ChatMessage.vue';
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
+import { DocumentCopy, Download } from '@element-plus/icons-vue';
+
+
 const chatInputRef = ref(null);
 // --- 光标位置状态 ---
 const lastSelectionStart = ref(null);
@@ -17,10 +20,9 @@ const chatContainerRef = ref(null);
 const isAtBottom = ref(true);
 const showScrollToBottomButton = ref(false); // 现在控制导航按钮组的显示
 const isForcingScroll = ref(false);
-const messageRefs = new Map(); // [新增] 存储消息组件的引用
-const focusedMessageIndex = ref(null); // [新增] 当前导航聚焦的消息索引
+const messageRefs = new Map();
+const focusedMessageIndex = ref(null);
 
-// [新增] 用于在模板中收集消息组件的引用
 const setMessageRef = (el, index) => {
   if (el) {
     messageRefs.set(index, el);
@@ -138,13 +140,11 @@ const imageViewerInitialIndex = ref(0);
 
 const senderRef = ref();
 
-// [BUG修复] 1. 新增一个更精确的计算属性，判断当前是否正在查看最后一条消息
 const isViewingLastMessage = computed(() => {
-  if (focusedMessageIndex.value === null) return false; // 未进入导航模式
+  if (focusedMessageIndex.value === null) return false;
   return focusedMessageIndex.value === chat_show.value.length - 1;
 });
 
-// [BUG修复] 2. 更新提示文本的计算属性，使其更符合实际操作
 const nextButtonTooltip = computed(() => {
   return isViewingLastMessage.value ? '滚动到底部' : '查看下一条消息';
 });
@@ -165,7 +165,7 @@ const forceScrollToBottom = () => {
   isForcingScroll.value = true;
   isAtBottom.value = true;
   showScrollToBottomButton.value = false;
-  focusedMessageIndex.value = null; // [新增] 退出导航模式
+  focusedMessageIndex.value = null;
 
   const el = chatContainerRef.value?.$el;
   if (el) {
@@ -177,7 +177,6 @@ const forceScrollToBottom = () => {
   }, 500);
 };
 
-// [新增] 在滚动时，找到当前视口顶部的消息
 const findFocusedMessageIndex = () => {
   const container = chatContainerRef.value?.$el;
   if (!container) return;
@@ -186,16 +185,13 @@ const findFocusedMessageIndex = () => {
   let closestIndex = -1;
   let smallestDistance = Infinity;
 
-  // 倒序遍历，优先找到视口内的消息
   for (let i = chat_show.value.length - 1; i >= 0; i--) {
     const msgComponent = messageRefs.get(i);
     if (msgComponent) {
       const el = msgComponent.$el;
       const elTop = el.offsetTop;
       const elBottom = elTop + el.clientHeight;
-      // 如果消息在视口内
       if (elTop < scrollTop + container.clientHeight && elBottom > scrollTop) {
-        // 找到视口中最顶部的消息
         const distance = Math.abs(elTop - scrollTop);
         if (distance < smallestDistance) {
           smallestDistance = distance;
@@ -217,20 +213,17 @@ const handleScroll = (event) => {
   const isScrolledToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 10;
 
   if (isAtBottom.value && !isScrolledToBottom) {
-    // 刚从底部向上滚动，激活导航模式
     findFocusedMessageIndex();
   }
 
   isAtBottom.value = isScrolledToBottom;
   showScrollToBottomButton.value = !isScrolledToBottom;
   if (isScrolledToBottom) {
-    focusedMessageIndex.value = null; // 回到底部，退出导航模式
+    focusedMessageIndex.value = null;
   }
 };
 
-// 导航到上一条消息
 const navigateToPreviousMessage = () => {
-  // 1. 总是先找到当前视口顶部的消息
   findFocusedMessageIndex();
   const currentIndex = focusedMessageIndex.value;
 
@@ -242,16 +235,11 @@ const navigateToPreviousMessage = () => {
   if (!targetComponent || !container) return;
   const element = targetComponent.$el;
 
-  // 2. 计算当前滚动位置与消息顶部的差距
   const scrollDifference = container.scrollTop - element.offsetTop;
 
-  // 3. 如果消息顶部在视口上方（即我们正在看消息的中间或下半部分），
-  //    则优先滚动到这条消息的顶部。
-  //    设置一个小的容差（例如5px）以避免浮点数问题。
   if (scrollDifference > 5) {
     element.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } 
-  // 4. 否则（我们已经看到了消息的顶部），就跳转到上一条消息。
   else if (currentIndex > 0) {
     const newIndex = currentIndex - 1;
     focusedMessageIndex.value = newIndex;
@@ -262,9 +250,8 @@ const navigateToPreviousMessage = () => {
   }
 };
 
-// 导航到下一条消息的逻辑
 const navigateToNextMessage = () => {
-  findFocusedMessageIndex(); // 总是先找到当前位置
+  findFocusedMessageIndex();
   
   if (focusedMessageIndex.value !== null && focusedMessageIndex.value < chat_show.value.length - 1) {
     focusedMessageIndex.value++;
@@ -326,59 +313,11 @@ const addCopyButtonsToCodeBlocks = async () => {
   });
 };
 
-const addDownloadButtonsToImages = async () => {
-  await nextTick();
-  document.querySelectorAll('.markdown-body img:not([data-download-processed])').forEach(img => {
-    img.setAttribute('data-download-processed', 'true');
-
-    if (img.parentElement.classList.contains('image-download-wrapper')) {
-      return;
-    }
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'image-download-wrapper';
-
-    const button = document.createElement('button');
-    button.className = 'image-download-button';
-    button.title = '下载图片';
-    button.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" /></svg>`;
-
-    button.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      try {
-        ElMessage.info('正在准备下载...');
-        const response = await fetch(img.src);
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-
-        const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
-
-        await window.api.saveFile({
-          title: '保存图片',
-          defaultPath: defaultFilename,
-          buttonLabel: '保存',
-          fileContent: new Uint8Array(arrayBuffer),
-        });
-        ElMessage.success('图片保存成功！');
-      } catch (error) {
-        if (!error.message.includes('User cancelled')) {
-          console.error('下载图片失败:', error);
-          ElMessage.error(`下载失败: ${error.message}`);
-        }
-      }
-    });
-
-    img.parentNode.insertBefore(wrapper, img);
-    wrapper.appendChild(img);
-    wrapper.appendChild(button);
-  });
-};
-
-
 const handleMarkdownImageClick = (event) => {
-  if (event.target.closest('.image-error-container') || event.target.closest('.code-block-wrapper') || event.target.closest('.image-download-button')) return;
-  const imgElement = event.target.closest('.markdown-body img');
+  if (event.target.tagName !== 'IMG' || !event.target.closest('.markdown-wrapper')) {
+    return;
+  }
+  const imgElement = event.target;
   if (imgElement && imgElement.src) {
     imageViewerSrcList.value = [imgElement.src];
     imageViewerInitialIndex.value = 0;
@@ -487,13 +426,10 @@ const handleUpload = async ({ fileList: newFiles }) => {
   chatInputRef.value?.focus({ cursor: 'end' });
 };
 
-// [MODIFIED] handleSendAudio to handle new payload if needed, but primarily simplifies
 const handleSendAudio = async (audioFile) => {
-    // The prompt.value is already up-to-date from the v-model binding.
-    // We just need to handle the audio file.
-    fileList.value = []; // Clear any other pending files
+    fileList.value = [];
     await file2fileList(audioFile, 0);
-    await askAI(false); // This will now send both the text in prompt.value and the audio in fileList
+    await askAI(false);
 };
 
 
@@ -520,6 +456,59 @@ const handleWindowFocus = () => {
   }, 50);
 };
 
+const handleCopyImageFromViewer = async (url) => {
+    if (!url) return;
+
+    try {
+        // 如果是 Base64，直接复制
+        if (url.startsWith('data:image')) {
+            await window.api.copyImage(url);
+            ElMessage.success('图片已复制到剪贴板');
+            return;
+        }
+
+        // 如果是网络链接，先 fetch
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`无法获取图片: ${response.statusText}`);
+        }
+        const blob = await response.blob();
+        const buffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(buffer);
+
+        await window.api.copyImage(uint8Array);
+        ElMessage.success('图片已复制到剪贴板');
+
+    } catch (error) {
+        console.error('复制图片失败:', error);
+        ElMessage.error(`复制失败: ${error.message}`);
+    }
+};
+
+const handleDownloadImageFromViewer = async (url) => {
+    if (!url) return;
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+
+        const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
+
+        await window.api.saveFile({
+            title: '保存图片',
+            defaultPath: defaultFilename,
+            buttonLabel: '保存',
+            fileContent: new Uint8Array(arrayBuffer),
+        });
+        ElMessage.success('图片保存成功！');
+    } catch (error) {
+        if (!error.message.includes('User cancelled') && !error.message.includes('用户取消')) {
+            console.error('下载图片失败:', error);
+            ElMessage.error(`下载失败: ${error.message}`);
+        }
+    }
+};
+
 
 const closePage = () => { window.close(); };
 
@@ -532,7 +521,6 @@ watch(zoomLevel, (newZoom) => {
 watch(chat_show, async () => {
   await addCopyButtonsToCodeBlocks();
   await attachImageErrorHandlers();
-  await addDownloadButtonsToImages();
 }, { deep: true, flush: 'post' });
 
 onMounted(async () => {
@@ -577,8 +565,8 @@ onMounted(async () => {
         AIAvart.value = currentPromptConfig.icon;
         favicon.value = currentPromptConfig.icon;
       } else {
-        AIAvart.value = "ai.svg"; // 默认AI头像
-        favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png"; // 根据主题设置默认图标
+        AIAvart.value = "ai.svg";
+        favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
       }
 
       autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
@@ -650,7 +638,6 @@ onMounted(async () => {
     document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
     const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
 
-    // --- 图标设置逻辑 (Catch块) ---
     if (currentPromptConfig && currentPromptConfig.icon) {
       AIAvart.value = currentPromptConfig.icon;
       favicon.value = currentPromptConfig.icon;
@@ -689,7 +676,6 @@ onMounted(async () => {
 
   await addCopyButtonsToCodeBlocks();
   await attachImageErrorHandlers();
-  await addDownloadButtonsToImages();
 
   setTimeout(() => {
     chatInputRef.value?.focus({ cursor: 'end' });
@@ -969,7 +955,6 @@ const loadSession = async (jsonData) => {
     if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(zoomLevel.value);
     if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); }
 
-    // --- 图标设置逻辑 (loadSession) ---
     const currentPromptConfigFromLoad = jsonData.currentPromptConfig || currentConfig.value.prompts[CODE.value];
     if (currentPromptConfigFromLoad && currentPromptConfigFromLoad.icon) {
       AIAvart.value = currentPromptConfigFromLoad.icon;
@@ -1284,7 +1269,7 @@ const formatTimestamp = (dateString) => {
     const date = new Date(dateString);
     const datePart = date.toLocaleDateString('sv-SE');
     const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-    return `${datePart}${timePart}`;
+    return `${datePart} ${timePart}`;
   } catch (e) {
     return '';
   }
@@ -1301,12 +1286,23 @@ const formatTimestamp = (dateString) => {
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
           @scroll="handleScroll">
-          <!-- [修改] 添加 :ref 来收集DOM元素 -->
-          <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :ref="el => setMessageRef(el, index)"
-            :message="message" :index="index" :isLastMessage="index === chat_show.length - 1" :isLoading="loading"
-            :userAvatar="UserAvart" :aiAvatar="AIAvart" :isCollapsed="isCollapsed(index)"
-            @delete-message="handleDeleteMessage" @copy-text="handleCopyText" @re-ask="handleReAsk"
-            @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
+          <ChatMessage 
+            v-for="(message, index) in chat_show" 
+            :key="message.id" 
+            :ref="el => setMessageRef(el, index)"
+            :message="message" 
+            :index="index" 
+            :is-last-message="index === chat_show.length - 1" 
+            :is-loading="loading"
+            :user-avatar="UserAvart" 
+            :ai-avatar="AIAvart" 
+            :is-collapsed="isCollapsed(index)"
+            :is-dark-mode="currentConfig.isDarkMode"
+            @delete-message="handleDeleteMessage" 
+            @copy-text="handleCopyText" 
+            @re-ask="handleReAsk"
+            @toggle-collapse="handleToggleCollapse" 
+            @show-system-prompt="handleShowSystemPrompt"
             @avatar-click="onAvatarClick" />
         </el-main>
 
@@ -1347,8 +1343,20 @@ const formatTimestamp = (dateString) => {
     <pre class="system-prompt-full-content">{{ systemPromptContent }}</pre>
   </el-dialog>
 
-  <el-image-viewer v-if="imageViewerVisible" :url-list="imageViewerSrcList" :initial-index="imageViewerInitialIndex"
-    @close="imageViewerVisible = false" :hide-on-click-modal="true" teleported />
+  <!-- [MODIFIED] 恢复默认的 el-image-viewer，不使用插槽 -->
+  <el-image-viewer 
+    v-if="imageViewerVisible" 
+    :url-list="imageViewerSrcList" 
+    :initial-index="imageViewerInitialIndex"
+    @close="imageViewerVisible = false" 
+    :hide-on-click-modal="true" 
+    teleported
+  />
+  <!-- [NEW] 将自定义工具栏作为独立元素渲染，通过 CSS 定位 -->
+  <div v-if="imageViewerVisible" class="custom-viewer-actions">
+      <el-button type="primary" :icon="DocumentCopy" circle @click="handleCopyImageFromViewer(imageViewerSrcList[0])" title="复制图片" />
+      <el-button type="primary" :icon="Download" circle @click="handleDownloadImageFromViewer(imageViewerSrcList[0])" title="下载图片" />
+  </div>
 </template>
 
 <style>
@@ -1537,39 +1545,34 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   border-color: var(--el-border-color);
 }
 
-.image-download-wrapper {
-  position: relative;
-  display: inline-block;
-  line-height: 0;
+/* [MODIFIED] 新增并修正图片预览工具栏样式 */
+.custom-viewer-actions {
+    position: fixed;
+    bottom: 100px; /* 定位在默认工具栏上方 (默认栏在 bottom: 40px) */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2100; /* 确保在图片预览器之上 */
+    padding: 6px 12px;
+    background-color: rgba(0, 0, 0, 0.4);
+    border-radius: 22px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.custom-viewer-actions .el-button {
+    background-color: transparent;
+    border: none;
+    color: white;
+    font-size: 16px;
+}
+.custom-viewer-actions .el-button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
 }
 
-.image-download-button {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 50%;
-  border: none;
-  background-color: rgba(0, 0, 0, 0.5);
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s ease-in-out;
-  z-index: 1;
-}
-
-.image-download-wrapper:hover .image-download-button {
-  opacity: 1;
-}
-
-.image-download-button:hover {
-  background-color: rgba(0, 0, 0, 0.7);
-}
 </style>
 
 <style scoped lang="less">

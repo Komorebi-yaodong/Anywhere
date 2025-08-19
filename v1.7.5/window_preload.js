@@ -59,4 +59,5 @@ window.api = {
     defaultConfig,
     savePromptWindowSettings,
     desktopCaptureSources: utools.desktopCaptureSources,
+    copyImage: utools.copyImage,
 };
