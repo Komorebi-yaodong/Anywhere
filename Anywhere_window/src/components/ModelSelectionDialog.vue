@@ -1,4 +1,3 @@
-<!-- ./Anywhere_window/src/components/ModelSelectionDialog.vue -->
 <script setup>
 import { ElDialog, ElTable, ElTableColumn, ElButton } from 'element-plus';
 

@@ -173,7 +173,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     </Bubble>
 
     <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner" variant="shadow"
-      maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading">
+      maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading && renderedMarkdownContent === '...'">
       <template #avatar>
         <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar">
       </template>
