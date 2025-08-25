@@ -548,9 +548,33 @@ html.dark .drag-overlay {
 .file-card-container {
     margin-bottom: 8px;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+    padding-top: 8px;
+    max-height: 70px;
 }
+
+/* [ADDED] 美化文件预览容器的滚动条 */
+.file-card-container::-webkit-scrollbar {
+    height: 6px;
+}
+
+.file-card-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.file-card-container::-webkit-scrollbar-thumb {
+    background-color: var(--el-border-color);
+    border-radius: 3px;
+}
+
+.file-card-container::-webkit-scrollbar-thumb:hover {
+    background-color: var(--el-text-color-secondary);
+}
+
 
 .file-card-container :deep(.ant-attachments-file-card-item-image) {
     width: 56px;

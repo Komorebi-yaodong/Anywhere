@@ -37,6 +37,6 @@
 		}
 	],
 	"development":{
-		"main": "http://localhost:5173/index.html"
+		"main":"http://localhost:5173/index.html"
 	}
 }
