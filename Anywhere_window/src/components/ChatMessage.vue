@@ -48,13 +48,24 @@ const formatTimestamp = (dateString) => {
 
 const formatMessageContent = (content) => {
   if (!content) return "";
-  if (!Array.isArray(content)) { if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) return ""; else return String(content); }
+  if (!Array.isArray(content)) {
+    if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) {
+        return "";
+    } else {
+        return String(content);
+    }
+  }
   let markdownString = "";
   content.forEach(part => {
-    if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) { }
-    else if (part.type === 'image_url' && part.image_url?.url) markdownString += `\n\n![Image](${part.image_url.url})\n`;
-    else if (part.type === 'input_audio' && part.input_audio?.data) markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
-    else if (part.type === 'text' && part.text) markdownString += part.text;
+    if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) {
+        // This is a file content block, do not render its text content in markdown view
+    } else if (part.type === 'image_url' && part.image_url?.url) {
+        markdownString += `\n\n![Image](${part.image_url.url})\n`;
+    } else if (part.type === 'input_audio' && part.input_audio?.data) {
+        markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
+    } else if (part.type === 'text' && part.text) {
+        markdownString += part.text;
+    }
   });
   return markdownString;
 };
@@ -75,11 +86,18 @@ const formatMessageFile = (content) => {
 };
 
 const formatMessageText = (content) => {
-  if (!Array.isArray(content)) return String(content);
-  let textString = "";
-  content.forEach(part => { if (!(part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) { if (part.type === 'text' && part.text) textString += part.text; } });
-  return textString.trim().trimEnd();
+    if (!content) return "";
+    if (!Array.isArray(content)) return String(content);
+    
+    let textString = "";
+    content.forEach(part => {
+        if (part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
+            textString += part.text;
+        }
+    });
+    return textString.trim();
 };
+
 
 const renderedMarkdownContent = computed(() => {
     const content = props.message.role ? props.message.content : props.message;

@@ -1107,12 +1107,12 @@ const askAI = async (forceSend = false) => {
   loading.value = true; signalController.value = new AbortController();
   let aiResponse = null; scrollToBottom();
   const aiMessageHistoryIndex = history.value.length; const aiMessageChatShowIndex = chat_show.value.length;
-  history.value.push({ role: "assistant", content: "" });
+  history.value.push({ role: "assistant", content: [] });
 
   chat_show.value.push({
     id: messageIdCounter.value++,
     role: "assistant",
-    content: [{ type: "text", text: "" }],
+    content: [],
     reasoning_content: "",
     status: "",
     aiName: modelMap.value[model.value] || model.value.split('|')[1],
@@ -1146,16 +1146,16 @@ const askAI = async (forceSend = false) => {
 
       const textContent = aiMessage.audio?.transcript || aiMessage.content || '未获取到文本内容。';
       const audioData = aiMessage.audio?.data;
+      const images = aiMessage.images || [];
 
-      history.value[aiMessageHistoryIndex].content = textContent;
+      const combinedContent = [];
+      if(textContent) combinedContent.push({ type: 'text', text: textContent });
+      images.forEach(img => combinedContent.push(img));
+      if (audioData) combinedContent.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
 
-      const chatShowContent = [{ type: 'text', text: textContent }];
-      if (audioData) {
-        chatShowContent.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
-      }
-
+      history.value[aiMessageHistoryIndex].content = combinedContent;
       if (chat_show.value[aiMessageChatShowIndex]) {
-        chat_show.value[aiMessageChatShowIndex].content = chatShowContent;
+        chat_show.value[aiMessageChatShowIndex].content = combinedContent;
         chat_show.value[aiMessageChatShowIndex].status = "";
       }
 
@@ -1167,39 +1167,70 @@ const askAI = async (forceSend = false) => {
           const { value, done } = await reader.read();
           if (done) { if (thinking.value && chat_show.value[aiMessageChatShowIndex]) { chat_show.value[aiMessageChatShowIndex].status = "end"; thinking.value = false; } break; }
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n\n'); buffer = lines.pop() || '';
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
+             if (line.startsWith('data: ')) {
               const jsonString = line.substring(6).trim();
               if (jsonString === '[DONE]') { if (thinking.value && chat_show.value[aiMessageChatShowIndex]) { chat_show.value[aiMessageChatShowIndex].status = "end"; thinking.value = false; } continue; }
               try {
                 const parsedData = JSON.parse(jsonString);
-                const reasoning_delta = parsedData.choices?.[0]?.delta?.reasoning_content;
-                const deltaContent = parsedData.choices?.[0]?.delta?.content;
+                const delta = parsedData.choices?.[0]?.delta;
+                if (!delta) continue;
+
+                const reasoning_delta = delta.reasoning_content;
+                const deltaContent = delta.content;
+                const deltaImages = delta.images;
+
                 if (chat_show.value[aiMessageChatShowIndex]) {
-                  if (reasoning_delta !== undefined && reasoning_delta !== null && reasoning_delta) {
-                    if (!thinking.value) { chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta; chat_show.value[aiMessageChatShowIndex].status = "start"; thinking.value = true; }
-                    else { chat_show.value[aiMessageChatShowIndex].status = "thinking"; chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta; }
-                  }
-                  if (deltaContent !== undefined && deltaContent !== null && deltaContent) {
-                    if (!is_think_flag && thinking.value) { thinking.value = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
-                    if (!thinking.value && deltaContent.trimEnd() === "<think>") { is_think_flag = true; thinking.value = true; chat_show.value[aiMessageChatShowIndex].status = "start"; chat_show.value[aiMessageChatShowIndex].reasoning_content = ""; }
-                    else if (thinking.value && is_think_flag && deltaContent.trimEnd() === "</think>") { thinking.value = false; is_think_flag = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
-                    else if (thinking.value && is_think_flag) { chat_show.value[aiMessageChatShowIndex].status = "thinking"; chat_show.value[aiMessageChatShowIndex].reasoning_content += deltaContent; }
-                    else {
-                      history.value[aiMessageHistoryIndex].content += deltaContent;
-                      if (chat_show.value[aiMessageChatShowIndex].content[0]) chat_show.value[aiMessageChatShowIndex].content[0].text += deltaContent;
-                      else chat_show.value[aiMessageChatShowIndex].content = [{ type: 'text', text: deltaContent }];
+                   const historyContentArray = history.value[aiMessageHistoryIndex].content;
+                   const chatShowContentArray = chat_show.value[aiMessageChatShowIndex].content;
+
+                    if (reasoning_delta) {
+                        if (!thinking.value) { chat_show.value[aiMessageChatShowIndex].status = "start"; thinking.value = true; }
+                        else { chat_show.value[aiMessageChatShowIndex].status = "thinking"; }
+                        chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta;
                     }
-                  }
-                } scrollToBottom();
-              } catch (parseError) { }
+
+                    if (deltaContent) {
+                        if (!is_think_flag && thinking.value) { thinking.value = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
+                        if (!thinking.value && deltaContent.trimEnd() === "<think>") { is_think_flag = true; thinking.value = true; chat_show.value[aiMessageChatShowIndex].status = "start"; chat_show.value[aiMessageChatShowIndex].reasoning_content = ""; }
+                        else if (thinking.value && is_think_flag && deltaContent.trimEnd() === "</think>") { thinking.value = false; is_think_flag = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
+                        else if (thinking.value && is_think_flag) { chat_show.value[aiMessageChatShowIndex].status = "thinking"; chat_show.value[aiMessageChatShowIndex].reasoning_content += deltaContent; }
+                        else {
+                            const appendText = (arr) => {
+                                let lastPart = arr.length > 0 ? arr[arr.length - 1] : null;
+                                if (lastPart && lastPart.type === 'text') {
+                                    lastPart.text += deltaContent;
+                                } else {
+                                    arr.push({ type: 'text', text: deltaContent });
+                                }
+                            };
+                            appendText(historyContentArray);
+                            appendText(chatShowContentArray);
+                        }
+                    }
+
+                    if (deltaImages && Array.isArray(deltaImages)) {
+                        deltaImages.forEach(img => {
+                            historyContentArray.push(img);
+                            chatShowContentArray.push(img);
+                        });
+                    }
+                }
+                scrollToBottom();
+              } catch (parseError) { /* Gracefully ignore non-JSON lines */ }
             }
           }
         } catch (readError) {
           if (chat_show.value[aiMessageChatShowIndex]) {
-            if (readError.name === 'AbortError') { if (chat_show.value[aiMessageChatShowIndex].content[0]) chat_show.value[aiMessageChatShowIndex].content[0].text += '\n(已取消)'; }
-            else { if (chat_show.value[aiMessageChatShowIndex].content[0]) chat_show.value[aiMessageChatShowIndex].content[0].text += `\n(读取流时出错: ${readError.message})`; }
+            const contentArray = chat_show.value[aiMessageChatShowIndex].content;
+            const errorText = readError.name === 'AbortError' ? '\n(已取消)' : `\n(读取流时出错: ${readError.message})`;
+            let lastPart = contentArray.length > 0 ? contentArray[contentArray.length - 1] : null;
+            if(lastPart && lastPart.type === 'text') { lastPart.text += errorText; }
+            else { contentArray.push({type: 'text', text: errorText}); }
+
             if (thinking.value) chat_show.value[aiMessageChatShowIndex].status = "error";
           }
           thinking.value = false; is_think_flag = false; break;
@@ -1209,9 +1240,15 @@ const askAI = async (forceSend = false) => {
       const data = await aiResponse.json();
       const reasoning_content = data.choices?.[0]?.message?.reasoning_content || '';
       const aiContent = data.choices?.[0]?.message?.content || '抱歉，未能获取到回复内容。';
-      history.value[aiMessageHistoryIndex].content = aiContent;
+      const aiImages = data.choices?.[0]?.message?.images || [];
+
+      const combinedContent = [];
+      if (aiContent) combinedContent.push({ type: 'text', text: aiContent });
+      aiImages.forEach(img => combinedContent.push(img));
+      
+      history.value[aiMessageHistoryIndex].content = combinedContent;
       if (chat_show.value[aiMessageChatShowIndex]) {
-        chat_show.value[aiMessageChatShowIndex].content[0].text = aiContent;
+        chat_show.value[aiMessageChatShowIndex].content = combinedContent;
         chat_show.value[aiMessageChatShowIndex].reasoning_content = reasoning_content;
         chat_show.value[aiMessageChatShowIndex].status = reasoning_content ? "end" : "";
       }
@@ -1220,9 +1257,17 @@ const askAI = async (forceSend = false) => {
   } catch (error) {
     let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
     if (error.name === 'AbortError') errorDisplay = "请求已取消";
-    if (history.value[aiMessageHistoryIndex]) history.value[aiMessageHistoryIndex].content = `错误: ${errorDisplay}`;
-    if (chat_show.value[aiMessageChatShowIndex]) chat_show.value[aiMessageChatShowIndex] = { id: chat_show.value[aiMessageChatShowIndex].id, role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" };
-    else chat_show.value.push({ id: messageIdCounter.value++, role: "assistant", content: [{ type: "text", text: `错误: ${errorDisplay}` }], reasoning_content: "", status: "" });
+    
+    const errorContent = [{ type: "text", text: `错误: ${errorDisplay}` }];
+    
+    if (history.value[aiMessageHistoryIndex]) {
+        history.value[aiMessageHistoryIndex].content = errorContent;
+    }
+    if (chat_show.value[aiMessageChatShowIndex]) {
+        chat_show.value[aiMessageChatShowIndex] = { ...chat_show.value[aiMessageChatShowIndex], content: errorContent, reasoning_content: "", status: "" };
+    } else {
+        chat_show.value.push({ id: messageIdCounter.value++, role: "assistant", content: errorContent, reasoning_content: "", status: "" });
+    }
   } finally {
     loading.value = false; signalController.value = null;
     const lastChatMsg = chat_show.value[chat_show.value.length - 1];
