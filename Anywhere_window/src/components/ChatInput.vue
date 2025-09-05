@@ -440,7 +440,7 @@ defineExpose({ focus, senderRef });
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt"
                             type="textarea" 
                             :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容'"
-                            :autosize="{ minRows: 1, maxRows: 5 }"
+                            :autosize="{ minRows: 1, maxRows: 15 }"
                             resize="none" 
                             @keydown="handleKeyDown"
                             :disabled="isRecording" />

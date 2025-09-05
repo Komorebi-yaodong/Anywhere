@@ -456,33 +456,62 @@ const handleWindowFocus = () => {
   }, 50);
 };
 
-const handleCopyImageFromViewer = async (url) => {
+const handleCopyImageFromViewer = (url) => {
     if (!url) return;
 
-    try {
-        // 如果是 Base64，直接复制
-        if (url.startsWith('data:image')) {
-            await window.api.copyImage(url);
+    // 1. 立即弹出加载提示，给用户即时反馈，duration: 0 表示不会自动消失
+    const loadingMessage = ElMessage({
+        message: '准备复制图片...',
+        type: 'info',
+        duration: 0, 
+    });
+
+    // 2. 将所有耗时操作放入一个“即发即忘”的异步函数中执行，防止阻塞点击事件本身
+    (async () => {
+        try {
+            // 情况一: 图片已经是本地 Base64 数据
+            if (url.startsWith('data:image')) {
+                // 在执行同步API前，强制UI刷新，确保用户看到提示
+                await new Promise(resolve => setTimeout(resolve, 20)); 
+                await window.api.copyImage(url);
+                ElMessage.success('图片已复制到剪贴板');
+                return; // 成功后提前结束
+            }
+
+            // 情况二: 图片是网络资源
+            // fetch本身是非阻塞的
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`网络错误: ${response.statusText}`);
+            }
+
+            // 更新提示，告知用户正在下载
+            loadingMessage.message = '正在下载和处理图片...';
+            // .blob() 和 .arrayBuffer() 对大文件可能会有短暂耗时
+            const blob = await response.blob();
+            const buffer = await blob.arrayBuffer();
+            const uint8Array = new Uint8Array(buffer);
+
+            // [核心优化点] 在调用会阻塞的API之前，再次更新提示
+            loadingMessage.message = '正在写入剪贴板...';
+            // 并使用微小的延时强制让Vue和浏览器有时间渲染上面这句新消息
+            await new Promise(resolve => setTimeout(resolve, 50)); 
+
+            // 3. 执行这个同步、阻塞的API调用。UI会在这里短暂冻结。
+            await window.api.copyImage(uint8Array);
+
+            // 4. 冻结结束后，操作完成。
             ElMessage.success('图片已复制到剪贴板');
-            return;
+
+        } catch (error) {
+            // 捕获任何步骤中的错误
+            console.error('复制图片失败:', error);
+            ElMessage.error(`复制失败: ${error.message}`);
+        } finally {
+            // 5. 无论成功还是失败，最后必须关闭加载提示
+            loadingMessage.close();
         }
-
-        // 如果是网络链接，先 fetch
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`无法获取图片: ${response.statusText}`);
-        }
-        const blob = await response.blob();
-        const buffer = await blob.arrayBuffer();
-        const uint8Array = new Uint8Array(buffer);
-
-        await window.api.copyImage(uint8Array);
-        ElMessage.success('图片已复制到剪贴板');
-
-    } catch (error) {
-        console.error('复制图片失败:', error);
-        ElMessage.error(`复制失败: ${error.message}`);
-    }
+    })();
 };
 
 const handleDownloadImageFromViewer = async (url) => {
