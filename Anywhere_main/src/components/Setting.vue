@@ -613,9 +613,9 @@ const handleSelectionChange = (val) => {
       </div>
     </el-scrollbar>
 
-    <!-- 备份数据管理弹窗 -->
-    <el-dialog v-model="isBackupManagerVisible" :title="t('setting.webdav.manager.title')" width="800px" top="10vh" :destroy-on-close="true" style="max-width: 90vw;">
-      <el-table :data="paginatedFiles" v-loading="isTableLoading" @selection-change="handleSelectionChange" style="width: 100%" height="55vh" border stripe>
+    <!-- [修改] 备份数据管理弹窗 -->
+    <el-dialog v-model="isBackupManagerVisible" :title="t('setting.webdav.manager.title')" width="700px" top="10vh" :destroy-on-close="true" style="max-width: 90vw;" class="backup-manager-dialog">
+      <el-table :data="paginatedFiles" v-loading="isTableLoading" @selection-change="handleSelectionChange" style="width: 100%" max-height="50vh" border stripe>
         <el-table-column type="selection" width="50" align="center" />
         <el-table-column prop="basename" :label="t('setting.webdav.manager.filename')" sortable show-overflow-tooltip min-width="160" />
         <el-table-column prop="lastmod" :label="t('setting.webdav.manager.modifiedTime')" width="170" sortable align="center">
@@ -844,5 +844,18 @@ const handleSelectionChange = (val) => {
 }
 :deep(.el-table--border .el-table__cell) {
     border-right: 1px solid var(--border-primary);
+}
+
+
+:deep(.backup-manager-dialog .el-dialog__header) {
+    padding: 5px !important;
+}
+
+:deep(.backup-manager-dialog .el-dialog__body) {
+    padding: 15px 20px 10px 20px !important;
+}
+
+:deep(.backup-manager-dialog .el-dialog__footer) {
+    padding: 5px;
 }
 </style>

@@ -390,14 +390,14 @@ async function saveSingleProviderSetting(key, value) {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="getModel_page" :title="t('providers.availableModelsDialogTitle')" width="700px" :close-on-click-modal="false">
+    <el-dialog v-model="getModel_page" :title="t('providers.availableModelsDialogTitle')" width="700px" top="10vh" :close-on-click-modal="false" class="available-models-dialog">
       <el-input v-model="searchQuery" :placeholder="t('providers.searchModelsPlaceholder', { default: '通过模型ID或所有者搜索...' })"
-        clearable :prefix-icon="Search" style="margin-bottom: 20px;" />
+        clearable :prefix-icon="Search" class="dialog-search-input" />
 
       <el-alert v-if="getModel_form.error" :title="getModel_form.error" type="error" show-icon :closable="false"
-        style="margin-bottom: 20px;" />
+        class="dialog-error-alert" />
 
-      <el-table :data="filteredModels" v-loading="getModel_form.isLoading" style="width: 100%" max-height="450px"
+      <el-table :data="filteredModels" v-loading="getModel_form.isLoading" style="width: 100%" max-height="50vh"
         :empty-text="searchQuery ? t('providers.noModelsMatchSearch', { default: '未找到匹配的模型' }) : t('providers.noModelsFoundError')"
         stripe border>
         <el-table-column prop="id" :label="t('providers.table.modelId')" sortable />
@@ -410,7 +410,7 @@ async function saveSingleProviderSetting(key, value) {
               <el-button
                 :type="selectedProvider && selectedProvider.modelList && selectedProvider.modelList.includes(scope.row.id) ? 'danger' : 'success'"
                 :icon="selectedProvider && selectedProvider.modelList && selectedProvider.modelList.includes(scope.row.id) ? Remove : CirclePlus"
-                circle plain size="small"
+                circle size="small"
                 @click="get_model_function(!(selectedProvider && selectedProvider.modelList && selectedProvider.modelList.includes(scope.row.id)), scope.row.id)" />
             </el-tooltip>
           </template>
@@ -540,7 +540,6 @@ async function saveSingleProviderSetting(key, value) {
   height: 100%;
 }
 
-/* 确保 el-scrollbar 内部的 view 也能正确撑开，这对于 el-empty 的居中很重要 */
 .provider-details-scrollbar :deep(.el-scrollbar__view) {
   height: 100%;
   display: flex;
@@ -549,8 +548,7 @@ async function saveSingleProviderSetting(key, value) {
 
 
 .provider-details {
-  padding: 30px 36px;
-  /* 添加 flex-grow: 1 以便在有内容时撑满 */
+  padding: 20px 30px;
   flex-grow: 1;
 }
 
@@ -558,8 +556,8 @@ async function saveSingleProviderSetting(key, value) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 28px;
-  padding-bottom: 24px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border-primary);
 }
 
@@ -599,7 +597,7 @@ async function saveSingleProviderSetting(key, value) {
 .provider-form :deep(.el-form-item__label) {
   font-weight: 500;
   color: var(--text-secondary);
-  padding-bottom: 8px !important;
+  padding-bottom: 0px !important;
 }
 
 .form-item-description {
@@ -685,5 +683,25 @@ async function saveSingleProviderSetting(key, value) {
 
 :deep(.el-table--border::after), :deep(.el-table--border::before) {
     background-color: var(--border-primary);
+}
+
+:deep(.available-models-dialog .el-dialog__header) {
+    padding: 5px !important;
+}
+
+:deep(.available-models-dialog .el-dialog__body) {
+    padding: 15px 20px 10px 20px !important;
+}
+
+:deep(.available-models-dialog .dialog-search-input) {
+    margin-bottom: 0 !important;
+}
+
+:deep(.available-models-dialog .dialog-error-alert) {
+    margin-bottom: 15px !important;
+}
+
+:deep(.available-models-dialog .el-dialog__footer) {
+    padding: 5px;
 }
 </style>
