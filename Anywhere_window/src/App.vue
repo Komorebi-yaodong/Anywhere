@@ -1647,6 +1647,13 @@ html.dark .filename-prompt-dialog .el-input-group__append {
     background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* .elx-run-code-drawer .el-drawer__body {
+  padding: 0 !important;
+} */
+
+.elx-run-code-drawer .elx-run-code-content-view-iframe {
+  height: 100% !important;
+}
 </style>
 
 <style scoped lang="less">
