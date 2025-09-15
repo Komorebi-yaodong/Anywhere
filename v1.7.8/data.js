@@ -821,13 +821,8 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
   }
   
   // 思考预算逻辑：优先使用覆盖值，否则使用配置值
-  const reasoningEffort = overrideReasoningEffort && overrideReasoningEffort !== 'default'
-    ? overrideReasoningEffort
-    : (config.prompts[CODE]?.reasoning_effort && config.prompts[CODE].reasoning_effort !== 'default'
-        ? config.prompts[CODE].reasoning_effort
-        : null);
-  
-  if (reasoningEffort) {
+  const reasoningEffort = overrideReasoningEffort;
+  if (reasoningEffort && reasoningEffort !== 'default') {
     payload.reasoning_effort = reasoningEffort;
   }
   
