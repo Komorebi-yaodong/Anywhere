@@ -1177,14 +1177,22 @@ const askAI = async (forceSend = false) => {
       const audioData = aiMessage.audio?.data;
       const images = aiMessage.images || [];
 
-      const combinedContent = [];
-      if(textContent) combinedContent.push({ type: 'text', text: textContent });
-      images.forEach(img => combinedContent.push(img));
-      if (audioData) combinedContent.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
+      // 1. contentForDisplay: 包含所有内容，用于在界面上渲染
+      const contentForDisplay = [];
+      if (textContent) contentForDisplay.push({ type: 'text', text: textContent });
+      images.forEach(img => contentForDisplay.push(img));
+      if (audioData) contentForDisplay.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
 
-      history.value[aiMessageHistoryIndex].content = combinedContent;
+      // 2. contentForApiHistory: 只包含API允许的内容（文本和图片）
+      // API不允许助手的消息中包含音频。我们只保留文本和图片记录。
+      const contentForApiHistory = [];
+      if (textContent) contentForApiHistory.push({ type: 'text', text: textContent });
+      images.forEach(img => contentForApiHistory.push(img)); // 假设API支持助手的图片回复
+
+      // 3. 将不同内容分别存入 history 和 chat_show
+      history.value[aiMessageHistoryIndex].content = contentForApiHistory; // <-- 使用过滤后的内容
       if (chat_show.value[aiMessageChatShowIndex]) {
-        chat_show.value[aiMessageChatShowIndex].content = combinedContent;
+        chat_show.value[aiMessageChatShowIndex].content = contentForDisplay; // <-- 使用完整内容
         chat_show.value[aiMessageChatShowIndex].status = "";
       }
 
