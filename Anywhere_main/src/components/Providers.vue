@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, computed, inject } from 'vue'
 import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove, Search } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
+import draggable from 'vuedraggable';
 
 const { t } = useI18n();
 
@@ -26,7 +27,7 @@ const selectedProvider = computed(() => {
   return null;
 });
 
-// [修改] 新的原子化保存函数
+// 原子化保存函数
 async function atomicSave(updateFunction) {
   try {
     // 1. 从数据库读取最新配置
@@ -259,6 +260,21 @@ function change_order(flag) {
   });
 }
 
+// [新增] 拖拽排序结束后调用的保存函数
+function saveModelOrder() {
+    if (!provider_key.value) return;
+    const keyToUpdate = provider_key.value;
+    // v-model已经更新了selectedProvider.modelList的顺序
+    const newOrder = selectedProvider.value.modelList;
+
+    atomicSave(config => {
+        const provider = config.providers[keyToUpdate];
+        if (provider) {
+            provider.modelList = newOrder;
+        }
+    });
+}
+
 // [修改] 对于简单的开关和输入框，使用精确的 saveSetting
 async function saveSingleProviderSetting(key, value) {
     if (!provider_key.value) return;
@@ -330,13 +346,28 @@ async function saveSingleProviderSetting(key, value) {
                 </el-form-item>
 
                 <el-form-item :label="t('providers.modelsLabel')" class="models-form-item">
-                  <div class="models-list-container">
-                    <el-tag v-for="model in selectedProvider.modelList" :key="model" closable @close="delete_model(model)"
-                      class="model-tag" type="info" effect="light">
-                      {{ model }}
-                    </el-tag>
-                    <div v-if="!selectedProvider.modelList || selectedProvider.modelList.length === 0"
-                      class="no-models-message">
+                  <draggable 
+                    v-if="selectedProvider.modelList && selectedProvider.modelList.length > 0"
+                    v-model="selectedProvider.modelList"
+                    item-key="model"
+                    class="models-list-container draggable-models-list"
+                    @end="saveModelOrder"
+                    ghost-class="sortable-ghost">
+                    <template #item="{ element: model }">
+                      <el-tag
+                        :key="model"
+                        closable
+                        @close="delete_model(model)"
+                        class="model-tag"
+                        type="info"
+                        effect="light"
+                      >
+                        {{ model }}
+                      </el-tag>
+                    </template>
+                  </draggable>
+                  <div v-else class="models-list-container">
+                    <div class="no-models-message">
                       {{ t('providers.noModelsAdded') }}
                     </div>
                   </div>
@@ -640,6 +671,16 @@ async function saveSingleProviderSetting(key, value) {
   color: var(--text-primary);
   border-color: transparent;
   font-weight: 500;
+}
+
+/* [新增] 拖拽样式 */
+.draggable-models-list .model-tag {
+  cursor: move;
+}
+.draggable-models-list .sortable-ghost {
+  opacity: 0.5;
+  background-color: var(--bg-accent-light);
+  border: 1px dashed var(--border-accent);
 }
 
 .models-actions-row {

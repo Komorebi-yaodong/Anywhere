@@ -563,7 +563,9 @@ function saveSetting(keyPath, value) {
  * @param {object} newConfig - 完整的配置对象，结构为 { config: {...} }
  */
 function updateConfigWithoutFeatures(newConfig) {
-  const { baseConfigPart, promptsPart, providersPart } = splitConfigForStorage(newConfig.config);
+  // 核心修复：在将配置存入数据库前，将其转换为纯净的 JavaScript 对象，以移除 Vue 的响应式 Proxy。
+  const plainConfig = JSON.parse(JSON.stringify(newConfig.config));
+  const { baseConfigPart, promptsPart, providersPart } = splitConfigForStorage(plainConfig);
 
   // 1. 更新基础配置 (config)
   let configDoc = utools.db.get("config");
