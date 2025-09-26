@@ -93,6 +93,12 @@
     "selectPromptsPlaceholder": "Choose prompts",
     "isAlwaysOnTopLabel": "Always on Top",
     "autoCloseOnBlurLabel": "Auto-close on Blur",
+    "replaceModels": "Replace Models",
+    "replaceModelsDialog": {
+      "title": "Bulk Replace Models",
+      "sourceModel": "Source Model",
+      "targetModel": "Target Model"
+    },
     "alerts": {
       "tagNameEmpty": "Tag name cannot be empty.",
       "tagExists": "Tag \"{tagName}\" already exists.",
@@ -101,7 +107,8 @@
       "targetTagNotFound": "Target tag not found.",
       "noPromptsToAssign": "No other prompts available to assign to this tag.",
       "invalidImageFormat": "Invalid image format. Please use {formats}.",
-      "imageSizeTooLarge": "Image size exceeds {maxSize}."
+      "imageSizeTooLarge": "Image size exceeds {maxSize}.",
+      "modelsReplacedSuccess": "Successfully replaced the model for {count} prompts."
     },
     "tooltips": {
       "moveLeft": "Move Left",

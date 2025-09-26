@@ -93,6 +93,12 @@
     "selectPromptsPlaceholder": "クイックアシスタントを選択",
     "isAlwaysOnTopLabel": "常に最前面に表示",
     "autoCloseOnBlurLabel": "フォーカスが外れたら閉じる",
+    "replaceModels": "モデルを置換",
+    "replaceModelsDialog": {
+      "title": "モデルの一括置換",
+      "sourceModel": "元のモデル",
+      "targetModel": "ターゲットモデル"
+    },
     "alerts": {
       "tagNameEmpty": "タグ名は空にできません。",
       "tagExists": "タグ「{tagName}」は既に存在します。",
@@ -101,7 +107,8 @@
       "targetTagNotFound": "対象のタグが見つかりません。",
       "noPromptsToAssign": "このタグに割り当てる他のクイックアシスタントはありません。",
       "invalidImageFormat": "無効な画像形式です。{formats}を使用してください。",
-      "imageSizeTooLarge": "画像サイズが{maxSize}を超えています。"
+      "imageSizeTooLarge": "画像サイズが{maxSize}を超えています。",
+      "modelsReplacedSuccess": "{count}個のクイックアシスタントのモデルを正常に置換しました。"
     },
     "tooltips": {
       "moveLeft": "左に移動",

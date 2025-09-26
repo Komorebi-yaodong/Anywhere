@@ -93,6 +93,12 @@
     "selectPromptsPlaceholder": "选择快捷助手",
     "isAlwaysOnTopLabel": "窗口置顶",
     "autoCloseOnBlurLabel": "失焦关闭",
+    "replaceModels": "替换模型",
+    "replaceModelsDialog": {
+      "title": "批量替换模型",
+      "sourceModel": "源模型",
+      "targetModel": "目标模型"
+    },
     "alerts": {
       "tagNameEmpty": "标签名不能为空",
       "tagExists": "标签 \"{tagName}\" 已存在",
@@ -101,7 +107,8 @@
       "targetTagNotFound": "目标标签未找到",
       "noPromptsToAssign": "没有其他可分配到此标签的快捷助手",
       "invalidImageFormat": "图片格式无效请使用 {formats}",
-      "imageSizeTooLarge": "图片大小超过 {maxSize}"
+      "imageSizeTooLarge": "图片大小超过 {maxSize}",
+      "modelsReplacedSuccess": "成功替换了 {count} 个快捷助手的模型。"
     },
     "tooltips": {
       "moveLeft": "左移",

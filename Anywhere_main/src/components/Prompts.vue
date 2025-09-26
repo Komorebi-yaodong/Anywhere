@@ -1,12 +1,12 @@
 <script setup>
 import { ref, reactive, computed, inject } from 'vue';
-import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled } from '@element-plus/icons-vue';
+import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled, Switch } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
 
 const { t } = useI18n();
 
-const currentConfig = inject('config'); 
+const currentConfig = inject('config');
 const activeCollapseNames = ref([]);
 
 const showPromptEditDialog = ref(false);
@@ -27,7 +27,7 @@ const editingPrompt = reactive({
   isDirectSend_normal: true,
   ifTextNecessary: false,
   voice: '',
-  reasoning_effort: "default", 
+  reasoning_effort: "default",
   window_width: 540,
   window_height: 700,
   isAlwaysOnTop: true,
@@ -42,6 +42,13 @@ const showAssignPromptDialog = ref(false);
 const assignPromptForm = reactive({
   targetTagName: '',
   selectedPromptKeys: [],
+});
+
+// [新增] 替换模型弹窗的状态
+const showReplaceModelDialog = ref(false);
+const replaceModelForm = reactive({
+  sourceModel: null,
+  targetModel: null,
 });
 
 const availableModels = computed(() => {
@@ -60,6 +67,21 @@ const availableModels = computed(() => {
     }
   });
   return models;
+});
+
+// [新增] 计算所有快捷助手中正在使用的模型列表 (用于替换模型的源模型下拉)
+const usedModels = computed(() => {
+    if (!currentConfig.value || !currentConfig.value.prompts) return [];
+    const modelSet = new Set();
+    Object.values(currentConfig.value.prompts).forEach(p => {
+        if (p.model) {
+            modelSet.add(p.model);
+        }
+    });
+    return Array.from(modelSet).sort().map(modelValue => ({
+        value: modelValue,
+        label: availableModels.value.find(m => m.value === modelValue)?.label || modelValue
+    }));
 });
 
 const availableVoices = computed(() => {
@@ -413,6 +435,40 @@ const downloadEditingIcon = () => {
     link.download = `icon.${extension}`;
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
 };
+
+// [新增] 打开替换模型弹窗的函数
+function prepareReplaceModels() {
+    replaceModelForm.sourceModel = null;
+    replaceModelForm.targetModel = null;
+    showReplaceModelDialog.value = true;
+}
+
+// [BUG修复] 将函数改为 async 并使用 await
+async function replaceModels() {
+    const { sourceModel, targetModel } = replaceModelForm;
+    if (!sourceModel || !targetModel) {
+        ElMessage.warning('请选择源模型和目标模型。');
+        return;
+    }
+    if (sourceModel === targetModel) {
+        ElMessage.warning('源模型和目标模型不能相同。');
+        return;
+    }
+
+    let updatedCount = 0;
+    // [BUG修复] 使用 await 等待 atomicSave 完成
+    await atomicSave(config => {
+        Object.values(config.prompts).forEach(prompt => {
+            if (prompt.model === sourceModel) {
+                prompt.model = targetModel;
+                updatedCount++;
+            }
+        });
+    }, true); 
+
+    ElMessage.success(t('prompts.alerts.modelsReplacedSuccess', { count: updatedCount }));
+    showReplaceModelDialog.value = false;
+}
 </script>
 
 <template>
@@ -494,13 +550,16 @@ const downloadEditingIcon = () => {
       </div>
     </el-scrollbar>
 
-    <!-- 底部按钮和所有 Dialog 保持不变 -->
+    <!-- [修改] 底部按钮区域 -->
     <div class="bottom-actions-container">
       <el-button class="action-btn" @click="prepareAddPrompt" :icon="Plus" type="primary">
         {{ t('prompts.addNewPrompt') }}
       </el-button>
       <el-button class="action-btn" @click="prepareAddTag" :icon="Plus">
         {{ t('prompts.addNewTag') }}
+      </el-button>
+      <el-button class="action-btn" @click="prepareReplaceModels" :icon="Switch">
+        {{ t('prompts.replaceModels') }}
       </el-button>
     </div>
 
@@ -690,6 +749,7 @@ const downloadEditingIcon = () => {
         <el-button type="primary" @click="addTag">{{ t('common.addTag') }}</el-button>
       </template>
     </el-dialog>
+
     <el-dialog v-model="showAssignPromptDialog" :title="t('prompts.assignPromptsToTag', { tagName: assignPromptForm.targetTagName })" width="600px" :close-on-click-modal="false">
       <el-form :model="assignPromptForm" label-position="top">
         <el-form-item :label="t('prompts.selectPromptsToAddLabel')">
@@ -704,6 +764,33 @@ const downloadEditingIcon = () => {
         <el-button type="primary" @click="assignSelectedPromptsToTag" :disabled="!assignPromptForm.selectedPromptKeys.length">{{ t('common.assignSelected') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- [新增] 替换模型弹窗 -->
+    <el-dialog v-model="showReplaceModelDialog" :title="t('prompts.replaceModelsDialog.title')" width="600px" :close-on-click-modal="false">
+        <el-form :model="replaceModelForm" label-position="top">
+            <el-row :gutter="20">
+                <el-col :span="12">
+                    <el-form-item :label="t('prompts.replaceModelsDialog.sourceModel')">
+                        <el-select v-model="replaceModelForm.sourceModel" filterable placeholder="请选择要被替换的模型" style="width: 100%;">
+                            <el-option v-for="item in usedModels" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                    </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                    <el-form-item :label="t('prompts.replaceModelsDialog.targetModel')">
+                        <el-select v-model="replaceModelForm.targetModel" filterable placeholder="请选择新的模型" style="width: 100%;">
+                            <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                    </el-form-item>
+                </el-col>
+            </el-row>
+        </el-form>
+        <template #footer>
+            <el-button @click="showReplaceModelDialog = false">{{ t('common.cancel') }}</el-button>
+            <el-button type="primary" @click="replaceModels">{{ t('common.confirm') }}</el-button>
+        </template>
+    </el-dialog>
+
   </div>
 </template>
 

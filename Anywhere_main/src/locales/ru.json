@@ -93,6 +93,12 @@
     "selectPromptsPlaceholder": "Выберите ассистентов",
     "isAlwaysOnTopLabel": "Всегда поверх",
     "autoCloseOnBlurLabel": "Закрывать при потере фокуса",
+    "replaceModels": "Заменить модели",
+    "replaceModelsDialog": {
+      "title": "Массовая замена моделей",
+      "sourceModel": "Исходная модель",
+      "targetModel": "Целевая модель"
+    },
     "alerts": {
       "tagNameEmpty": "Имя тега не может быть пустым.",
       "tagExists": "Тег «{tagName}» уже существует.",
@@ -101,7 +107,8 @@
       "targetTagNotFound": "Целевой тег не найден.",
       "noPromptsToAssign": "Нет других ассистентов для назначения этому тегу.",
       "invalidImageFormat": "Неверный формат изображения. Используйте {formats}.",
-      "imageSizeTooLarge": "Размер изображения превышает {maxSize}."
+      "imageSizeTooLarge": "Размер изображения превышает {maxSize}.",
+      "modelsReplacedSuccess": "Успешно заменена модель для {count} ассистентов."
     },
     "tooltips": {
       "moveLeft": "Переместить влево",
