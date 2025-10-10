@@ -698,7 +698,7 @@ const handleSelectionChange = (val) => {
   padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
 }
 
 .settings-card {
@@ -710,10 +710,15 @@ const handleSelectionChange = (val) => {
 }
 
 .card-header {
-  padding: 20px 25px;
+  padding: 15px 25px;
   font-size: 18px;
-  font-weight: 600;
   color: var(--text-primary);
+}
+
+/* MODIFIED: Specifically target spans inside the header for boldness */
+.card-header > span,
+.card-header :deep(span) {
+  font-weight: 700; /* or 'bold' */
 }
 
 :deep(.el-card__header) {
@@ -729,7 +734,7 @@ const handleSelectionChange = (val) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-primary);
   gap: 20px;
   flex-wrap: wrap;

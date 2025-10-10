@@ -56,7 +56,7 @@
     "editPrompt": "Edit Prompt",
     "addNewTag": "Add New Tag",
     "assignPromptsToTag": "Add Prompts to '{tagName}'",
-    "promptKeyLabel": "Prompt Name (Unique Identifier)",
+    "promptKeyLabel": "Name",
     "promptKeyPlaceholder": "e.g., CodeGeneration",
     "typeLabel": "Type",
     "iconLabel": "Icon",
@@ -76,7 +76,8 @@
       "window": "Standalone Window"
     },
     "modelLabel": "Model",
-    "llmParametersLabel": "Model Parameters (Only effective for the current Quick Prompt model; no longer effective after switching to other models)",
+    "llmParametersLabel": "Model Parameters",
+    "llmParametersRemark": "Only effective for the current Quick Prompt model; no longer effective after switching to other models",
     "AssistantParametersLabel": "Quick Prompt Parameters",
     "sendDirectLabel": "Direct Text/Screenshot Sending",
     "sendFileLabel": "Direct File Sending",

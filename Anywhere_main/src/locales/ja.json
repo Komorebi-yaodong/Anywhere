@@ -56,7 +56,7 @@
     "editPrompt": "クイックアシスタントを編集",
     "addNewTag": "新しいタグを追加",
     "assignPromptsToTag": "'{tagName}' にクイックアシスタントを追加",
-    "promptKeyLabel": "クイックアシスタント名 (一意の識別子)",
+    "promptKeyLabel": "名称",
     "promptKeyPlaceholder": "例：CodeGeneration",
     "typeLabel": "タイプ",
     "iconLabel": "アイコン",
@@ -76,7 +76,8 @@
       "window": "独立したウィンドウ"
     },
     "modelLabel": "モデル",
-    "llmParametersLabel": "モデルパラメータ（現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります）",
+    "llmParametersLabel": "モデルパラメータ",
+    "llmParametersRemark": "現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります",
     "AssistantParametersLabel": "クイックアシスタントパラメータ",
     "sendDirectLabel": "テキスト/スクリーンショットを直接送信",
     "sendFileLabel": "ファイルを直接送信",

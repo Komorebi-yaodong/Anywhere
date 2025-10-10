@@ -56,7 +56,7 @@
     "editPrompt": "编辑快捷助手",
     "addNewTag": "新增标签",
     "assignPromptsToTag": "添加快捷助手到 '{tagName}'",
-    "promptKeyLabel": "快捷助手名称 (唯一标识符)",
+    "promptKeyLabel": "名称",
     "promptKeyPlaceholder": "例如, CodeGeneration",
     "typeLabel": "类型",
     "iconLabel": "图标",
@@ -76,7 +76,8 @@
       "window": "独立窗口"
     },
     "modelLabel": "模型",
-    "llmParametersLabel": "模型参数（仅当前 快捷助手 模型生效，更换其他模型后不再生效）",
+    "llmParametersLabel": "模型参数",
+    "llmParametersRemark": "仅当前 快捷助手 模型生效，更换其他模型后不再生效",
     "AssistantParametersLabel": "快捷助手参数",
     "sendDirectLabel": "文本/截图直接发送",
     "sendFileLabel": "文件直接发送",
