@@ -1443,6 +1443,10 @@ const formatTimestamp = (dateString) => {
 
 <style>
 /* Global styles directly used by App.vue or its dynamic content */
+html:not(.dark) {
+  --text-primary: #000000;
+  --el-text-color-primary: var(--text-primary);
+}
 .save-options-dialog.el-dialog {
   position: fixed;
   top: 50%;
@@ -1673,6 +1677,7 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   flex-direction: column;
   background-color: var(--el-bg-color-page);
   color: var(--el-text-color-primary);
+  font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 }
 
 .main-area-wrapper {

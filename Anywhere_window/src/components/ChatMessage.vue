@@ -30,7 +30,7 @@ const preprocessKatex = (text) => {
 };
 
 const mermaidConfig = computed(() => ({
-  theme: props.isDarkMode ? 'dark' : 'neutral'
+  theme: props.isDarkMode ? 'dark' : 'neutral',
 }));
 
 
@@ -168,7 +168,7 @@ const truncateFilename = (filename, maxLength = 30) => {
       <p class="system-prompt-preview">{{ String(message.content) }}</p>
     </div>
 
-    <Bubble v-if="message.role === 'user'" class="user-bubble" placement="end" shape="corner" variant="shadow"
+    <Bubble v-if="message.role === 'user'" class="user-bubble" placement="end" shape="corner"
       maxWidth="90%" avatar-size="40px">
       <template #avatar>
         <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)" class="chat-avatar">
@@ -209,7 +209,7 @@ const truncateFilename = (filename, maxLength = 30) => {
       </template>
     </Bubble>
 
-    <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner" variant="shadow"
+    <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner"
       maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading && renderedMarkdownContent === '...'">
       <template #avatar>
         <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar">
@@ -220,8 +220,7 @@ const truncateFilename = (filename, maxLength = 30) => {
             <span class="ai-name">{{ message.aiName }}</span>
             <span v-if="message.voiceName" class="voice-name">({{ message.voiceName }})</span>
           </div>
-          <span class="timestamp" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp)
-            }}</span>
+          <span class="timestamp" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp)}}</span>
         </div>
         <Thinking v-if="message.status && message.status.length > 0" maxWidth="90%" :content="(message.reasoning_content || '').trim()"
           :modelValue="false">
@@ -247,7 +246,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                 :enable-latex="true"
                 :mermaid-config="mermaidConfig"
                 :default-theme-mode="isDarkMode ? 'dark' : 'light'"
-                :themes="{light:'github-light', dark:'github-dark-default'}"
+                :themes="{light:'one-light', dark:'vesper'}"
                 :allow-html="true" />
         </div>
       </template>
@@ -278,20 +277,21 @@ const truncateFilename = (filename, maxLength = 30) => {
 .chat-message .ai-bubble {
   width: auto;
   max-width: 90%;
-  margin: 0;
 }
 
 .chat-message .user-bubble {
   align-self: flex-end;
-  :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
+  :deep(.el-bubble-content-wrapper .el-bubble-content) {
+    border-radius: 18px;
     background-color: #f4f4f4;
-    border: #e6e6e6 1px solid;
+    padding-top: 10px;
+    padding-bottom: 10px;
     max-width: 100%;
   }
 }
 
 html.dark .chat-message .user-bubble {
-  :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
+  :deep(.el-bubble-content-wrapper .el-bubble-content) {
     background: #393939;
     border: #383838 0px solid;
   }
@@ -299,17 +299,22 @@ html.dark .chat-message .user-bubble {
 
 .chat-message .ai-bubble {
   align-self: flex-start;
-  :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
+  :deep(.el-bubble-content-wrapper .el-bubble-content) {
     background-color: #ffffff;
-    border: 1px solid #e6e6e6;
+    // border: 1px solid #e6e6e6;
     max-width: 100%;
+    padding-left: 4px;
+  }
+
+  :deep(.el-bubble-content-wrapper .el-bubble-footer) {
+    margin-top: 0;
   }
 }
 
 html.dark .chat-message .ai-bubble {
-  :deep(.el-bubble-content-wrapper .el-bubble-content-shadow) {
-    background: #222222;
-    border: 1px solid var(--border-primary);
+  :deep(.el-bubble-content-wrapper .el-bubble-content) {
+    background: #181818;
+    // border: 1px solid var(--border-primary);
   }
 }
 
@@ -368,9 +373,11 @@ html.dark .system-prompt-container:hover {
   :deep(.elx-xmarkdown-container) {
     background: transparent !important;
     padding: 0;
-    color: inherit;
-    font-size: 14px;
+    color: var(--text-primary);
+    font-size: 15px;
     line-height: 1.7;
+    tab-size: 4;
+    font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
     word-break: break-word;
   }
 
@@ -378,7 +385,6 @@ html.dark .system-prompt-container:hover {
     font-size: 1.2em !important;
   }
 
-  /* [新增] 针对 KaTeX 内部滚动条的样式优化 */
   :deep(.katex-display > .katex > .katex-html) {
     padding-bottom: 8px !important; /* 为滚动条留出空间，避免遮挡公式 */
 
@@ -437,6 +443,25 @@ html.dark .system-prompt-container:hover {
   :deep(h5) { font-size: 1em; }
   :deep(h6) { font-size: 0.9em; color: #656d76; }
 
+  :deep(blockquote) {
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    border-left: 4px solid #b3b3b3;
+    background-color: rgba(0, 0, 0, 0.035) !important;
+    color: var(--text-secondary);
+    border-radius: 0 8px 8px 0;
+    html.dark & {
+      border-left-color: #656565;
+      background-color: rgba(255, 255, 255, 0.05) !important;
+    }
+  }
+  :deep(blockquote p) {
+    margin-bottom: 0.5em;
+  }
+  :deep(blockquote p:last-child) {
+    margin-bottom: 0;
+  }
+    
   :deep(pre code), :deep(.inline-code-tag) {
     font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
     font-size: 1em;
@@ -455,28 +480,31 @@ html.dark .system-prompt-container:hover {
   html.dark & {
     :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5) { border-bottom-color: #373A40; }
     :deep(h6) { color: #8b949e; }
-    :deep(hr) { background-color: #373A40 !important; }
+    :deep(hr) { background-color: #373A40 !important; margin-top: 8px; margin-bottom:8px; }
     :deep(table) { border-color: #373A40; }
     :deep(th) { background-color: #2c2e33; }
     :deep(tr) { background-color: #212327; border-top: 1px solid #373A40; }
     :deep(tr:nth-child(2n)) { background-color: #25272b; }
     :deep(td) { border-color: #373A40; }
-    :deep(.pre-md) { border: 1px solid #373A40; }
-    :deep(pre.shiki) { background-color: #171717 !important; }
+    :deep(.pre-md) { border: 0px solid #373A40;}
+    // :deep(pre.shiki) { background-color: #171717 !important; }
     :deep(.inline-code-tag) { background-color: rgba(110, 118, 129, 0.4); color: #c9d1d9; }
   }
 
   :deep(.markdown-mermaid) {
     max-width: 100%;
     overflow-x: auto;
-    padding: 10px;
-    border-radius: 6px;
+    padding: 5px;
+    border-radius: 8px;
     box-sizing: border-box;
-    html.dark & { background-color: #121212; }
+    html.dark & { 
+      background-color: #272727;
+      color: var(--el-text-color-primary) !important;
+    }
     .mermaid-toolbar {
       border-radius: 0px;
       html.dark & {
-        background-color: #373A40;
+        background-color: #272727;
         .el-tabs__nav { background-color: #2c2e33; }
       }
     }
@@ -521,7 +549,7 @@ html.dark .ai-name { color: var(--el-text-color-regular); }
 .footer-actions { display: flex; align-items: center; gap: 4px; }
 .user-bubble .footer-actions { margin-left: auto; }
 .ai-bubble .footer-actions { margin-right: auto; }
-.timestamp { font-size: 0.75rem; color: var(--el-text-color-placeholder); opacity: 0.8; white-space: nowrap; flex-shrink: 0; }
+.timestamp { font-size: 0.75rem; color: var(--el-text-color-placeholder); opacity: 0.8; white-space: nowrap; flex-shrink: 0; padding-left: 4px;}
 
 html.dark .ai-bubble :deep(.el-thinking .trigger) { background-color: var(--el-fill-color-darker, #2c2e33); color: var(--el-text-color-primary, #F9FAFB); border-color: var(--el-border-color-dark, #373A40); }
 html.dark .ai-bubble :deep(.el-thinking .el-icon) { color: var(--el-text-color-secondary, #A0A5B1); }

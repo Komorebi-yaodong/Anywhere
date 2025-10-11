@@ -1237,7 +1237,7 @@ html.dark .bottom-actions-container {
 }
 
 .slider-form-item {
-  margin-top: -10px;
+  margin-top: 15px;
 }
 
 :deep(.el-slider__runway) {

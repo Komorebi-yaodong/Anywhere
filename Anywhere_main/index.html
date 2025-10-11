@@ -12,7 +12,7 @@
   <style>
     :root {
       /* THEME VARS */
-      --bg-primary: #F7F7F8;
+      --bg-primary: #F9F9F9;
       --bg-secondary: #FFFFFF;
       --bg-tertiary: #F0F0F0;
       --bg-accent: #1F2937;
@@ -46,16 +46,16 @@
 
     html.dark {
       /* THEME VARS */
-      --bg-primary: #17181c;
-      --bg-secondary: #212327;
+      --bg-primary: #171717;
+      --bg-secondary: #212121;
       --bg-tertiary: #2c2e33;
-      --bg-accent: #F9FAFB;
+      --bg-accent: #F9F9F9;
       --bg-accent-light: #373A40;
       --text-primary: #F9FAFB;
       --text-secondary: #A0A5B1;
       --text-tertiary: #656A76;
       --text-accent: #F9FAFB;
-      --text-on-accent: #17181c;
+      --text-on-accent: #171717;
       --border-primary: #373A40;
       --border-secondary: #2c2e33;
       --border-accent: #656A76;
@@ -140,16 +140,16 @@
     }
 
     html.dark {
-      --el-bg-color: #212327;
-      --el-bg-color-page: #17181c;
-      --el-bg-color-overlay: #212327;
+      --el-bg-color: #212121;
+      --el-bg-color-page: #171717;
+      --el-bg-color-overlay: #212121;
       --el-fill-color: #373a40;
       --el-fill-color-light: #373a40;
       --el-fill-color-lighter: #2c2e33;
       --el-fill-color-lightest: #2c2e33;
       --el-fill-color-dark: #2c2e33;
-      --el-fill-color-darker: #17181c;
-      --el-fill-color-blank: #17181c;
+      --el-fill-color-darker: #171717;
+      --el-fill-color-blank: #171717;
       --el-border-color: #373a40;
       --el-border-color-light: #373a40;
       --el-border-color-lighter: #373a40;
@@ -307,9 +307,18 @@
       background: var(--text-secondary);
     }
 
-    /* ===== FIXES FOR BLACK & WHITE THEME ===== */
+    html.dark .el-button--primary {
+      --el-button-text-color: var(--text-on-accent);
+      --el-button-bg-color: var(--el-color-primary);
+      --el-button-border-color: var(--el-color-primary);
+    }
+    html.dark .el-button--primary:hover,
+    html.dark .el-button--primary:focus {
+      --el-button-hover-text-color: var(--text-on-accent);
+      --el-button-hover-bg-color: var(--el-color-primary-light-3);
+      --el-button-hover-border-color: var(--el-color-primary-light-3);
+    }
 
-    /* FIX: Switch text color visibility */
     .el-switch .el-switch__core .el-switch__inner .is-text {
       color: var(--text-primary) !important;
     }

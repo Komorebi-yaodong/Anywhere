@@ -84,7 +84,7 @@
     "ifTextNecessary": "补充文本信息",
     "streamLabel": "流式响应",
     "enableTemperatureLabel": "自定义温度",
-    "temperatureLabel": "温度设置（不同模型温度范围不同，如果报错可以关闭自定义温度）",
+    "temperatureLabel": "温度设置",
     "promptContentLabel": "快捷助手内容",
     "enabledLabel": "启用",
     "addToTagLabel": "添加到标签 (可选)",

@@ -300,7 +300,6 @@ const handleSelectionChange = (val) => {
     text-align: center;
     background-color: var(--bg-secondary);
     border-radius: var(--radius-lg);
-    /* [MODIFIED] Replaced border with shadow */
     box-shadow: 0 0 0 1px var(--border-primary);
 }
 
@@ -324,7 +323,6 @@ const handleSelectionChange = (val) => {
     width: 100%;
     background-color: var(--bg-secondary);
     border-radius: var(--radius-lg);
-    /* [MODIFIED] Replaced border with compound shadow */
     box-shadow: 0 0 0 1px var(--border-primary), var(--shadow-sm);
     overflow: hidden;
 }

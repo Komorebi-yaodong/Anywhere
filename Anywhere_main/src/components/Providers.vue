@@ -516,7 +516,7 @@ async function saveSingleProviderSetting(key, value) {
   cursor: pointer;
   transition: background-color 0.2s, color 0.2s;
   font-size: 14px;
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
 }
 
 .provider-item-name {
@@ -525,7 +525,8 @@ async function saveSingleProviderSetting(key, value) {
   text-overflow: ellipsis;
   flex-grow: 1;
   margin-right: 8px;
-  font-weight: 500;
+  font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-weight: bolder;
 }
 
 .provider-item:hover {

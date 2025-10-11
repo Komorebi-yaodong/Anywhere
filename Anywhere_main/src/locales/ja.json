@@ -84,7 +84,7 @@
     "ifTextNecessary": "テキスト情報を補足",
     "streamLabel": "ストリーム応答",
     "enableTemperatureLabel": "カスタム温度",
-    "temperatureLabel": "温度設定（モデルによって温度範囲が異なります。エラーが発生した場合は、カスタム温度を無効にできます）",
+    "temperatureLabel": "温度設定",
     "promptContentLabel": "クイックアシスタント内容",
     "enabledLabel": "有効",
     "addToTagLabel": "タグに追加（オプション）",

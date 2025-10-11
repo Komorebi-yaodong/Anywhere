@@ -84,7 +84,7 @@
     "ifTextNecessary": "Add Text Info",
     "streamLabel": "Stream Responses",
     "enableTemperatureLabel": "Custom Temperature",
-    "temperatureLabel": "Temperature Settings (Temperature ranges vary for different models; if an error occurs, you can disable custom temperature)",
+    "temperatureLabel": "Temperature Settings",
     "promptContentLabel": "Prompt Content",
     "enabledLabel": "Enabled",
     "addToTagLabel": "Add to Tag (Optional)",
