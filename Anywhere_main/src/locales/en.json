@@ -48,7 +48,7 @@
     }
   },
   "prompts": {
-    "allPrompts": "ALL PROMPTS",
+    "allPrompts": "ALL",
     "noPrompts": "No prompts defined yet.",
     "noPromptsInTag": "No prompts in this tag.",
     "addExistingPrompt": "Add Existing Prompt",

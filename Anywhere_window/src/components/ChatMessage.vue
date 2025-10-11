@@ -46,28 +46,47 @@ const formatTimestamp = (dateString) => {
   }
 };
 
+// [MODIFIED] New logic to group consecutive images
 const formatMessageContent = (content) => {
-  if (!content) return "";
-  if (!Array.isArray(content)) {
-    if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) {
-        return "";
-    } else {
-        return String(content);
+    if (!content) return "";
+    if (!Array.isArray(content)) {
+        if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) {
+            return "";
+        } else {
+            return String(content);
+        }
     }
-  }
-  let markdownString = "";
-  content.forEach(part => {
-    if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) {
-        // This is a file content block, do not render its text content in markdown view
-    } else if (part.type === 'image_url' && part.image_url?.url) {
-        markdownString += `\n\n![Image](${part.image_url.url})\n`;
-    } else if (part.type === 'input_audio' && part.input_audio?.data) {
-        markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
-    } else if (part.type === 'text' && part.text) {
-        markdownString += part.text;
+    
+    let markdownString = "";
+    let i = 0;
+    while (i < content.length) {
+        const part = content[i];
+
+        if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) {
+            i++;
+            continue;
+        } else if (part.type === 'image_url' && part.image_url?.url) {
+            let imageGroupMarkdown = "";
+            // Collect all consecutive images
+            while (i < content.length && content[i].type === 'image_url' && content[i].image_url?.url) {
+                imageGroupMarkdown += `![Image](${content[i].image_url.url}) `;
+                i++;
+            }
+            // Wrap the group of images in newlines to form a paragraph
+            markdownString += `\n\n${imageGroupMarkdown.trim()}\n\n`;
+        } else if (part.type === 'input_audio' && part.input_audio?.data) {
+            markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
+            i++;
+        } else if (part.type === 'text' && part.text) {
+            markdownString += part.text;
+            i++;
+        } else {
+            // Failsafe for unknown or empty parts
+            i++;
+        }
     }
-  });
-  return markdownString;
+    
+    return markdownString;
 };
 
 const formatMessageFile = (content) => {
@@ -383,11 +402,17 @@ html.dark .system-prompt-container:hover {
     }
   }
 
-  :deep(img){
-    max-width: 50vw;
-    max-height: 50vh;
+  /* [MODIFIED] Image display styles */
+  :deep(img) {
+    max-width: min(50vw, 400px);
+    max-height: min(50vh, 300px);
     width: auto;
     height: auto;
+    display: inline-block; /* Allow side-by-side display */
+    vertical-align: middle; /* Align images nicely on the same line */
+    margin: 4px; /* Add space between images */
+    border-radius: 8px;
+    object-fit: cover; /* Ensure images are nicely cropped */
   }
   
   :deep(p:last-of-type) {

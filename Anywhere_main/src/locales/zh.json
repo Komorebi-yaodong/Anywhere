@@ -48,7 +48,7 @@
     }
   },
   "prompts": {
-    "allPrompts": "所有快捷助手",
+    "allPrompts": "全部",
     "noPrompts": "尚未定义任何快捷助手",
     "noPromptsInTag": "此标签下没有快捷助手",
     "addExistingPrompt": "添加已有快捷助手",

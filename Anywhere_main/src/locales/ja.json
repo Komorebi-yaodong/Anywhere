@@ -48,7 +48,7 @@
     }
   },
   "prompts": {
-    "allPrompts": "すべてのクイックアシスタント",
+    "allPrompts": "全部",
     "noPrompts": "まだクイックアシスタントは定義されていません。",
     "noPromptsInTag": "このタグにはクイックアシスタントがありません。",
     "addExistingPrompt": "既存のクイックアシスタントを追加",
