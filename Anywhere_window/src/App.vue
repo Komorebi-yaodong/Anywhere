@@ -1540,6 +1540,38 @@ html.dark .filename-prompt-dialog .el-input-group__append {
 .elx-run-code-drawer .elx-run-code-content-view-iframe {
   height: 100% !important;
 }
+
+.system-prompt-full-content .el-textarea__inner::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 4px;
+}
+
+.system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thumb {
+    background: var(--el-text-color-disabled, #c0c4cc);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+.system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thumb:hover {
+    background: var(--el-text-color-secondary, #909399);
+    background-clip: content-box;
+}
+
+html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thumb {
+    background: #6b6b6b;
+    background-clip: content-box;
+}
+
+html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thumb:hover {
+    background: #999;
+    background-clip: content-box;
+}
 </style>
 
 <style scoped lang="less">
