@@ -355,15 +355,23 @@
     }
 
 
-    /* FIX: Pagination active state */
     .el-pagination.is-background .el-pager li:not(.is-disabled).is-active {
       background-color: var(--bg-accent);
       color: var(--text-on-accent);
     }
 
-    /* FIX: Loading spinner color */
     .el-loading-spinner .path {
         stroke: var(--text-accent);
+    }
+
+    html.dark .el-button--primary.is-link {
+      color: var(--el-color-primary-light-3);
+    }
+    html.dark .el-button--warning.is-link {
+      color: var(--el-color-warning-light-3);
+    }
+    html.dark .el-button--danger.is-link {
+      color: var(--el-color-danger-light-3);
     }
   </style>
   <script type="module" src="/src/main.js"></script>
