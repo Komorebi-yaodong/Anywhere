@@ -534,6 +534,7 @@ const saveSystemPrompt = async () => {
 
             const newPrompt = {
                 ...baseConfig, // 继承源配置或默认配置
+                icon: AIAvart.value,
                 prompt: newPromptContent, // 覆盖为新的提示词
                 enable: true, // 新创建的默认启用
                 model: model.value || baseConfig.model, // 使用当前窗口选择的模型
