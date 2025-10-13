@@ -479,28 +479,17 @@ const handleEditStart = async (index) => {
     // 步骤 1: 切换到编辑模式
     childComponent.switchToEditMode();
 
-    // 步骤 2: 等待DOM更新完成，确保元素已经变矮
+    // 步骤 2: 等待 Vue 完成 DOM 更新
     await nextTick();
 
-    // 步骤 3: 手动计算并执行滚动
-    // 使用 setTimeout 将滚动操作推迟到浏览器渲染之后，这是最关键的一步
-    setTimeout(() => {
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const elementRect = element.getBoundingClientRect();
-
-        // 检查元素是否完全在可视区域内
-        const isTopVisible = elementRect.top >= containerRect.top;
-        const isBottomVisible = elementRect.bottom <= containerRect.bottom;
-
-        if (!isTopVisible) {
-            // 如果顶部在可视区域之上，直接滚动到顶部
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (!isBottomVisible) {
-            // 如果底部在可视区域之下，滚动以显示底部
-            element.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }
-        // 如果元素已经在可视区域内，则不执行任何滚动操作
-    }, 0); // 使用 0 毫秒延迟，将其推到事件循环的末尾
+    // 步骤 3: 使用双重 requestAnimationFrame 等待浏览器完成布局和绘制
+    // 这是比 setTimeout(0) 更可靠的方式，确保在获取元素位置时，它已经是最终渲染的尺寸
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            // 核心修复: 在下一帧绘制前，执行立即滚动
+            element.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+        });
+    });
 };
 
 const handleEditEnd = async ({ index, action, content }) => {

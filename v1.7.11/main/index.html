@@ -48,7 +48,7 @@
 
     html.dark {
       /* THEME VARS */
-      --bg-primary: #171717;
+      --bg-primary: #191919;
       --bg-secondary: #212121;
       --bg-tertiary: #2c2e33;
       --bg-accent: #F9F9F9;
@@ -57,7 +57,7 @@
       --text-secondary: #A0A5B1;
       --text-tertiary: #656A76;
       --text-accent: #F9FAFB;
-      --text-on-accent: #171717;
+      --text-on-accent: #191919;
       --border-primary: #373A40;
       --border-secondary: #2c2e33;
       --border-accent: #656A76;
@@ -67,6 +67,7 @@
       --el-color-primary: var(--bg-accent);
       --el-color-primary-light-3: #E5E7EB;
       --el-color-primary-light-5: #F9FAFB;
+      --el-color-primary-light-6: #D4D4D4;
       --el-color-primary-light-7: #4B5563;
       --el-color-primary-light-9: #373A40;
       --el-color-primary-dark-2: #D1D5DB;
@@ -143,15 +144,15 @@
 
     html.dark {
       --el-bg-color: #212121;
-      --el-bg-color-page: #171717;
+      --el-bg-color-page: #191919;
       --el-bg-color-overlay: #212121;
       --el-fill-color: #373a40;
       --el-fill-color-light: #373a40;
       --el-fill-color-lighter: #2c2e33;
       --el-fill-color-lightest: #2c2e33;
       --el-fill-color-dark: #2c2e33;
-      --el-fill-color-darker: #171717;
-      --el-fill-color-blank: #171717;
+      --el-fill-color-darker: #191919;
+      --el-fill-color-blank: #191919;
       --el-border-color: #373a40;
       --el-border-color-light: #373a40;
       --el-border-color-lighter: #373a40;
@@ -374,6 +375,12 @@
     }
     html.dark .el-button--danger.is-link {
       color: var(--el-color-danger-light-3);
+    }
+    html.dark .el-switch.is-checked .el-switch__core {
+      background-color: var(--el-color-primary-light-6) !important;
+    }
+    html.dark .el-switch.is-checked .el-switch__core .el-switch__action {
+      background-color: var(--text-on-accent);
     }
   </style>
 </body>
