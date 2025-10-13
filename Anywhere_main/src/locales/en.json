@@ -109,7 +109,8 @@
       "noPromptsToAssign": "No other prompts available to assign to this tag.",
       "invalidImageFormat": "Invalid image format. Please use {formats}.",
       "imageSizeTooLarge": "Image size exceeds {maxSize}.",
-      "modelsReplacedSuccess": "Successfully replaced the model for {count} prompts."
+      "modelsReplacedSuccess": "Successfully replaced the model for {count} prompts.",
+      "refreshSuccess": "Quick Prompts configuration has been refreshed!"
     },
     "tooltips": {
       "moveLeft": "Move Left",

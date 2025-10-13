@@ -526,7 +526,7 @@ const saveSystemPrompt = async () => {
             currentConfig.value.prompts[CODE.value].prompt = newPromptContent;
             ElMessage.success('快捷助手提示词已更新');
         } else {
-            // [BUG修复] 创建新的快捷助手
+            // 创建新的快捷助手
             const latestConfigData = await window.api.getConfig();
             
             // 使用窗口加载时保存的源配置作为基础，如果没有则回退到默认AI配置
@@ -537,8 +537,22 @@ const saveSystemPrompt = async () => {
                 prompt: newPromptContent, // 覆盖为新的提示词
                 enable: true, // 新创建的默认启用
                 model: model.value || baseConfig.model, // 使用当前窗口选择的模型
+                enable:true,
+                stream:true,
+                isTemperature: false,
+                temperature: 0.7,
+                ifTextNecessary: false,
+                isDirectSend_file: true,
+                isDirectSend_normal: true,
+                voice: "",
                 isAlwaysOnTop: latestConfigData.config.isAlwaysOnTop_global,
                 autoCloseOnBlur: latestConfigData.config.autoCloseOnBlur_global,
+                window_width: 540,
+                window_height: 700,
+                position_x: 0,
+                position_y: 0,
+                reasoning_effort: "default",
+                zoom: 1
             };
 
             latestConfigData.config.prompts[CODE.value] = newPrompt;

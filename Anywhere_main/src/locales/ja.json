@@ -109,7 +109,8 @@
       "noPromptsToAssign": "このタグに割り当てる他のクイックアシスタントはありません。",
       "invalidImageFormat": "無効な画像形式です。{formats}を使用してください。",
       "imageSizeTooLarge": "画像サイズが{maxSize}を超えています。",
-      "modelsReplacedSuccess": "{count}個のクイックアシスタントのモデルを正常に置換しました。"
+      "modelsReplacedSuccess": "{count}個のクイックアシスタントのモデルを正常に置換しました。",
+      "refreshSuccess": "クイックアシスタントの設定が更新されました！"
     },
     "tooltips": {
       "moveLeft": "左に移動",

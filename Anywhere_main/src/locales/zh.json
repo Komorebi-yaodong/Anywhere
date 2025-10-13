@@ -109,7 +109,8 @@
       "noPromptsToAssign": "没有其他可分配到此标签的快捷助手",
       "invalidImageFormat": "图片格式无效请使用 {formats}",
       "imageSizeTooLarge": "图片大小超过 {maxSize}",
-      "modelsReplacedSuccess": "成功替换了 {count} 个快捷助手的模型。"
+      "modelsReplacedSuccess": "成功替换了 {count} 个快捷助手的模型。",
+      "refreshSuccess": "快捷助手配置已刷新！"
     },
     "tooltips": {
       "moveLeft": "左移",

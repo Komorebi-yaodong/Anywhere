@@ -109,7 +109,8 @@
       "noPromptsToAssign": "Нет других ассистентов для назначения этому тегу.",
       "invalidImageFormat": "Неверный формат изображения. Используйте {formats}.",
       "imageSizeTooLarge": "Размер изображения превышает {maxSize}.",
-      "modelsReplacedSuccess": "Успешно заменена модель для {count} ассистентов."
+      "modelsReplacedSuccess": "Успешно заменена модель для {count} ассистентов.",
+      "refreshSuccess": "Конфигурация быстрых ассистентов обновлена!"
     },
     "tooltips": {
       "moveLeft": "Переместить влево",

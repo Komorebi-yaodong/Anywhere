@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, inject } from 'vue';
-import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled, Switch } from '@element-plus/icons-vue';
+import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled, Switch, Refresh } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
 
@@ -445,14 +445,14 @@ const downloadEditingIcon = () => {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
 };
 
-// [新增] 打开替换模型弹窗的函数
+// 打开替换模型弹窗的函数
 function prepareReplaceModels() {
     replaceModelForm.sourceModel = null;
     replaceModelForm.targetModel = null;
     showReplaceModelDialog.value = true;
 }
 
-// [BUG修复] 将函数改为 async 并使用 await
+// 将函数改为 async 并使用 await
 async function replaceModels() {
     const { sourceModel, targetModel } = replaceModelForm;
     if (!sourceModel || !targetModel) {
@@ -465,7 +465,7 @@ async function replaceModels() {
     }
 
     let updatedCount = 0;
-    // [BUG修复] 使用 await 等待 atomicSave 完成
+    // 使用 await 等待 atomicSave 完成
     await atomicSave(config => {
         Object.values(config.prompts).forEach(prompt => {
             if (prompt.model === sourceModel) {
@@ -477,6 +477,22 @@ async function replaceModels() {
 
     ElMessage.success(t('prompts.alerts.modelsReplacedSuccess', { count: updatedCount }));
     showReplaceModelDialog.value = false;
+}
+
+// 刷新配置函数
+async function refreshPromptsConfig() {
+  try {
+    const latestConfigData = await window.api.getConfig();
+    if (latestConfigData && latestConfigData.config) {
+      currentConfig.value = latestConfigData.config;
+      ElMessage.success(t('prompts.alerts.refreshSuccess'));
+    } else {
+      throw new Error("未能获取到有效的配置数据。");
+    }
+  } catch (error) {
+    console.error("刷新配置失败:", error);
+    ElMessage.error('刷新配置失败，请稍后重试。');
+  }
 }
 </script>
 
@@ -567,6 +583,13 @@ async function replaceModels() {
       <el-button class="action-btn" @click="prepareReplaceModels" :icon="Switch">
         {{ t('prompts.replaceModels') }}
       </el-button>
+      <el-button
+        class="refresh-fab-button"
+        :icon="Refresh"
+        type="primary"
+        circle
+        @click="refreshPromptsConfig"
+      />
     </div>
 
     <el-dialog v-model="showPromptEditDialog" :title="isNewPrompt ? t('prompts.addNewPrompt') : t('prompts.editPrompt')" width="700px" :close-on-click-modal="false" custom-class="edit-prompt-dialog">
@@ -1278,4 +1301,14 @@ html.dark .bottom-actions-container {
   padding: 15px 24px !important;
 }
 
+.refresh-fab-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 21;
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  box-shadow: var(--el-box-shadow-light);
+}
 </style>
