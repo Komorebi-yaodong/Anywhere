@@ -227,7 +227,9 @@ function prepareAddPrompt() {
     enable: true, selectedTag: "", icon: "", stream: true, isTemperature: false, temperature: 0.7,
     isDirectSend_file: false, isDirectSend_normal: true, ifTextNecessary: false,
     voice: '', reasoning_effort: "default", window_width: 540, window_height: 700,
-    position_x: 0, position_y: 0, isAlwaysOnTop: true, autoCloseOnBlur: true,
+    position_x: 0, position_y: 0, 
+    isAlwaysOnTop: currentConfig.value.isAlwaysOnTop_global, 
+    autoCloseOnBlur: currentConfig.value.autoCloseOnBlur_global,
   });
   showPromptEditDialog.value = true;
 }

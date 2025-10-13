@@ -1,8 +1,8 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, nextTick } from 'vue';
 import { Bubble, Thinking, XMarkdown } from 'vue-element-plus-x';
-import { ElTooltip, ElButton } from 'element-plus';
-import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom } from '@element-plus/icons-vue';
+import { ElTooltip, ElButton, ElInput } from 'element-plus';
+import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close } from '@element-plus/icons-vue';
 import 'katex/dist/katex.min.css';
 
 const props = defineProps({
@@ -16,7 +16,10 @@ const props = defineProps({
   isDarkMode: Boolean
 });
 
-const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click']);
+const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message']);
+
+const isEditing = ref(false);
+const editedContent = ref('');
 
 const preprocessKatex = (text) => {
   if (!text) return '';
@@ -33,7 +36,6 @@ const mermaidConfig = computed(() => ({
   theme: props.isDarkMode ? 'dark' : 'neutral',
 }));
 
-
 const formatTimestamp = (dateString) => {
   if (!dateString) return '';
   try {
@@ -46,7 +48,6 @@ const formatTimestamp = (dateString) => {
   }
 };
 
-// [MODIFIED] New logic to group consecutive images
 const formatMessageContent = (content) => {
     if (!content) return "";
     if (!Array.isArray(content)) {
@@ -67,12 +68,10 @@ const formatMessageContent = (content) => {
             continue;
         } else if (part.type === 'image_url' && part.image_url?.url) {
             let imageGroupMarkdown = "";
-            // Collect all consecutive images
             while (i < content.length && content[i].type === 'image_url' && content[i].image_url?.url) {
                 imageGroupMarkdown += `![Image](${content[i].image_url.url}) `;
                 i++;
             }
-            // Wrap the group of images in newlines to form a paragraph
             markdownString += `\n\n${imageGroupMarkdown.trim()}\n\n`;
         } else if (part.type === 'input_audio' && part.input_audio?.data) {
             markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
@@ -81,7 +80,6 @@ const formatMessageContent = (content) => {
             markdownString += part.text;
             i++;
         } else {
-            // Failsafe for unknown or empty parts
             i++;
         }
     }
@@ -117,13 +115,43 @@ const formatMessageText = (content) => {
     return textString.trim();
 };
 
+const isEditable = computed(() => {
+    const content = props.message.content;
+    if (typeof content === 'string') return true;
+    if (Array.isArray(content)) {
+        return content.some(part => part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:')));
+    }
+    return false;
+});
+
+const startEditing = () => {
+    editedContent.value = formatMessageText(props.message.content);
+    isEditing.value = true;
+};
+
+const cancelEditing = () => {
+    isEditing.value = false;
+};
+
+const saveEdit = () => {
+    emit('edit-message', props.index, editedContent.value);
+    isEditing.value = false;
+};
+
+const handleEditKeyDown = (event) => {
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelEditing();
+    } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        saveEdit();
+    }
+};
 
 const renderedMarkdownContent = computed(() => {
     const content = props.message.role ? props.message.content : props.message;
     let formattedContent = formatMessageContent(content);
-    
     formattedContent = preprocessKatex(formattedContent);
-
     if (!formattedContent && props.message.role === 'assistant') return '...';
     return formattedContent || ' ';
 });
@@ -144,28 +172,23 @@ const onToggleCollapse = (event) => emit('toggle-collapse', props.index, event);
 const onShowSystemPrompt = () => emit('show-system-prompt', props.message.content);
 const onAvatarClick = (role, event) => emit('avatar-click', role, event);
 const truncateFilename = (filename, maxLength = 30) => {
-  if (typeof filename !== 'string' || filename.length <= maxLength) {
-    return filename;
-  }
+  if (typeof filename !== 'string' || filename.length <= maxLength) return filename;
   const ellipsis = '...';
   const lastDotIndex = filename.lastIndexOf('.');
-  if (lastDotIndex === -1 || lastDotIndex < 10) {
-    return filename.substring(0, maxLength - ellipsis.length) + ellipsis;
-  }
+  if (lastDotIndex === -1 || lastDotIndex < 10) return filename.substring(0, maxLength - ellipsis.length) + ellipsis;
   const nameWithoutExt = filename.substring(0, lastDotIndex);
   const extension = filename.substring(lastDotIndex);
   const charsToKeep = maxLength - extension.length - ellipsis.length;
-  if (charsToKeep < 1) {
-    return ellipsis + extension;
-  }
+  if (charsToKeep < 1) return ellipsis + extension;
   return nameWithoutExt.substring(0, charsToKeep) + ellipsis + extension;
 };
 </script>
 
 <template>
   <div class="chat-message">
-    <div v-if="message.role === 'system'" class="system-prompt-container" @click="onShowSystemPrompt">
-      <p class="system-prompt-preview">{{ String(message.content) }}</p>
+    <div v-if="message.role === 'system'" class="system-prompt-container">
+      <p class="system-prompt-preview" @click="onShowSystemPrompt">{{ String(message.content) }}</p>
+      <el-button :icon="Edit" @click="onShowSystemPrompt" size="small" circle text class="system-prompt-edit-btn" />
     </div>
 
     <Bubble v-if="message.role === 'user'" class="user-bubble" placement="end" shape="corner"
@@ -179,7 +202,7 @@ const truncateFilename = (filename, maxLength = 30) => {
         </div>
       </template>
       <template #content>
-        <div class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
+        <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
             <XMarkdown 
                 :markdown="renderedMarkdownContent" 
                 :is-dark="isDarkMode"
@@ -188,6 +211,14 @@ const truncateFilename = (filename, maxLength = 30) => {
                 :default-theme-mode="isDarkMode ? 'dark' : 'light'"  
                 :themes="{light:'github-light', dark:'github-dark-default'}"
                 :allow-html="true" />
+        </div>
+        <div v-else class="editing-wrapper">
+            <el-input v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" @keydown="handleEditKeyDown" />
+            <div class="editing-actions">
+                <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
+                <el-button :icon="Check" @click="saveEdit" size="small" circle type="primary" />
+                <el-button :icon="Close" @click="cancelEditing" size="small" circle />
+            </div>
         </div>
       </template>
       <template #footer>
@@ -200,6 +231,7 @@ const truncateFilename = (filename, maxLength = 30) => {
               </el-tooltip>
             </div>
             <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
+            <el-button v-if="isEditable" :icon="Edit" @click="startEditing" size="small" circle />
             <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
               @click="onToggleCollapse($event)" size="small" circle />
             <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
@@ -239,7 +271,7 @@ const truncateFilename = (filename, maxLength = 30) => {
         </Thinking>
       </template>
       <template #content>
-        <div class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
+        <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
             <XMarkdown 
                 :markdown="renderedMarkdownContent" 
                 :is-dark="isDarkMode"
@@ -249,11 +281,19 @@ const truncateFilename = (filename, maxLength = 30) => {
                 :themes="{light:'one-light', dark:'vesper'}"
                 :allow-html="true" />
         </div>
+        <div v-else class="editing-wrapper">
+            <el-input v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" />
+            <div class="editing-actions">
+                <el-button :icon="Check" @click="saveEdit" size="small" circle type="primary" />
+                <el-button :icon="Close" @click="cancelEditing" size="small" circle />
+            </div>
+        </div>
       </template>
       <template #footer>
         <div class="message-footer">
           <div class="footer-actions">
             <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
+            <el-button v-if="isEditable" :icon="Edit" @click="startEditing" size="small" circle />
             <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
               @click="onToggleCollapse($event)" size="small" circle />
             <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
@@ -343,12 +383,26 @@ html.dark .chat-message .ai-bubble {
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s;
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .system-prompt-container:hover {
   background-color: var(--el-fill-color-lighter);
   border-color: var(--el-color-primary-light-7);
 }
+
+.system-prompt-edit-btn {
+  margin-left: 10px;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.system-prompt-container:hover .system-prompt-edit-btn {
+  opacity: 1;
+}
+
 
 html.dark .system-prompt-container {
   border-color: var(--el-border-color-dark);
@@ -367,6 +421,7 @@ html.dark .system-prompt-container:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-grow: 1;
 }
 
 .markdown-wrapper {
@@ -522,6 +577,54 @@ html.dark .system-prompt-container:hover {
     mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
   }
 }
+
+.editing-wrapper {
+  width: 100%;
+  min-width: 70vw;
+  .el-textarea {
+    margin-bottom: 8px;
+    :deep(.el-textarea__inner) {
+      background-color: #ECECEC;
+      box-shadow: none !important;
+      border: 1px solid var(--el-border-color-light);
+      color: var(--el-text-color-primary);
+    }
+  }
+  .editing-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+
+    .el-button--primary {
+        --el-button-bg-color: var(--bg-accent);
+        --el-button-border-color: var(--bg-accent);
+        --el-button-text-color: var(--text-on-accent);
+    }
+    .el-button--primary:hover {
+        --el-button-hover-bg-color: var(--bg-accent-light);
+        --el-button-hover-border-color: var(--bg-accent-light);
+    }
+  }
+  .edit-shortcut-hint {
+    font-size: 12px;
+    color: var(--el-text-color-placeholder);
+    margin-right: auto; /* 关键：这行代码会将提示推到最左边 */
+    align-self: center; /* 垂直居中 */
+  }
+}
+
+html.dark .editing-wrapper {
+    .el-textarea :deep(.el-textarea__inner) {
+        background-color: #424242;
+        border-color: var(--border-primary);
+        color: var(--text-primary);
+    }
+    .editing-actions .el-button--primary {
+        --el-button-hover-bg-color: #e0e0e0;
+        --el-button-hover-border-color: #e0e0e0;
+    }
+}
+
 
 .file-list-container {
   display: flex; overflow-x: auto; overflow-y: hidden; padding: 4px 0 8px 0; margin-bottom: 5px; gap: 8px; max-width: 100%; scrollbar-width: thin; scrollbar-color: var(--el-text-color-disabled) transparent;

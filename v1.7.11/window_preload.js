@@ -3,6 +3,7 @@ const { ipcRenderer } = require('electron');
 const {
     getConfig,
     updateConfig,
+    saveSetting,
     getUser,
     getRandomItem,
     chatOpenAI,
@@ -49,6 +50,7 @@ window.addEventListener('DOMContentLoaded', () => {
 window.api = {
     getConfig,
     updateConfig,
+    saveSetting,
     getUser,
     chatOpenAI,
     copyText,
