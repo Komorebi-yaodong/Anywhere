@@ -44,6 +44,14 @@
       --el-switch-off-color: var(--border-primary);
     }
 
+    .el-button--primary.is-link {
+      color: #409EFF; /* Element Plus 默认主色蓝 */
+    }
+    .el-button--primary.is-link:hover,
+    .el-button--primary.is-link:focus {
+      color: #79bbff; /* 悬浮时变浅 */
+    }
+
     html.dark {
       /* THEME VARS */
       --bg-primary: #191919;
@@ -366,7 +374,11 @@
     }
 
     html.dark .el-button--primary.is-link {
-      color: var(--el-color-primary-light-3);
+      color: #79bbff; /* 一个适合深色模式的亮蓝色 */
+    }
+    html.dark .el-button--primary.is-link:hover,
+    html.dark .el-button--primary.is-link:focus {
+      color: #a0cfff; /* 悬浮时更亮 */
     }
     html.dark .el-button--warning.is-link {
       color: var(--el-color-warning-light-3);

@@ -121,6 +121,7 @@ const defaultConversationName = ref("");
 const selectedVoice = ref(null);
 const tempReasoningEffort = ref('default');
 const messageIdCounter = ref(0);
+const sourcePromptConfig = ref(null);
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 
@@ -520,22 +521,30 @@ const saveSystemPrompt = async () => {
     try {
         const promptExists = !!currentConfig.value.prompts[CODE.value];
         if (promptExists) {
+            // 更新现有快捷助手
             await window.api.saveSetting(`prompts.${CODE.value}.prompt`, newPromptContent);
             currentConfig.value.prompts[CODE.value].prompt = newPromptContent;
             ElMessage.success('快捷助手提示词已更新');
         } else {
+            // [BUG修复] 创建新的快捷助手
             const latestConfigData = await window.api.getConfig();
-            const newPrompt = { 
-                ...defaultConfig.config.prompts.AI,
-                prompt: newPromptContent,
-                enable: true,
-                model: model.value || defaultConfig.config.prompts.AI.model,
+            
+            // 使用窗口加载时保存的源配置作为基础，如果没有则回退到默认AI配置
+            const baseConfig = sourcePromptConfig.value || defaultConfig.config.prompts.AI;
+
+            const newPrompt = {
+                ...baseConfig, // 继承源配置或默认配置
+                prompt: newPromptContent, // 覆盖为新的提示词
+                enable: true, // 新创建的默认启用
+                model: model.value || baseConfig.model, // 使用当前窗口选择的模型
                 isAlwaysOnTop: latestConfigData.config.isAlwaysOnTop_global,
-                autoCloseOnBlur: latestConfigData.config.autoCloseOnBlur_global
+                autoCloseOnBlur: latestConfigData.config.autoCloseOnBlur_global,
             };
+
             latestConfigData.config.prompts[CODE.value] = newPrompt;
             await window.api.updateConfig(latestConfigData);
             currentConfig.value = latestConfigData.config;
+            sourcePromptConfig.value = newPrompt; // 更新源配置为刚创建的新配置
             ElMessage.success(`已为您创建并保存新的快捷助手: "${CODE.value}"`);
         }
     } catch (error) {
@@ -582,6 +591,8 @@ onMounted(async () => {
 
   try {
     window.preload.receiveMsg(async (data) => {
+      sourcePromptConfig.value = currentConfig.value.prompts[data?.code];
+
       if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
       else defaultConversationName.value = "";
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };

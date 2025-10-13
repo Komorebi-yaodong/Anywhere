@@ -141,27 +141,32 @@ const promptsAvailableToAssign = computed(() => (tagName) => {
 
 async function atomicSave(updateFunction, syncFeatures = false) {
   try {
+    // 总是从数据库读取最新的配置开始操作
     const latestConfigData = await window.api.getConfig();
     if (!latestConfigData || !latestConfigData.config) {
       throw new Error("Failed to get latest config from DB.");
     }
     const latestConfig = latestConfigData.config;
 
+    // 在最新的配置上执行修改逻辑
     updateFunction(latestConfig);
     
+    // 准备要保存的完整配置对象
     const configToSave = { config: latestConfig };
     
+    // 根据需要决定是否同步 features
     if (syncFeatures) {
       await window.api.updateConfig(configToSave);
     } else {
       await window.api.updateConfigWithoutFeatures(configToSave);
     }
 
+    // [BUG修复] 更新当前组件的本地响应式状态以反映变化
     currentConfig.value = latestConfig;
     
   } catch (error) {
     console.error("Atomic save failed:", error);
-    ElMessage.error('配置保存失败');
+    ElMessage.error('配置保存失败，请重试');
   }
 }
 
@@ -234,30 +239,32 @@ function prepareAddPrompt() {
   showPromptEditDialog.value = true;
 }
 
-// [修改] 核心修复点：将函数改为 async 并在打开弹窗前刷新配置
 async function prepareEditPrompt(promptKey, currentTagName = null) {
   isNewPrompt.value = false;
 
-  // [新增] 从数据库获取最新配置
+  // 核心修复点：在打开编辑弹窗前，先从数据库刷新配置
   try {
     const latestConfigData = await window.api.getConfig();
     if (latestConfigData && latestConfigData.config) {
-      // [新增] 更新本地的响应式 `config` 对象
+      // 更新本地的响应式 `config` 对象，确保弹窗显示的是最新数据
       currentConfig.value = latestConfigData.config;
+    } else {
+      throw new Error("Failed to fetch latest config.");
     }
   } catch (error) {
     console.error("Failed to refresh config before editing prompt:", error);
     ElMessage.error("无法获取最新的快捷助手设置，可能显示旧数据。");
+    // 即使获取失败，也继续使用当前内存中的数据，避免阻塞操作
   }
 
-  // [修改] 现在 `currentConfig.value` 是最新的了
+  // 后续逻辑使用更新后的 `currentConfig.value`
   const p = currentConfig.value.prompts[promptKey];
   if (!p) {
-    ElMessage.error("快捷助手不存在，可能已被删除。");
+    ElMessage.error("快捷助手不存在，可能已被其他操作删除。");
+    // 刷新列表或提示用户
     return;
   }
 
-  // 后续逻辑保持不变，现在使用的是最新数据
   Object.assign(editingPrompt, {
     originalKey: promptKey, key: promptKey, type: p.type, prompt: p.prompt,
     showMode: p.showMode, model: p.model, enable: p.enable, icon: p.icon || "",
