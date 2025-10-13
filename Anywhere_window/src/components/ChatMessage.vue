@@ -18,6 +18,7 @@ const props = defineProps({
 
 const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message']);
 
+const editInputRef = ref(null);
 const isEditing = ref(false);
 const editedContent = ref('');
 
@@ -124,27 +125,30 @@ const isEditable = computed(() => {
     return false;
 });
 
-const startEditing = () => {
+const switchToEditMode = () => {
     editedContent.value = formatMessageText(props.message.content);
     isEditing.value = true;
+    nextTick(() => {
+        editInputRef.value?.focus();
+    });
 };
 
-const cancelEditing = () => {
+const switchToShowMode = () => {
     isEditing.value = false;
 };
 
-const saveEdit = () => {
-    emit('edit-message', props.index, editedContent.value);
-    isEditing.value = false;
-};
+defineExpose({
+    switchToEditMode,
+    switchToShowMode
+});
 
 const handleEditKeyDown = (event) => {
     if (event.key === 'Escape') {
         event.preventDefault();
-        cancelEditing();
+        emit('edit-finished', { index: props.index, action: 'cancel' });
     } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
-        saveEdit();
+        emit('edit-finished', { index: props.index, action: 'save', content: editedContent.value });
     }
 };
 
@@ -213,11 +217,11 @@ const truncateFilename = (filename, maxLength = 30) => {
                 :allow-html="true" />
         </div>
         <div v-else class="editing-wrapper">
-            <el-input v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" @keydown="handleEditKeyDown" />
+            <el-input ref="editInputRef" v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" @keydown="handleEditKeyDown" />
             <div class="editing-actions">
                 <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
-                <el-button :icon="Check" @click="saveEdit" size="small" circle type="primary" />
-                <el-button :icon="Close" @click="cancelEditing" size="small" circle />
+                <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle type="primary" />
+                <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
             </div>
         </div>
       </template>
@@ -231,7 +235,7 @@ const truncateFilename = (filename, maxLength = 30) => {
               </el-tooltip>
             </div>
             <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
-            <el-button v-if="isEditable" :icon="Edit" @click="startEditing" size="small" circle />
+            <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small" circle />
             <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
               @click="onToggleCollapse($event)" size="small" circle />
             <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
@@ -282,10 +286,11 @@ const truncateFilename = (filename, maxLength = 30) => {
                 :allow-html="true" />
         </div>
         <div v-else class="editing-wrapper">
-            <el-input v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" />
+            <el-input ref="editInputRef" v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" @keydown="handleEditKeyDown" />
             <div class="editing-actions">
-                <el-button :icon="Check" @click="saveEdit" size="small" circle type="primary" />
-                <el-button :icon="Close" @click="cancelEditing" size="small" circle />
+                <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
+                <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle type="primary" />
+                <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
             </div>
         </div>
       </template>
@@ -293,7 +298,7 @@ const truncateFilename = (filename, maxLength = 30) => {
         <div class="message-footer">
           <div class="footer-actions">
             <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
-            <el-button v-if="isEditable" :icon="Edit" @click="startEditing" size="small" circle />
+            <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small" circle />
             <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
               @click="onToggleCollapse($event)" size="small" circle />
             <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
@@ -588,6 +593,30 @@ html.dark .system-prompt-container:hover {
       box-shadow: none !important;
       border: 1px solid var(--el-border-color-light);
       color: var(--el-text-color-primary);
+    }
+    :deep(.el-textarea__inner::-webkit-scrollbar) {
+      width: 8px;
+      height: 8px;
+    }
+    :deep(.el-textarea__inner::-webkit-scrollbar-track) {
+      background: transparent;
+      border-radius: 4px;
+    }
+    :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+      background: var(--el-text-color-disabled, #c0c4cc);
+      border-radius: 4px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+    :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+      background: var(--el-text-color-secondary, #909399);
+      background-clip: content-box;
+    }
+    html.dark & :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+        background: #6b6b6b;
+    }
+    html.dark & :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+        background: #999;
     }
   }
   .editing-actions {

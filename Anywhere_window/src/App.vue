@@ -452,13 +452,12 @@ const handleDownloadImageFromViewer = async (url) => {
 
 const handleEditMessage = (index, newContent) => {
     if (index < 0) return;
-    
     const updateContent = (message) => {
         if (!message) return;
         if (typeof message.content === 'string') {
             message.content = newContent;
         } else if (Array.isArray(message.content)) {
-            const textPart = message.content.find(p => p.type === 'text');
+            const textPart = message.content.find(p => p.type === 'text' && !(p.text.toLowerCase().startsWith('file name:')));
             if (textPart) {
                 textPart.text = newContent;
             } else {
@@ -466,11 +465,54 @@ const handleEditMessage = (index, newContent) => {
             }
         }
     };
-    
     if (chat_show.value[index]) updateContent(chat_show.value[index]);
     if (history.value[index]) updateContent(history.value[index]);
-    
-    ElMessage.success('消息已更新');
+};
+
+const handleEditStart = async (index) => {
+    const scrollContainer = chatContainerRef.value?.$el;
+    const childComponent = messageRefs.get(index);
+    const element = childComponent?.$el;
+
+    if (!scrollContainer || !element || !childComponent) return;
+
+    // 步骤 1: 切换到编辑模式
+    childComponent.switchToEditMode();
+
+    // 步骤 2: 等待DOM更新完成，确保元素已经变矮
+    await nextTick();
+
+    // 步骤 3: 手动计算并执行滚动
+    // 使用 setTimeout 将滚动操作推迟到浏览器渲染之后，这是最关键的一步
+    setTimeout(() => {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+
+        // 检查元素是否完全在可视区域内
+        const isTopVisible = elementRect.top >= containerRect.top;
+        const isBottomVisible = elementRect.bottom <= containerRect.bottom;
+
+        if (!isTopVisible) {
+            // 如果顶部在可视区域之上，直接滚动到顶部
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (!isBottomVisible) {
+            // 如果底部在可视区域之下，滚动以显示底部
+            element.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+        // 如果元素已经在可视区域内，则不执行任何滚动操作
+    }, 0); // 使用 0 毫秒延迟，将其推到事件循环的末尾
+};
+
+const handleEditEnd = async ({ index, action, content }) => {
+    const childComponent = messageRefs.get(index);
+    if (childComponent) {
+        // 先处理数据和状态
+        if (action === 'save') {
+            handleEditMessage(index, content);
+            ElMessage.success('消息已更新');
+        }
+        childComponent.switchToShowMode();
+    }
 };
 
 const saveSystemPrompt = async () => {
@@ -1243,6 +1285,8 @@ const formatTimestamp = (dateString) => {
             @toggle-collapse="handleToggleCollapse" 
             @show-system-prompt="handleShowSystemPrompt"
             @avatar-click="onAvatarClick"
+            @edit-message-requested="handleEditStart"
+            @edit-finished="handleEditEnd"
             @edit-message="handleEditMessage"
             />
         </el-main>
