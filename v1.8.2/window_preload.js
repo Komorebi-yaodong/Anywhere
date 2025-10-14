@@ -52,6 +52,7 @@ window.api = {
     updateConfig,
     saveSetting,
     getUser,
+    getRandomItem,
     chatOpenAI,
     copyText,
     handleFilePath,

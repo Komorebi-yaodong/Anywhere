@@ -14,7 +14,7 @@ const fileHandlers = {
     text: {
         extensions: [
             // Common text files
-            '.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css', '.csv',
+            '.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css', '.csv', '.srt',
             // Common code files
             '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go',
             '.php', '.rb', '.rs', '.sh', '.sql', '.vue'

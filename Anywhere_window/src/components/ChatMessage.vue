@@ -49,7 +49,7 @@ const formatTimestamp = (dateString) => {
   }
 };
 
-const formatMessageContent = (content) => {
+const formatMessageContent = (content,role) => {
     if (!content) return "";
     if (!Array.isArray(content)) {
         if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) {
@@ -75,7 +75,11 @@ const formatMessageContent = (content) => {
             }
             markdownString += `\n\n${imageGroupMarkdown.trim()}\n\n`;
         } else if (part.type === 'input_audio' && part.input_audio?.data) {
-            markdownString += `\n\n<audio id="audio" controls="" preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
+            if (role === 'user') {
+              markdownString += `\n\n<audio class="chat-audio-player" controls preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
+            }else {
+              markdownString += `\n\n<audio class="chat-audio-player" controls autoplay preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
+            }
             i++;
         } else if (part.type === 'text' && part.text) {
             markdownString += part.text;
@@ -154,7 +158,8 @@ const handleEditKeyDown = (event) => {
 
 const renderedMarkdownContent = computed(() => {
     const content = props.message.role ? props.message.content : props.message;
-    let formattedContent = formatMessageContent(content);
+    const role = props.message.role ? props.message.role : 'user';
+    let formattedContent = formatMessageContent(content,role);
     formattedContent = preprocessKatex(formattedContent);
     if (!formattedContent && props.message.role === 'assistant') return '...';
     return formattedContent || ' ';
@@ -468,7 +473,6 @@ html.dark .system-prompt-container:hover {
     }
   }
 
-  /* [MODIFIED] Image display styles */
   :deep(img) {
     max-width: min(50vw, 400px);
     max-height: min(50vh, 300px);
@@ -480,7 +484,91 @@ html.dark .system-prompt-container:hover {
     border-radius: 8px;
     object-fit: cover; /* Ensure images are nicely cropped */
   }
-  
+
+  :deep(.chat-audio-player) {
+    width: 100%;
+    min-width: 40vw;
+    height: 48px;
+    accent-color: var(--text-primary);
+
+    // 移除浏览器默认的边框和背景
+    &::-webkit-media-controls-enclosure {
+      background: none;
+      border-radius: 24px;
+    }
+
+    // 设置我们自己的胶囊背景和内边距
+    &::-webkit-media-controls-panel {
+      background-color: var(--bg-tertiary, #F0F0F0);
+      border-radius: 24px;
+      padding: 0px;
+      justify-content: center; // 让控件居中
+    }
+
+    // 设置播放按钮颜色
+    &::-webkit-media-controls-play-button {
+      color: var(--text-primary);
+      border-radius: 50%;
+      &:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+      }
+    }
+    
+    // 设置时间文本样式
+    &::-webkit-media-controls-current-time-display,
+    &::-webkit-media-controls-time-remaining-display {
+      color: var(--text-secondary);
+      font-size: 13px;
+      text-shadow: none;
+    }
+
+    // 设置进度条轨道样式
+    &::-webkit-media-controls-timeline {
+      background-color: var(--border-primary, #E5E7EB);
+      border-radius: 3px;
+      height: 6px;
+      margin: 0 10px;
+    }
+
+    // 设置音量按钮等其他控件的颜色
+    &::-webkit-media-controls-mute-button,
+    &::-webkit-media-controls-overflow-button {
+      color: var(--text-secondary);
+       border-radius: 50%;
+      &:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+      }
+    }
+  }
+
+  // [样式优化] 暗色模式下的音频播放器样式
+  html.dark & :deep(.chat-audio-player) {
+    accent-color: var(--text-primary);
+    
+    &::-webkit-media-controls-panel {
+      background-color: var(--bg-tertiary, #2c2e33);
+    }
+
+    // 关键技巧：使用 filter: invert(1) 将黑色的图标和文字变为白色
+    &::-webkit-media-controls-play-button,
+    &::-webkit-media-controls-mute-button,
+    &::-webkit-media-controls-overflow-button,
+    &::-webkit-media-controls-current-time-display,
+    &::-webkit-media-controls-time-remaining-display {
+      filter: invert(1);
+    }
+    
+    &::-webkit-media-controls-play-button:hover,
+    &::-webkit-media-controls-mute-button:hover,
+    &::-webkit-media-controls-overflow-button:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    &::-webkit-media-controls-timeline {
+      background-color: var(--border-primary, #373A40);
+    }
+  }
+
   :deep(p:last-of-type) {
     margin-bottom: 0;
   }

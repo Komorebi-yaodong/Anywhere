@@ -10,6 +10,8 @@ import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
 import { DocumentCopy, Download } from '@element-plus/icons-vue';
 
+import OpenAI from 'openai';
+
 const chatInputRef = ref(null);
 const lastSelectionStart = ref(null);
 const lastSelectionEnd = ref(null);
@@ -1066,6 +1068,34 @@ const sendFile = async () => {
   fileList.value = []; return contentList;
 };
 
+function getRandomItem(list) {
+  // 检查list是不是字符串
+  if (typeof list === "string") {
+    // 如果字符串包含逗号
+    if (list.includes(",")) {
+      list = list.split(",");
+      // 删除空白字符
+      list = list.filter(item => item.trim() !== "");
+    }
+    else if (list.includes("，")) {
+      list = list.split("，");
+      // 删除空白字符
+      list = list.filter(item => item.trim() !== "");
+    }
+    else {
+      return list;
+    }
+  }
+
+  if (list.length === 0) {
+    return "";
+  }
+  else {
+    const resault = list[Math.floor(Math.random() * list.length)];
+    return resault;
+  }
+}
+
 const askAI = async (forceSend = false) => {
   if (loading.value) return;
   let is_think_flag = false;
@@ -1100,9 +1130,11 @@ const askAI = async (forceSend = false) => {
     history.value = messagesToKeepInHistory; chat_show.value = messagesToKeepInChatShow;
   }
 
-  loading.value = true; signalController.value = new AbortController();
-  let aiResponse = null; scrollToBottom();
-  const aiMessageHistoryIndex = history.value.length; const aiMessageChatShowIndex = chat_show.value.length;
+  loading.value = true;
+  signalController.value = new AbortController();
+  scrollToBottom();
+  const aiMessageHistoryIndex = history.value.length;
+  const aiMessageChatShowIndex = chat_show.value.length;
   history.value.push({ role: "assistant", content: [] });
   chat_show.value.push({
     id: messageIdCounter.value++, role: "assistant", content: [], reasoning_content: "", status: "",
@@ -1110,110 +1142,96 @@ const askAI = async (forceSend = false) => {
   });
 
   try {
+    const openai = new OpenAI({
+      apiKey: window.api.getRandomItem(api_key.value),
+      baseURL: base_url.value,
+      dangerouslyAllowBrowser: true,
+    });
+
     const messagesForAPI = JSON.parse(JSON.stringify(history.value.slice(0, aiMessageHistoryIndex)));
-    chatInputRef.value?.focus({ cursor: 'end' });
-    aiResponse = await window.api.chatOpenAI(messagesForAPI, currentConfig.value, model.value, CODE.value, signalController.value.signal, selectedVoice.value, tempReasoningEffort.value);
-    if (!aiResponse?.ok && aiResponse?.status !== 200) {
-      let errorMsg = `API 请求失败: ${aiResponse?.status}${aiResponse?.statusText}`;
-      try { const errorBody = await aiResponse?.text(); errorMsg += `\n${errorBody || '(No Response Body)'}`; } catch { }
-      throw new Error(errorMsg);
-    }
     const currentPromptConfig = currentConfig.value.prompts[CODE.value];
     let useStream = currentConfig.value.stream;
     if (currentPromptConfig && typeof currentPromptConfig.stream === 'boolean') useStream = currentPromptConfig.stream;
     const isVoiceReply = !!selectedVoice.value;
     const isStreamReply = useStream && !isVoiceReply;
 
+    const payload = {
+        model: model.value.split("|")[1],
+        messages: messagesForAPI,
+        stream: isStreamReply,
+    };
+
+    if (currentPromptConfig && currentPromptConfig.isTemperature) {
+        payload.temperature = currentPromptConfig.temperature;
+    }
+    if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') {
+        payload.reasoning_effort = tempReasoningEffort.value;
+    }
     if (isVoiceReply) {
-      const data = await aiResponse.json();
-      const aiMessage = data.choices?.[0]?.message;
+        payload.modalities = ["text", "audio"];
+        payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
+    }
+    
+    chatInputRef.value?.focus({ cursor: 'end' });
+
+    if (isStreamReply) {
+      const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
+      for await (const part of stream) {
+        const delta = part.choices[0]?.delta;
+        if (!delta) continue;
+        const reasoning_delta = delta.reasoning_content; const deltaContent = delta.content; const deltaImages = delta.images;
+        if (chat_show.value[aiMessageChatShowIndex]) {
+           const historyContentArray = history.value[aiMessageHistoryIndex].content; const chatShowContentArray = chat_show.value[aiMessageChatShowIndex].content;
+            if (reasoning_delta) {
+                if (!thinking.value) { chat_show.value[aiMessageChatShowIndex].status = "start"; thinking.value = true; }
+                else { chat_show.value[aiMessageChatShowIndex].status = "thinking"; }
+                chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta;
+            }
+            if (deltaContent) {
+                if (!is_think_flag && thinking.value) { thinking.value = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
+                if (!thinking.value && deltaContent.trimEnd() === "<think>") { is_think_flag = true; thinking.value = true; chat_show.value[aiMessageChatShowIndex].status = "start"; chat_show.value[aiMessageChatShowIndex].reasoning_content = ""; }
+                else if (thinking.value && is_think_flag && deltaContent.trimEnd() === "</think>") { thinking.value = false; is_think_flag = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
+                else if (thinking.value && is_think_flag) { chat_show.value[aiMessageChatShowIndex].status = "thinking"; chat_show.value[aiMessageChatShowIndex].reasoning_content += deltaContent; }
+                else {
+                    const appendText = (arr) => {
+                        let lastPart = arr.length > 0 ? arr[arr.length - 1] : null;
+                        if (lastPart && lastPart.type === 'text') lastPart.text += deltaContent;
+                        else arr.push({ type: 'text', text: deltaContent });
+                    };
+                    appendText(historyContentArray); appendText(chatShowContentArray);
+                }
+            }
+            if (deltaImages && Array.isArray(deltaImages)) {
+                deltaImages.forEach(img => { historyContentArray.push(img); chatShowContentArray.push(img); });
+            }
+        }
+        scrollToBottom();
+      }
+      if (thinking.value) {
+        chat_show.value[aiMessageChatShowIndex].status = "end";
+        thinking.value = false;
+      }
+    } else {
+      const completion = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
+      const aiMessage = completion.choices[0].message;
       if (!aiMessage) throw new Error('API响应格式不正确，缺少message字段');
+      const reasoning_content = aiMessage.reasoning_content || '';
       const textContent = aiMessage.audio?.transcript || aiMessage.content || '未获取到文本内容。';
-      const audioData = aiMessage.audio?.data; const images = aiMessage.images || [];
+      const audioData = aiMessage.audio?.data;
+      const images = aiMessage.images || [];
+
       const contentForDisplay = [];
       if (textContent) contentForDisplay.push({ type: 'text', text: textContent });
       images.forEach(img => contentForDisplay.push(img));
       if (audioData) contentForDisplay.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
+
       const contentForApiHistory = [];
       if (textContent) contentForApiHistory.push({ type: 'text', text: textContent });
       images.forEach(img => contentForApiHistory.push(img));
+      
       history.value[aiMessageHistoryIndex].content = contentForApiHistory;
       if (chat_show.value[aiMessageChatShowIndex]) {
         chat_show.value[aiMessageChatShowIndex].content = contentForDisplay;
-        chat_show.value[aiMessageChatShowIndex].status = "";
-      }
-    } else if (isStreamReply) {
-      scrollToBottom();
-      const reader = aiResponse.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
-      while (true) {
-        try {
-          const { value, done } = await reader.read();
-          if (done) { if (thinking.value && chat_show.value[aiMessageChatShowIndex]) { chat_show.value[aiMessageChatShowIndex].status = "end"; thinking.value = false; } break; }
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          
-          for (const line of lines) {
-             if (line.startsWith('data: ')) {
-              const jsonString = line.substring(6).trim();
-              if (jsonString === '[DONE]') { if (thinking.value && chat_show.value[aiMessageChatShowIndex]) { chat_show.value[aiMessageChatShowIndex].status = "end"; thinking.value = false; } continue; }
-              try {
-                const parsedData = JSON.parse(jsonString);
-                const delta = parsedData.choices?.[0]?.delta;
-                if (!delta) continue;
-                const reasoning_delta = delta.reasoning_content; const deltaContent = delta.content; const deltaImages = delta.images;
-                if (chat_show.value[aiMessageChatShowIndex]) {
-                   const historyContentArray = history.value[aiMessageHistoryIndex].content; const chatShowContentArray = chat_show.value[aiMessageChatShowIndex].content;
-                    if (reasoning_delta) {
-                        if (!thinking.value) { chat_show.value[aiMessageChatShowIndex].status = "start"; thinking.value = true; }
-                        else { chat_show.value[aiMessageChatShowIndex].status = "thinking"; }
-                        chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta;
-                    }
-                    if (deltaContent) {
-                        if (!is_think_flag && thinking.value) { thinking.value = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
-                        if (!thinking.value && deltaContent.trimEnd() === "<think>") { is_think_flag = true; thinking.value = true; chat_show.value[aiMessageChatShowIndex].status = "start"; chat_show.value[aiMessageChatShowIndex].reasoning_content = ""; }
-                        else if (thinking.value && is_think_flag && deltaContent.trimEnd() === "</think>") { thinking.value = false; is_think_flag = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
-                        else if (thinking.value && is_think_flag) { chat_show.value[aiMessageChatShowIndex].status = "thinking"; chat_show.value[aiMessageChatShowIndex].reasoning_content += deltaContent; }
-                        else {
-                            const appendText = (arr) => {
-                                let lastPart = arr.length > 0 ? arr[arr.length - 1] : null;
-                                if (lastPart && lastPart.type === 'text') lastPart.text += deltaContent;
-                                else arr.push({ type: 'text', text: deltaContent });
-                            };
-                            appendText(historyContentArray); appendText(chatShowContentArray);
-                        }
-                    }
-                    if (deltaImages && Array.isArray(deltaImages)) {
-                        deltaImages.forEach(img => { historyContentArray.push(img); chatShowContentArray.push(img); });
-                    }
-                }
-                scrollToBottom();
-              } catch (parseError) { /* Gracefully ignore non-JSON lines */ }
-            }
-          }
-        } catch (readError) {
-          if (chat_show.value[aiMessageChatShowIndex]) {
-            const contentArray = chat_show.value[aiMessageChatShowIndex].content;
-            const errorText = readError.name === 'AbortError' ? '\n(已取消)' : `\n(读取流时出错: ${readError.message})`;
-            let lastPart = contentArray.length > 0 ? contentArray[contentArray.length - 1] : null;
-            if(lastPart && lastPart.type === 'text') { lastPart.text += errorText; }
-            else { contentArray.push({type: 'text', text: errorText}); }
-            if (thinking.value) chat_show.value[aiMessageChatShowIndex].status = "error";
-          }
-          thinking.value = false; is_think_flag = false; break;
-        }
-      }
-    } else {
-      const data = await aiResponse.json();
-      const reasoning_content = data.choices?.[0]?.message?.reasoning_content || '';
-      const aiContent = data.choices?.[0]?.message?.content || '抱歉，未能获取到回复内容。';
-      const aiImages = data.choices?.[0]?.message?.images || [];
-      const combinedContent = [];
-      if (aiContent) combinedContent.push({ type: 'text', text: aiContent });
-      aiImages.forEach(img => combinedContent.push(img));
-      history.value[aiMessageHistoryIndex].content = combinedContent;
-      if (chat_show.value[aiMessageChatShowIndex]) {
-        chat_show.value[aiMessageChatShowIndex].content = combinedContent;
         chat_show.value[aiMessageChatShowIndex].reasoning_content = reasoning_content;
         chat_show.value[aiMessageChatShowIndex].status = reasoning_content ? "end" : "";
       }
@@ -1236,6 +1254,7 @@ const askAI = async (forceSend = false) => {
     chatInputRef.value?.focus({ cursor: 'end' });
   }
 };
+
 
 const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } };
 const copyText = async (content, index) => { if (loading.value && index === history.value.length - 1) return; await window.api.copyText(content); };
