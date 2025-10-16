@@ -1147,8 +1147,7 @@ const askAI = async (forceSend = false) => {
       baseURL: base_url.value,
       dangerouslyAllowBrowser: true,
     });
-
-    const messagesForAPI = JSON.parse(JSON.stringify(history.value.slice(0, aiMessageHistoryIndex)));
+    const messagesForAPI = history.value.slice(0, aiMessageHistoryIndex);
     const currentPromptConfig = currentConfig.value.prompts[CODE.value];
     let useStream = currentConfig.value.stream;
     if (currentPromptConfig && typeof currentPromptConfig.stream === 'boolean') useStream = currentPromptConfig.stream;
