@@ -392,6 +392,14 @@
     html.dark .el-switch.is-checked .el-switch__core .el-switch__action {
       background-color: var(--text-on-accent);
     }
+
+    html.dark .el-checkbox__input.is-checked .el-checkbox__inner {
+      background-color: #fff !important;
+      border-color: #fff !important;
+    }
+    html.dark .el-checkbox__input.is-checked .el-checkbox__inner::after {
+      border-color: var(--text-on-accent) !important;
+    }
   </style>
   <script type="module" src="/src/main.js"></script>
 </body>

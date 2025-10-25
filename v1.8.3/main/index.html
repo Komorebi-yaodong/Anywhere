@@ -394,6 +394,16 @@
     html.dark .el-switch.is-checked .el-switch__core .el-switch__action {
       background-color: var(--text-on-accent);
     }
+
+    /* --- [FIX START] 新增的修复深色模式下复选框样式的代码 --- */
+    html.dark .el-checkbox__input.is-checked .el-checkbox__inner {
+      background-color: #fff !important; /* 白色背景 */
+      border-color: #fff !important; /* 白色边框 */
+    }
+    html.dark .el-checkbox__input.is-checked .el-checkbox__inner::after {
+      border-color: var(--text-on-accent) !important; /* 使用深色主题的 --text-on-accent 变量作为对勾颜色 */
+    }
+    /* --- [FIX END] --- */
   </style>
 </body>
 
