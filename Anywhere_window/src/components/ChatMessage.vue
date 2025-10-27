@@ -16,7 +16,7 @@ const props = defineProps({
   isDarkMode: Boolean
 });
 
-const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message']);
+const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished']);
 
 const editInputRef = ref(null);
 const isEditing = ref(false);
@@ -121,9 +121,16 @@ const formatMessageText = (content) => {
 };
 
 const isEditable = computed(() => {
+    // 用户消息总是可编辑的，以便添加或修改文本。
+    if (props.message.role === 'user') {
+        return true;
+    }
+    
+    // 对于其他角色（如助手），检查是否存在可编辑的文本内容。
     const content = props.message.content;
     if (typeof content === 'string') return true;
     if (Array.isArray(content)) {
+        // 只要内容数组中有一个是文本部分，就认为它是可编辑的
         return content.some(part => part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:')));
     }
     return false;
@@ -196,7 +203,10 @@ const truncateFilename = (filename, maxLength = 30) => {
 <template>
   <div class="chat-message">
     <div v-if="message.role === 'system'" class="system-prompt-container">
-      <p class="system-prompt-preview" @click="onShowSystemPrompt">{{ String(message.content) }}</p>
+      <p class="system-prompt-preview" @click="onShowSystemPrompt">
+        <span v-if="String(message.content).trim()">{{ String(message.content) }}</span>
+        <span v-else class="placeholder-text">系统提示词...</span>
+      </p>
       <el-button :icon="Edit" @click="onShowSystemPrompt" size="small" circle text class="system-prompt-edit-btn" />
     </div>
 
@@ -229,22 +239,25 @@ const truncateFilename = (filename, maxLength = 30) => {
                 <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
             </div>
         </div>
+        
       </template>
       <template #footer>
         <div class="message-footer">
-          <div class="footer-actions">
-            <div class="file-list-container" v-if="formatMessageFile(message.content).length > 0">
+          <div class="footer-wrapper">
+            <div class="footer-actions">
+              <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
+              <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small" circle />
+              <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
+                @click="onToggleCollapse($event)" size="small" circle />
+              <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
+              <el-button :icon="Delete" size="small" @click="onDelete" circle />
+            </div>
+            <div class="message-files-vertical-list" v-if="formatMessageFile(message.content).length > 0">
               <el-tooltip v-for="(file_name, idx) in formatMessageFile(message.content)" :key="idx" :content="file_name"
-                placement="top" :disabled="file_name.length < 20">
-                <el-button class="file-button" type="info" plain size="small" :icon="Document">{{truncateFilename(file_name)}}</el-button>
+                placement="top" :disabled="file_name.length < 30" :popper-style="{ maxWidth: '30vw', wordBreak: 'break-all' }">
+                <el-button class="file-button" type="info" plain size="small" :icon="Document">{{truncateFilename(file_name, 20)}}</el-button>
               </el-tooltip>
             </div>
-            <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
-            <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small" circle />
-            <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
-              @click="onToggleCollapse($event)" size="small" circle />
-            <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
-            <el-button :icon="Delete" size="small" @click="onDelete" circle />
           </div>
         </div>
       </template>
@@ -432,6 +445,11 @@ html.dark .system-prompt-container:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   flex-grow: 1;
+}
+
+.placeholder-text {
+  color: var(--el-text-color-placeholder);
+  font-style: italic;
 }
 
 .markdown-wrapper {
@@ -742,19 +760,68 @@ html.dark .editing-wrapper {
     }
 }
 
+.message-files-vertical-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  padding-right: 5px;
+  max-height: 150px;
+  overflow-y: auto;
 
-.file-list-container {
-  display: flex; overflow-x: auto; overflow-y: hidden; padding: 4px 0 8px 0; margin-bottom: 5px; gap: 8px; max-width: 100%; scrollbar-width: thin; scrollbar-color: var(--el-text-color-disabled) transparent;
-  &::-webkit-scrollbar { height: 5px; }
-  &::-webkit-scrollbar-track { background: transparent; border-radius: 3px; }
-  &::-webkit-scrollbar-thumb { background-color: var(--el-text-color-disabled); border-radius: 3px; border: 1px solid transparent; background-clip: content-box; }
-  &::-webkit-scrollbar-thumb:hover { background-color: var(--el-text-color-secondary); }
-  .el-button { border: none; background-color: var(--el-fill-color-light); color: var(--el-color-info); }
-  .el-button :hover { border: none; background-color: var(--el-fill-color-lighter); color: var(--el-color-info); }
+  &::-webkit-scrollbar {
+    width: 8px !important;
+    height: 8px !important;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--el-text-color-disabled, #c0c4cc);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--el-text-color-secondary, #909399);
+    background-clip: content-box;
+  }
+  .file-button {
+    width: auto;
+    justify-content: flex-start;
+    border: none;
+    background-color: var(--el-fill-color-light);
+    color: var(--el-color-info);
+  }
+  .file-button:hover {
+    border: none;
+    background-color: var(--el-fill-color-lighter);
+    color: var(--el-color-info);
+  }
 }
-html.dark .file-list-container {
-  .el-button { background-color: var(--el-fill-color-dark); color: var(--el-text-color-regular); }
-  .el-button :hover { background-color: var(--el-fill-color-darker); color: var(--el-text-color-regular); }
+html.dark .message-files-vertical-list {
+  &::-webkit-scrollbar {
+    width: 8px !important;
+    height: 8px !important;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #6b6b6b;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: #999;
+  }
+  .file-button {
+    background-color: var(--el-fill-color-dark);
+    color: var(--el-text-color-regular);
+  }
+  .file-button:hover {
+    background-color: var(--el-fill-color-darker);
+    color: var(--el-text-color-regular);
+  }
 }
 
 .user-info-header, .ai-info-header { font-size: 0.8rem; color: var(--el-text-color-secondary); display: flex; align-items: center; margin-bottom: 4px; padding: 0 2px; }
@@ -767,6 +834,12 @@ html.dark .ai-name { color: var(--el-text-color-regular); }
 
 .message-footer { display: flex; justify-content: flex-end; align-items: center; width: 100%; margin-top: 8px; }
 .footer-actions { display: flex; align-items: center; gap: 4px; }
+.footer-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
 .user-bubble .footer-actions { margin-left: auto; }
 .ai-bubble .footer-actions { margin-right: auto; }
 .timestamp { font-size: 0.75rem; color: var(--el-text-color-placeholder); opacity: 0.8; white-space: nowrap; flex-shrink: 0; padding-left: 4px;}

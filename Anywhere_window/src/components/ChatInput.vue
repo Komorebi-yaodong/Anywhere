@@ -453,7 +453,11 @@ defineExpose({ focus, senderRef });
                                     circle :disabled="isRecording" /></el-tooltip>
 
                             <el-tooltip :content="reasoningTooltipContent">
-                                <el-button :type="reasoningButtonType" size="default" circle :disabled="isRecording"
+                                <el-button 
+                                    :class="{ 'is-active-special': tempReasoningEffort && tempReasoningEffort !== 'default' }" 
+                                    size="default" 
+                                    circle 
+                                    :disabled="isRecording"
                                     @click="toggleReasoningSelector">
                                     <el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -466,8 +470,11 @@ defineExpose({ focus, senderRef });
                             </el-tooltip>
 
                             <el-tooltip content="语音回复设置">
-                                <el-button size="default" circle :disabled="isRecording"
-                                    :type="selectedVoice ? 'primary' : ''" :class="{ 'is-pulsing': selectedVoice }"
+                                <el-button 
+                                    size="default" 
+                                    circle 
+                                    :disabled="isRecording"
+                                    :class="{ 'is-active-special': selectedVoice }"
                                     @click="toggleVoiceSelector"><el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -743,9 +750,20 @@ html.dark .chat-input-area-vertical {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
-html.dark .chat-input-area-vertical .el-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+.chat-input-area-vertical .action-buttons-left .el-button.is-active-special {
+    color: var(--el-color-warning);
 }
+
+.chat-input-area-vertical .action-buttons-left .el-button:hover {
+    color: var(--text-on-accent);
+    background-color: var(--bg-accent);
+    background-color: var(--el-color-primary-light-8);
+}
+
+.chat-input-area-vertical .action-buttons-right .el-button:hover {
+    color: var(--text-on-accent);
+}
+
 
 /* Common Styles */
 :deep(.el-textarea.is-disabled .el-textarea__inner) {
@@ -793,7 +811,7 @@ html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
 .el-button.is-circle:hover,
 .el-button.is-circle:focus {
     color: var(--el-color-primary);
-    background-color: var(--el-color-primary-light-9);
+    background-color: var(--el-color-primary-light-8);
 }
 
 .el-button.is-circle[type="primary"] {
@@ -806,7 +824,7 @@ html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
     background-color: var(--el-color-primary-light-3);
 }
 
-/* Pulsing glow animation */
+/* Pulsing glow animation - This class is now only used for demonstration if needed */
 @keyframes pulse-glow {
     0% {
         box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0.4);
@@ -819,10 +837,6 @@ html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
     100% {
         box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0);
     }
-}
-
-.el-button.is-pulsing {
-    animation: pulse-glow 2s infinite;
 }
 
 html.dark .el-button--danger.is-plain {
