@@ -3,12 +3,14 @@
     "header": {
       "chats": "云端对话 💬",
       "prompts": "快捷助手 🚀",
+      "mcp": "MCP 服务 🔧",
       "providers": "服务商 ☁️",
       "settings": "设置 ⚙️"
     },
     "tabs": {
       "chats": "云端对话",
       "prompts": "快捷助手",
+      "mcp": "MCP 服务",
       "providers": "服务商",
       "settings": "设置"
     }
@@ -135,6 +137,59 @@
       "low": "低",
       "medium": "中",
       "high": "高"
+    }
+  },
+  "mcp": {
+    "title": "MCP 服务",
+    "addServer": "添加 MCP 服务",
+    "editJson": "编辑 JSON",
+    "noServers": "尚未配置 MCP 服务。",
+    "addServerTitle": "添加新 MCP 服务",
+    "editServerTitle": "编辑 MCP 服务",
+    "nameLabel": "名称",
+    "descriptionLabel": "描述",
+    "typeLabel": "类型",
+    "activeLabel": "启用",
+    "typeOptions": {
+      "stdio": "标准输入/输出 (stdio)",
+      "streamableHttp": "可流式 HTTP",
+      "sse": "服务器发送事件 (SSE)",
+      "inMemory": "内存中 (In-Memory)"
+    },
+    "stdio": {
+      "command": "命令",
+      "args": "参数",
+      "env": "环境变量"
+    },
+    "http": {
+      "url": "基础 URL",
+      "headers": "请求头"
+    },
+    "inMemory": {
+      "provider": "提供者"
+    },
+    "advanced": "高级/可选设置",
+    "registryUrl": "注册表 URL",
+    "providerName": "服务商名称",
+    "providerUrl": "服务商链接",
+    "logoUrl": "图标链接",
+    "tags": "标签",
+    "argsPlaceholder": "每行输入一个参数",
+    "envPlaceholder": "KEY1=VALUE1\nKEY2=VALUE2",
+    "headersPlaceholder": "Header-Name: Header-Value\nAuthorization: Bearer token",
+    "tagsPlaceholder": "输入标签，以逗号分隔",
+    "alerts": {
+      "deleteConfirmTitle": "确认删除",
+      "deleteConfirmText": "您确定要删除 MCP 服务 “{name}” 吗？",
+      "saveSuccess": "MCP 服务保存成功。",
+      "saveFailed": "MCP 服务保存失败。",
+      "deleteSuccess": "MCP 服务删除成功。",
+      "deleteFailed": "MCP 服务删除失败。",
+      "invalidJson": "JSON 格式无效，请检查您的输入。"
+    },
+    "jsonDialog": {
+      "title": "编辑 MCP 服务 JSON",
+      "description": "警告：直接编辑 JSON 可能会导致问题，如果格式不正确。请谨慎操作。"
     }
   },
   "providers": {

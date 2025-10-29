@@ -3,12 +3,14 @@
     "header": {
       "chats": "Cloud Chats 💬",
       "prompts": "Quick Prompts 🚀",
+      "mcp": "MCP Servers 🔧",
       "providers": "Providers ☁️",
       "settings": "Settings ⚙️"
     },
     "tabs": {
       "chats": "Cloud Chats",
       "prompts": "Quick Prompts",
+      "mcp": "MCP Servers",
       "providers": "Providers",
       "settings": "Settings"
     }
@@ -135,6 +137,59 @@
       "low": "Low",
       "medium": "Medium",
       "high": "High"
+    }
+  },
+  "mcp": {
+    "title": "MCP Servers",
+    "addServer": "Add MCP Server",
+    "editJson": "Edit JSON",
+    "noServers": "No MCP servers configured.",
+    "addServerTitle": "Add New MCP Server",
+    "editServerTitle": "Edit MCP Server",
+    "nameLabel": "Name",
+    "descriptionLabel": "Description",
+    "typeLabel": "Type",
+    "activeLabel": "Active",
+    "typeOptions": {
+      "stdio": "stdio",
+      "streamableHttp": "Streamable HTTP",
+      "sse": "Server-Sent Events (SSE)",
+      "inMemory": "In-Memory"
+    },
+    "stdio": {
+      "command": "Command",
+      "args": "Arguments",
+      "env": "Environment Variables"
+    },
+    "http": {
+      "url": "Base URL",
+      "headers": "Request Headers"
+    },
+    "inMemory": {
+      "provider": "Provider"
+    },
+    "advanced": "Advanced/Optional Settings",
+    "registryUrl": "Registry URL",
+    "providerName": "Provider Name",
+    "providerUrl": "Provider URL",
+    "logoUrl": "Logo URL",
+    "tags": "Tags",
+    "argsPlaceholder": "Enter one argument per line",
+    "envPlaceholder": "KEY1=VALUE1\nKEY2=VALUE2",
+    "headersPlaceholder": "Header-Name: Header-Value\nAuthorization: Bearer token",
+    "tagsPlaceholder": "Enter tags separated by commas",
+    "alerts": {
+      "deleteConfirmTitle": "Confirm Deletion",
+      "deleteConfirmText": "Are you sure you want to delete the MCP server '{name}'?",
+      "saveSuccess": "MCP server saved successfully.",
+      "saveFailed": "Failed to save MCP server.",
+      "deleteSuccess": "MCP server deleted successfully.",
+      "deleteFailed": "Failed to delete MCP server.",
+      "invalidJson": "Invalid JSON format. Please check your input."
+    },
+    "jsonDialog": {
+      "title": "Edit MCP Servers JSON",
+      "description": "Warning: Directly editing the JSON can cause issues if the format is incorrect. Proceed with caution."
     }
   },
   "providers": {

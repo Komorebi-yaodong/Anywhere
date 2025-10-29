@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElTooltip, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElTooltip, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckboxGroup, ElCheckbox } from 'element-plus';
 import { createClient } from "webdav/web";
 
 import ChatHeader from './components/ChatHeader.vue';
@@ -8,9 +8,10 @@ import ChatMessage from './components/ChatMessage.vue';
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
-import { DocumentCopy, Download } from '@element-plus/icons-vue';
+import { DocumentCopy, Download, Search } from '@element-plus/icons-vue';
 
 import OpenAI from 'openai';
+// No longer import from mcp-client.js
 
 const chatInputRef = ref(null);
 const lastSelectionStart = ref(null);
@@ -136,6 +137,32 @@ const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
 
 const senderRef = ref();
+
+// --- MCP State ---
+const isMcpDialogVisible = ref(false);
+const sessionMcpServerIds = ref([]); // Store IDs of servers active for this session
+const openaiFormattedTools = ref([]);
+const mcpSearchQuery = ref(''); // For search functionality
+
+const isMcpActive = computed(() => sessionMcpServerIds.value.length > 0);
+
+const availableMcpServers = computed(() => {
+  if (!currentConfig.value || !currentConfig.value.mcpServers) return [];
+  return Object.entries(currentConfig.value.mcpServers)
+    .filter(([, server]) => server.isActive)
+    .map(([id, server]) => ({ id, ...server }));
+});
+
+const filteredMcpServers = computed(() => {
+  if (!mcpSearchQuery.value) {
+    return availableMcpServers.value;
+  }
+  const query = mcpSearchQuery.value.toLowerCase();
+  return availableMcpServers.value.filter(server =>
+    (server.name && server.name.toLowerCase().includes(query)) ||
+    (server.description && server.description.toLowerCase().includes(query))
+  );
+});
 
 const isViewingLastMessage = computed(() => {
   if (focusedMessageIndex.value === null) return false;
@@ -380,11 +407,12 @@ const handleUpload = async ({ fileList: newFiles }) => {
   for (const file of newFiles) await file2fileList(file, fileList.value.length + 1);
   chatInputRef.value?.focus({ cursor: 'end' });
 };
+const handleOpenMcpDialog = () => toggleMcpDialog();
 
 const handleSendAudio = async (audioFile) => {
-    fileList.value = [];
-    await file2fileList(audioFile, 0);
-    await askAI(false);
+  fileList.value = [];
+  await file2fileList(audioFile, 0);
+  await askAI(false);
 };
 
 const handleWindowBlur = () => {
@@ -407,169 +435,169 @@ const handleWindowFocus = () => {
 };
 
 const handleCopyImageFromViewer = (url) => {
-    if (!url) return;
-    const loadingMessage = ElMessage({ message: '准备复制图片...', type: 'info', duration: 0 });
-    (async () => {
-        try {
-            if (url.startsWith('data:image')) {
-                await new Promise(resolve => setTimeout(resolve, 20)); 
-                await window.api.copyImage(url);
-                ElMessage.success('图片已复制到剪贴板');
-                return;
-            }
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`网络错误: ${response.statusText}`);
-            loadingMessage.message = '正在下载和处理图片...';
-            const blob = await response.blob();
-            const buffer = await blob.arrayBuffer();
-            const uint8Array = new Uint8Array(buffer);
-            loadingMessage.message = '正在写入剪贴板...';
-            await new Promise(resolve => setTimeout(resolve, 50)); 
-            await window.api.copyImage(uint8Array);
-            ElMessage.success('图片已复制到剪贴板');
-        } catch (error) {
-            console.error('复制图片失败:', error);
-            ElMessage.error(`复制失败: ${error.message}`);
-        } finally {
-            loadingMessage.close();
-        }
-    })();
+  if (!url) return;
+  const loadingMessage = ElMessage({ message: '准备复制图片...', type: 'info', duration: 0 });
+  (async () => {
+    try {
+      if (url.startsWith('data:image')) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        await window.api.copyImage(url);
+        ElMessage.success('图片已复制到剪贴板');
+        return;
+      }
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`网络错误: ${response.statusText}`);
+      loadingMessage.message = '正在下载和处理图片...';
+      const blob = await response.blob();
+      const buffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(buffer);
+      loadingMessage.message = '正在写入剪贴板...';
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await window.api.copyImage(uint8Array);
+      ElMessage.success('图片已复制到剪贴板');
+    } catch (error) {
+      console.error('复制图片失败:', error);
+      ElMessage.error(`复制失败: ${error.message}`);
+    } finally {
+      loadingMessage.close();
+    }
+  })();
 };
 
 const handleDownloadImageFromViewer = async (url) => {
-    if (!url) return;
-    try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
-        await window.api.saveFile({ title: '保存图片', defaultPath: defaultFilename, buttonLabel: '保存', fileContent: new Uint8Array(arrayBuffer) });
-        ElMessage.success('图片保存成功！');
-    } catch (error) {
-        if (!error.message.includes('User cancelled') && !error.message.includes('用户取消')) {
-            console.error('下载图片失败:', error);
-            ElMessage.error(`下载失败: ${error.message}`);
-        }
+  if (!url) return;
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
+    await window.api.saveFile({ title: '保存图片', defaultPath: defaultFilename, buttonLabel: '保存', fileContent: new Uint8Array(arrayBuffer) });
+    ElMessage.success('图片保存成功！');
+  } catch (error) {
+    if (!error.message.includes('User cancelled') && !error.message.includes('用户取消')) {
+      console.error('下载图片失败:', error);
+      ElMessage.error(`下载失败: ${error.message}`);
     }
+  }
 };
 
 const handleEditMessage = (index, newContent) => {
-    if (index < 0) return;
-    const updateContent = (message) => {
-        if (!message) return;
-        if (typeof message.content === 'string') {
-            message.content = newContent;
-        } else if (Array.isArray(message.content)) {
-            const textPart = message.content.find(p => p.type === 'text' && !(p.text.toLowerCase().startsWith('file name:')));
-            if (textPart) {
-                textPart.text = newContent;
-            } else {
-                message.content.push({ type: 'text', text: newContent });
-            }
-        }
-    };
-    if (chat_show.value[index]) updateContent(chat_show.value[index]);
-    if (history.value[index]) updateContent(history.value[index]);
+  if (index < 0) return;
+  const updateContent = (message) => {
+    if (!message) return;
+    if (typeof message.content === 'string') {
+      message.content = newContent;
+    } else if (Array.isArray(message.content)) {
+      const textPart = message.content.find(p => p.type === 'text' && !(p.text.toLowerCase().startsWith('file name:')));
+      if (textPart) {
+        textPart.text = newContent;
+      } else {
+        message.content.push({ type: 'text', text: newContent });
+      }
+    }
+  };
+  if (chat_show.value[index]) updateContent(chat_show.value[index]);
+  if (history.value[index]) updateContent(history.value[index]);
 };
 
 const handleEditStart = async (index) => {
-    const scrollContainer = chatContainerRef.value?.$el;
-    const childComponent = messageRefs.get(index);
-    const element = childComponent?.$el;
+  const scrollContainer = chatContainerRef.value?.$el;
+  const childComponent = messageRefs.get(index);
+  const element = childComponent?.$el;
 
-    if (!scrollContainer || !element || !childComponent) return;
+  if (!scrollContainer || !element || !childComponent) return;
 
-    // 步骤 1: 切换到编辑模式
-    childComponent.switchToEditMode();
+  // 步骤 1: 切换到编辑模式
+  childComponent.switchToEditMode();
 
-    // 步骤 2: 等待 Vue 完成 DOM 更新
-    await nextTick();
+  // 步骤 2: 等待 Vue 完成 DOM 更新
+  await nextTick();
 
-    // 步骤 3: 使用双重 requestAnimationFrame 等待浏览器完成布局和绘制
-    // 这是比 setTimeout(0) 更可靠的方式，确保在获取元素位置时，它已经是最终渲染的尺寸
+  // 步骤 3: 使用双重 requestAnimationFrame 等待浏览器完成布局和绘制
+  // 这是比 setTimeout(0) 更可靠的方式，确保在获取元素位置时，它已经是最终渲染的尺寸
+  requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            // 核心修复: 在下一帧绘制前，执行立即滚动
-            element.scrollIntoView({ behavior: 'auto', block: 'nearest' });
-        });
+      // 核心修复: 在下一帧绘制前，执行立即滚动
+      element.scrollIntoView({ behavior: 'auto', block: 'nearest' });
     });
+  });
 };
 
 const handleEditEnd = async ({ index, action, content }) => {
-    const childComponent = messageRefs.get(index);
-    if (childComponent) {
-        // 先处理数据和状态
-        if (action === 'save') {
-            handleEditMessage(index, content);
-            ElMessage.success('消息已更新');
-        }
-        childComponent.switchToShowMode();
+  const childComponent = messageRefs.get(index);
+  if (childComponent) {
+    // 先处理数据和状态
+    if (action === 'save') {
+      handleEditMessage(index, content);
+      ElMessage.success('消息已更新');
     }
+    childComponent.switchToShowMode();
+  }
 };
 
 const saveSystemPrompt = async () => {
-    const newPromptContent = systemPromptContent.value;
-    const systemMessageIndex = history.value.findIndex(m => m.role === 'system');
+  const newPromptContent = systemPromptContent.value;
+  const systemMessageIndex = history.value.findIndex(m => m.role === 'system');
 
-    if (systemMessageIndex !== -1) {
-        history.value[systemMessageIndex].content = newPromptContent;
-        chat_show.value[systemMessageIndex].content = newPromptContent;
+  if (systemMessageIndex !== -1) {
+    history.value[systemMessageIndex].content = newPromptContent;
+    chat_show.value[systemMessageIndex].content = newPromptContent;
+  } else {
+    const newSystemMsg = { role: "system", content: newPromptContent };
+    history.value.unshift(newSystemMsg);
+    chat_show.value.unshift({ ...newSystemMsg, id: messageIdCounter.value++ });
+  }
+
+  try {
+    const promptExists = !!currentConfig.value.prompts[CODE.value];
+    if (promptExists) {
+      // 更新现有快捷助手
+      await window.api.saveSetting(`prompts.${CODE.value}.prompt`, newPromptContent);
+      currentConfig.value.prompts[CODE.value].prompt = newPromptContent;
+      ElMessage.success('快捷助手提示词已更新');
     } else {
-        const newSystemMsg = { role: "system", content: newPromptContent };
-        history.value.unshift(newSystemMsg);
-        chat_show.value.unshift({ ...newSystemMsg, id: messageIdCounter.value++ });
+      // 创建新的快捷助手
+      const latestConfigData = await window.api.getConfig();
+
+      // 使用窗口加载时保存的源配置作为基础，如果没有则回退到默认AI配置
+      const baseConfig = sourcePromptConfig.value || defaultConfig.config.prompts.AI;
+
+      const newPrompt = {
+        ...baseConfig, // 继承源配置或默认配置
+        icon: AIAvart.value,
+        prompt: newPromptContent, // 覆盖为新的提示词
+        enable: true, // 新创建的默认启用
+        model: model.value || baseConfig.model, // 使用当前窗口选择的模型
+        enable: true,
+        stream: true,
+        isTemperature: false,
+        temperature: 0.7,
+        ifTextNecessary: false,
+        isDirectSend_file: true,
+        isDirectSend_normal: true,
+        voice: "",
+        isAlwaysOnTop: latestConfigData.config.isAlwaysOnTop_global,
+        autoCloseOnBlur: latestConfigData.config.autoCloseOnBlur_global,
+        window_width: 540,
+        window_height: 700,
+        position_x: 0,
+        position_y: 0,
+        reasoning_effort: "default",
+        zoom: 1
+      };
+
+      latestConfigData.config.prompts[CODE.value] = newPrompt;
+      await window.api.updateConfig(latestConfigData);
+      currentConfig.value = latestConfigData.config;
+      sourcePromptConfig.value = newPrompt; // 更新源配置为刚创建的新配置
+      ElMessage.success(`已为您创建并保存新的快捷助手: "${CODE.value}"`);
     }
+  } catch (error) {
+    console.error("保存系统提示词失败:", error);
+    ElMessage.error(`保存失败: ${error.message}`);
+  }
 
-    try {
-        const promptExists = !!currentConfig.value.prompts[CODE.value];
-        if (promptExists) {
-            // 更新现有快捷助手
-            await window.api.saveSetting(`prompts.${CODE.value}.prompt`, newPromptContent);
-            currentConfig.value.prompts[CODE.value].prompt = newPromptContent;
-            ElMessage.success('快捷助手提示词已更新');
-        } else {
-            // 创建新的快捷助手
-            const latestConfigData = await window.api.getConfig();
-            
-            // 使用窗口加载时保存的源配置作为基础，如果没有则回退到默认AI配置
-            const baseConfig = sourcePromptConfig.value || defaultConfig.config.prompts.AI;
-
-            const newPrompt = {
-                ...baseConfig, // 继承源配置或默认配置
-                icon: AIAvart.value,
-                prompt: newPromptContent, // 覆盖为新的提示词
-                enable: true, // 新创建的默认启用
-                model: model.value || baseConfig.model, // 使用当前窗口选择的模型
-                enable:true,
-                stream:true,
-                isTemperature: false,
-                temperature: 0.7,
-                ifTextNecessary: false,
-                isDirectSend_file: true,
-                isDirectSend_normal: true,
-                voice: "",
-                isAlwaysOnTop: latestConfigData.config.isAlwaysOnTop_global,
-                autoCloseOnBlur: latestConfigData.config.autoCloseOnBlur_global,
-                window_width: 540,
-                window_height: 700,
-                position_x: 0,
-                position_y: 0,
-                reasoning_effort: "default",
-                zoom: 1
-            };
-
-            latestConfigData.config.prompts[CODE.value] = newPrompt;
-            await window.api.updateConfig(latestConfigData);
-            currentConfig.value = latestConfigData.config;
-            sourcePromptConfig.value = newPrompt; // 更新源配置为刚创建的新配置
-            ElMessage.success(`已为您创建并保存新的快捷助手: "${CODE.value}"`);
-        }
-    } catch (error) {
-        console.error("保存系统提示词失败:", error);
-        ElMessage.error(`保存失败: ${error.message}`);
-    }
-
-    systemPromptDialogVisible.value = false;
+  systemPromptDialogVisible.value = false;
 };
 
 
@@ -615,7 +643,7 @@ onMounted(async () => {
       basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
       document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
       const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
-      
+
       if (currentPromptConfig && currentPromptConfig.icon) {
         AIAvart.value = currentPromptConfig.icon;
         favicon.value = currentPromptConfig.icon;
@@ -737,13 +765,14 @@ onMounted(async () => {
   }, 100);
 });
 
-onBeforeUnmount(() => {
+onBeforeUnmount(async () => {
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('blur', handleWindowBlur);
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
+  await window.api.closeMcpClient();
 });
 
 const saveWindowSize = async () => {
@@ -1096,186 +1125,391 @@ function getRandomItem(list) {
   }
 }
 
-const askAI = async (forceSend = false) => {
-  if (loading.value) return;
-  let is_think_flag = false;
-  if (!forceSend) {
-    let file_content = await sendFile();
-    const promptText = prompt.value.trim();
-    if ((file_content && file_content.length > 0) || promptText) {
-      const userContentList = [];
-      if (promptText) userContentList.push({ type: "text", text: promptText });
-      if (file_content && file_content.length > 0) userContentList.push(...file_content);
-      const userTimestamp = new Date().toLocaleString('sv-SE');
-      if (userContentList.length == 1 && userContentList[0].type === "text") {
-        history.value.push({ role: "user", content: userContentList[0]["text"] });
-        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: userContentList[0]["text"] }], timestamp: userTimestamp });
-      } else if (userContentList.length > 0) {
-        history.value.push({ role: "user", content: userContentList });
-        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
-      } else return;
-    } else return;
-    prompt.value = "";
-  }
-  if (temporary.value && history.value.length > 1) {
-    const lastUserMessage = history.value[history.value.length - 1];
-    const systemMessage = history.value[0].role === "system" ? history.value[0] : null;
-    const messagesToKeepInHistory = []; const messagesToKeepInChatShow = [];
-    if (systemMessage) { messagesToKeepInHistory.push(systemMessage); messagesToKeepInChatShow.push(chat_show.value.find(m => m.role === "system") || systemMessage); }
-    if (lastUserMessage && lastUserMessage.role === "user") {
-      messagesToKeepInHistory.push(lastUserMessage);
-      const correspondingUserChatShow = chat_show.value.filter(m => m.role === 'user').pop();
-      if (correspondingUserChatShow) messagesToKeepInChatShow.push(correspondingUserChatShow); else messagesToKeepInChatShow.push(lastUserMessage);
-    }
-    history.value = messagesToKeepInHistory; chat_show.value = messagesToKeepInChatShow;
-  }
+async function applyMcpTools() {
+  isMcpDialogVisible.value = false;
+  const activeServerConfigs = {};
 
-  loading.value = true;
-  signalController.value = new AbortController();
-  scrollToBottom();
-  const aiMessageHistoryIndex = history.value.length;
-  const aiMessageChatShowIndex = chat_show.value.length;
-  history.value.push({ role: "assistant", content: [] });
-  chat_show.value.push({
-    id: messageIdCounter.value++, role: "assistant", content: [], reasoning_content: "", status: "",
-    aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
-  });
+  for (const id of sessionMcpServerIds.value) {
+    if (currentConfig.value.mcpServers[id]) {
+      const serverConf = currentConfig.value.mcpServers[id];
+      activeServerConfigs[id] = {
+        transport: serverConf.type,
+        command: serverConf.command,
+        args: serverConf.args,
+        url: serverConf.baseUrl,
+      };
+    }
+  }
 
   try {
-    const openai = new OpenAI({
-      apiKey: window.api.getRandomItem(api_key.value),
-      baseURL: base_url.value,
-      dangerouslyAllowBrowser: true,
-    });
-    const messagesForAPI = history.value.slice(0, aiMessageHistoryIndex);
-    const currentPromptConfig = currentConfig.value.prompts[CODE.value];
-    let useStream = currentConfig.value.stream;
-    if (currentPromptConfig && typeof currentPromptConfig.stream === 'boolean') useStream = currentPromptConfig.stream;
-    const isVoiceReply = !!selectedVoice.value;
-    const isStreamReply = useStream && !isVoiceReply;
+    const { openaiFormattedTools: newFormattedTools } = await window.api.initializeMcpClient(activeServerConfigs);
+    openaiFormattedTools.value = newFormattedTools;
 
-    const payload = {
-        model: model.value.split("|")[1],
-        messages: messagesForAPI,
-        stream: isStreamReply,
-    };
-
-    if (currentPromptConfig && currentPromptConfig.isTemperature) {
-        payload.temperature = currentPromptConfig.temperature;
-    }
-    if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') {
-        payload.reasoning_effort = tempReasoningEffort.value;
-    }
-    if (isVoiceReply) {
-        payload.modalities = ["text", "audio"];
-        payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
-    }
-    
-    chatInputRef.value?.focus({ cursor: 'end' });
-
-    if (isStreamReply) {
-      const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
-      for await (const part of stream) {
-        const delta = part.choices[0]?.delta;
-        if (!delta) continue;
-        const reasoning_delta = delta.reasoning_content; const deltaContent = delta.content; const deltaImages = delta.images;
-        if (chat_show.value[aiMessageChatShowIndex]) {
-           const historyContentArray = history.value[aiMessageHistoryIndex].content; const chatShowContentArray = chat_show.value[aiMessageChatShowIndex].content;
-            if (reasoning_delta) {
-                if (!thinking.value) { chat_show.value[aiMessageChatShowIndex].status = "start"; thinking.value = true; }
-                else { chat_show.value[aiMessageChatShowIndex].status = "thinking"; }
-                chat_show.value[aiMessageChatShowIndex].reasoning_content += reasoning_delta;
-            }
-            if (deltaContent) {
-                if (!is_think_flag && thinking.value) { thinking.value = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
-                if (!thinking.value && deltaContent.trimEnd() === "<think>") { is_think_flag = true; thinking.value = true; chat_show.value[aiMessageChatShowIndex].status = "start"; chat_show.value[aiMessageChatShowIndex].reasoning_content = ""; }
-                else if (thinking.value && is_think_flag && deltaContent.trimEnd() === "</think>") { thinking.value = false; is_think_flag = false; chat_show.value[aiMessageChatShowIndex].status = "end"; }
-                else if (thinking.value && is_think_flag) { chat_show.value[aiMessageChatShowIndex].status = "thinking"; chat_show.value[aiMessageChatShowIndex].reasoning_content += deltaContent; }
-                else {
-                    const appendText = (arr) => {
-                        let lastPart = arr.length > 0 ? arr[arr.length - 1] : null;
-                        if (lastPart && lastPart.type === 'text') lastPart.text += deltaContent;
-                        else arr.push({ type: 'text', text: deltaContent });
-                    };
-                    appendText(historyContentArray); appendText(chatShowContentArray);
-                }
-            }
-            if (deltaImages && Array.isArray(deltaImages)) {
-                deltaImages.forEach(img => { historyContentArray.push(img); chatShowContentArray.push(img); });
-            }
-        }
-        scrollToBottom();
-      }
-      if (thinking.value) {
-        chat_show.value[aiMessageChatShowIndex].status = "end";
-        thinking.value = false;
-      }
+    if (newFormattedTools.length > 0) {
+      ElMessage.success(`已启用 ${newFormattedTools.length} 个 MCP 工具`);
     } else {
-      const completion = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
-      const aiMessage = completion.choices[0].message;
-      if (!aiMessage) throw new Error('API响应格式不正确，缺少message字段');
-      const reasoning_content = aiMessage.reasoning_content || '';
-      const textContent = aiMessage.audio?.transcript || aiMessage.content || '未获取到文本内容。';
-      const audioData = aiMessage.audio?.data;
-      const images = aiMessage.images || [];
-
-      const contentForDisplay = [];
-      if (textContent) contentForDisplay.push({ type: 'text', text: textContent });
-      images.forEach(img => contentForDisplay.push(img));
-      if (audioData) contentForDisplay.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
-
-      const contentForApiHistory = [];
-      if (textContent) contentForApiHistory.push({ type: 'text', text: textContent });
-      images.forEach(img => contentForApiHistory.push(img));
-      
-      history.value[aiMessageHistoryIndex].content = contentForApiHistory;
-      if (chat_show.value[aiMessageChatShowIndex]) {
-        chat_show.value[aiMessageChatShowIndex].content = contentForDisplay;
-        chat_show.value[aiMessageChatShowIndex].reasoning_content = reasoning_content;
-        chat_show.value[aiMessageChatShowIndex].status = reasoning_content ? "end" : "";
-      }
+      ElMessage.info('已清除所有 MCP 工具');
     }
   } catch (error) {
-    let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
-    if (error.name === 'AbortError') errorDisplay = "请求已取消";
-    const errorContent = [{ type: "text", text: `错误: ${errorDisplay}` }];
-    if (history.value[aiMessageHistoryIndex]) history.value[aiMessageHistoryIndex].content = errorContent;
-    if (chat_show.value[aiMessageChatShowIndex]) chat_show.value[aiMessageChatShowIndex] = { ...chat_show.value[aiMessageChatShowIndex], content: errorContent, reasoning_content: "", status: "" };
-    else chat_show.value.push({ id: messageIdCounter.value++, role: "assistant", content: errorContent, reasoning_content: "", status: "" });
-  } finally {
-    loading.value = false; signalController.value = null;
-    const lastChatMsg = chat_show.value[chat_show.value.length - 1];
-    if (lastChatMsg && lastChatMsg.role === 'assistant' && thinking.value && !is_think_flag) { lastChatMsg.status = "end"; thinking.value = false; }
-    if (chat_show.value[aiMessageChatShowIndex] && chat_show.value[aiMessageChatShowIndex].role === 'assistant') {
-      chat_show.value[aiMessageChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
-    }
-    is_think_flag = false; scrollToBottom();
-    chatInputRef.value?.focus({ cursor: 'end' });
+    console.error("Failed to initialize MCP tools:", error);
+    ElMessage.error(`加载MCP工具失败: ${error.message}`);
   }
-};
+}
 
+function clearMcpTools() {
+  sessionMcpServerIds.value = [];
+  applyMcpTools();
+}
+
+function toggleMcpDialog() {
+  isMcpDialogVisible.value = !isMcpDialogVisible.value;
+}
+
+// 在 ./Anywhere_window/src/App.vue 中找到 askAI 函数并完全替换
+
+const askAI = async (forceSend = false) => {
+    if (loading.value) return;
+
+    if (!forceSend) {
+        let file_content = await sendFile();
+        const promptText = prompt.value.trim();
+        if ((file_content && file_content.length > 0) || promptText) {
+            const userContentList = [];
+            if (promptText) userContentList.push({ type: "text", text: promptText });
+            if (file_content && file_content.length > 0) userContentList.push(...file_content);
+            const userTimestamp = new Date().toLocaleString('sv-SE');
+            if (userContentList.length > 0) {
+                const contentForHistory = userContentList.length === 1 && userContentList[0].type === 'text' 
+                    ? userContentList[0].text 
+                    : userContentList;
+                history.value.push({ role: "user", content: contentForHistory });
+                chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
+            } else return;
+        } else return;
+        prompt.value = "";
+    }
+    
+    if (temporary.value) {
+        const systemMessage = history.value.find(m => m.role === 'system');
+        const lastUserMessage = history.value[history.value.length - 1];
+        history.value = [systemMessage, lastUserMessage].filter(Boolean);
+        chat_show.value = chat_show.value.filter(m => m.role === 'system' || m.id === lastUserMessage.id);
+    }
+    
+    loading.value = true;
+    signalController.value = new AbortController();
+    await nextTick();
+    scrollToBottom();
+
+    const messagesForAPI = [...history.value];
+    const preApiCallLength = messagesForAPI.length;
+
+    const MAX_TOOL_CALLS = 5;
+    let tool_calls_count = 0;
+
+    const currentPromptConfig = currentConfig.value.prompts[CODE.value];
+    const isVoiceReply = !!selectedVoice.value;
+    const useStream = currentPromptConfig?.stream && !isVoiceReply;
+
+    const assistantMessageId = messageIdCounter.value++;
+    chat_show.value.push({
+        id: assistantMessageId,
+        role: "assistant",
+        content: [],
+        reasoning_content: "",
+        status: "",
+        aiName: modelMap.value[model.value] || model.value.split('|')[1],
+        voiceName: selectedVoice.value,
+        tool_calls: []
+    });
+    const assistantChatShowIndex = chat_show.value.length - 1;
+
+    try {
+        const openai = new OpenAI({
+            apiKey: getRandomItem(api_key.value),
+            baseURL: base_url.value,
+            dangerouslyAllowBrowser: true,
+        });
+
+        while (tool_calls_count < MAX_TOOL_CALLS && !signalController.value.signal.aborted) {
+            chatInputRef.value?.focus({ cursor: 'end' });
+            
+            const payload = {
+                model: model.value.split("|")[1],
+                messages: messagesForAPI,
+                stream: useStream,
+            };
+
+            if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
+            if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
+            if (openaiFormattedTools.value.length > 0) {
+                payload.tools = openaiFormattedTools.value;
+                payload.tool_choice = "auto";
+            }
+            if (isVoiceReply) {
+                payload.modalities = ["text", "audio"];
+                payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
+                payload.stream = false; // Voice reply must be non-streaming
+            }
+            
+            let responseMessage;
+
+            if (payload.stream) {
+                const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
+                
+                let aggregatedContent = "";
+                let aggregatedToolCalls = [];
+                
+                let lastUpdateTime = 0;
+                const updateInterval = 100;
+
+                for await (const part of stream) {
+                    console.log("STREAM PART RECEIVED:", JSON.stringify(part, null, 2)); // DEBUG: Log entire stream part
+                    const delta = part.choices[0]?.delta;
+                    const finishReason = part.choices[0]?.finish_reason;
+
+                    if (!delta) continue;
+                    
+                    if (delta.content) {
+                        aggregatedContent += delta.content;
+                        const now = Date.now();
+                        if (now - lastUpdateTime > updateInterval) {
+                            chat_show.value[assistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
+                            scrollToBottom();
+                            lastUpdateTime = now;
+                        }
+                    }
+                    
+                    // --- MODIFICATION START ---
+                    if (delta.tool_calls) {
+                        console.log("Processing delta with tool_calls:", JSON.stringify(delta.tool_calls, null, 2)); // DEBUG
+                        for (const toolCallChunk of delta.tool_calls) {
+                            // Standard streams provide an index for each chunk.
+                            // If it's missing (non-standard stream), we assume it's a new tool call to be added.
+                            const index = toolCallChunk.index ?? aggregatedToolCalls.length;
+                            
+                            if (!aggregatedToolCalls[index]) {
+                                // This is the first time we see this index, initialize it.
+                                aggregatedToolCalls[index] = {
+                                    id: toolCallChunk.id || "",
+                                    type: "function",
+                                    function: { name: "", arguments: "" }
+                                };
+                            }
+
+                            // Get the tool we are currently building.
+                            const currentTool = aggregatedToolCalls[index];
+
+                            // Aggregate the properties from the chunk.
+                            if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
+                            if (toolCallChunk.type) currentTool.type = toolCallChunk.type;
+                            if (toolCallChunk.function) {
+                                if (toolCallChunk.function.name) {
+                                    currentTool.function.name = toolCallChunk.function.name;
+                                }
+                                if (toolCallChunk.function.arguments) {
+                                    // This handles both streamed arguments (+=) and complete arguments (assign once).
+                                    currentTool.function.arguments += toolCallChunk.function.arguments;
+                                }
+                            }
+                        }
+                        console.log("Aggregated tool calls so far:", JSON.stringify(aggregatedToolCalls, null, 2)); // DEBUG
+                    }
+                    // --- MODIFICATION END ---
+                    
+                    if (finishReason === "tool_calls" || finishReason === "stop") {
+                        console.log("Finish reason detected:", finishReason); // DEBUG
+                        break;
+                    }
+                }
+                
+                responseMessage = { role: 'assistant', content: aggregatedContent || null };
+                if (aggregatedToolCalls.length > 0) {
+                    // Filter out any potentially incomplete tool calls before assigning
+                    responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
+                }
+
+            } else {
+                const response = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
+                responseMessage = response.choices[0].message;
+            }
+
+            messagesForAPI.push(responseMessage);
+            
+            if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+                console.log("Response has tool calls, preparing to execute:", JSON.stringify(responseMessage.tool_calls)); // DEBUG
+                const toolCalls = responseMessage.tool_calls;
+                const toolCallDataForUI = toolCalls.map(tc => ({
+                    id: tc.id,
+                    name: tc.function.name,
+                    args: tc.function.arguments,
+                    result: '执行中...',
+                }));
+                chat_show.value[assistantChatShowIndex].tool_calls.push(...toolCallDataForUI);
+                await nextTick();
+                scrollToBottom();
+
+                const toolMessages = await Promise.all(
+                    toolCalls.map(async (toolCall) => {
+                        const toolName = toolCall.function.name;
+                        const uiToolCall = chat_show.value[assistantChatShowIndex].tool_calls.find(t => t.id === toolCall.id);
+                        let toolArgs;
+                        try {
+                           toolArgs = JSON.parse(toolCall.function.arguments);
+                        } catch (e) {
+                           const errorMsg = `工具参数解析错误: ${e.message}`;
+                           if (uiToolCall) uiToolCall.result = errorMsg;
+                           return { tool_call_id: toolCall.id, role: "tool", name: toolName, content: errorMsg };
+                        }
+                        
+                        let result;
+                        try {
+                            console.log(`Invoking MCP tool: ${toolName} with args:`, toolArgs); // DEBUG
+                            result = await window.api.invokeMcpTool(toolName, toolArgs);
+                            console.log(`MCP tool ${toolName} returned:`, result); // DEBUG
+                        } catch (e) {
+                            console.error(`MCP tool ${toolName} execution failed:`, e); // DEBUG
+                            result = `工具执行错误: ${e.message}`;
+                        }
+                        
+                        const toolContent = Array.isArray(result)
+                            ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n')
+                            : String(result);
+
+                        if (uiToolCall) uiToolCall.result = toolContent;
+                        
+                        return { tool_call_id: toolCall.id, role: "tool", name: toolName, content: toolContent };
+                    })
+                );
+
+                messagesForAPI.push(...toolMessages);
+                tool_calls_count++;
+
+            } else {
+                if (responseMessage.content || responseMessage.audio || responseMessage.images) {
+                    const finalContent = responseMessage.audio?.transcript || responseMessage.content || '';
+                    const audioData = responseMessage.audio?.data;
+                    const images = responseMessage.images || [];
+
+                    const contentForDisplay = [];
+                    if (finalContent) contentForDisplay.push({ type: 'text', text: finalContent });
+                    images.forEach(img => contentForDisplay.push(img));
+                    if (audioData) contentForDisplay.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
+                    
+                    chat_show.value[assistantChatShowIndex].content = contentForDisplay;
+                }
+                break; 
+            }
+        }
+
+        if (tool_calls_count >= MAX_TOOL_CALLS) {
+            messagesForAPI.push({ role: 'assistant', content: '错误: 工具调用次数超过限制。' });
+            chat_show.value[assistantChatShowIndex].content = [{ type: 'text', text: '错误: 工具调用次数超过限制。' }];
+        }
+    } catch (error) {
+        let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
+        if (error.name === 'AbortError') errorDisplay = "请求已取消";
+        messagesForAPI.push({ role: 'assistant', content: `错误: ${errorDisplay}` });
+        chat_show.value[assistantChatShowIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
+    } finally {
+        const newMessages = messagesForAPI.slice(preApiCallLength);
+        if (newMessages.length > 0) {
+            history.value.push(...newMessages);
+        }
+
+        loading.value = false;
+        signalController.value = null;
+        chat_show.value[assistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
+        await nextTick();
+        scrollToBottom();
+        chatInputRef.value?.focus({ cursor: 'end' });
+    }
+};
 
 const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } };
 const copyText = async (content, index) => { if (loading.value && index === history.value.length - 1) return; await window.api.copyText(content); };
 const reaskAI = async () => {
-  if (loading.value || history.value.length === 0) return;
-  const lastHistoryMessage = history.value[history.value.length - 1];
-  if (lastHistoryMessage.role === "system") return;
-  if (lastHistoryMessage.role === "assistant") { history.value.pop(); chat_show.value.pop(); }
+  // DEBUG: Add this log to see if the function is being called unexpectedly
+  console.log('%c[Anywhere DEBUG] reaskAI function was triggered!', 'color: orange; font-weight: bold;');
+
+  // 1. Basic safety check
+  if (loading.value || history.value.length === 0) {
+    console.log('[Anywhere DEBUG] reaskAI aborted: loading or history empty.');
+    return;
+  }
+
+  // 2. Find the index of the last user message in both history arrays
+  const lastUserIndexInHistory = history.value.findLastIndex(msg => msg.role === 'user');
+  const lastUserIndexInShow = chat_show.value.findLastIndex(msg => msg.role === 'user');
+
+  // If no user message is found, do nothing
+  if (lastUserIndexInHistory === -1 || lastUserIndexInShow === -1) {
+    ElMessage.warning('没有可以重新提问的用户消息');
+    console.log('[Anywhere DEBUG] reaskAI aborted: No user message found.');
+    return;
+  }
+
+  // 3. [FIX] Truncate arrays using slice() for safer reactivity.
+  // This creates new arrays instead of modifying them in-place.
+  history.value = history.value.slice(0, lastUserIndexInHistory + 1);
+  chat_show.value = chat_show.value.slice(0, lastUserIndexInShow + 1);
+  
+  // 4. Clear any UI state related to the truncated messages
+  collapsedMessages.value.clear();
+    
+  // 5. Wait for the UI to update
+  await nextTick();
+
+  // 6. Call askAI again with the truncated history
+  console.log('[Anywhere DEBUG] Calling askAI from reaskAI with history:', JSON.parse(JSON.stringify(history.value)));
   await askAI(true);
 };
+
 const deleteMessage = (index) => {
-  if (loading.value) { ElMessage.warning('请等待当前回复完成后再操作'); return; }
+  if (loading.value) {
+    ElMessage.warning('请等待当前回复完成后再操作');
+    return;
+  }
   if (index < 0 || index >= chat_show.value.length) return;
-  if (chat_show.value[index]?.role === 'system') { ElMessage.info('系统提示词不能被删除'); return; }
-  history.value.splice(index, 1);
+
+  const messageToDelete = chat_show.value[index];
+  if (messageToDelete?.role === 'system') {
+    ElMessage.info('系统提示词不能被删除');
+    return;
+  }
+
+  const historyMessagesToDelete = [];
+
+  // Find the corresponding message in the history array
+  // This assumes chat_show and history are in sync for user/assistant messages
+  const historyIndex = history.value.findIndex(h => h.role === messageToDelete.role && JSON.stringify(h.content) === JSON.stringify(messageToDelete.content));
+
+  if (historyIndex > -1) {
+    const historyMessage = history.value[historyIndex];
+    historyMessagesToDelete.push(historyMessage);
+
+    // If the deleted message is an assistant message with tool calls, find subsequent tool messages
+    if (historyMessage.role === 'assistant' && historyMessage.tool_calls) {
+      let nextIndex = historyIndex + 1;
+      while (nextIndex < history.value.length && history.value[nextIndex].role === 'tool') {
+        historyMessagesToDelete.push(history.value[nextIndex]);
+        nextIndex++;
+      }
+    }
+  }
+
+  // Remove from history by filtering
+  history.value = history.value.filter(h => !historyMessagesToDelete.includes(h));
+
+  // Remove from UI
   chat_show.value.splice(index, 1);
 };
+
 const clearHistory = () => {
   if (loading.value || history.value.length === 0) return;
   if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
   else { history.value = []; chat_show.value = []; }
-  collapsedMessages.value.clear(); messageRefs.clear(); focusedMessageIndex.value = null; 
+  collapsedMessages.value.clear(); messageRefs.clear(); focusedMessageIndex.value = null;
   defaultConversationName.value = "";
   chatInputRef.value?.focus({ cursor: 'end' }); ElMessage.success('历史记录已清除');
 };
@@ -1287,6 +1521,13 @@ const formatTimestamp = (dateString) => {
     const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
     return `${datePart} ${timePart}`;
   } catch (e) { return ''; }
+};
+
+const truncateText = (text, maxLength = 40) => {
+  if (typeof text !== 'string' || text.length <= maxLength) {
+    return text;
+  }
+  return text.substring(0, maxLength) + '...';
 };
 </script>
 
@@ -1300,39 +1541,30 @@ const formatTimestamp = (dateString) => {
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
           @scroll="handleScroll">
-          <ChatMessage 
-            v-for="(message, index) in chat_show" 
-            :key="message.id" 
-            :ref="el => setMessageRef(el, index)"
-            :message="message" 
-            :index="index" 
-            :is-last-message="index === chat_show.length - 1" 
-            :is-loading="loading"
-            :user-avatar="UserAvart" 
-            :ai-avatar="AIAvart" 
-            :is-collapsed="isCollapsed(index)"
-            :is-dark-mode="currentConfig.isDarkMode"
-            @delete-message="handleDeleteMessage" 
-            @copy-text="handleCopyText" 
-            @re-ask="handleReAsk"
-            @toggle-collapse="handleToggleCollapse" 
-            @show-system-prompt="handleShowSystemPrompt"
-            @avatar-click="onAvatarClick"
-            @edit-message-requested="handleEditStart"
-            @edit-finished="handleEditEnd"
-            @edit-message="handleEditMessage"
-            />
+          <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :ref="el => setMessageRef(el, index)"
+            :message="message" :index="index" :is-last-message="index === chat_show.length - 1" :is-loading="loading"
+            :user-avatar="UserAvart" :ai-avatar="AIAvart" :is-collapsed="isCollapsed(index)"
+            :is-dark-mode="currentConfig.isDarkMode" @delete-message="handleDeleteMessage" @copy-text="handleCopyText"
+            @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
+            @avatar-click="onAvatarClick" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"
+            @edit-message="handleEditMessage" />
         </el-main>
 
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
           <el-button class="scroll-nav-btn" @click="navigateToPreviousMessage">
-            <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-              <path fill="currentColor" d="m488.832 344.32-339.84 335.872a32 32 0 0 0 0 45.248l.064.064a32 32 0 0 0 45.248 0L512 412.928l317.696 312.576a32 32 0 0 0 45.248 0l.064-.064a32 32 0 0 0 0-45.248L533.824 344.32a32 32 0 0 0-44.992 0z"></path>
+            <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20"
+              height="20">
+              <path fill="currentColor"
+                d="m488.832 344.32-339.84 335.872a32 32 0 0 0 0 45.248l.064.064a32 32 0 0 0 45.248 0L512 412.928l317.696 312.576a32 32 0 0 0 45.248 0l.064-.064a32 32 0 0 0 0-45.248L533.824 344.32a32 32 0 0 0-44.992 0z">
+              </path>
             </svg>
           </el-button>
           <el-button class="scroll-nav-btn" @click="navigateToNextMessage">
-            <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-              <path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z"></path>
+            <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20"
+              height="20">
+              <path fill="currentColor"
+                d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z">
+              </path>
             </svg>
           </el-button>
         </div>
@@ -1341,35 +1573,56 @@ const formatTimestamp = (dateString) => {
       <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
         v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
         :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
-        @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
-        @remove-file="handleRemoveFile" @upload="handleUpload" @send-audio="handleSendAudio" />
+        :is-mcp-active="isMcpActive" @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
+        @remove-file="handleRemoveFile" @upload="handleUpload" @send-audio="handleSendAudio"
+        @open-mcp-dialog="handleOpenMcpDialog" />
     </el-container>
   </main>
 
   <ModelSelectionDialog v-model="changeModel_page" :modelList="modelList" :currentModel="model"
     @select="handleChangeModel" />
 
-  <el-dialog v-model="systemPromptDialogVisible" title="编辑系统提示词" custom-class="system-prompt-dialog" width="60%" :show-close="true"
-    :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true" :close-on-press-escape="true">
-    <el-input v-model="systemPromptContent" type="textarea" :autosize="{ minRows: 4, maxRows: 15 }" class="system-prompt-full-content" resize="none" />
-     <template #footer>
-        <el-button @click="systemPromptDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveSystemPrompt">保存</el-button>
-      </template>
+  <el-dialog v-model="systemPromptDialogVisible" title="编辑系统提示词" custom-class="system-prompt-dialog" width="60%"
+    :show-close="true" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"
+    :close-on-press-escape="true">
+    <el-input v-model="systemPromptContent" type="textarea" :autosize="{ minRows: 4, maxRows: 15 }"
+      class="system-prompt-full-content" resize="none" />
+    <template #footer>
+      <el-button @click="systemPromptDialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="saveSystemPrompt">保存</el-button>
+    </template>
   </el-dialog>
 
-  <el-image-viewer 
-    v-if="imageViewerVisible" 
-    :url-list="imageViewerSrcList" 
-    :initial-index="imageViewerInitialIndex"
-    @close="imageViewerVisible = false" 
-    :hide-on-click-modal="true" 
-    teleported
-  />
+  <el-image-viewer v-if="imageViewerVisible" :url-list="imageViewerSrcList" :initial-index="imageViewerInitialIndex"
+    @close="imageViewerVisible = false" :hide-on-click-modal="true" teleported />
   <div v-if="imageViewerVisible" class="custom-viewer-actions">
-      <el-button type="primary" :icon="DocumentCopy" circle @click="handleCopyImageFromViewer(imageViewerSrcList[0])" title="复制图片" />
-      <el-button type="primary" :icon="Download" circle @click="handleDownloadImageFromViewer(imageViewerSrcList[0])" title="下载图片" />
+    <el-button type="primary" :icon="DocumentCopy" circle @click="handleCopyImageFromViewer(imageViewerSrcList[0])"
+      title="复制图片" />
+    <el-button type="primary" :icon="Download" circle @click="handleDownloadImageFromViewer(imageViewerSrcList[0])"
+      title="下载图片" />
   </div>
+
+  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP 工具" width="540px" top="10vh" custom-class="mcp-dialog">
+    <div class="mcp-dialog-content">
+      <div class="mcp-checkbox-group custom-scrollbar">
+        <el-checkbox-group v-model="sessionMcpServerIds">
+          <el-checkbox v-for="server in filteredMcpServers" :key="server.id" :value="server.id" border>
+            <div class="mcp-checkbox-label">
+              <span class="mcp-server-name">{{ truncateText(server.name, 35) }}</span>
+              <span class="mcp-server-description">{{ truncateText(server.description, 45) }}</span>
+            </div>
+          </el-checkbox>
+        </el-checkbox-group>
+      </div>
+      <div class="mcp-dialog-footer-search">
+        <el-input v-model="mcpSearchQuery" placeholder="搜索工具名称或描述..." :prefix-icon="Search" clearable />
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="clearMcpTools">清除全部</el-button>
+      <el-button type="primary" @click="applyMcpTools">应用</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style>
@@ -1378,6 +1631,7 @@ html:not(.dark) {
   --text-primary: #000000;
   --el-text-color-primary: var(--text-primary);
 }
+
 .save-options-dialog.el-dialog {
   position: fixed;
   top: 50%;
@@ -1447,12 +1701,13 @@ html.dark .save-option-text p {
   margin-right: 0;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
+
 html.dark .system-prompt-dialog .el-dialog__header {
-    border-bottom-color: var(--el-border-color-dark);
+  border-bottom-color: var(--el-border-color-dark);
 }
 
 .system-prompt-dialog .el-dialog__title {
-    color: var(--el-text-color-primary);
+  color: var(--el-text-color-primary);
 }
 
 .system-prompt-dialog .el-dialog__body {
@@ -1486,11 +1741,13 @@ html.dark .system-prompt-dialog {
   color: var(--el-text-color-primary);
   width: 100%;
 }
+
 .system-prompt-full-content .el-textarea__inner {
   box-shadow: none !important;
   background-color: var(--el-fill-color-light) !important;
   max-height: 60vh;
 }
+
 html.dark .system-prompt-full-content .el-textarea__inner {
   background-color: var(--el-fill-color-dark) !important;
 }
@@ -1544,30 +1801,34 @@ html.dark .filename-prompt-dialog .el-input-group__append {
 
 /* [MODIFIED] 新增并修正图片预览工具栏样式 */
 .custom-viewer-actions {
-    position: fixed;
-    bottom: 100px; /* 定位在默认工具栏上方 (默认栏在 bottom: 40px) */
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 2100; /* 确保在图片预览器之上 */
-    padding: 6px 12px;
-    background-color: rgba(0, 0, 0, 0.4);
-    border-radius: 22px;
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+  position: fixed;
+  bottom: 100px;
+  /* 定位在默认工具栏上方 (默认栏在 bottom: 40px) */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2100;
+  /* 确保在图片预览器之上 */
+  padding: 6px 12px;
+  background-color: rgba(0, 0, 0, 0.4);
+  border-radius: 22px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
+
 .custom-viewer-actions .el-button {
-    background-color: transparent;
-    border: none;
-    color: white;
-    font-size: 16px;
+  background-color: transparent;
+  border: none;
+  color: white;
+  font-size: 16px;
 }
+
 .custom-viewer-actions .el-button:hover {
-    background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .elx-run-code-drawer .elx-run-code-content-view-iframe {
@@ -1575,35 +1836,163 @@ html.dark .filename-prompt-dialog .el-input-group__append {
 }
 
 .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  width: 8px;
+  height: 8px;
 }
 
 .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-track {
-    background: transparent;
-    border-radius: 4px;
+  background: transparent;
+  border-radius: 4px;
 }
 
 .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thumb {
-    background: var(--el-text-color-disabled, #c0c4cc);
-    border-radius: 4px;
-    border: 2px solid transparent;
-    background-clip: content-box;
+  background: var(--el-text-color-disabled, #c0c4cc);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thumb:hover {
-    background: var(--el-text-color-secondary, #909399);
-    background-clip: content-box;
+  background: var(--el-text-color-secondary, #909399);
+  background-clip: content-box;
 }
 
 html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thumb {
-    background: #6b6b6b;
-    background-clip: content-box;
+  background: #6b6b6b;
+  background-clip: content-box;
 }
 
 html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thumb:hover {
-    background: #999;
-    background-clip: content-box;
+  background: #999;
+}
+
+.mcp-dialog .mcp-dialog-content {
+  padding: 0 10px;
+}
+
+.mcp-dialog .mcp-dialog-content p {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: var(--el-text-color-secondary);
+}
+
+.mcp-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.mcp-checkbox-group .el-checkbox {
+  height: auto;
+  padding: 8px 15px;
+  display: flex;
+  align-items: center;
+}
+
+.mcp-checkbox-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.5;
+  gap: 2px;
+}
+
+.mcp-server-name {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.mcp-server-description {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+
+
+.mcp-dialog-content {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow: hidden;
+  max-height: 60vh;
+}
+
+.mcp-dialog-content p {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: var(--el-text-color-secondary);
+  padding: 0 5px;
+  flex-shrink: 0;
+}
+
+.mcp-checkbox-group {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding-right: 15px;
+}
+
+.mcp-checkbox-group .el-checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mcp-checkbox-group .el-checkbox {
+  width: 100%;
+  height: auto;
+  /* 高度自适应 */
+  min-height: 54px;
+  /* 保证最小高度 */
+  padding: 10px 15px;
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+}
+
+.mcp-checkbox-group .el-checkbox.is-bordered {
+  border-radius: 8px;
+}
+
+.mcp-checkbox-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.5;
+  gap: 2px;
+  white-space: normal;
+}
+
+.mcp-server-name {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.mcp-server-description {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.mcp-dialog-footer-search {
+  flex-shrink: 0;
+  padding: 15px 15px 0 0;
+  margin-top: 10px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+html.dark .mcp-dialog-footer-search {
+  border-top-color: var(--el-border-color-darker);
+}
+
+/* 修复深色模式下已勾选的 bordered checkbox 对勾颜色 */
+html.dark .el-checkbox.is-bordered.is-checked .el-checkbox__inner {
+  background-color: #fff !important;
+  border-color: #fff !important;
+}
+
+html.dark .el-checkbox.is-bordered.is-checked .el-checkbox__inner::after {
+  border-color: #1d1d1d !important;
+  /* 设置为深色 */
 }
 </style>
 

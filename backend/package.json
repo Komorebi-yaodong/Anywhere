@@ -1,0 +1,19 @@
+{
+  "name": "anywhere-backend",
+  "version": "1.0.0",
+  "description": "Bundler for Utools plugin preload scripts",
+  "main": "index.js",
+  "scripts": {
+    "build": "esbuild src/preload.js src/window_preload.js --bundle --platform=node --outdir=./public --format=cjs --external:electron",
+    "watch": "esbuild src/preload.js src/window_preload.js --bundle --platform=node --outdir=./public --format=cjs --external:electron --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@langchain/mcp-adapters": "^1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.2"
+  }
+}

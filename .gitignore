@@ -11,6 +11,8 @@ lerna-debug.log*
 /Anywhere_window/node_modules
 /Anywhere_main/dist
 /Anywhere_window/dist
+/backend/node_modules
+/backend/public
 .DS_Store
 dist
 dist-ssr

@@ -7,7 +7,8 @@ from moveDist import moveDist
 
 UTOOLS_DOC = "./utools-api-doc.md"
 README = "./README.md"
-PRELOAD = "./"+moveDist()+"/"
+# PRELOAD = "./"+moveDist()+"/"
+PRELOAD = "./backend/src/"
 
 MAIN = [
     "./Anywhere_main/index.html",

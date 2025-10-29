@@ -21,6 +21,11 @@ def deleteFiles(dir,delete_dir):
     if os.path.exists(window_dir):
         shutil.rmtree(window_dir)
 
+def deleteFile(dir, delete_file):
+    file_path = os.path.join(dir, delete_file)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
 # 将指定目录下的dist文件夹内文件全部复制到指定目录下
 def moveDistFiles(dir, move_dir):
     dist_dir = os.path.join(dir, 'dist')
@@ -41,24 +46,49 @@ def moveDistFiles(dir, move_dir):
                 print(f"未知类型文件: {item_path}")
     else:
         print(f"目录 {dist_dir} 不存在")
+
+# 将指定目录下的文件全部复制到指定目录下
+def movePublicFiles(dir, move_dir):
+    public_dir = os.path.join(dir, 'public')
+    if os.path.exists(public_dir):
+        os.makedirs(move_dir, exist_ok=True)  # 确保是目录
+        for item in os.listdir(public_dir):
+            item_path = os.path.join(public_dir, item)
+            print("  >> ", item_path)
+            if os.path.isfile(item_path):
+                shutil.copy(item_path, move_dir)
+            elif os.path.isdir(item_path):
+                shutil.copytree(item_path, os.path.join(move_dir, item), dirs_exist_ok=True)
+            else:
+                print(f"未知类型文件: {item_path}")
+    else:
+        print(f"目录 {public_dir} 不存在")
     
 
 if __name__ == "__main__":
+    
     latest_version_dir = moveDist()
-    input_makesure1 = input(f"删除 {latest_version_dir} 目录下的 main 文件夹？(y/n): ")
-    if input_makesure1.lower() == 'y':
-        deleteFiles(latest_version_dir, 'main')
-        print(f"已删除 {latest_version_dir} 目录下的 main 文件夹，正在更新dist文件夹至其中")
-        main_dir = os.path.join(latest_version_dir, 'main')
-        moveDistFiles("Anywhere_main", main_dir)
-        print("main 文件夹转移完成\n")
+    # input_makesure1 = input(f"删除 {latest_version_dir} 目录下的 main 文件夹？(y/n): ")
+    # if input_makesure1.lower() == 'y':
+    #     deleteFiles(latest_version_dir, 'main')
+    #     print(f"已删除 {latest_version_dir} 目录下的 main 文件夹，正在更新dist文件夹至其中")
+    #     main_dir = os.path.join(latest_version_dir, 'main')
+    #     moveDistFiles("Anywhere_main", main_dir)
+    #     print("main 文件夹转移完成\n")
     
 
+    # input_makesure2 = input(f"删除 {latest_version_dir} 目录下的 window 文件夹？(y/n): ")
+    # if input_makesure2.lower() == 'y':
+    #     deleteFiles(latest_version_dir, 'window')
+    #     print(f"已删除 {latest_version_dir} 目录下的 window 文件夹，正在更新dist文件夹至其中")
+    #     window_dir = os.path.join(latest_version_dir, 'window')
+    #     moveDistFiles("Anywhere_window", window_dir)
+    #     print("window 文件夹转移完成\n")
 
-    input_makesure2 = input(f"删除 {latest_version_dir} 目录下的 window 文件夹？(y/n): ")
-    if input_makesure2.lower() == 'y':
-        deleteFiles(latest_version_dir, 'window')
-        print(f"已删除 {latest_version_dir} 目录下的 window 文件夹，正在更新dist文件夹至其中")
-        window_dir = os.path.join(latest_version_dir, 'window')
-        moveDistFiles("Anywhere_window", window_dir)
-        print("window 文件夹转移完成")
+    input_makesure3 = input(f"删除 {latest_version_dir} 目录下的 preload.js 和window_preload.js(y/n): ")
+    if input_makesure3.lower() == 'y':
+        deleteFile(latest_version_dir, 'preload.js')
+        deleteFile(latest_version_dir, 'window_preload.js')
+        print(f"已删除 {latest_version_dir} 目录下的 preload.js 和window_preload.js，正在更新preload文件至其中")
+        movePublicFiles("backend", latest_version_dir)
+        print("preload 相关文件转移完成")

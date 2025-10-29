@@ -3,12 +3,14 @@
     "header": {
       "chats": "クラウドチャット 💬",
       "prompts": "クイックアシスタント 🚀",
+      "mcp": "MCPサーバー 🔧",
       "providers": "サービスプロバイダー ☁️",
       "settings": "設定 ⚙️"
     },
     "tabs": {
       "chats": "クラウドチャット",
       "prompts": "クイックアシスタント",
+      "mcp": "MCPサーバー",
       "providers": "サービスプロバイダー",
       "settings": "設定"
     }
@@ -135,6 +137,59 @@
       "low": "低",
       "medium": "中",
       "high": "高"
+    }
+  },
+  "mcp": {
+    "title": "MCPサーバー",
+    "addServer": "MCPサーバーを追加",
+    "editJson": "JSONを編集",
+    "noServers": "MCPサーバーが設定されていません。",
+    "addServerTitle": "新しいMCPサーバーを追加",
+    "editServerTitle": "MCPサーバーを編集",
+    "nameLabel": "名前",
+    "descriptionLabel": "説明",
+    "typeLabel": "タイプ",
+    "activeLabel": "有効",
+    "typeOptions": {
+      "stdio": "標準入出力 (stdio)",
+      "streamableHttp": "ストリーミングHTTP",
+      "sse": "サーバー送信イベント (SSE)",
+      "inMemory": "インメモリ (In-Memory)"
+    },
+    "stdio": {
+      "command": "コマンド",
+      "args": "引数",
+      "env": "環境変数"
+    },
+    "http": {
+      "url": "ベースURL",
+      "headers": "リクエストヘッダー"
+    },
+    "inMemory": {
+      "provider": "プロバイダー"
+    },
+    "advanced": "詳細/オプション設定",
+    "registryUrl": "レジストリURL",
+    "providerName": "プロバイダー名",
+    "providerUrl": "プロバイダーURL",
+    "logoUrl": "ロゴURL",
+    "tags": "タグ",
+    "argsPlaceholder": "引数を1行に1つずつ入力",
+    "envPlaceholder": "KEY1=VALUE1\nKEY2=VALUE2",
+    "headersPlaceholder": "Header-Name: Header-Value\nAuthorization: Bearer token",
+    "tagsPlaceholder": "タグをカンマ区切りで入力",
+    "alerts": {
+      "deleteConfirmTitle": "削除の確認",
+      "deleteConfirmText": "本当にMCPサーバー「{name}」を削除しますか？",
+      "saveSuccess": "MCPサーバーの保存に成功しました。",
+      "saveFailed": "MCPサーバーの保存に失敗しました。",
+      "deleteSuccess": "MCPサーバーの削除に成功しました。",
+      "deleteFailed": "MCPサーバーの削除に失敗しました。",
+      "invalidJson": "無効なJSON形式です。入力を確認してください。"
+    },
+    "jsonDialog": {
+      "title": "MCPサーバーのJSONを編集",
+      "description": "警告：JSONを直接編集すると、形式が正しくない場合に問題が発生する可能性があります。注意して進めてください。"
     }
   },
   "providers": {

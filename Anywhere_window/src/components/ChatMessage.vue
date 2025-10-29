@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, nextTick } from 'vue';
 import { Bubble, Thinking, XMarkdown } from 'vue-element-plus-x';
-import { ElTooltip, ElButton, ElInput } from 'element-plus';
+import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon } from 'element-plus';
 import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close } from '@element-plus/icons-vue';
 import 'katex/dist/katex.min.css';
 
@@ -26,9 +26,9 @@ const preprocessKatex = (text) => {
   if (!text) return '';
   let processedText = text;
   processedText = processedText.replace(/\u2013/g, '-').replace(/\u2014/g, '-');
-  
-  processedText = processedText.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
-  processedText = processedText.replace(/\\\(\s*(.*?)\s*\\\)/g, '$$$1$');
+
+  processedText = processedText.replace(/\\$$([\s\S]*?)\\$$/g, '$$$$$1$$$$');
+  processedText = processedText.replace(/\\$\s*(.*?)\s*\\$/g, '$$$1$');
 
   return processedText;
 };
@@ -58,7 +58,7 @@ const formatMessageContent = (content,role) => {
             return String(content);
         }
     }
-    
+
     let markdownString = "";
     let i = 0;
     while (i < content.length) {
@@ -88,7 +88,7 @@ const formatMessageContent = (content,role) => {
             i++;
         }
     }
-    
+
     return markdownString;
 };
 
@@ -110,7 +110,7 @@ const formatMessageFile = (content) => {
 const formatMessageText = (content) => {
     if (!content) return "";
     if (!Array.isArray(content)) return String(content);
-    
+
     let textString = "";
     content.forEach(part => {
         if (part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
@@ -125,7 +125,7 @@ const isEditable = computed(() => {
     if (props.message.role === 'user') {
         return true;
     }
-    
+
     // 对于其他角色（如助手），检查是否存在可编辑的文本内容。
     const content = props.message.content;
     if (typeof content === 'string') return true;
@@ -222,12 +222,12 @@ const truncateFilename = (filename, maxLength = 30) => {
       </template>
       <template #content>
         <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
-            <XMarkdown 
-                :markdown="renderedMarkdownContent" 
+            <XMarkdown
+                :markdown="renderedMarkdownContent"
                 :is-dark="isDarkMode"
                 :enable-latex="true"
                 :mermaid-config="mermaidConfig"
-                :default-theme-mode="isDarkMode ? 'dark' : 'light'"  
+                :default-theme-mode="isDarkMode ? 'dark' : 'light'"
                 :themes="{light:'github-light', dark:'github-dark-default'}"
                 :allow-html="true" />
         </div>
@@ -239,7 +239,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                 <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
             </div>
         </div>
-        
+
       </template>
       <template #footer>
         <div class="message-footer">
@@ -264,7 +264,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     </Bubble>
 
     <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner"
-      maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading && renderedMarkdownContent === '...'">
+      maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading && renderedMarkdownContent === '...' && (!message.tool_calls || message.tool_calls.length === 0)">
       <template #avatar>
         <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar">
       </template>
@@ -293,9 +293,35 @@ const truncateFilename = (filename, maxLength = 30) => {
         </Thinking>
       </template>
       <template #content>
+        <!-- === MODIFICATION START: The order of tool_calls and markdown is swapped === -->
+        <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-container">
+            <el-collapse class="tool-collapse" accordion>
+                <el-collapse-item v-for="toolCall in message.tool_calls" :key="toolCall.id" :name="toolCall.id">
+                    <template #title>
+                        <div class="tool-call-title">
+                            <el-icon class="tool-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path><path d="m18 15 4-4"></path><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"></path></svg>
+                            </el-icon>
+                            <span class="tool-name">{{ toolCall.name }}</span>
+                        </div>
+                    </template>
+                    <div class="tool-call-details">
+                        <div class="tool-detail-section">
+                            <strong>参数:</strong>
+                            <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
+                        </div>
+                        <div class="tool-detail-section">
+                            <strong>结果:</strong>
+                            <pre><code>{{ toolCall.result }}</code></pre>
+                        </div>
+                    </div>
+                </el-collapse-item>
+            </el-collapse>
+        </div>
+        
         <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
-            <XMarkdown 
-                :markdown="renderedMarkdownContent" 
+            <XMarkdown
+                :markdown="renderedMarkdownContent"
                 :is-dark="isDarkMode"
                 :enable-latex="true"
                 :mermaid-config="mermaidConfig"
@@ -311,6 +337,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                 <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
             </div>
         </div>
+        <!-- === MODIFICATION END === -->
       </template>
       <template #footer>
         <div class="message-footer">
@@ -531,7 +558,7 @@ html.dark .system-prompt-container:hover {
         background-color: rgba(0, 0, 0, 0.05);
       }
     }
-    
+
     // 设置时间文本样式
     &::-webkit-media-controls-current-time-display,
     &::-webkit-media-controls-time-remaining-display {
@@ -562,7 +589,7 @@ html.dark .system-prompt-container:hover {
   // [样式优化] 暗色模式下的音频播放器样式
   html.dark & :deep(.chat-audio-player) {
     accent-color: var(--text-primary);
-    
+
     &::-webkit-media-controls-panel {
       background-color: var(--bg-tertiary, #2c2e33);
     }
@@ -575,7 +602,7 @@ html.dark .system-prompt-container:hover {
     &::-webkit-media-controls-time-remaining-display {
       filter: invert(1);
     }
-    
+
     &::-webkit-media-controls-play-button:hover,
     &::-webkit-media-controls-mute-button:hover,
     &::-webkit-media-controls-overflow-button:hover {
@@ -627,7 +654,7 @@ html.dark .system-prompt-container:hover {
   :deep(blockquote p:last-child) {
     margin-bottom: 0;
   }
-    
+
   :deep(pre code), :deep(.inline-code-tag) {
     font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
     font-size: 1em;
@@ -663,7 +690,7 @@ html.dark .system-prompt-container:hover {
     padding: 5px;
     border-radius: 8px;
     box-sizing: border-box;
-    html.dark & { 
+    html.dark & {
       background-color: #272727;
       color: var(--el-text-color-primary) !important;
     }
@@ -850,4 +877,118 @@ html.dark .ai-bubble :deep(.el-thinking-popper) { max-width: 85vw; background-co
 html.dark .ai-bubble :deep(.el-thinking-popper .el-popper__arrow::before) { background: var(--bg-tertiary, #2c2e33) !important; border-color: var(--border-primary, #373A40) !important; }
 .ai-bubble :deep(.el-thinking .content pre) { max-width: 100%; margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; box-sizing: border-box; }
 html.dark .ai-bubble :deep(.el-thinking .content pre) { background-color: var(--el-fill-color-darker); color: var(--el-text-color-regular, #E5E7EB); border: 1px solid var(--border-primary, #373A40); }
+
+/* MODIFICATION START */
+.tool-calls-container {
+  margin-top: 10px;
+}
+/* MODIFICATION END */
+
+.tool-collapse {
+  border: none;
+  :deep(.el-collapse-item__header) {
+    background-color: var(--el-fill-color-light);
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    padding: 0 12px;
+    height: 36px;
+    &.is-active {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+  }
+  :deep(.el-collapse-item__wrap) {
+    background-color: transparent;
+    border: 1px solid var(--el-border-color-lighter);
+    border-top: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+  }
+  :deep(.el-collapse-item__content) {
+    padding: 12px;
+  }
+}
+html.dark .tool-collapse {
+  :deep(.el-collapse-item__header) {
+    background-color: var(--el-fill-color-darker);
+    border-color: var(--el-border-color-dark);
+  }
+  :deep(.el-collapse-item__wrap) {
+    border-color: var(--el-border-color-dark);
+  }
+}
+
+
+.tool-call-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.tool-icon {
+  color: var(--el-text-color-secondary);
+}
+.tool-name {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.tool-call-details {
+  .tool-detail-section {
+    margin-bottom: 10px;
+    &:last-child {
+      margin-bottom: 0;
+    }
+    strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+      color: var(--el-text-color-secondary);
+    }
+    pre {
+      margin: 0;
+      padding: 8px;
+      border-radius: 6px;
+      background-color: var(--el-fill-color-light);
+      max-height: 150px;
+      overflow: auto;
+      font-size: 12px;
+      code {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+        color: var(--el-text-color-primary);
+      }
+    }
+  }
+}
+html.dark .tool-call-details {
+  .tool-detail-section pre {
+    background-color: var(--el-fill-color-darker);
+  }
+}
+
+.tool-call-details .tool-detail-section pre::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.tool-call-details .tool-detail-section pre::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+.tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb {
+  background: var(--el-text-color-disabled, #c0c4cc);
+  border-radius: 4px;
+  border: 2px solid var(--el-fill-color-light);
+  background-clip: content-box;
+}
+.tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:hover {
+  background: var(--el-text-color-secondary, #909399);
+  background-clip: content-box;
+}
+html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb {
+  background: #6b6b6b;
+  border-color: var(--el-fill-color-darker);
+}
+html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
 </style>
