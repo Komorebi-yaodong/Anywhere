@@ -1204,7 +1204,34 @@ const askAI = async (forceSend = false) => {
     const isVoiceReply = !!selectedVoice.value;
     let useStream = currentPromptConfig?.stream && !isVoiceReply;
 
-    const messagesForAPI = [...history.value];
+    // *** MCP PROMPT INJECTION LOGIC - START ***
+    const messagesForAPI = JSON.parse(JSON.stringify(history.value)); // Deep copy to avoid mutating state directly
+    if (openaiFormattedTools.value.length > 0) {
+        const mcpSystemPrompt = `
+##工具调用声明
+ 
+在此环境中，您/assistant/model可以使用工具来回答用户的问题，并在使用工具后获得工具调用结果，用户无法查看您/assistant/model与工具的交互内容。您/assistant/model)需要循序渐进地使用工具来完成给定任务，每次工具的使用都以前一次工具使用的结果为依据。
+
+## 工具使用规则
+
+以下是您/assistant/model解决任务时应始终遵循的规则：
+1. 始终为工具使用正确的参数。切勿使用变量名作为操作参数，而应使用其值。
+2. 仅在需要时调用工具：如果不需要调用工具，请直接回答问题。
+3. 绝不要重复调用您之前已使用完全相同参数调用过的工具。
+4. 对于工具的使用，请**确保**使用正确的参数。
+5. 只有您/assistant/model可以查看工具调用结果，用户无法查看工具的调用结果，您/assistant/model需要在工具调用后将结果以正确的方式告诉给用户（例如工具生成了图片，可以使用markdown的图片格式告诉给用户：\`![内容](图片链接)\`）。
+6. 区分工具的返回结果与用户的回复：您/assistant/model的回复将被用户查看，仅在调用工具时会将信息传送给工具，而工具的返回结果仅由您/assistant/model查看，您/assistant/model需要将工具的返回结果以正确的方式告诉给用户，不要错将工具回复的信息当作用户回复的信息与用户交流。
+现在开始！如果您正确解决了任务，您将获得 1,000,000 美元的奖励。
+`;
+        const systemMessageIndex = messagesForAPI.findIndex(m => m.role === 'system');
+        if (systemMessageIndex !== -1) {
+            messagesForAPI[systemMessageIndex].content += mcpSystemPrompt;
+        } else {
+            messagesForAPI.unshift({ role: "system", content: mcpSystemPrompt });
+        }
+    }
+    // *** MCP PROMPT INJECTION LOGIC - END ***
+
     const MAX_TOOL_CALLS = 5;
     let tool_calls_count = 0;
     
@@ -1254,6 +1281,7 @@ const askAI = async (forceSend = false) => {
             let responseMessage;
 
             if (useStream) {
+                openai.apiKey = getRandomItem(api_key.value);
                 const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
                 
                 let aggregatedContent = "";
@@ -1292,6 +1320,7 @@ const askAI = async (forceSend = false) => {
                     responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
                 }
             } else {
+                openai.apiKey = getRandomItem(api_key.value);
                 const response = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
                 responseMessage = response.choices[0].message;
             }
@@ -1433,69 +1462,87 @@ const reaskAI = async () => {
 };
 
 const deleteMessage = (index) => {
+    // *** NEW DELETION LOGIC - START ***
     if (loading.value) {
         ElMessage.warning('请等待当前回复完成后再操作');
         return;
     }
     if (index < 0 || index >= chat_show.value.length) return;
 
-    const messageToDelete = chat_show.value[index];
-    if (messageToDelete?.role === 'system') {
+    const msgToDeleteInShow = chat_show.value[index];
+    if (msgToDeleteInShow?.role === 'system') {
         ElMessage.info('系统提示词不能被删除');
         return;
     }
 
-    const deletedMessageId = messageToDelete.id;
-
-    // --- NEW ROBUST LOGIC ---
-    // 1. Find the occurrence count of the message's role up to its index in chat_show
-    let roleCountInShow = 0;
-    for (let i = 0; i < index; i++) {
-        // [FIX] Ensure message exists before accessing role
-        if (chat_show.value[i] && chat_show.value[i].role === messageToDelete.role) {
-            roleCountInShow++;
-        }
-    }
-
-    // 2. Find the corresponding message in the history array by skipping messages of the same role
-    let historyIndexToDelete = -1;
-    let currentRoleCountInHistory = 0;
+    // 1. 找到 msgToDeleteInShow 在 history 中的精确位置
+    let history_idx = -1;
+    let show_counter = -1;
     for (let i = 0; i < history.value.length; i++) {
-        if (history.value[i].role === messageToDelete.role) {
-            if (currentRoleCountInHistory === roleCountInShow) {
-                historyIndexToDelete = i;
-                break;
-            }
-            currentRoleCountInHistory++;
+        if (history.value[i].role !== 'tool') {
+            show_counter++;
+        }
+        if (show_counter === index) {
+            history_idx = i;
+            break;
+        }
+    }
+    if (history_idx === -1) {
+        console.error("Critical error: Cannot map chat_show index to history index. Aborting delete.");
+        ElMessage.error("删除失败：消息状态不一致。");
+        return;
+    }
+
+    // 2. 确定要删除的完整区块（包括工具调用）
+    let history_start_idx = history_idx;
+    let history_end_idx = history_idx;
+    let show_start_idx = index;
+    let show_end_idx = index;
+
+    const currentMsgInHistory = history.value[history_idx];
+
+    // 逻辑：检查当前消息、前一个可见消息、后一个可见消息是否形成工具调用链
+    const prevMsgInHistory = history.value[history_idx - 1];
+
+    if (currentMsgInHistory.role === 'assistant' && currentMsgInHistory.tool_calls) {
+        // --- 情况 A: 删除了发起工具调用的 AI 消息 ---
+        // 往前不需要动
+        // 往后寻找所有关联的 'tool' 消息和下一个 'assistant' 消息
+        history_end_idx = history_idx;
+        while (history.value[history_end_idx + 1]?.role === 'tool') {
+            history_end_idx++;
+        }
+        // 如果后面紧跟着一个 assistant 消息 (总结消息)，也一并删除
+        if (history.value[history_end_idx + 1]?.role === 'assistant') {
+            history_end_idx++;
+            show_end_idx = index + 1; // UI上也要多删一个
+        }
+    } else if (currentMsgInHistory.role === 'assistant' && prevMsgInHistory?.role === 'tool') {
+        // --- 情况 B: 删除了工具调用后的总结 AI 消息 ---
+        // 往前寻找所有 'tool' 消息和发起调用的 'assistant' 消息
+        history_start_idx = history_idx;
+        while (history.value[history_start_idx - 1]?.role === 'tool') {
+            history_start_idx--;
+        }
+        // 如果前面是发起调用的 assistant 消息，也一并删除
+        if (history.value[history_start_idx - 1]?.role === 'assistant' && history.value[history_start_idx - 1]?.tool_calls) {
+            history_start_idx--;
+            show_start_idx = index - 1; // UI上也要往前多删一个
         }
     }
 
-    // 3. If found, proceed with deletion from history
-    if (historyIndexToDelete !== -1) {
-        const historyMessage = history.value[historyIndexToDelete];
-        
-        let spliceCount = 1;
-        // If it's an assistant message with tool calls, remove subsequent 'tool' messages
-        if (historyMessage && historyMessage.role === 'assistant' && historyMessage.tool_calls) {
-            let nextIndex = historyIndexToDelete + 1;
-            while (nextIndex < history.value.length && history.value[nextIndex]?.role === 'tool') {
-                spliceCount++;
-                nextIndex++;
-            }
-        }
+    // 3. 计算要删除的数量
+    const history_delete_count = history_end_idx - history_start_idx + 1;
+    const show_delete_count = show_end_idx - show_start_idx + 1;
 
-        // Perform the splice on the history array
-        history.value.splice(historyIndexToDelete, spliceCount);
-    } else {
-        console.error("Bug: Could not find corresponding message in history to delete. State may become inconsistent.");
-        ElMessage.error("删除失败，无法在历史记录中找到对应消息。");
+    // 4. 执行删除
+    if (history_delete_count > 0) {
+        history.value.splice(history_start_idx, history_delete_count);
     }
-
-    // 4. Finally, remove from the UI array using the unique ID
-    const showIndexToDelete = chat_show.value.findIndex(msg => msg.id === deletedMessageId);
-    if (showIndexToDelete > -1) {
-        chat_show.value.splice(showIndexToDelete, 1);
+    if (show_delete_count > 0) {
+        chat_show.value.splice(show_start_idx, show_delete_count);
     }
+    // *** NEW DELETION LOGIC - END ***
 };
 
 const clearHistory = () => {
