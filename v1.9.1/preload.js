@@ -88538,6 +88538,7 @@ var require_data5 = __commonJS({
           ubWindow.setFullScreen(false);
         }
       );
+      ubWindow.webContents.openDevTools({ mode: "detach" });
     }
     async function coderedirect2(label, payload) {
       utools.redirect(label, payload);

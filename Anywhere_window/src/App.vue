@@ -1165,11 +1165,10 @@ function toggleMcpDialog() {
   isMcpDialogVisible.value = !isMcpDialogVisible.value;
 }
 
-// 在 ./Anywhere_window/src/App.vue 中找到 askAI 函数并完全替换
-
 const askAI = async (forceSend = false) => {
     if (loading.value) return;
 
+    // --- 1. Process User Input ---
     if (!forceSend) {
         let file_content = await sendFile();
         const promptText = prompt.value.trim();
@@ -1179,8 +1178,8 @@ const askAI = async (forceSend = false) => {
             if (file_content && file_content.length > 0) userContentList.push(...file_content);
             const userTimestamp = new Date().toLocaleString('sv-SE');
             if (userContentList.length > 0) {
-                const contentForHistory = userContentList.length === 1 && userContentList[0].type === 'text' 
-                    ? userContentList[0].text 
+                const contentForHistory = userContentList.length === 1 && userContentList[0].type === 'text'
+                    ? userContentList[0].text
                     : userContentList;
                 history.value.push({ role: "user", content: contentForHistory });
                 chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
@@ -1188,41 +1187,28 @@ const askAI = async (forceSend = false) => {
         } else return;
         prompt.value = "";
     }
-    
+
     if (temporary.value) {
         const systemMessage = history.value.find(m => m.role === 'system');
-        const lastUserMessage = history.value[history.value.length - 1];
+        const lastUserMessage = history.value.findLast(m => m.role === 'user');
         history.value = [systemMessage, lastUserMessage].filter(Boolean);
-        chat_show.value = chat_show.value.filter(m => m.role === 'system' || m.id === lastUserMessage.id);
     }
-    
+
+    // --- 2. Initialize AI Turn ---
     loading.value = true;
     signalController.value = new AbortController();
     await nextTick();
     scrollToBottom();
 
-    const messagesForAPI = [...history.value];
-    const preApiCallLength = messagesForAPI.length;
-
-    const MAX_TOOL_CALLS = 5;
-    let tool_calls_count = 0;
-
     const currentPromptConfig = currentConfig.value.prompts[CODE.value];
     const isVoiceReply = !!selectedVoice.value;
-    const useStream = currentPromptConfig?.stream && !isVoiceReply;
+    let useStream = currentPromptConfig?.stream && !isVoiceReply;
 
-    const assistantMessageId = messageIdCounter.value++;
-    chat_show.value.push({
-        id: assistantMessageId,
-        role: "assistant",
-        content: [],
-        reasoning_content: "",
-        status: "",
-        aiName: modelMap.value[model.value] || model.value.split('|')[1],
-        voiceName: selectedVoice.value,
-        tool_calls: []
-    });
-    const assistantChatShowIndex = chat_show.value.length - 1;
+    const messagesForAPI = [...history.value];
+    const MAX_TOOL_CALLS = 5;
+    let tool_calls_count = 0;
+    
+    let currentAssistantChatShowIndex = -1;
 
     try {
         const openai = new OpenAI({
@@ -1231,15 +1217,17 @@ const askAI = async (forceSend = false) => {
             dangerouslyAllowBrowser: true,
         });
 
+        // --- 3. Start Tool Calling Loop ---
         while (tool_calls_count < MAX_TOOL_CALLS && !signalController.value.signal.aborted) {
             chatInputRef.value?.focus({ cursor: 'end' });
-            
+
             const payload = {
                 model: model.value.split("|")[1],
-                messages: messagesForAPI,
+                messages: messagesForAPI, // Always use the latest message list
                 stream: useStream,
             };
-
+            
+            // Apply other parameters
             if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
             if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
             if (openaiFormattedTools.value.length > 0) {
@@ -1247,179 +1235,148 @@ const askAI = async (forceSend = false) => {
                 payload.tool_choice = "auto";
             }
             if (isVoiceReply) {
+                payload.stream = false; // Voice reply must be non-streaming
+                useStream = false;
                 payload.modalities = ["text", "audio"];
                 payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
-                payload.stream = false; // Voice reply must be non-streaming
             }
-            
+
+            // [CRITICAL FIX] Create a NEW bubble for EACH assistant turn in the loop
+            const assistantMessageId = messageIdCounter.value++;
+            chat_show.value.push({
+                id: assistantMessageId,
+                role: "assistant", content: [], reasoning_content: "", status: "",
+                aiName: modelMap.value[model.value] || model.value.split('|')[1],
+                voiceName: selectedVoice.value, tool_calls: []
+            });
+            currentAssistantChatShowIndex = chat_show.value.length - 1;
+
             let responseMessage;
 
-            if (payload.stream) {
+            if (useStream) {
                 const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
                 
                 let aggregatedContent = "";
                 let aggregatedToolCalls = [];
-                
-                let lastUpdateTime = 0;
-                const updateInterval = 100;
+                let lastUpdateTime = Date.now();
 
                 for await (const part of stream) {
-                    console.log("STREAM PART RECEIVED:", JSON.stringify(part, null, 2)); // DEBUG: Log entire stream part
                     const delta = part.choices[0]?.delta;
-                    const finishReason = part.choices[0]?.finish_reason;
-
                     if (!delta) continue;
                     
                     if (delta.content) {
                         aggregatedContent += delta.content;
-                        const now = Date.now();
-                        if (now - lastUpdateTime > updateInterval) {
-                            chat_show.value[assistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
+                        if (Date.now() - lastUpdateTime > 100) {
+                            chat_show.value[currentAssistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
                             scrollToBottom();
-                            lastUpdateTime = now;
+                            lastUpdateTime = Date.now();
                         }
                     }
                     
-                    // --- MODIFICATION START ---
                     if (delta.tool_calls) {
-                        console.log("Processing delta with tool_calls:", JSON.stringify(delta.tool_calls, null, 2)); // DEBUG
                         for (const toolCallChunk of delta.tool_calls) {
-                            // Standard streams provide an index for each chunk.
-                            // If it's missing (non-standard stream), we assume it's a new tool call to be added.
                             const index = toolCallChunk.index ?? aggregatedToolCalls.length;
-                            
                             if (!aggregatedToolCalls[index]) {
-                                // This is the first time we see this index, initialize it.
-                                aggregatedToolCalls[index] = {
-                                    id: toolCallChunk.id || "",
-                                    type: "function",
-                                    function: { name: "", arguments: "" }
-                                };
+                                aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
                             }
-
-                            // Get the tool we are currently building.
                             const currentTool = aggregatedToolCalls[index];
-
-                            // Aggregate the properties from the chunk.
                             if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
-                            if (toolCallChunk.type) currentTool.type = toolCallChunk.type;
-                            if (toolCallChunk.function) {
-                                if (toolCallChunk.function.name) {
-                                    currentTool.function.name = toolCallChunk.function.name;
-                                }
-                                if (toolCallChunk.function.arguments) {
-                                    // This handles both streamed arguments (+=) and complete arguments (assign once).
-                                    currentTool.function.arguments += toolCallChunk.function.arguments;
-                                }
-                            }
+                            if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
+                            if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
                         }
-                        console.log("Aggregated tool calls so far:", JSON.stringify(aggregatedToolCalls, null, 2)); // DEBUG
-                    }
-                    // --- MODIFICATION END ---
-                    
-                    if (finishReason === "tool_calls" || finishReason === "stop") {
-                        console.log("Finish reason detected:", finishReason); // DEBUG
-                        break;
                     }
                 }
                 
                 responseMessage = { role: 'assistant', content: aggregatedContent || null };
                 if (aggregatedToolCalls.length > 0) {
-                    // Filter out any potentially incomplete tool calls before assigning
                     responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
                 }
-
             } else {
                 const response = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
                 responseMessage = response.choices[0].message;
             }
 
+            // Sync the assistant's response to the main history
             messagesForAPI.push(responseMessage);
             
+            const currentBubble = chat_show.value[currentAssistantChatShowIndex];
+            if (responseMessage.content) {
+                currentBubble.content = [{ type: 'text', text: responseMessage.content }];
+            }
+
             if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-                console.log("Response has tool calls, preparing to execute:", JSON.stringify(responseMessage.tool_calls)); // DEBUG
-                const toolCalls = responseMessage.tool_calls;
-                const toolCallDataForUI = toolCalls.map(tc => ({
-                    id: tc.id,
-                    name: tc.function.name,
-                    args: tc.function.arguments,
-                    result: '执行中...',
+                tool_calls_count++;
+                currentBubble.tool_calls = responseMessage.tool_calls.map(tc => ({
+                    id: tc.id, name: tc.function.name, args: tc.function.arguments, result: '执行中...',
                 }));
-                chat_show.value[assistantChatShowIndex].tool_calls.push(...toolCallDataForUI);
+
                 await nextTick();
                 scrollToBottom();
 
                 const toolMessages = await Promise.all(
-                    toolCalls.map(async (toolCall) => {
-                        const toolName = toolCall.function.name;
-                        const uiToolCall = chat_show.value[assistantChatShowIndex].tool_calls.find(t => t.id === toolCall.id);
-                        let toolArgs;
+                    responseMessage.tool_calls.map(async (toolCall) => {
+                        const uiToolCall = currentBubble.tool_calls.find(t => t.id === toolCall.id);
+                        let toolContent;
                         try {
-                           toolArgs = JSON.parse(toolCall.function.arguments);
+                           const toolArgs = JSON.parse(toolCall.function.arguments);
+                           const result = await window.api.invokeMcpTool(toolCall.function.name, toolArgs);
+                           toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
+                           if (uiToolCall) uiToolCall.result = toolContent;
                         } catch (e) {
-                           const errorMsg = `工具参数解析错误: ${e.message}`;
-                           if (uiToolCall) uiToolCall.result = errorMsg;
-                           return { tool_call_id: toolCall.id, role: "tool", name: toolName, content: errorMsg };
+                           toolContent = `工具执行或参数解析错误: ${e.message}`;
+                           if (uiToolCall) uiToolCall.result = toolContent;
                         }
-                        
-                        let result;
-                        try {
-                            console.log(`Invoking MCP tool: ${toolName} with args:`, toolArgs); // DEBUG
-                            result = await window.api.invokeMcpTool(toolName, toolArgs);
-                            console.log(`MCP tool ${toolName} returned:`, result); // DEBUG
-                        } catch (e) {
-                            console.error(`MCP tool ${toolName} execution failed:`, e); // DEBUG
-                            result = `工具执行错误: ${e.message}`;
-                        }
-                        
-                        const toolContent = Array.isArray(result)
-                            ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n')
-                            : String(result);
-
-                        if (uiToolCall) uiToolCall.result = toolContent;
-                        
-                        return { tool_call_id: toolCall.id, role: "tool", name: toolName, content: toolContent };
+                        return { tool_call_id: toolCall.id, role: "tool", name: toolCall.function.name, content: toolContent };
                     })
                 );
-
+                
                 messagesForAPI.push(...toolMessages);
-                tool_calls_count++;
-
             } else {
-                if (responseMessage.content || responseMessage.audio || responseMessage.images) {
-                    const finalContent = responseMessage.audio?.transcript || responseMessage.content || '';
-                    const audioData = responseMessage.audio?.data;
-                    const images = responseMessage.images || [];
-
-                    const contentForDisplay = [];
-                    if (finalContent) contentForDisplay.push({ type: 'text', text: finalContent });
-                    images.forEach(img => contentForDisplay.push(img));
-                    if (audioData) contentForDisplay.push({ type: "input_audio", input_audio: { data: audioData, format: 'wav' } });
-                    
-                    chat_show.value[assistantChatShowIndex].content = contentForDisplay;
+                if (isVoiceReply && responseMessage.audio) {
+                  currentBubble.content = currentBubble.content || [];
+                  currentBubble.content.push({ type: "input_audio", input_audio: { data: responseMessage.audio.data, format: 'wav' } });
                 }
-                break; 
+                break; // Exit loop if no more tool calls
             }
-        }
+        } // End of while loop
 
         if (tool_calls_count >= MAX_TOOL_CALLS) {
-            messagesForAPI.push({ role: 'assistant', content: '错误: 工具调用次数超过限制。' });
-            chat_show.value[assistantChatShowIndex].content = [{ type: 'text', text: '错误: 工具调用次数超过限制。' }];
+            const errorMsg = '错误: 工具调用次数超过限制。';
+            messagesForAPI.push({ role: 'assistant', content: errorMsg });
+            
+            // [CRITICAL FIX] Create a final error bubble
+            chat_show.value.push({
+                id: messageIdCounter.value++, role: "assistant", content: [{ type: 'text', text: errorMsg }],
+                aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
+            });
         }
+        
     } catch (error) {
         let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
         if (error.name === 'AbortError') errorDisplay = "请求已取消";
-        messagesForAPI.push({ role: 'assistant', content: `错误: ${errorDisplay}` });
-        chat_show.value[assistantChatShowIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
-    } finally {
-        const newMessages = messagesForAPI.slice(preApiCallLength);
-        if (newMessages.length > 0) {
-            history.value.push(...newMessages);
+        
+        // Use the last created bubble (or create one if none exists) for the error.
+        const errorBubbleIndex = currentAssistantChatShowIndex > -1 ? currentAssistantChatShowIndex : chat_show.value.length;
+        if (currentAssistantChatShowIndex === -1) {
+             chat_show.value.push({
+                id: messageIdCounter.value++, role: "assistant", content: [],
+                aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
+            });
         }
+        chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
+        
+        // Add error to history for consistency
+        messagesForAPI.push({ role: 'assistant', content: `错误: ${errorDisplay}` });
+
+    } finally {
+        // [CRITICAL FIX] Final state synchronization
+        history.value = [...messagesForAPI];
 
         loading.value = false;
         signalController.value = null;
-        chat_show.value[assistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
+        if (currentAssistantChatShowIndex > -1) {
+            chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
+        }
         await nextTick();
         scrollToBottom();
         chatInputRef.value?.focus({ cursor: 'end' });
@@ -1427,82 +1384,118 @@ const askAI = async (forceSend = false) => {
 };
 
 const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } };
-const copyText = async (content, index) => { if (loading.value && index === history.value.length - 1) return; await window.api.copyText(content); };
+const copyText = async (content, index) => { if (loading.value && index === chat_show.value.length - 1) return; await window.api.copyText(content); };
 const reaskAI = async () => {
-  // DEBUG: Add this log to see if the function is being called unexpectedly
   console.log('%c[Anywhere DEBUG] reaskAI function was triggered!', 'color: orange; font-weight: bold;');
-
-  // 1. Basic safety check
   if (loading.value || history.value.length === 0) {
     console.log('[Anywhere DEBUG] reaskAI aborted: loading or history empty.');
     return;
   }
-
-  // 2. Find the index of the last user message in both history arrays
   const lastUserIndexInHistory = history.value.findLastIndex(msg => msg.role === 'user');
-  const lastUserIndexInShow = chat_show.value.findLastIndex(msg => msg.role === 'user');
-
-  // If no user message is found, do nothing
-  if (lastUserIndexInHistory === -1 || lastUserIndexInShow === -1) {
+  if (lastUserIndexInHistory === -1) {
     ElMessage.warning('没有可以重新提问的用户消息');
     console.log('[Anywhere DEBUG] reaskAI aborted: No user message found.');
     return;
   }
-
-  // 3. [FIX] Truncate arrays using slice() for safer reactivity.
-  // This creates new arrays instead of modifying them in-place.
   history.value = history.value.slice(0, lastUserIndexInHistory + 1);
-  chat_show.value = chat_show.value.slice(0, lastUserIndexInShow + 1);
   
-  // 4. Clear any UI state related to the truncated messages
-  collapsedMessages.value.clear();
-    
-  // 5. Wait for the UI to update
-  await nextTick();
+  // Find corresponding user message in chat_show
+  let userMessageCount = 0;
+  for(let i = 0; i <= lastUserIndexInHistory; i++){
+    if(history.value[i].role === 'user') userMessageCount++;
+  }
 
-  // 6. Call askAI again with the truncated history
+  let lastUserIndexInShow = -1;
+  let currentShowUserCount = 0;
+  for(let i = 0; i < chat_show.value.length; i++){
+     if(chat_show.value[i].role === 'user'){
+       currentShowUserCount++;
+       if(currentShowUserCount === userMessageCount){
+         lastUserIndexInShow = i;
+         break;
+       }
+     }
+  }
+  
+  if(lastUserIndexInShow > -1) {
+      chat_show.value = chat_show.value.slice(0, lastUserIndexInShow + 1);
+  } else {
+    // Fallback if sync is lost
+    const lastUserShowMsg = chat_show.value.findLast(msg => msg.role === 'user');
+    const idx = chat_show.value.lastIndexOf(lastUserShowMsg);
+    if(idx > -1) chat_show.value = chat_show.value.slice(0, idx + 1);
+  }
+
+  collapsedMessages.value.clear();
+  await nextTick();
   console.log('[Anywhere DEBUG] Calling askAI from reaskAI with history:', JSON.parse(JSON.stringify(history.value)));
   await askAI(true);
 };
 
 const deleteMessage = (index) => {
-  if (loading.value) {
-    ElMessage.warning('请等待当前回复完成后再操作');
-    return;
-  }
-  if (index < 0 || index >= chat_show.value.length) return;
-
-  const messageToDelete = chat_show.value[index];
-  if (messageToDelete?.role === 'system') {
-    ElMessage.info('系统提示词不能被删除');
-    return;
-  }
-
-  const historyMessagesToDelete = [];
-
-  // Find the corresponding message in the history array
-  // This assumes chat_show and history are in sync for user/assistant messages
-  const historyIndex = history.value.findIndex(h => h.role === messageToDelete.role && JSON.stringify(h.content) === JSON.stringify(messageToDelete.content));
-
-  if (historyIndex > -1) {
-    const historyMessage = history.value[historyIndex];
-    historyMessagesToDelete.push(historyMessage);
-
-    // If the deleted message is an assistant message with tool calls, find subsequent tool messages
-    if (historyMessage.role === 'assistant' && historyMessage.tool_calls) {
-      let nextIndex = historyIndex + 1;
-      while (nextIndex < history.value.length && history.value[nextIndex].role === 'tool') {
-        historyMessagesToDelete.push(history.value[nextIndex]);
-        nextIndex++;
-      }
+    if (loading.value) {
+        ElMessage.warning('请等待当前回复完成后再操作');
+        return;
     }
-  }
+    if (index < 0 || index >= chat_show.value.length) return;
 
-  // Remove from history by filtering
-  history.value = history.value.filter(h => !historyMessagesToDelete.includes(h));
+    const messageToDelete = chat_show.value[index];
+    if (messageToDelete?.role === 'system') {
+        ElMessage.info('系统提示词不能被删除');
+        return;
+    }
 
-  // Remove from UI
-  chat_show.value.splice(index, 1);
+    const deletedMessageId = messageToDelete.id;
+
+    // --- NEW ROBUST LOGIC ---
+    // 1. Find the occurrence count of the message's role up to its index in chat_show
+    let roleCountInShow = 0;
+    for (let i = 0; i < index; i++) {
+        // [FIX] Ensure message exists before accessing role
+        if (chat_show.value[i] && chat_show.value[i].role === messageToDelete.role) {
+            roleCountInShow++;
+        }
+    }
+
+    // 2. Find the corresponding message in the history array by skipping messages of the same role
+    let historyIndexToDelete = -1;
+    let currentRoleCountInHistory = 0;
+    for (let i = 0; i < history.value.length; i++) {
+        if (history.value[i].role === messageToDelete.role) {
+            if (currentRoleCountInHistory === roleCountInShow) {
+                historyIndexToDelete = i;
+                break;
+            }
+            currentRoleCountInHistory++;
+        }
+    }
+
+    // 3. If found, proceed with deletion from history
+    if (historyIndexToDelete !== -1) {
+        const historyMessage = history.value[historyIndexToDelete];
+        
+        let spliceCount = 1;
+        // If it's an assistant message with tool calls, remove subsequent 'tool' messages
+        if (historyMessage && historyMessage.role === 'assistant' && historyMessage.tool_calls) {
+            let nextIndex = historyIndexToDelete + 1;
+            while (nextIndex < history.value.length && history.value[nextIndex]?.role === 'tool') {
+                spliceCount++;
+                nextIndex++;
+            }
+        }
+
+        // Perform the splice on the history array
+        history.value.splice(historyIndexToDelete, spliceCount);
+    } else {
+        console.error("Bug: Could not find corresponding message in history to delete. State may become inconsistent.");
+        ElMessage.error("删除失败，无法在历史记录中找到对应消息。");
+    }
+
+    // 4. Finally, remove from the UI array using the unique ID
+    const showIndexToDelete = chat_show.value.findIndex(msg => msg.id === deletedMessageId);
+    if (showIndexToDelete > -1) {
+        chat_show.value.splice(showIndexToDelete, 1);
+    }
 };
 
 const clearHistory = () => {

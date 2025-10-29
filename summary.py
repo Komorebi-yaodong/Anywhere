@@ -77,7 +77,7 @@ def get_summary():
 
 if __name__ == "__main__":
     sum = get_summary()
-    with open("result.md", "w", encoding='utf-8') as file:
+    with open("result.txt", "w", encoding='utf-8') as file:
         file.write(sum)
     # 将内容发送到剪切板
     pyperclip.copy(sum)

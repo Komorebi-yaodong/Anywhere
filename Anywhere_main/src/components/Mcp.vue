@@ -2,7 +2,7 @@
 import { ref, reactive, computed, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Delete, Edit, CopyDocument, Tools } from '@element-plus/icons-vue';
+import { Plus, Delete, Edit, CopyDocument, Tools, Search } from '@element-plus/icons-vue';
 
 const { t } = useI18n();
 const currentConfig = inject('config');
@@ -11,6 +11,7 @@ const showEditDialog = ref(false);
 const showJsonDialog = ref(false);
 const isNewServer = ref(false);
 const jsonEditorContent = ref('');
+const searchQuery = ref('');
 
 const defaultServer = {
     id: null,
@@ -46,6 +47,19 @@ const mcpServersList = computed(() => {
     return Object.entries(currentConfig.value.mcpServers)
         .map(([id, value]) => ({ id, ...value }))
         .sort((a, b) => a.name.localeCompare(b.name));
+});
+
+const filteredMcpServersList = computed(() => {
+    if (!searchQuery.value) {
+        return mcpServersList.value;
+    }
+    const lowerCaseQuery = searchQuery.value.toLowerCase();
+    return mcpServersList.value.filter(server =>
+        (server.name && server.name.toLowerCase().includes(lowerCaseQuery)) ||
+        (server.description && server.description.toLowerCase().includes(lowerCaseQuery)) ||
+        (server.provider && server.provider.toLowerCase().includes(lowerCaseQuery)) ||
+        (server.tags && server.tags.some(tag => tag.toLowerCase().includes(lowerCaseQuery)))
+    );
 });
 
 function generateUniqueId() {
@@ -206,33 +220,41 @@ async function saveJson() {
                 <div v-if="mcpServersList.length === 0" class="empty-state">
                     <el-empty :description="t('mcp.noServers')" />
                 </div>
-                <div v-else class="mcp-grid-container">
-                    <div v-for="server in mcpServersList" :key="server.id" class="mcp-card">
-                        <div class="mcp-card-header">
-                            <el-avatar :src="server.logoUrl" shape="square" :size="32" class="mcp-card-icon">
-                                <el-icon :size="20"><Tools /></el-icon>
-                            </el-avatar>
-                            <div class="mcp-card-title-group">
-                                <span class="mcp-name">{{ server.name }}</span>
-                                <span class="mcp-provider" v-if="server.provider">{{ server.provider }}</span>
+                <div v-else>
+                    <div class="search-bar-container">
+                        <el-input v-model="searchQuery" placeholder="搜索名称、描述、提供者或标签..." :prefix-icon="Search" clearable />
+                    </div>
+                    <div v-if="filteredMcpServersList.length === 0" class="empty-state">
+                        <el-empty description="未找到匹配的服务" />
+                    </div>
+                    <div v-else class="mcp-grid-container">
+                        <div v-for="server in filteredMcpServersList" :key="server.id" class="mcp-card">
+                            <div class="mcp-card-header">
+                                <el-avatar :src="server.logoUrl" shape="square" :size="32" class="mcp-card-icon">
+                                    <el-icon :size="20"><Tools /></el-icon>
+                                </el-avatar>
+                                <div class="mcp-card-title-group">
+                                    <span class="mcp-name">{{ server.name }}</span>
+                                    <span class="mcp-provider" v-if="server.provider">{{ server.provider }}</span>
+                                </div>
+                                <el-switch :model-value="server.isActive"
+                                    @change="(value) => handleActiveChange(server.id, value)" size="small"
+                                    class="mcp-active-toggle" />
                             </div>
-                            <el-switch :model-value="server.isActive"
-                                @change="(value) => handleActiveChange(server.id, value)" size="small"
-                                class="mcp-active-toggle" />
-                        </div>
-                        <div class="mcp-card-body">
-                            <p class="mcp-description">{{ server.description }}</p>
-                        </div>
-                        <div class="mcp-card-footer">
-                            <div class="mcp-tags">
-                                <el-tag v-if="server.type" size="small" type="info">{{ server.type }}</el-tag>
-                                <el-tag v-for="tag in server.tags" :key="tag" size="small">{{ tag }}</el-tag>
+                            <div class="mcp-card-body">
+                                <p class="mcp-description">{{ server.description }}</p>
                             </div>
-                            <div class="mcp-actions">
-                                <el-button :icon="Edit" text circle @click="prepareEditServer(server)" />
-                                <el-button :icon="Delete" text circle type="danger"
-                                    @click="deleteServer(server.id, server.name)" />
-                                <el-button :icon="CopyDocument" text circle @click="copyServerJson(server)" />
+                            <div class="mcp-card-footer">
+                                <div class="mcp-tags">
+                                    <el-tag v-if="server.type" size="small" type="info">{{ server.type }}</el-tag>
+                                    <el-tag v-for="tag in server.tags" :key="tag" size="small">{{ tag }}</el-tag>
+                                </div>
+                                <div class="mcp-actions">
+                                    <el-button :icon="Edit" text circle @click="prepareEditServer(server)" />
+                                    <el-button :icon="Delete" text circle type="danger"
+                                        @click="deleteServer(server.id, server.name)" />
+                                    <el-button :icon="CopyDocument" text circle @click="copyServerJson(server)" />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -278,13 +300,19 @@ async function saveJson() {
                 </el-form-item>
                 
                 <el-divider>连接设置</el-divider>
-                
-                <el-form-item :label="t('mcp.http.url')"><el-input v-model="editingServer.baseUrl" /></el-form-item>
-                <el-form-item :label="t('mcp.stdio.command')"><el-input v-model="editingServer.command" /></el-form-item>
-                <el-form-item :label="t('mcp.stdio.args')"><el-input v-model="editingServer.args" type="textarea" :rows="3" :placeholder="t('mcp.argsPlaceholder')" /></el-form-item>
-                 <el-form-item :label="t('mcp.http.headers')"><el-input v-model="editingServer.headers" type="textarea" :rows="2" :placeholder="t('mcp.headersPlaceholder')" /></el-form-item>
-                <el-form-item :label="t('mcp.stdio.env')"><el-input v-model="editingServer.env" type="textarea" :rows="2" :placeholder="t('mcp.envPlaceholder')" /></el-form-item>
-                <el-form-item :label="t('mcp.inMemory.provider')"><el-input v-model="editingServer.provider" /></el-form-item>
+
+                <!-- HTTP / SSE Fields -->
+                <template v-if="editingServer.type === 'streamableHttp' || editingServer.type === 'sse'">
+                    <el-form-item :label="t('mcp.http.url')"><el-input v-model="editingServer.baseUrl" /></el-form-item>
+                    <el-form-item :label="t('mcp.http.headers')"><el-input v-model="editingServer.headers" type="textarea" :rows="2" :placeholder="t('mcp.headersPlaceholder')" /></el-form-item>
+                </template>
+
+                <!-- Stdio Fields -->
+                <template v-if="editingServer.type === 'stdio'">
+                    <el-form-item :label="t('mcp.stdio.command')"><el-input v-model="editingServer.command" /></el-form-item>
+                    <el-form-item :label="t('mcp.stdio.args')"><el-input v-model="editingServer.args" type="textarea" :rows="3" :placeholder="t('mcp.argsPlaceholder')" /></el-form-item>
+                    <el-form-item :label="t('mcp.stdio.env')"><el-input v-model="editingServer.env" type="textarea" :rows="2" :placeholder="t('mcp.envPlaceholder')" /></el-form-item>
+                </template>
 
                 <el-divider>{{ t('mcp.advanced') }}</el-divider>
                 <el-row :gutter="20">
@@ -330,11 +358,15 @@ async function saveJson() {
     padding: 24px 24px 90px 24px;
 }
 
+.search-bar-container {
+    margin-bottom: 24px;
+}
+
 .empty-state {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: calc(100vh - 150px);
+    height: calc(100vh - 200px); /* Adjust height for better centering */
 }
 
 .mcp-grid-container {

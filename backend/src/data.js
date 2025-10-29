@@ -905,7 +905,7 @@ async function openWindow(config, msg) {
       ubWindow.setFullScreen(false);
     }
   );
-  // ubWindow.webContents.openDevTools({ mode: "detach" });
+  ubWindow.webContents.openDevTools({ mode: "detach" });
 }
 
 async function coderedirect(label, payload) {

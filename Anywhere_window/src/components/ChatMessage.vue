@@ -168,7 +168,7 @@ const renderedMarkdownContent = computed(() => {
     const role = props.message.role ? props.message.role : 'user';
     let formattedContent = formatMessageContent(content,role);
     formattedContent = preprocessKatex(formattedContent);
-    if (!formattedContent && props.message.role === 'assistant') return '...';
+    if (!formattedContent && props.message.role === 'assistant') return ' ';
     return formattedContent || ' ';
 });
 
@@ -264,7 +264,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     </Bubble>
 
     <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner"
-      maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading && renderedMarkdownContent === '...' && (!message.tool_calls || message.tool_calls.length === 0)">
+      maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading && renderedMarkdownContent === ' ' && (!message.tool_calls || message.tool_calls.length === 0)">
       <template #avatar>
         <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar">
       </template>
