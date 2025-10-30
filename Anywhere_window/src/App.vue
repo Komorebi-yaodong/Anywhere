@@ -1168,7 +1168,7 @@ function toggleMcpDialog() {
 const askAI = async (forceSend = false) => {
     if (loading.value) return;
 
-    // --- 1. Process User Input ---
+    // --- 1. 处理用户输入 ---
     if (!forceSend) {
         let file_content = await sendFile();
         const promptText = prompt.value.trim();
@@ -1194,7 +1194,7 @@ const askAI = async (forceSend = false) => {
         history.value = [systemMessage, lastUserMessage].filter(Boolean);
     }
 
-    // --- 2. Initialize AI Turn ---
+    // --- 2. 初始化 AI 回合 ---
     loading.value = true;
     signalController.value = new AbortController();
     await nextTick();
@@ -1204,10 +1204,28 @@ const askAI = async (forceSend = false) => {
     const isVoiceReply = !!selectedVoice.value;
     let useStream = currentPromptConfig?.stream && !isVoiceReply;
 
-    // *** MCP PROMPT INJECTION LOGIC - START ***
-    const messagesForAPI = JSON.parse(JSON.stringify(history.value)); // Deep copy to avoid mutating state directly
-    if (openaiFormattedTools.value.length > 0) {
-        const mcpSystemPrompt = `
+    const MAX_TOOL_CALLS = 5;
+    let tool_calls_count = 0;
+    
+    let currentAssistantChatShowIndex = -1;
+
+    try {
+        const openai = new OpenAI({
+            apiKey: () => getRandomItem(api_key.value),
+            baseURL: base_url.value,
+            dangerouslyAllowBrowser: true,
+        });
+
+        // --- 3. 开始工具调用循环 ---
+        while (tool_calls_count < MAX_TOOL_CALLS && !signalController.value.signal.aborted) {
+            chatInputRef.value?.focus({ cursor: 'end' });
+
+            // --- 为本次请求创建临时消息列表 ---
+            const messagesForThisRequest = JSON.parse(JSON.stringify(history.value));
+            
+            // --- 仅在临时列表中注入MCP提示词 ---
+            if (openaiFormattedTools.value.length > 0) {
+                const mcpSystemPrompt = `
 ##工具调用声明
  
 在此环境中，您/assistant/model可以使用工具来回答用户的问题，并在使用工具后获得工具调用结果，用户无法查看您/assistant/model与工具的交互内容。您/assistant/model)需要循序渐进地使用工具来完成给定任务，每次工具的使用都以前一次工具使用的结果为依据。
@@ -1223,38 +1241,23 @@ const askAI = async (forceSend = false) => {
 6. 区分工具的返回结果与用户的回复：您/assistant/model的回复将被用户查看，仅在调用工具时会将信息传送给工具，而工具的返回结果仅由您/assistant/model查看，您/assistant/model需要将工具的返回结果以正确的方式告诉给用户，不要错将工具回复的信息当作用户回复的信息与用户交流。
 现在开始！如果您正确解决了任务，您将获得 1,000,000 美元的奖励。
 `;
-        const systemMessageIndex = messagesForAPI.findIndex(m => m.role === 'system');
-        if (systemMessageIndex !== -1) {
-            messagesForAPI[systemMessageIndex].content += mcpSystemPrompt;
-        } else {
-            messagesForAPI.unshift({ role: "system", content: mcpSystemPrompt });
-        }
-    }
-    // *** MCP PROMPT INJECTION LOGIC - END ***
-
-    const MAX_TOOL_CALLS = 5;
-    let tool_calls_count = 0;
-    
-    let currentAssistantChatShowIndex = -1;
-
-    try {
-        const openai = new OpenAI({
-            apiKey: getRandomItem(api_key.value),
-            baseURL: base_url.value,
-            dangerouslyAllowBrowser: true,
-        });
-
-        // --- 3. Start Tool Calling Loop ---
-        while (tool_calls_count < MAX_TOOL_CALLS && !signalController.value.signal.aborted) {
-            chatInputRef.value?.focus({ cursor: 'end' });
+                const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
+                if (systemMessageIndex !== -1) {
+                    if (!messagesForThisRequest[systemMessageIndex].content.includes("##工具调用声明")) {
+                        messagesForThisRequest[systemMessageIndex].content += mcpSystemPrompt;
+                    }
+                } else {
+                    messagesForThisRequest.unshift({ role: "system", content: mcpSystemPrompt });
+                }
+            }
 
             const payload = {
                 model: model.value.split("|")[1],
-                messages: messagesForAPI, // Always use the latest message list
+                messages: messagesForThisRequest, // 使用临时的、注入了提示词的消息列表
                 stream: useStream,
             };
             
-            // Apply other parameters
+            // 应用其他参数
             if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
             if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
             if (openaiFormattedTools.value.length > 0) {
@@ -1262,13 +1265,13 @@ const askAI = async (forceSend = false) => {
                 payload.tool_choice = "auto";
             }
             if (isVoiceReply) {
-                payload.stream = false; // Voice reply must be non-streaming
+                payload.stream = false;
                 useStream = false;
                 payload.modalities = ["text", "audio"];
                 payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
             }
 
-            // [CRITICAL FIX] Create a NEW bubble for EACH assistant turn in the loop
+            // 为每个AI回合创建一个新的UI气泡
             const assistantMessageId = messageIdCounter.value++;
             chat_show.value.push({
                 id: assistantMessageId,
@@ -1277,11 +1280,11 @@ const askAI = async (forceSend = false) => {
                 voiceName: selectedVoice.value, tool_calls: []
             });
             currentAssistantChatShowIndex = chat_show.value.length - 1;
+            scrollToBottom();
 
             let responseMessage;
 
             if (useStream) {
-                openai.apiKey = getRandomItem(api_key.value);
                 const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
                 
                 let aggregatedContent = "";
@@ -1320,13 +1323,12 @@ const askAI = async (forceSend = false) => {
                     responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
                 }
             } else {
-                openai.apiKey = getRandomItem(api_key.value);
                 const response = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
                 responseMessage = response.choices[0].message;
             }
 
-            // Sync the assistant's response to the main history
-            messagesForAPI.push(responseMessage);
+            // 将AI的回复同步到主 history 数组
+            history.value.push(responseMessage);
             
             const currentBubble = chat_show.value[currentAssistantChatShowIndex];
             if (responseMessage.content) {
@@ -1359,21 +1361,22 @@ const askAI = async (forceSend = false) => {
                     })
                 );
                 
-                messagesForAPI.push(...toolMessages);
+                // 将工具调用的结果同步到主 history 数组
+                history.value.push(...toolMessages);
             } else {
                 if (isVoiceReply && responseMessage.audio) {
                   currentBubble.content = currentBubble.content || [];
                   currentBubble.content.push({ type: "input_audio", input_audio: { data: responseMessage.audio.data, format: 'wav' } });
                 }
-                break; // Exit loop if no more tool calls
+                break; // 如果没有工具调用，则退出循环
             }
-        } // End of while loop
+        } // 循环结束
 
         if (tool_calls_count >= MAX_TOOL_CALLS) {
             const errorMsg = '错误: 工具调用次数超过限制。';
-            messagesForAPI.push({ role: 'assistant', content: errorMsg });
+            // 将错误消息同步到主 history 数组
+            history.value.push({ role: 'assistant', content: errorMsg });
             
-            // [CRITICAL FIX] Create a final error bubble
             chat_show.value.push({
                 id: messageIdCounter.value++, role: "assistant", content: [{ type: 'text', text: errorMsg }],
                 aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
@@ -1384,7 +1387,6 @@ const askAI = async (forceSend = false) => {
         let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
         if (error.name === 'AbortError') errorDisplay = "请求已取消";
         
-        // Use the last created bubble (or create one if none exists) for the error.
         const errorBubbleIndex = currentAssistantChatShowIndex > -1 ? currentAssistantChatShowIndex : chat_show.value.length;
         if (currentAssistantChatShowIndex === -1) {
              chat_show.value.push({
@@ -1394,13 +1396,10 @@ const askAI = async (forceSend = false) => {
         }
         chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
         
-        // Add error to history for consistency
-        messagesForAPI.push({ role: 'assistant', content: `错误: ${errorDisplay}` });
+        // 将错误消息同步到主 history 数组
+        history.value.push({ role: 'assistant', content: `错误: ${errorDisplay}` });
 
     } finally {
-        // [CRITICAL FIX] Final state synchronization
-        history.value = [...messagesForAPI];
-
         loading.value = false;
         signalController.value = null;
         if (currentAssistantChatShowIndex > -1) {
@@ -1415,54 +1414,48 @@ const askAI = async (forceSend = false) => {
 const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } };
 const copyText = async (content, index) => { if (loading.value && index === chat_show.value.length - 1) return; await window.api.copyText(content); };
 const reaskAI = async () => {
-  console.log('%c[Anywhere DEBUG] reaskAI function was triggered!', 'color: orange; font-weight: bold;');
-  if (loading.value || history.value.length === 0) {
-    console.log('[Anywhere DEBUG] reaskAI aborted: loading or history empty.');
-    return;
-  }
-  const lastUserIndexInHistory = history.value.findLastIndex(msg => msg.role === 'user');
-  if (lastUserIndexInHistory === -1) {
-    ElMessage.warning('没有可以重新提问的用户消息');
-    console.log('[Anywhere DEBUG] reaskAI aborted: No user message found.');
-    return;
-  }
-  history.value = history.value.slice(0, lastUserIndexInHistory + 1);
-  
-  // Find corresponding user message in chat_show
-  let userMessageCount = 0;
-  for(let i = 0; i <= lastUserIndexInHistory; i++){
-    if(history.value[i].role === 'user') userMessageCount++;
-  }
+    if (loading.value) return;
 
-  let lastUserIndexInShow = -1;
-  let currentShowUserCount = 0;
-  for(let i = 0; i < chat_show.value.length; i++){
-     if(chat_show.value[i].role === 'user'){
-       currentShowUserCount++;
-       if(currentShowUserCount === userMessageCount){
-         lastUserIndexInShow = i;
-         break;
-       }
-     }
-  }
-  
-  if(lastUserIndexInShow > -1) {
-      chat_show.value = chat_show.value.slice(0, lastUserIndexInShow + 1);
-  } else {
-    // Fallback if sync is lost
-    const lastUserShowMsg = chat_show.value.findLast(msg => msg.role === 'user');
-    const idx = chat_show.value.lastIndexOf(lastUserShowMsg);
-    if(idx > -1) chat_show.value = chat_show.value.slice(0, idx + 1);
-  }
+    // 1. 找到历史记录中最后一个非工具消息的索引。这是用户可见的最后一条消息。
+    const lastVisibleMessageIndexInHistory = history.value.findLastIndex(msg => msg.role !== 'tool');
 
-  collapsedMessages.value.clear();
-  await nextTick();
-  console.log('[Anywhere DEBUG] Calling askAI from reaskAI with history:', JSON.parse(JSON.stringify(history.value)));
-  await askAI(true);
+    if (lastVisibleMessageIndexInHistory === -1) {
+        ElMessage.warning('没有可以重新提问的用户消息');
+        return;
+    }
+
+    const lastVisibleMessage = history.value[lastVisibleMessageIndexInHistory];
+
+    if (lastVisibleMessage.role === 'assistant') {
+        // 规则: 如果最后一个可见消息是 AI 的回复（无论是简单回复还是工具调用发起者），
+        // 则从 history 数组中移除这个 AI 消息以及它之后的所有工具消息。
+        const historyItemsToRemove = history.value.length - lastVisibleMessageIndexInHistory;
+
+        // 计算需要从 chat_show 数组中移除多少个可见项。
+        const showItemsToRemove = history.value.slice(lastVisibleMessageIndexInHistory)
+                                          .filter(m => m.role !== 'tool').length;
+
+        history.value.splice(lastVisibleMessageIndexInHistory, historyItemsToRemove);
+        if (showItemsToRemove > 0) {
+            chat_show.value.splice(chat_show.value.length - showItemsToRemove);
+        }
+
+    } else if (lastVisibleMessage.role === 'user') {
+        // 规则: 如果最后一个可见消息是用户的，不修改历史记录，直接重新请求。
+        // 此处无需任何操作。
+    } else {
+        // 其他情况（如系统消息），不应触发重新提问。
+        ElMessage.warning('无法从此消息类型重新提问。');
+        return;
+    }
+
+    // 3. 清理状态并发送新的AI请求
+    collapsedMessages.value.clear();
+    await nextTick();
+    await askAI(true);
 };
 
 const deleteMessage = (index) => {
-    // *** NEW DELETION LOGIC - START ***
     if (loading.value) {
         ElMessage.warning('请等待当前回复完成后再操作');
         return;
@@ -1475,10 +1468,12 @@ const deleteMessage = (index) => {
         return;
     }
 
-    // 1. 找到 msgToDeleteInShow 在 history 中的精确位置
+    // --- 1. 定位消息在 `history` 数组中的真实索引 ---
+    // `chat_show` 只包含可见消息，`history` 包含所有消息（包括隐藏的 'tool' 类型）
     let history_idx = -1;
     let show_counter = -1;
     for (let i = 0; i < history.value.length; i++) {
+        // 只有非 'tool' 消息才计入 `chat_show` 的索引
         if (history.value[i].role !== 'tool') {
             show_counter++;
         }
@@ -1487,72 +1482,86 @@ const deleteMessage = (index) => {
             break;
         }
     }
+
     if (history_idx === -1) {
-        console.error("Critical error: Cannot map chat_show index to history index. Aborting delete.");
+        console.error("关键错误: 无法将 chat_show 索引映射到 history 索引。中止删除。");
         ElMessage.error("删除失败：消息状态不一致。");
         return;
     }
 
-    // 2. 确定要删除的完整区块（包括工具调用）
+    // --- 2. 根据消息类型和上下文，确定要删除的 `history` 范围 ---
+    const messageToDeleteInHistory = history.value[history_idx];
     let history_start_idx = history_idx;
     let history_end_idx = history_idx;
-    let show_start_idx = index;
-    let show_end_idx = index;
 
-    const currentMsgInHistory = history.value[history_idx];
-
-    // 逻辑：检查当前消息、前一个可见消息、后一个可见消息是否形成工具调用链
-    const prevMsgInHistory = history.value[history_idx - 1];
-
-    if (currentMsgInHistory.role === 'assistant' && currentMsgInHistory.tool_calls) {
-        // --- 情况 A: 删除了发起工具调用的 AI 消息 ---
-        // 往前不需要动
-        // 往后寻找所有关联的 'tool' 消息和下一个 'assistant' 消息
-        history_end_idx = history_idx;
+    // 核心逻辑：判断被删除的消息是否是工具调用的发起者
+    if (
+        messageToDeleteInHistory.role === 'assistant' &&
+        messageToDeleteInHistory.tool_calls &&
+        messageToDeleteInHistory.tool_calls.length > 0
+    ) {
+        // 如果是，则需要一并删除其后紧邻的所有 'tool' 消息
+        // 这形成了一个“命运共同体”：(发起调用的AI, tool, tool, ...)
         while (history.value[history_end_idx + 1]?.role === 'tool') {
             history_end_idx++;
         }
-        // 如果后面紧跟着一个 assistant 消息 (总结消息)，也一并删除
-        if (history.value[history_end_idx + 1]?.role === 'assistant') {
-            history_end_idx++;
-            show_end_idx = index + 1; // UI上也要多删一个
-        }
-    } else if (currentMsgInHistory.role === 'assistant' && prevMsgInHistory?.role === 'tool') {
-        // --- 情况 B: 删除了工具调用后的总结 AI 消息 ---
-        // 往前寻找所有 'tool' 消息和发起调用的 'assistant' 消息
-        history_start_idx = history_idx;
-        while (history.value[history_start_idx - 1]?.role === 'tool') {
-            history_start_idx--;
-        }
-        // 如果前面是发起调用的 assistant 消息，也一并删除
-        if (history.value[history_start_idx - 1]?.role === 'assistant' && history.value[history_start_idx - 1]?.tool_calls) {
-            history_start_idx--;
-            show_start_idx = index - 1; // UI上也要往前多删一个
-        }
     }
+    // 对于其他所有情况（用户消息、简单的AI回复、总结性的AI回复），
+    // history_start_idx 和 history_end_idx 将保持相等，只删除单个消息。
+    // 这就正确地将总结性AI回复与它之前的工具调用链分离开来。
 
-    // 3. 计算要删除的数量
+    // --- 3. 计算并执行删除操作 ---
+
+    // 计算在 history 数组中需要删除的条目数量
     const history_delete_count = history_end_idx - history_start_idx + 1;
-    const show_delete_count = show_end_idx - show_start_idx + 1;
+    
+    // 在 chat_show 数组中，我们只删除用户点击的那一条可见消息
+    const show_delete_count = 1;
+    const show_start_idx = index;
 
-    // 4. 执行删除
+    // 从 history 数组中删除
     if (history_delete_count > 0) {
         history.value.splice(history_start_idx, history_delete_count);
     }
+    
+    // 从 chat_show 数组中删除
     if (show_delete_count > 0) {
         chat_show.value.splice(show_start_idx, show_delete_count);
     }
-    // *** NEW DELETION LOGIC - END ***
+
+    // 清理可能遗留的状态
+    collapsedMessages.value.clear();
+    focusedMessageIndex.value = null;
+    console.log(history.value);
 };
 
 const clearHistory = () => {
-  if (loading.value || history.value.length === 0) return;
-  if (history.value[0].role === "system") { history.value = [history.value[0]]; chat_show.value = [chat_show.value[0]]; }
-  else { history.value = []; chat_show.value = []; }
-  collapsedMessages.value.clear(); messageRefs.clear(); focusedMessageIndex.value = null;
+  if (loading.value) return;
+
+  // 检查当前快捷助手配置中是否存在系统提示词
+  const systemPrompt = currentConfig.value.prompts[CODE.value]?.prompt;
+
+  if (systemPrompt) {
+    // 如果存在，则重置为仅包含该系统提示词的状态
+    const systemMsg = { role: "system", content: systemPrompt };
+    history.value = [systemMsg];
+    // 为 chat_show 中的消息添加唯一ID，确保UI正确更新
+    chat_show.value = [{ ...systemMsg, id: messageIdCounter.value++ }];
+  } else {
+    // 如果不存在系统提示词，则完全清空
+    history.value = [];
+    chat_show.value = [];
+  }
+
+  // 重置所有相关的UI状态
+  collapsedMessages.value.clear();
+  messageRefs.clear();
+  focusedMessageIndex.value = null;
   defaultConversationName.value = "";
-  chatInputRef.value?.focus({ cursor: 'end' }); ElMessage.success('历史记录已清除');
+  chatInputRef.value?.focus({ cursor: 'end' });
+  ElMessage.success('历史记录已清除');
 };
+
 const formatTimestamp = (dateString) => {
   if (!dateString) return '';
   try {
