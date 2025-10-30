@@ -482,22 +482,51 @@ const handleDownloadImageFromViewer = async (url) => {
 };
 
 const handleEditMessage = (index, newContent) => {
-  if (index < 0) return;
+  if (index < 0 || index >= chat_show.value.length) return;
+
+  // 1. 找到 history 数组中正确的索引，这会考虑到 chat_show 中不可见的 'tool' 消息。
+  let history_idx = -1;
+  let show_counter = -1;
+  for (let i = 0; i < history.value.length; i++) {
+    // 只有非 'tool' 类型的消息才计入 show_counter
+    if (history.value[i].role !== 'tool') {
+      show_counter++;
+    }
+    if (show_counter === index) {
+      history_idx = i;
+      break;
+    }
+  }
+
+  // 2. 定义一个通用的内容更新函数
   const updateContent = (message) => {
     if (!message) return;
-    if (typeof message.content === 'string') {
+    if (typeof message.content === 'string' || message.content === null) {
       message.content = newContent;
     } else if (Array.isArray(message.content)) {
-      const textPart = message.content.find(p => p.type === 'text' && !(p.text.toLowerCase().startsWith('file name:')));
+      // 寻找第一个可编辑的文本部分并更新它
+      const textPart = message.content.find(p => p.type === 'text' && !(p.text && p.text.toLowerCase().startsWith('file name:')));
       if (textPart) {
         textPart.text = newContent;
       } else {
+        // 如果没有文本部分，则添加一个新的
         message.content.push({ type: 'text', text: newContent });
       }
     }
   };
-  if (chat_show.value[index]) updateContent(chat_show.value[index]);
-  if (history.value[index]) updateContent(history.value[index]);
+
+  // 3. 使用原始的 UI 索引更新 chat_show 数组
+  if (chat_show.value[index]) {
+    updateContent(chat_show.value[index]);
+  }
+
+  // 4. 使用我们计算出的正确索引来更新 history 数组
+  if (history_idx !== -1 && history.value[history_idx]) {
+    updateContent(history.value[history_idx]);
+  } else {
+    // 如果找不到映射，这是一个潜在的问题，进行日志记录以方便调试
+    console.error("错误：无法将 chat_show 索引映射到 history 索引。下次API请求可能会使用旧数据。");
+  }
 };
 
 const handleEditStart = async (index) => {
@@ -1226,20 +1255,42 @@ const askAI = async (forceSend = false) => {
             // --- 仅在临时列表中注入MCP提示词 ---
             if (openaiFormattedTools.value.length > 0) {
                 const mcpSystemPrompt = `
+                
 ##工具调用声明
  
-在此环境中，您/assistant/model可以使用工具来回答用户的问题，并在使用工具后获得工具调用结果，用户无法查看您/assistant/model与工具的交互内容。您/assistant/model)需要循序渐进地使用工具来完成给定任务，每次工具的使用都以前一次工具使用的结果为依据。
+在此环境中， 您/assistant/model 可以使用工具来回答用户的问题，并在使用工具后获得工具调用结果，用户无法查看 您/assistant/model 与工具的交互内容。 您/assistant/model 需要循序渐进地使用工具来完成给定任务，每次工具的使用都以前一次工具使用的结果为依据。
 
-## 工具使用规则
+## Skills:
+- **工具调用逻辑规划**: 能够根据任务需求，判断工具使用的必要性、顺序和参数的准确性。
+- **参数值校验**: 严格区分变量名与实际值，确保工具调用时所有参数均为有效值。
+- **结果解析与内容合成**: 能够理解工具返回的原始数据，并将其转化为自然、流畅、用户友好的最终回复。
+- **多媒体格式封装**: 精通Markdown和特定HTML标签的使用，确保图片、视频和音频链接能够以可预览的形式展示。
+- **规则记忆与强约束执行**: 能够无条件地遵守所有给定的操作规则，避免重复和错误的调用。
 
-以下是您/assistant/model解决任务时应始终遵循的规则：
-1. 始终为工具使用正确的参数。切勿使用变量名作为操作参数，而应使用其值。
-2. 仅在需要时调用工具：如果不需要调用工具，请直接回答问题。
-3. 绝不要重复调用您之前已使用完全相同参数调用过的工具。
-4. 对于工具的使用，请**确保**使用正确的参数。
-5. 只有您/assistant/model可以查看工具调用结果，用户无法查看工具的调用结果，您/assistant/model需要在工具调用后将结果以正确的方式告诉给用户（例如工具生成了图片，可以使用markdown的图片格式告诉给用户：\`![内容](图片链接)\`）。
-6. 区分工具的返回结果与用户的回复：您/assistant/model的回复将被用户查看，仅在调用工具时会将信息传送给工具，而工具的返回结果仅由您/assistant/model查看，您/assistant/model需要将工具的返回结果以正确的方式告诉给用户，不要错将工具回复的信息当作用户回复的信息与用户交流。
-现在开始！如果您正确解决了任务，您将获得 1,000,000 美元的奖励。
+## Rules:
+
+以下是 您/assistant/model 解决任务时应始终遵循的规则：
+1. **参数值优先原则**: 在任何情况下，对参数值的精确度应给予最高优先级，确保零错误率。
+2. **调用约束**：仅在必要时调用工具，避免不必要的冗余操作。
+3. **迭代效率优化**: 积极利用“绝不要重复调用”的约束，提高任务执行的效率和精确度。
+4. **隐私约束**: 用户无法查看 您/assistant/model 的工具交互内容和原始返回结果；必须将结果合成后告知用户。
+5. **用户视角驱动**: 始终站在用户的角度审视工具输出，思考如何将技术性的工具结果转化为具有价值的、易懂的信息。
+6. **工具/用户交互隔离**: 严格维护工具调用结果和用户可见回复之间的隔离墙，确保用户始终接收到的是专业合成结果，而不是工具的原始调试信息。
+7. **格式细致检查**: 在提交包含媒体链接的回复前，必须执行最终检查，确认格式（尤其是代码块排除约束）完全符合以下的规定:
+  - **图片**: 必须使用Markdown格式：\`![内容描述](图片链接)\`
+  - **视频**: 必须使用以下HTML格式：
+  \`\`\`html
+  <video controls style="max-width: 80%; max-height: 400px; height: auto; width: auto; display: block;"><source src="视频链接地址" type="video/mp4">您的浏览器不支持视频播放。</video>
+  \`\`\`
+  - **音频**: 必须使用以下HTML格式：
+  \`\`\`html
+  <audio id="audio" controls="" preload="none">
+  <source id="mp3" src="音频链接地址">
+  </audio>
+  \`\`\`
+  - **格式要求**: 所有多媒体展示格式（图片、视频、音频）**绝不能**包含在代码块（\`\`\`)中。
+
+现在开始！如果 您/assistant/model 正确解决了任务，您将获得 1,000,000 美元的奖励。
 `;
                 const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
                 if (systemMessageIndex !== -1) {
@@ -1515,7 +1566,7 @@ const deleteMessage = (index) => {
     // 计算在 history 数组中需要删除的条目数量
     const history_delete_count = history_end_idx - history_start_idx + 1;
     
-    // 在 chat_show 数组中，我们只删除用户点击的那一条可见消息
+    // 在 chat_show 数组中，只删除用户点击的那一条可见消息
     const show_delete_count = 1;
     const show_start_idx = index;
 
