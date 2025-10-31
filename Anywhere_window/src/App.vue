@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElTooltip, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckboxGroup, ElCheckbox } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElTooltip, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckboxGroup, ElCheckbox, ElButtonGroup, ElTag } from 'element-plus';
 import { createClient } from "webdav/web";
 
 import ChatHeader from './components/ChatHeader.vue';
@@ -142,7 +142,9 @@ const senderRef = ref();
 const isMcpDialogVisible = ref(false);
 const sessionMcpServerIds = ref([]); // Store IDs of servers active for this session
 const openaiFormattedTools = ref([]);
-const mcpSearchQuery = ref(''); // For search functionality
+const mcpSearchQuery = ref('');
+const isMcpLoading = ref(false);
+const mcpFilter = ref('all'); // 新增：MCP过滤器状态, 'all', 'selected', 'unselected'
 
 const isMcpActive = computed(() => sessionMcpServerIds.value.length > 0);
 
@@ -154,15 +156,27 @@ const availableMcpServers = computed(() => {
 });
 
 const filteredMcpServers = computed(() => {
-  if (!mcpSearchQuery.value) {
-    return availableMcpServers.value;
-  }
-  const query = mcpSearchQuery.value.toLowerCase();
-  return availableMcpServers.value.filter(server =>
-    (server.name && server.name.toLowerCase().includes(query)) ||
-    (server.description && server.description.toLowerCase().includes(query))
-  );
+    let servers = availableMcpServers.value;
+
+    // Filter by selection status
+    if (mcpFilter.value === 'selected') {
+        servers = servers.filter(server => sessionMcpServerIds.value.includes(server.id));
+    } else if (mcpFilter.value === 'unselected') {
+        servers = servers.filter(server => !sessionMcpServerIds.value.includes(server.id));
+    }
+
+    // Filter by search query
+    if (mcpSearchQuery.value) {
+        const query = mcpSearchQuery.value.toLowerCase();
+        servers = servers.filter(server =>
+            (server.name && server.name.toLowerCase().includes(query)) ||
+            (server.description && server.description.toLowerCase().includes(query))
+        );
+    }
+    
+    return servers;
 });
+
 
 const isViewingLastMessage = computed(() => {
   if (focusedMessageIndex.value === null) return false;
@@ -744,6 +758,10 @@ onMounted(async () => {
         } catch (error) { console.error("Error during initial file processing:", error); ElMessage.error("文件处理失败: " + error.message); }
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
+      if (currentPromptConfig?.defaultMcpServers && currentPromptConfig.defaultMcpServers.length > 0) {
+        sessionMcpServerIds.value = [...currentPromptConfig.defaultMcpServers];
+        await applyMcpTools();
+      }
     });
   } catch (err) {
     basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
@@ -1016,6 +1034,14 @@ const loadSession = async (jsonData) => {
     CODE.value = jsonData.CODE; document.title = CODE.value;
     basic_msg.value = jsonData.basic_msg; isInit.value = jsonData.isInit;
     autoCloseOnBlur.value = jsonData.autoCloseOnBlur; temporary.value = jsonData.temporary;
+    const mcpServersToLoad = jsonData.currentPromptConfig?.defaultMcpServers || [];
+    if (Array.isArray(mcpServersToLoad) && mcpServersToLoad.length > 0) {
+        sessionMcpServerIds.value = [...mcpServersToLoad];
+        await applyMcpTools();
+    } else {
+        sessionMcpServerIds.value = [];
+        await applyMcpTools();
+    }
     history.value = jsonData.history; chat_show.value = jsonData.chat_show;
     selectedVoice.value = jsonData.selectedVoice || '';
     tempReasoningEffort.value = jsonData.currentPromptConfig?.reasoning_effort || 'default';
@@ -1155,9 +1181,17 @@ function getRandomItem(list) {
 }
 
 async function applyMcpTools() {
+  // 1. 立即关闭弹窗，恢复流畅的UI体验和关闭动画
   isMcpDialogVisible.value = false;
-  const activeServerConfigs = {};
 
+  // 2. 立即在顶部 Header 显示加载状态
+  isMcpLoading.value = true;
+
+  // 使用 nextTick 确保UI更新（弹窗关闭）后再执行耗时操作
+  await nextTick();
+
+  // 3. 在后台准备并执行工具加载任务
+  const activeServerConfigs = {};
   for (const id of sessionMcpServerIds.value) {
     if (currentConfig.value.mcpServers[id]) {
       const serverConf = currentConfig.value.mcpServers[id];
@@ -1174,21 +1208,34 @@ async function applyMcpTools() {
     const { openaiFormattedTools: newFormattedTools } = await window.api.initializeMcpClient(activeServerConfigs);
     openaiFormattedTools.value = newFormattedTools;
 
+    // 4. 任务完成后给出提示消息
     if (newFormattedTools.length > 0) {
-      ElMessage.success(`已启用 ${newFormattedTools.length} 个 MCP 工具`);
-    } else {
+      ElMessage.success(`已成功启用 ${newFormattedTools.length} 个 MCP 工具`);
+    } else if (Object.keys(activeServerConfigs).length > 0 || openaiFormattedTools.value.length > 0) {
+      // 仅在确实执行了“清除”操作时提示
       ElMessage.info('已清除所有 MCP 工具');
     }
   } catch (error) {
     console.error("Failed to initialize MCP tools:", error);
     ElMessage.error(`加载MCP工具失败: ${error.message}`);
+  } finally {
+    // 5. 无论成功或失败，最后都取消加载状态
+    isMcpLoading.value = false;
   }
 }
 
 function clearMcpTools() {
   sessionMcpServerIds.value = [];
-  applyMcpTools();
+  ElMessage.info('已清除所有选中的MCP工具，请点击“应用”生效');
 }
+
+function selectAllMcpServers() {
+    const allVisibleIds = filteredMcpServers.value.map(server => server.id);
+    const selectedIdsSet = new Set(sessionMcpServerIds.value);
+    allVisibleIds.forEach(id => selectedIdsSet.add(id));
+    sessionMcpServerIds.value = Array.from(selectedIdsSet);
+}
+
 
 function toggleMcpDialog() {
   isMcpDialogVisible.value = !isMcpDialogVisible.value;
@@ -1580,8 +1627,17 @@ const deleteMessage = (index) => {
         chat_show.value.splice(show_start_idx, show_delete_count);
     }
 
-    // 清理可能遗留的状态
-    collapsedMessages.value.clear();
+    const deletedIndexInShow = index;
+    const newCollapsedMessages = new Set();
+    for (const collapsedIdx of collapsedMessages.value) {
+      if (collapsedIdx < deletedIndexInShow) {
+        newCollapsedMessages.add(collapsedIdx);
+      } else if (collapsedIdx > deletedIndexInShow) {
+        newCollapsedMessages.add(collapsedIdx - 1);
+      }
+    }
+    collapsedMessages.value = newCollapsedMessages;
+
     focusedMessageIndex.value = null;
     console.log(history.value);
 };
@@ -1629,14 +1685,38 @@ const truncateText = (text, maxLength = 40) => {
   }
   return text.substring(0, maxLength) + '...';
 };
+
+function toggleMcpServerSelection(serverId) {
+  const index = sessionMcpServerIds.value.indexOf(serverId);
+  if (index === -1) {
+    sessionMcpServerIds.value.push(serverId);
+  } else {
+    sessionMcpServerIds.value.splice(index, 1);
+  }
+}
+
+const focusOnInput = () => {
+  setTimeout(() => {
+    chatInputRef.value?.focus({ cursor: 'end' });
+  }, 100);
+};
 </script>
 
 <template>
   <main>
     <el-container>
-      <ChatHeader :favicon="favicon" :modelMap="modelMap" :model="model" :autoCloseOnBlur="autoCloseOnBlur"
-        :temporary="temporary" @save-window-size="handleSaveWindowSize" @open-model-dialog="handleOpenModelDialog"
-        @toggle-pin="handleTogglePin" @toggle-memory="handleToggleMemory" @save-session="handleSaveSession" />
+      <ChatHeader 
+    :favicon="favicon" 
+    :modelMap="modelMap" 
+    :model="model" 
+    :autoCloseOnBlur="autoCloseOnBlur"
+    :temporary="temporary"
+    :is-mcp-loading="isMcpLoading"  
+    @save-window-size="handleSaveWindowSize"
+    @open-model-dialog="handleOpenModelDialog"
+    @toggle-pin="handleTogglePin"
+    @toggle-memory="handleToggleMemory" 
+    @save-session="handleSaveSession" />
 
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
@@ -1702,23 +1782,49 @@ const truncateText = (text, maxLength = 40) => {
       title="下载图片" />
   </div>
 
-  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP 工具" width="540px" top="10vh" custom-class="mcp-dialog">
+  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP 工具" width="540px" top="10vh" custom-class="mcp-dialog" @close="focusOnInput">
     <div class="mcp-dialog-content">
-      <div class="mcp-checkbox-group custom-scrollbar">
-        <el-checkbox-group v-model="sessionMcpServerIds">
-          <el-checkbox v-for="server in filteredMcpServers" :key="server.id" :value="server.id" border>
-            <div class="mcp-checkbox-label">
-              <span class="mcp-server-name">{{ truncateText(server.name, 35) }}</span>
-              <span class="mcp-server-description">{{ truncateText(server.description, 45) }}</span>
+      <div class="mcp-dialog-toolbar">
+        <el-button-group>
+          <el-button :type="mcpFilter === 'all' ? 'primary' : ''" @click="mcpFilter = 'all'">全部</el-button>
+          <el-button :type="mcpFilter === 'selected' ? 'primary' : ''" @click="mcpFilter = 'selected'">已选
+          </el-button>
+          <el-button :type="mcpFilter === 'unselected' ? 'primary' : ''" @click="mcpFilter = 'unselected'">未选
+          </el-button>
+        </el-button-group>
+      </div>
+      <div class="mcp-server-list custom-scrollbar">
+        <div
+          v-for="server in filteredMcpServers"
+          :key="server.id"
+          class="mcp-server-item"
+          :class="{ 'is-checked': sessionMcpServerIds.includes(server.id) }"
+          @click="toggleMcpServerSelection(server.id)"
+        >
+          <el-checkbox
+            :model-value="sessionMcpServerIds.includes(server.id)"
+            size="large"
+            @change="() => toggleMcpServerSelection(server.id)"
+            @click.stop
+          />
+          <div class="mcp-server-content">
+            <div class="mcp-server-header-row">
+              <span class="mcp-server-name">{{ server.name }}</span>
+              <div class="mcp-server-tags">
+                <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{ server.type }}</el-tag>
+                <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{ tag }}</el-tag>
+              </div>
             </div>
-          </el-checkbox>
-        </el-checkbox-group>
+            <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
+          </div>
+        </div>
       </div>
       <div class="mcp-dialog-footer-search">
         <el-input v-model="mcpSearchQuery" placeholder="搜索工具名称或描述..." :prefix-icon="Search" clearable />
       </div>
     </div>
     <template #footer>
+      <el-button @click="selectAllMcpServers">全选当前</el-button>
       <el-button @click="clearMcpTools">清除全部</el-button>
       <el-button type="primary" @click="applyMcpTools">应用</el-button>
     </template>
@@ -1966,60 +2072,7 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
   background: #999;
 }
 
-.mcp-dialog .mcp-dialog-content {
-  padding: 0 10px;
-}
-
 .mcp-dialog .mcp-dialog-content p {
-  margin-top: 0;
-  margin-bottom: 15px;
-  color: var(--el-text-color-secondary);
-}
-
-.mcp-checkbox-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding-right: 5px;
-}
-
-.mcp-checkbox-group .el-checkbox {
-  height: auto;
-  padding: 8px 15px;
-  display: flex;
-  align-items: center;
-}
-
-.mcp-checkbox-label {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.5;
-  gap: 2px;
-}
-
-.mcp-server-name {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-}
-
-.mcp-server-description {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-
-
-.mcp-dialog-content {
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-  overflow: hidden;
-  max-height: 60vh;
-}
-
-.mcp-dialog-content p {
   margin-top: 0;
   margin-bottom: 15px;
   color: var(--el-text-color-secondary);
@@ -2027,45 +2080,29 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
   flex-shrink: 0;
 }
 
-.mcp-checkbox-group {
-    flex-grow: 1;
-    overflow-y: auto;
-    padding-right: 15px;
-}
-
-.mcp-checkbox-group .el-checkbox-group {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.mcp-checkbox-group .el-checkbox {
-  width: 100%;
-  height: auto;
-  /* 高度自适应 */
-  min-height: 54px;
-  /* 保证最小高度 */
-  padding: 10px 15px;
-  margin-right: 0;
+.mcp-server-header-row {
   display: flex;
   align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
 }
-
-.mcp-checkbox-group .el-checkbox.is-bordered {
-  border-radius: 8px;
-}
-
-.mcp-checkbox-label {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.5;
-  gap: 2px;
-  white-space: normal;
-}
-
 .mcp-server-name {
   font-weight: 500;
   color: var(--el-text-color-primary);
+  min-width: 0;
+  flex-grow: 1;
+}
+.mcp-server-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.mcp-server-description {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .mcp-server-description {
@@ -2084,15 +2121,125 @@ html.dark .mcp-dialog-footer-search {
   border-top-color: var(--el-border-color-darker);
 }
 
-/* 修复深色模式下已勾选的 bordered checkbox 对勾颜色 */
-html.dark .el-checkbox.is-bordered.is-checked .el-checkbox__inner {
+.mcp-dialog .mcp-dialog-content {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow: hidden;
+  flex-direction: column;
+  padding: 0 10px;
+}
+
+.mcp-dialog-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-shrink: 0;
+  padding: 0 5px;
+}
+
+.mcp-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  gap: 10px;
+  max-height: 45vh;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.mcp-server-tags .el-tag {
+  height: 20px;
+  padding: 0 6px;
+}
+
+.mcp-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 35vh; /* 您可以按需调整高度 */
+  overflow-y: auto;
+  padding: 5px;
+}
+
+.mcp-server-item {
+  display: flex;
+  align-items: flex-start; /* 顶部对齐 */
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.mcp-server-item:hover {
+  background-color: var(--el-fill-color-light);
+}
+
+.mcp-server-item.is-checked {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+html.dark .mcp-server-item:hover {
+    background-color: var(--el-fill-color-darker);
+}
+
+html.dark .mcp-server-item.is-checked {
+    background-color: var(--el-fill-color-dark);
+}
+
+.mcp-server-item .el-checkbox {
+  margin-top: 1px; /* 微调复选框垂直位置 */
+}
+
+.mcp-server-content {
+  flex: 1;
+  min-width: 0; /* 允许flex子元素收缩 */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mcp-server-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.mcp-server-name {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mcp-server-tags {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0; /* 防止标签被压缩 */
+}
+
+.mcp-server-description {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner {
   background-color: #fff !important;
   border-color: #fff !important;
 }
 
-html.dark .el-checkbox.is-bordered.is-checked .el-checkbox__inner::after {
-  border-color: #1d1d1d !important;
-  /* 设置为深色 */
+html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::after {
+  border-color: #1d1d1d !important; /* 设置为深色 */
 }
 </style>
 

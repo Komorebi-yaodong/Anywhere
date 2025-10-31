@@ -12,17 +12,17 @@ const showJsonDialog = ref(false);
 const isNewServer = ref(false);
 const jsonEditorContent = ref('');
 const searchQuery = ref('');
+const advancedCollapse = ref([]); // 新增：控制高级设置折叠面板
 
 const defaultServer = {
     id: null,
     name: '',
     description: '',
-    type: 'stdio',
+    type: 'sse',
     isActive: true,
     baseUrl: '',
     command: '',
     args: [],
-    registryUrl: '',
     env: {},
     headers: {},
     provider: '',
@@ -102,6 +102,7 @@ const convertObjectToText = (obj) => {
 function prepareAddServer() {
     isNewServer.value = true;
     Object.assign(editingServer, createEditingServerState());
+    advancedCollapse.value = []; // 默认折叠高级选项
     showEditDialog.value = true;
 }
 
@@ -115,6 +116,7 @@ function prepareEditServer(server) {
         headers: convertObjectToText(server.headers),
         tags: Array.isArray(server.tags) ? server.tags.join(', ') : ''
     });
+    advancedCollapse.value = []; // 默认折叠高级选项
     showEditDialog.value = true;
 }
 
@@ -140,7 +142,6 @@ async function saveServer() {
     addIfPresent(serverData, 'baseUrl', editingServer.baseUrl);
     addIfPresent(serverData, 'command', editingServer.command);
     addIfArrayPresent(serverData, 'args', convertTextToLines(editingServer.args));
-    addIfPresent(serverData, 'registryUrl', editingServer.registryUrl);
     addIfObjectPresent(serverData, 'env', convertTextToObject(editingServer.env));
     addIfObjectPresent(serverData, 'headers', convertTextToObject(editingServer.headers));
     addIfPresent(serverData, 'provider', editingServer.provider);
@@ -272,20 +273,20 @@ async function saveJson() {
         </div>
 
         <el-dialog v-model="showEditDialog" :title="isNewServer ? t('mcp.addServerTitle') : t('mcp.editServerTitle')"
-            width="750px" :close-on-click-modal="false" top="8vh">
+            width="700px" :close-on-click-modal="false" top="8vh">
             <el-form :model="editingServer" label-position="top" @submit.prevent="saveServer">
                 <el-row :gutter="20">
-                    <el-col :span="12">
+                    <el-col :span="14">
                         <el-form-item :label="t('mcp.nameLabel')" required>
                             <el-input v-model="editingServer.name" />
                         </el-form-item>
                     </el-col>
-                    <el-col :span="8">
+                    <el-col :span="6">
                         <el-form-item :label="t('mcp.typeLabel')">
                             <el-select v-model="editingServer.type" style="width: 100%;">
-                                <el-option :label="t('mcp.typeOptions.stdio')" value="stdio" />
-                                <el-option :label="t('mcp.typeOptions.streamableHttp')" value="streamableHttp" />
                                 <el-option :label="t('mcp.typeOptions.sse')" value="sse" />
+                                <el-option :label="t('mcp.typeOptions.streamableHttp')" value="streamableHttp" />
+                                <el-option :label="t('mcp.typeOptions.stdio')" value="stdio" />
                             </el-select>
                         </el-form-item>
                     </el-col>
@@ -299,7 +300,7 @@ async function saveJson() {
                     <el-input v-model="editingServer.description" type="textarea" :rows="2" />
                 </el-form-item>
                 
-                <el-divider>连接设置</el-divider>
+                <el-divider content-position="left">连接设置</el-divider>
 
                 <!-- HTTP / SSE Fields -->
                 <template v-if="editingServer.type === 'streamableHttp' || editingServer.type === 'sse'">
@@ -310,17 +311,29 @@ async function saveJson() {
                 <!-- Stdio Fields -->
                 <template v-if="editingServer.type === 'stdio'">
                     <el-form-item :label="t('mcp.stdio.command')"><el-input v-model="editingServer.command" /></el-form-item>
-                    <el-form-item :label="t('mcp.stdio.args')"><el-input v-model="editingServer.args" type="textarea" :rows="3" :placeholder="t('mcp.argsPlaceholder')" /></el-form-item>
+                    <el-form-item :label="t('mcp.stdio.args')"><el-input v-model="editingServer.args" type="textarea" :rows="2" :placeholder="t('mcp.argsPlaceholder')" /></el-form-item>
                     <el-form-item :label="t('mcp.stdio.env')"><el-input v-model="editingServer.env" type="textarea" :rows="2" :placeholder="t('mcp.envPlaceholder')" /></el-form-item>
                 </template>
 
-                <el-divider>{{ t('mcp.advanced') }}</el-divider>
-                <el-row :gutter="20">
-                    <el-col :span="12"><el-form-item :label="t('mcp.registryUrl')"><el-input v-model="editingServer.registryUrl" /></el-form-item></el-col>
-                    <el-col :span="12"><el-form-item :label="t('mcp.logoUrl')"><el-input v-model="editingServer.logoUrl" /></el-form-item></el-col>
-                </el-row>
-                <el-form-item :label="t('mcp.providerUrl')"><el-input v-model="editingServer.providerUrl" /></el-form-item>
-                <el-form-item :label="t('mcp.tags')"><el-input v-model="editingServer.tags" :placeholder="t('mcp.tagsPlaceholder')" /></el-form-item>
+                <el-collapse v-model="advancedCollapse" class="advanced-collapse">
+                    <el-collapse-item :title="t('mcp.advanced')" name="1">
+                        <el-row :gutter="20">
+                            <el-col :span="12">
+                                <el-form-item :label="t('mcp.providerName')">
+                                    <el-input v-model="editingServer.provider" />
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="12">
+                                <el-form-item :label="t('mcp.logoUrl')">
+                                    <el-input v-model="editingServer.logoUrl" />
+                                </el-form-item>
+                            </el-col>
+                        </el-row>
+                        <el-form-item :label="t('mcp.providerUrl')"><el-input v-model="editingServer.providerUrl" /></el-form-item>
+                        <el-form-item :label="t('mcp.tags')"><el-input v-model="editingServer.tags" :placeholder="t('mcp.tagsPlaceholder')" /></el-form-item>
+                    </el-collapse-item>
+                </el-collapse>
+
             </el-form>
             <template #footer>
                 <el-button @click="showEditDialog = false">{{ t('common.cancel') }}</el-button>
@@ -503,5 +516,38 @@ html.dark .bottom-actions-container {
     flex-grow: 0;
     min-width: 180px;
     font-weight: 500;
+}
+
+.advanced-collapse {
+    border-top: none;
+    border-bottom: none;
+    margin: 15px 0 0 0;
+}
+
+.advanced-collapse :deep(.el-collapse-item__header) {
+    border-bottom: 1px solid var(--border-primary);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    line-height: 1;
+    height: 36px;
+}
+
+html.dark .advanced-collapse :deep(.el-collapse-item__header) {
+    border-bottom-color: var(--border-accent);
+}
+
+.advanced-collapse :deep(.el-collapse-item__header.is-active) {
+    border-bottom-style: dashed;
+}
+
+.advanced-collapse :deep(.el-collapse-item__wrap) {
+    border-bottom: none;
+    padding-top: 20px;
+    background-color: transparent;
+}
+
+.advanced-collapse :deep(.el-collapse-item__content) {
+    padding-bottom: 0;
 }
 </style>

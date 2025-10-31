@@ -51,6 +51,7 @@
   },
   "prompts": {
     "allPrompts": "全部",
+    "searchPlaceholder":"名前または内容を検索...",
     "noPrompts": "まだクイックアシスタントは定義されていません。",
     "noPromptsInTag": "このタグにはクイックアシスタントがありません。",
     "addExistingPrompt": "既存のクイックアシスタントを追加",
@@ -123,7 +124,8 @@
       "ifTextNecessary": "有効にすると、一部のプロバイダー（例: Vertex）の要件を満たすため、リクエストにテキストが含まれるように、テキストの前にタイムスタンプを自動的に追加します。",
       "reasoningEffort": "モデルの思考プロセスの計算予算を設定します。高い値はより詳細な回答をもたらす可能性がありますが、遅延とコストが増加します。",
       "isAlwaysOnTopTooltip": "ウィンドウを常に他のウィンドウより手前に表示します。",
-      "autoCloseOnBlurTooltip": "独立したウィンドウがフォーカスを失ったときに自動的に閉じるようにします。"
+      "autoCloseOnBlurTooltip": "独立したウィンドウがフォーカスを失ったときに自動的に閉じるようにします。",
+      "defaultMcpServers": "設定すると、このアシスタントをスタンドアロンウィンドウで開いたときに、選択したMCPサービスが自動的に有効になります。"
     },
     "voiceLabel": "デフォルト音声",
     "voicePlaceholder": "音声を選択または無効化",
@@ -137,7 +139,9 @@
       "low": "低",
       "medium": "中",
       "high": "高"
-    }
+    },
+    "defaultMcpServersLabel": "MCP",
+    "defaultMcpServersPlaceholder": "このアシスタントでデフォルトで有効にするMCPサービスを選択"
   },
   "mcp": {
     "title": "MCPサーバー",

@@ -293,7 +293,25 @@ const truncateFilename = (filename, maxLength = 30) => {
         </Thinking>
       </template>
       <template #content>
-        <!-- === MODIFICATION START: The order of tool_calls and markdown is swapped === -->
+        
+        <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
+            <XMarkdown
+                :markdown="renderedMarkdownContent"
+                :is-dark="isDarkMode"
+                :enable-latex="true"
+                :mermaid-config="mermaidConfig"
+                :default-theme-mode="isDarkMode ? 'dark' : 'light'"
+                :themes="{light:'one-light', dark:'vesper'}"
+                :allow-html="true" />
+        </div>
+        <div v-else class="editing-wrapper">
+            <el-input ref="editInputRef" v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" @keydown="handleEditKeyDown" />
+            <div class="editing-actions">
+                <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
+                <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle type="primary" />
+                <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
+            </div>
+        </div>
         <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-container">
             <el-collapse class="tool-collapse" accordion>
                 <el-collapse-item v-for="toolCall in message.tool_calls" :key="toolCall.id" :name="toolCall.id">
@@ -318,26 +336,6 @@ const truncateFilename = (filename, maxLength = 30) => {
                 </el-collapse-item>
             </el-collapse>
         </div>
-        
-        <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
-            <XMarkdown
-                :markdown="renderedMarkdownContent"
-                :is-dark="isDarkMode"
-                :enable-latex="true"
-                :mermaid-config="mermaidConfig"
-                :default-theme-mode="isDarkMode ? 'dark' : 'light'"
-                :themes="{light:'one-light', dark:'vesper'}"
-                :allow-html="true" />
-        </div>
-        <div v-else class="editing-wrapper">
-            <el-input ref="editInputRef" v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" @keydown="handleEditKeyDown" />
-            <div class="editing-actions">
-                <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
-                <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle type="primary" />
-                <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
-            </div>
-        </div>
-        <!-- === MODIFICATION END === -->
       </template>
       <template #footer>
         <div class="message-footer">

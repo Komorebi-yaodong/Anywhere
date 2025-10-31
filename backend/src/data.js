@@ -31,6 +31,7 @@ const defaultConfig = {
         ifTextNecessary: false,
         voice: null,
         reasoning_effort: "default",
+        defaultMcpServers: [],
         window_width: 540,
         window_height: 700,
         position_x: 0,
@@ -329,6 +330,10 @@ function checkConfig(config) {
   }
 
   for (let key in config.prompts) {
+    if (config.prompts[key].defaultMcpServers === undefined) {
+      config.prompts[key].defaultMcpServers = [];
+      flag = true;
+    }
     if (config.prompts[key].isAlwaysOnTop === undefined) {
       config.prompts[key].isAlwaysOnTop = true;
       flag = true;

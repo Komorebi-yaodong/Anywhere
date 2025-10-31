@@ -1,7 +1,6 @@
-<!-- ./Anywhere_window/src/components/ChatHeader.vue -->
 <script setup>
-import { ElHeader, ElTooltip, ElButton } from 'element-plus';
-import { Download, CoffeeCup, Lollipop } from '@element-plus/icons-vue'
+import { ElHeader, ElTooltip, ElButton, ElIcon } from 'element-plus';
+import { Download, CoffeeCup, Lollipop, Loading } from '@element-plus/icons-vue'
 
 defineProps({
   favicon: String,
@@ -9,6 +8,7 @@ defineProps({
   model: String,
   autoCloseOnBlur: Boolean,
   temporary: Boolean,
+  isMcpLoading: Boolean,
 });
 
 const emit = defineEmits([
@@ -31,8 +31,11 @@ const emit = defineEmits([
         </el-tooltip>
       </div>
       <div class="header-center">
-        <el-button class="model-selector-btn" @click="emit('open-model-dialog')">
-          {{ modelMap[model] || '选择模型' }}
+        <el-button class="model-selector-btn" @click="emit('open-model-dialog')" :disabled="isMcpLoading">
+          <el-icon v-if="isMcpLoading" class="is-loading" style="margin-right: 6px;">
+            <Loading />
+          </el-icon>
+          {{ isMcpLoading ? '加载工具中...' : (modelMap[model] || '选择模型') }}
         </el-button>
       </div>
       <div class="header-right">

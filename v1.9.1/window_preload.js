@@ -87822,6 +87822,7 @@ var require_data5 = __commonJS({
             ifTextNecessary: false,
             voice: null,
             reasoning_effort: "default",
+            defaultMcpServers: [],
             window_width: 540,
             window_height: 700,
             position_x: 0,
@@ -88079,6 +88080,10 @@ var require_data5 = __commonJS({
         flag = true;
       }
       for (let key in config.prompts) {
+        if (config.prompts[key].defaultMcpServers === void 0) {
+          config.prompts[key].defaultMcpServers = [];
+          flag = true;
+        }
         if (config.prompts[key].isAlwaysOnTop === void 0) {
           config.prompts[key].isAlwaysOnTop = true;
           flag = true;
