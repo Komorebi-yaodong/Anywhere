@@ -18,7 +18,6 @@ const mcpManager = {
         // 1. 识别并关闭不再需要的会话
         const idsToClose = [...currentIdSet].filter(id => !requestedIdSet.has(id));
         if (idsToClose.length > 0) {
-            console.log("MCP Manager: Closing sessions for", idsToClose);
             await Promise.all(idsToClose.map(id => this.closeSession(id)));
         }
 
@@ -40,8 +39,6 @@ const mcpManager = {
                    this.closeSession(id);
                    console.error(`MCP Manager: Failed to start session for '${id}':`, result.reason);
                 } else {
-                   // 这是预期的中止，静默处理
-                   console.log(`MCP Manager: Session for '${id}' was correctly aborted.`);
                 }
             }
         });
@@ -103,7 +100,6 @@ const mcpManager = {
 
             // 检查在耗时的 getTools 操作后，会话是否已被外部命令中止
             if (!this.activeSessions.has(id)) {
-                console.log(`MCP Manager: Session for '${id}' was closed while loading, discarding results.`);
                 // 即使会话记录被删除，也要确保这个新创建的 client 实例被关闭
                 await client.close();
                 throw new Error("Session aborted during tool loading");
@@ -114,7 +110,6 @@ const mcpManager = {
             if (session) {
                 session.tools = tools;
             }
-            console.log(`MCP Manager: Session for '${id}' started successfully.`);
 
         } catch (error) {
             // 如果加载失败，确保清理
@@ -141,7 +136,6 @@ const mcpManager = {
 
             // 3. 从活动会话中移除
             this.activeSessions.delete(id);
-            console.log(`MCP Manager: Session for '${id}' has been closed.`);
         }
     },
 };
@@ -171,13 +165,13 @@ async function initializeMcpClient(activeServerConfigs) {
 /**
  * [MCP Logic] Invokes a tool by name.
  */
-async function invokeMcpTool(toolName, toolArgs) {
+async function invokeMcpTool(toolName, toolArgs, signal) { // Added signal parameter
     const toolToCall = langchainToolMap.get(toolName);
     if (!toolToCall) {
         throw new Error(`Tool "${toolName}" not found. It might have been closed or failed to load.`);
     }
-    // toolToCall 内部持有对存活的 client 实例的引用
-    return await toolToCall.invoke(toolArgs);
+    // Assume the invoke method accepts a config object with a signal
+    return await toolToCall.invoke(toolArgs, { signal });
 }
 
 module.exports = {

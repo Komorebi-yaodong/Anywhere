@@ -11,6 +11,9 @@ importers:
       '@langchain/mcp-adapters':
         specifier: ^1.0.0
         version: 1.0.0(@langchain/core@1.0.2)(@langchain/langgraph@1.0.1(@langchain/core@1.0.2)(zod-to-json-schema@3.24.6(zod@3.25.76))(zod@3.25.76))
+      find-process:
+        specifier: ^2.0.0
+        version: 2.0.0
     devDependencies:
       esbuild:
         specifier: ^0.25.2
@@ -278,6 +281,10 @@ packages:
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
 
+  commander@12.1.0:
+    resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
+    engines: {node: '>=18'}
+
   console-table-printer@2.15.0:
     resolution: {integrity: sha512-SrhBq4hYVjLCkBVOWaTzceJalvn5K1Zq5aQA6wXC/cYjI3frKWNPEMK3sZsJfNNQApvCQmgBcc13ZKmFj8qExw==}
 
@@ -391,6 +398,10 @@ packages:
     resolution: {integrity: sha512-/t88Ty3d5JWQbWYgaOGCCYfXRwV1+be02WqYYlL6h0lEiUAMPM8o8qKGO01YIkOHzka2up08wvgYD0mDiI+q3Q==}
     engines: {node: '>= 0.8'}
 
+  find-process@2.0.0:
+    resolution: {integrity: sha512-YUBQnteWGASJoEVVsOXy6XtKAY2O1FCsWnnvQ8y0YwgY1rZiKeVptnFvMu6RSELZAJOGklqseTnUGGs5D0bKmg==}
+    hasBin: true
+
   forwarded@0.2.0:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
@@ -473,6 +484,10 @@ packages:
         optional: true
       openai:
         optional: true
+
+  loglevel@1.9.2:
+    resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
+    engines: {node: '>= 0.6.0'}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -905,6 +920,8 @@ snapshots:
 
   color-name@1.1.4: {}
 
+  commander@12.1.0: {}
+
   console-table-printer@2.15.0:
     dependencies:
       simple-wcswidth: 1.1.2
@@ -1051,6 +1068,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  find-process@2.0.0:
+    dependencies:
+      chalk: 4.1.2
+      commander: 12.1.0
+      loglevel: 1.9.2
+
   forwarded@0.2.0: {}
 
   fresh@2.0.0: {}
@@ -1124,6 +1147,8 @@ snapshots:
       p-retry: 4.6.2
       semver: 7.7.3
       uuid: 10.0.0
+
+  loglevel@1.9.2: {}
 
   math-intrinsics@1.1.0: {}
 

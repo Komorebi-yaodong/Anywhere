@@ -180,7 +180,6 @@ const commandHandlers = {
         content = payload;
       } else if (type === "img") {
         content = [{ type: "image_url", image_url: { url: payload } }];
-        console.log(content);
       } else if (type === "files") {
         content = await sendfileDirect(payload);
       } else {

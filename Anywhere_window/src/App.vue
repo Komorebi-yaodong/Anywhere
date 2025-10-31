@@ -137,6 +137,7 @@ const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
 
 const senderRef = ref();
+const toolCallControllers = ref(new Map());
 
 // --- MCP State ---
 const isMcpDialogVisible = ref(false);
@@ -156,25 +157,25 @@ const availableMcpServers = computed(() => {
 });
 
 const filteredMcpServers = computed(() => {
-    let servers = availableMcpServers.value;
+  let servers = availableMcpServers.value;
 
-    // Filter by selection status
-    if (mcpFilter.value === 'selected') {
-        servers = servers.filter(server => sessionMcpServerIds.value.includes(server.id));
-    } else if (mcpFilter.value === 'unselected') {
-        servers = servers.filter(server => !sessionMcpServerIds.value.includes(server.id));
-    }
+  // Filter by selection status
+  if (mcpFilter.value === 'selected') {
+    servers = servers.filter(server => sessionMcpServerIds.value.includes(server.id));
+  } else if (mcpFilter.value === 'unselected') {
+    servers = servers.filter(server => !sessionMcpServerIds.value.includes(server.id));
+  }
 
-    // Filter by search query
-    if (mcpSearchQuery.value) {
-        const query = mcpSearchQuery.value.toLowerCase();
-        servers = servers.filter(server =>
-            (server.name && server.name.toLowerCase().includes(query)) ||
-            (server.description && server.description.toLowerCase().includes(query))
-        );
-    }
-    
-    return servers;
+  // Filter by search query
+  if (mcpSearchQuery.value) {
+    const query = mcpSearchQuery.value.toLowerCase();
+    servers = servers.filter(server =>
+      (server.name && server.name.toLowerCase().includes(query)) ||
+      (server.description && server.description.toLowerCase().includes(query))
+    );
+  }
+
+  return servers;
 });
 
 
@@ -1036,11 +1037,11 @@ const loadSession = async (jsonData) => {
     autoCloseOnBlur.value = jsonData.autoCloseOnBlur; temporary.value = jsonData.temporary;
     const mcpServersToLoad = jsonData.currentPromptConfig?.defaultMcpServers || [];
     if (Array.isArray(mcpServersToLoad) && mcpServersToLoad.length > 0) {
-        sessionMcpServerIds.value = [...mcpServersToLoad];
-        await applyMcpTools();
+      sessionMcpServerIds.value = [...mcpServersToLoad];
+      await applyMcpTools();
     } else {
-        sessionMcpServerIds.value = [];
-        await applyMcpTools();
+      sessionMcpServerIds.value = [];
+      await applyMcpTools();
     }
     history.value = jsonData.history; chat_show.value = jsonData.chat_show;
     selectedVoice.value = jsonData.selectedVoice || '';
@@ -1204,9 +1205,9 @@ async function applyMcpTools() {
   try {
     // 2. 直接调用后端的同步函数，它现在是幂等的且能处理中止
     const {
-        openaiFormattedTools: newFormattedTools,
-        successfulServerIds,
-        failedServerIds
+      openaiFormattedTools: newFormattedTools,
+      successfulServerIds,
+      failedServerIds
     } = await window.api.initializeMcpClient(activeServerConfigs);
 
     // 3. 根据返回结果更新UI
@@ -1214,11 +1215,11 @@ async function applyMcpTools() {
     sessionMcpServerIds.value = successfulServerIds;
 
     if (failedServerIds && failedServerIds.length > 0) {
-        const failedNames = failedServerIds.map(id => currentConfig.value.mcpServers[id]?.name || id).join('、');
-        ElMessage.error({
-            message: `以下 MCP 服务加载失败，已自动取消勾选: ${failedNames}`,
-            duration: 5000
-        });
+      const failedNames = failedServerIds.map(id => currentConfig.value.mcpServers[id]?.name || id).join('、');
+      ElMessage.error({
+        message: `以下 MCP 服务加载失败，已自动取消勾选: ${failedNames}`,
+        duration: 5000
+      });
     }
 
     if (newFormattedTools.length > 0) {
@@ -1245,10 +1246,10 @@ function clearMcpTools() {
 }
 
 function selectAllMcpServers() {
-    const allVisibleIds = filteredMcpServers.value.map(server => server.id);
-    const selectedIdsSet = new Set(sessionMcpServerIds.value);
-    allVisibleIds.forEach(id => selectedIdsSet.add(id));
-    sessionMcpServerIds.value = Array.from(selectedIdsSet);
+  const allVisibleIds = filteredMcpServers.value.map(server => server.id);
+  const selectedIdsSet = new Set(sessionMcpServerIds.value);
+  allVisibleIds.forEach(id => selectedIdsSet.add(id));
+  sessionMcpServerIds.value = Array.from(selectedIdsSet);
 }
 
 
@@ -1257,71 +1258,71 @@ function toggleMcpDialog() {
 }
 
 const askAI = async (forceSend = false) => {
-    if (loading.value) return;
-    if (isMcpLoading.value) {
-        ElMessage.info('正在加载工具，请稍后再试...');
-        return;
-    }
+  if (loading.value) return;
+  if (isMcpLoading.value) {
+    ElMessage.info('正在加载工具，请稍后再试...');
+    return;
+  }
 
-    // --- 1. 处理用户输入 ---
-    if (!forceSend) {
-        let file_content = await sendFile();
-        const promptText = prompt.value.trim();
-        if ((file_content && file_content.length > 0) || promptText) {
-            const userContentList = [];
-            if (promptText) userContentList.push({ type: "text", text: promptText });
-            if (file_content && file_content.length > 0) userContentList.push(...file_content);
-            const userTimestamp = new Date().toLocaleString('sv-SE');
-            if (userContentList.length > 0) {
-                const contentForHistory = userContentList.length === 1 && userContentList[0].type === 'text'
-                    ? userContentList[0].text
-                    : userContentList;
-                history.value.push({ role: "user", content: contentForHistory });
-                chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
-            } else return;
-        } else return;
-        prompt.value = "";
-    }
+  // --- 1. 处理用户输入 ---
+  if (!forceSend) {
+    let file_content = await sendFile();
+    const promptText = prompt.value.trim();
+    if ((file_content && file_content.length > 0) || promptText) {
+      const userContentList = [];
+      if (promptText) userContentList.push({ type: "text", text: promptText });
+      if (file_content && file_content.length > 0) userContentList.push(...file_content);
+      const userTimestamp = new Date().toLocaleString('sv-SE');
+      if (userContentList.length > 0) {
+        const contentForHistory = userContentList.length === 1 && userContentList[0].type === 'text'
+          ? userContentList[0].text
+          : userContentList;
+        history.value.push({ role: "user", content: contentForHistory });
+        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
+      } else return;
+    } else return;
+    prompt.value = "";
+  }
 
-    if (temporary.value) {
-        const systemMessage = history.value.find(m => m.role === 'system');
-        const lastUserMessage = history.value.findLast(m => m.role === 'user');
-        history.value = [systemMessage, lastUserMessage].filter(Boolean);
-    }
+  if (temporary.value) {
+    const systemMessage = history.value.find(m => m.role === 'system');
+    const lastUserMessage = history.value.findLast(m => m.role === 'user');
+    history.value = [systemMessage, lastUserMessage].filter(Boolean);
+  }
 
-    // --- 2. 初始化 AI 回合 ---
-    loading.value = true;
-    signalController.value = new AbortController();
-    await nextTick();
-    scrollToBottom();
+  // --- 2. 初始化 AI 回合 ---
+  loading.value = true;
+  signalController.value = new AbortController();
+  await nextTick();
+  scrollToBottom();
 
-    const currentPromptConfig = currentConfig.value.prompts[CODE.value];
-    const isVoiceReply = !!selectedVoice.value;
-    let useStream = currentPromptConfig?.stream && !isVoiceReply;
+  const currentPromptConfig = currentConfig.value.prompts[CODE.value];
+  const isVoiceReply = !!selectedVoice.value;
+  let useStream = currentPromptConfig?.stream && !isVoiceReply;
 
-    const MAX_TOOL_CALLS = 5;
-    let tool_calls_count = 0;
-    
-    let currentAssistantChatShowIndex = -1;
+  const MAX_TOOL_CALLS = 5;
+  let tool_calls_count = 0;
 
-    try {
-        const openai = new OpenAI({
-            apiKey: () => getRandomItem(api_key.value),
-            baseURL: base_url.value,
-            dangerouslyAllowBrowser: true,
-            maxRetries: 3,
-        });
+  let currentAssistantChatShowIndex = -1;
 
-        // --- 3. 开始工具调用循环 ---
-        while (tool_calls_count < MAX_TOOL_CALLS && !signalController.value.signal.aborted) {
-            chatInputRef.value?.focus({ cursor: 'end' });
+  try {
+    const openai = new OpenAI({
+      apiKey: () => getRandomItem(api_key.value),
+      baseURL: base_url.value,
+      dangerouslyAllowBrowser: true,
+      maxRetries: 3,
+    });
 
-            // --- 为本次请求创建临时消息列表 ---
-            const messagesForThisRequest = JSON.parse(JSON.stringify(history.value));
-            
-            // --- 仅在临时列表中注入MCP提示词 ---
-            if (openaiFormattedTools.value.length > 0) {
-                const mcpSystemPrompt = `
+    // --- 3. 开始工具调用循环 ---
+    while (tool_calls_count < MAX_TOOL_CALLS && !signalController.value.signal.aborted) {
+      chatInputRef.value?.focus({ cursor: 'end' });
+
+      // --- 为本次请求创建临时消息列表 ---
+      const messagesForThisRequest = JSON.parse(JSON.stringify(history.value));
+
+      // --- 仅在临时列表中注入MCP提示词 ---
+      if (openaiFormattedTools.value.length > 0) {
+        const mcpSystemPrompt = `
                 
 ##工具调用声明
  
@@ -1359,307 +1360,316 @@ const askAI = async (forceSend = false) => {
 
 现在开始！如果 您/assistant/model 正确解决了任务，您将获得 1,000,000 美元的奖励。
 `;
-                const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
-                if (systemMessageIndex !== -1) {
-                    if (!messagesForThisRequest[systemMessageIndex].content.includes("##工具调用声明")) {
-                        messagesForThisRequest[systemMessageIndex].content += mcpSystemPrompt;
-                    }
-                } else {
-                    messagesForThisRequest.unshift({ role: "system", content: mcpSystemPrompt });
-                }
-            }
-
-            const payload = {
-                model: model.value.split("|")[1],
-                messages: messagesForThisRequest, // 使用临时的、注入了提示词的消息列表
-                stream: useStream,
-            };
-            
-            // 应用其他参数
-            if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
-            if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
-            if (openaiFormattedTools.value.length > 0) {
-                payload.tools = openaiFormattedTools.value;
-                payload.tool_choice = "auto";
-            }
-            if (isVoiceReply) {
-                payload.stream = false;
-                useStream = false;
-                payload.modalities = ["text", "audio"];
-                payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
-            }
-
-            // 为每个AI回合创建一个新的UI气泡
-            const assistantMessageId = messageIdCounter.value++;
-            chat_show.value.push({
-                id: assistantMessageId,
-                role: "assistant", content: [], reasoning_content: "", status: "",
-                aiName: modelMap.value[model.value] || model.value.split('|')[1],
-                voiceName: selectedVoice.value, tool_calls: []
-            });
-            currentAssistantChatShowIndex = chat_show.value.length - 1;
-            scrollToBottom();
-
-            let responseMessage;
-
-            if (useStream) {
-                const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
-                
-                let aggregatedContent = "";
-                let aggregatedToolCalls = [];
-                let lastUpdateTime = Date.now();
-
-                for await (const part of stream) {
-                    const delta = part.choices[0]?.delta;
-                    if (!delta) continue;
-                    
-                    if (delta.content) {
-                        aggregatedContent += delta.content;
-                        if (Date.now() - lastUpdateTime > 100) {
-                            chat_show.value[currentAssistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
-                            scrollToBottom();
-                            lastUpdateTime = Date.now();
-                        }
-                    }
-                    
-                    if (delta.tool_calls) {
-                        for (const toolCallChunk of delta.tool_calls) {
-                            const index = toolCallChunk.index ?? aggregatedToolCalls.length;
-                            if (!aggregatedToolCalls[index]) {
-                                aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
-                            }
-                            const currentTool = aggregatedToolCalls[index];
-                            if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
-                            if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
-                            if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
-                        }
-                    }
-                }
-                
-                responseMessage = { role: 'assistant', content: aggregatedContent || null };
-                if (aggregatedToolCalls.length > 0) {
-                    responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
-                }
-            } else {
-                const response = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
-                responseMessage = response.choices[0].message;
-            }
-
-            // 将AI的回复同步到主 history 数组
-            history.value.push(responseMessage);
-            
-            const currentBubble = chat_show.value[currentAssistantChatShowIndex];
-            if (responseMessage.content) {
-                currentBubble.content = [{ type: 'text', text: responseMessage.content }];
-            }
-
-            if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-                tool_calls_count++;
-                currentBubble.tool_calls = responseMessage.tool_calls.map(tc => ({
-                    id: tc.id, name: tc.function.name, args: tc.function.arguments, result: '执行中...',
-                }));
-
-                await nextTick();
-                scrollToBottom();
-
-                const toolMessages = await Promise.all(
-                    responseMessage.tool_calls.map(async (toolCall) => {
-                        const uiToolCall = currentBubble.tool_calls.find(t => t.id === toolCall.id);
-                        let toolContent;
-                        try {
-                           const toolArgs = JSON.parse(toolCall.function.arguments);
-                           const result = await window.api.invokeMcpTool(toolCall.function.name, toolArgs);
-                           toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
-                           if (uiToolCall) uiToolCall.result = toolContent;
-                        } catch (e) {
-                           toolContent = `工具执行或参数解析错误: ${e.message}`;
-                           if (uiToolCall) uiToolCall.result = toolContent;
-                        }
-                        return { tool_call_id: toolCall.id, role: "tool", name: toolCall.function.name, content: toolContent };
-                    })
-                );
-                
-                // 将工具调用的结果同步到主 history 数组
-                history.value.push(...toolMessages);
-            } else {
-                if (isVoiceReply && responseMessage.audio) {
-                  currentBubble.content = currentBubble.content || [];
-                  currentBubble.content.push({ type: "input_audio", input_audio: { data: responseMessage.audio.data, format: 'wav' } });
-                }
-                break; // 如果没有工具调用，则退出循环
-            }
-        } // 循环结束
-
-        if (tool_calls_count >= MAX_TOOL_CALLS) {
-            const errorMsg = '错误: 工具调用次数超过限制。';
-            // 将错误消息同步到主 history 数组
-            history.value.push({ role: 'assistant', content: errorMsg });
-            
-            chat_show.value.push({
-                id: messageIdCounter.value++, role: "assistant", content: [{ type: 'text', text: errorMsg }],
-                aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
-            });
+        const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
+        if (systemMessageIndex !== -1) {
+          if (!messagesForThisRequest[systemMessageIndex].content.includes("##工具调用声明")) {
+            messagesForThisRequest[systemMessageIndex].content += mcpSystemPrompt;
+          }
+        } else {
+          messagesForThisRequest.unshift({ role: "system", content: mcpSystemPrompt });
         }
-        
-    } catch (error) {
-        let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
-        if (error.name === 'AbortError') errorDisplay = "请求已取消";
-        
-        const errorBubbleIndex = currentAssistantChatShowIndex > -1 ? currentAssistantChatShowIndex : chat_show.value.length;
-        if (currentAssistantChatShowIndex === -1) {
-             chat_show.value.push({
-                id: messageIdCounter.value++, role: "assistant", content: [],
-                aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
-            });
-        }
-        chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
-        
-        // 将错误消息同步到主 history 数组
-        history.value.push({ role: 'assistant', content: `错误: ${errorDisplay}` });
+      }
 
-    } finally {
-        loading.value = false;
-        signalController.value = null;
-        if (currentAssistantChatShowIndex > -1) {
-            chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
+      const payload = {
+        model: model.value.split("|")[1],
+        messages: messagesForThisRequest, // 使用临时的、注入了提示词的消息列表
+        stream: useStream,
+      };
+
+      // 应用其他参数
+      if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
+      if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
+      if (openaiFormattedTools.value.length > 0) {
+        payload.tools = openaiFormattedTools.value;
+        payload.tool_choice = "auto";
+      }
+      if (isVoiceReply) {
+        payload.stream = false;
+        useStream = false;
+        payload.modalities = ["text", "audio"];
+        payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
+      }
+
+      // 为每个AI回合创建一个新的UI气泡
+      const assistantMessageId = messageIdCounter.value++;
+      chat_show.value.push({
+        id: assistantMessageId,
+        role: "assistant", content: [], reasoning_content: "", status: "",
+        aiName: modelMap.value[model.value] || model.value.split('|')[1],
+        voiceName: selectedVoice.value, tool_calls: []
+      });
+      currentAssistantChatShowIndex = chat_show.value.length - 1;
+      scrollToBottom();
+
+      let responseMessage;
+
+      if (useStream) {
+        const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
+
+        let aggregatedContent = "";
+        let aggregatedToolCalls = [];
+        let lastUpdateTime = Date.now();
+
+        for await (const part of stream) {
+          const delta = part.choices[0]?.delta;
+          if (!delta) continue;
+
+          if (delta.content) {
+            aggregatedContent += delta.content;
+            if (Date.now() - lastUpdateTime > 100) {
+              chat_show.value[currentAssistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
+              scrollToBottom();
+              lastUpdateTime = Date.now();
+            }
+          }
+
+          if (delta.tool_calls) {
+            for (const toolCallChunk of delta.tool_calls) {
+              const index = toolCallChunk.index ?? aggregatedToolCalls.length;
+              if (!aggregatedToolCalls[index]) {
+                aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
+              }
+              const currentTool = aggregatedToolCalls[index];
+              if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
+              if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
+              if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
+            }
+          }
         }
+
+        responseMessage = { role: 'assistant', content: aggregatedContent || null };
+        if (aggregatedToolCalls.length > 0) {
+          responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
+        }
+      } else {
+        const response = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
+        responseMessage = response.choices[0].message;
+      }
+
+      // 将AI的回复同步到主 history 数组
+      history.value.push(responseMessage);
+
+      const currentBubble = chat_show.value[currentAssistantChatShowIndex];
+      if (responseMessage.content) {
+        currentBubble.content = [{ type: 'text', text: responseMessage.content }];
+      }
+
+      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        tool_calls_count++;
+        currentBubble.tool_calls = responseMessage.tool_calls.map(tc => ({
+          id: tc.id, name: tc.function.name, args: tc.function.arguments, result: '执行中...',
+        }));
+
         await nextTick();
         scrollToBottom();
-        chatInputRef.value?.focus({ cursor: 'end' });
+
+        const toolMessages = await Promise.all(
+          responseMessage.tool_calls.map(async (toolCall) => {
+            const uiToolCall = currentBubble.tool_calls.find(t => t.id === toolCall.id);
+            let toolContent;
+
+            const controller = new AbortController();
+            toolCallControllers.value.set(toolCall.id, controller);
+
+            try {
+              const toolArgs = JSON.parse(toolCall.function.arguments);
+              const result = await window.api.invokeMcpTool(toolCall.function.name, toolArgs, controller.signal);
+              toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
+              if (uiToolCall) uiToolCall.result = toolContent;
+            } catch (e) {
+              if (e.name === 'AbortError') {
+                toolContent = "Error: Tool call was canceled by the user.";
+              } else {
+                toolContent = `工具执行或参数解析错误: ${e.message}`;
+              }
+              if (uiToolCall) uiToolCall.result = toolContent;
+            } finally {
+              toolCallControllers.value.delete(toolCall.id);
+            }
+            return { tool_call_id: toolCall.id, role: "tool", name: toolCall.function.name, content: toolContent };
+          })
+        );
+
+        // 将工具调用的结果同步到主 history 数组
+        history.value.push(...toolMessages);
+      } else {
+        if (isVoiceReply && responseMessage.audio) {
+          currentBubble.content = currentBubble.content || [];
+          currentBubble.content.push({ type: "input_audio", input_audio: { data: responseMessage.audio.data, format: 'wav' } });
+        }
+        break; // 如果没有工具调用，则退出循环
+      }
+    } // 循环结束
+
+    if (tool_calls_count >= MAX_TOOL_CALLS) {
+      const errorMsg = '错误: 工具调用次数超过限制。';
+      // 将错误消息同步到主 history 数组
+      history.value.push({ role: 'assistant', content: errorMsg });
+
+      chat_show.value.push({
+        id: messageIdCounter.value++, role: "assistant", content: [{ type: 'text', text: errorMsg }],
+        aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
+      });
     }
+
+  } catch (error) {
+    let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
+    if (error.name === 'AbortError') errorDisplay = "请求已取消";
+
+    const errorBubbleIndex = currentAssistantChatShowIndex > -1 ? currentAssistantChatShowIndex : chat_show.value.length;
+    if (currentAssistantChatShowIndex === -1) {
+      chat_show.value.push({
+        id: messageIdCounter.value++, role: "assistant", content: [],
+        aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
+      });
+    }
+    chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
+
+    // 将错误消息同步到主 history 数组
+    history.value.push({ role: 'assistant', content: `错误: ${errorDisplay}` });
+
+  } finally {
+    loading.value = false;
+    signalController.value = null;
+    if (currentAssistantChatShowIndex > -1) {
+      chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
+    }
+    await nextTick();
+    scrollToBottom();
+    chatInputRef.value?.focus({ cursor: 'end' });
+  }
 };
 
 const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } };
 const copyText = async (content, index) => { if (loading.value && index === chat_show.value.length - 1) return; await window.api.copyText(content); };
 const reaskAI = async () => {
-    if (loading.value) return;
+  if (loading.value) return;
 
-    // 1. 找到历史记录中最后一个非工具消息的索引。这是用户可见的最后一条消息。
-    const lastVisibleMessageIndexInHistory = history.value.findLastIndex(msg => msg.role !== 'tool');
+  // 1. 找到历史记录中最后一个非工具消息的索引。这是用户可见的最后一条消息。
+  const lastVisibleMessageIndexInHistory = history.value.findLastIndex(msg => msg.role !== 'tool');
 
-    if (lastVisibleMessageIndexInHistory === -1) {
-        ElMessage.warning('没有可以重新提问的用户消息');
-        return;
+  if (lastVisibleMessageIndexInHistory === -1) {
+    ElMessage.warning('没有可以重新提问的用户消息');
+    return;
+  }
+
+  const lastVisibleMessage = history.value[lastVisibleMessageIndexInHistory];
+
+  if (lastVisibleMessage.role === 'assistant') {
+    // 规则: 如果最后一个可见消息是 AI 的回复（无论是简单回复还是工具调用发起者），
+    // 则从 history 数组中移除这个 AI 消息以及它之后的所有工具消息。
+    const historyItemsToRemove = history.value.length - lastVisibleMessageIndexInHistory;
+
+    // 计算需要从 chat_show 数组中移除多少个可见项。
+    const showItemsToRemove = history.value.slice(lastVisibleMessageIndexInHistory)
+      .filter(m => m.role !== 'tool').length;
+
+    history.value.splice(lastVisibleMessageIndexInHistory, historyItemsToRemove);
+    if (showItemsToRemove > 0) {
+      chat_show.value.splice(chat_show.value.length - showItemsToRemove);
     }
 
-    const lastVisibleMessage = history.value[lastVisibleMessageIndexInHistory];
+  } else if (lastVisibleMessage.role === 'user') {
+    // 规则: 如果最后一个可见消息是用户的，不修改历史记录，直接重新请求。
+    // 此处无需任何操作。
+  } else {
+    // 其他情况（如系统消息），不应触发重新提问。
+    ElMessage.warning('无法从此消息类型重新提问。');
+    return;
+  }
 
-    if (lastVisibleMessage.role === 'assistant') {
-        // 规则: 如果最后一个可见消息是 AI 的回复（无论是简单回复还是工具调用发起者），
-        // 则从 history 数组中移除这个 AI 消息以及它之后的所有工具消息。
-        const historyItemsToRemove = history.value.length - lastVisibleMessageIndexInHistory;
-
-        // 计算需要从 chat_show 数组中移除多少个可见项。
-        const showItemsToRemove = history.value.slice(lastVisibleMessageIndexInHistory)
-                                          .filter(m => m.role !== 'tool').length;
-
-        history.value.splice(lastVisibleMessageIndexInHistory, historyItemsToRemove);
-        if (showItemsToRemove > 0) {
-            chat_show.value.splice(chat_show.value.length - showItemsToRemove);
-        }
-
-    } else if (lastVisibleMessage.role === 'user') {
-        // 规则: 如果最后一个可见消息是用户的，不修改历史记录，直接重新请求。
-        // 此处无需任何操作。
-    } else {
-        // 其他情况（如系统消息），不应触发重新提问。
-        ElMessage.warning('无法从此消息类型重新提问。');
-        return;
-    }
-
-    // 3. 清理状态并发送新的AI请求
-    collapsedMessages.value.clear();
-    await nextTick();
-    await askAI(true);
+  // 3. 清理状态并发送新的AI请求
+  collapsedMessages.value.clear();
+  await nextTick();
+  await askAI(true);
 };
 
 const deleteMessage = (index) => {
-    if (loading.value) {
-        ElMessage.warning('请等待当前回复完成后再操作');
-        return;
+  if (loading.value) {
+    ElMessage.warning('请等待当前回复完成后再操作');
+    return;
+  }
+  if (index < 0 || index >= chat_show.value.length) return;
+
+  const msgToDeleteInShow = chat_show.value[index];
+  if (msgToDeleteInShow?.role === 'system') {
+    ElMessage.info('系统提示词不能被删除');
+    return;
+  }
+
+  // --- 1. 定位消息在 `history` 数组中的真实索引 ---
+  // `chat_show` 只包含可见消息，`history` 包含所有消息（包括隐藏的 'tool' 类型）
+  let history_idx = -1;
+  let show_counter = -1;
+  for (let i = 0; i < history.value.length; i++) {
+    // 只有非 'tool' 消息才计入 `chat_show` 的索引
+    if (history.value[i].role !== 'tool') {
+      show_counter++;
     }
-    if (index < 0 || index >= chat_show.value.length) return;
-
-    const msgToDeleteInShow = chat_show.value[index];
-    if (msgToDeleteInShow?.role === 'system') {
-        ElMessage.info('系统提示词不能被删除');
-        return;
+    if (show_counter === index) {
+      history_idx = i;
+      break;
     }
+  }
 
-    // --- 1. 定位消息在 `history` 数组中的真实索引 ---
-    // `chat_show` 只包含可见消息，`history` 包含所有消息（包括隐藏的 'tool' 类型）
-    let history_idx = -1;
-    let show_counter = -1;
-    for (let i = 0; i < history.value.length; i++) {
-        // 只有非 'tool' 消息才计入 `chat_show` 的索引
-        if (history.value[i].role !== 'tool') {
-            show_counter++;
-        }
-        if (show_counter === index) {
-            history_idx = i;
-            break;
-        }
+  if (history_idx === -1) {
+    console.error("关键错误: 无法将 chat_show 索引映射到 history 索引。中止删除。");
+    ElMessage.error("删除失败：消息状态不一致。");
+    return;
+  }
+
+  // --- 2. 根据消息类型和上下文，确定要删除的 `history` 范围 ---
+  const messageToDeleteInHistory = history.value[history_idx];
+  let history_start_idx = history_idx;
+  let history_end_idx = history_idx;
+
+  // 核心逻辑：判断被删除的消息是否是工具调用的发起者
+  if (
+    messageToDeleteInHistory.role === 'assistant' &&
+    messageToDeleteInHistory.tool_calls &&
+    messageToDeleteInHistory.tool_calls.length > 0
+  ) {
+    // 如果是，则需要一并删除其后紧邻的所有 'tool' 消息
+    // 这形成了一个“命运共同体”：(发起调用的AI, tool, tool, ...)
+    while (history.value[history_end_idx + 1]?.role === 'tool') {
+      history_end_idx++;
     }
+  }
+  // 对于其他所有情况（用户消息、简单的AI回复、总结性的AI回复），
+  // history_start_idx 和 history_end_idx 将保持相等，只删除单个消息。
+  // 这就正确地将总结性AI回复与它之前的工具调用链分离开来。
 
-    if (history_idx === -1) {
-        console.error("关键错误: 无法将 chat_show 索引映射到 history 索引。中止删除。");
-        ElMessage.error("删除失败：消息状态不一致。");
-        return;
+  // --- 3. 计算并执行删除操作 ---
+
+  // 计算在 history 数组中需要删除的条目数量
+  const history_delete_count = history_end_idx - history_start_idx + 1;
+
+  // 在 chat_show 数组中，只删除用户点击的那一条可见消息
+  const show_delete_count = 1;
+  const show_start_idx = index;
+
+  // 从 history 数组中删除
+  if (history_delete_count > 0) {
+    history.value.splice(history_start_idx, history_delete_count);
+  }
+
+  // 从 chat_show 数组中删除
+  if (show_delete_count > 0) {
+    chat_show.value.splice(show_start_idx, show_delete_count);
+  }
+
+  const deletedIndexInShow = index;
+  const newCollapsedMessages = new Set();
+  for (const collapsedIdx of collapsedMessages.value) {
+    if (collapsedIdx < deletedIndexInShow) {
+      newCollapsedMessages.add(collapsedIdx);
+    } else if (collapsedIdx > deletedIndexInShow) {
+      newCollapsedMessages.add(collapsedIdx - 1);
     }
+  }
+  collapsedMessages.value = newCollapsedMessages;
 
-    // --- 2. 根据消息类型和上下文，确定要删除的 `history` 范围 ---
-    const messageToDeleteInHistory = history.value[history_idx];
-    let history_start_idx = history_idx;
-    let history_end_idx = history_idx;
-
-    // 核心逻辑：判断被删除的消息是否是工具调用的发起者
-    if (
-        messageToDeleteInHistory.role === 'assistant' &&
-        messageToDeleteInHistory.tool_calls &&
-        messageToDeleteInHistory.tool_calls.length > 0
-    ) {
-        // 如果是，则需要一并删除其后紧邻的所有 'tool' 消息
-        // 这形成了一个“命运共同体”：(发起调用的AI, tool, tool, ...)
-        while (history.value[history_end_idx + 1]?.role === 'tool') {
-            history_end_idx++;
-        }
-    }
-    // 对于其他所有情况（用户消息、简单的AI回复、总结性的AI回复），
-    // history_start_idx 和 history_end_idx 将保持相等，只删除单个消息。
-    // 这就正确地将总结性AI回复与它之前的工具调用链分离开来。
-
-    // --- 3. 计算并执行删除操作 ---
-
-    // 计算在 history 数组中需要删除的条目数量
-    const history_delete_count = history_end_idx - history_start_idx + 1;
-    
-    // 在 chat_show 数组中，只删除用户点击的那一条可见消息
-    const show_delete_count = 1;
-    const show_start_idx = index;
-
-    // 从 history 数组中删除
-    if (history_delete_count > 0) {
-        history.value.splice(history_start_idx, history_delete_count);
-    }
-    
-    // 从 chat_show 数组中删除
-    if (show_delete_count > 0) {
-        chat_show.value.splice(show_start_idx, show_delete_count);
-    }
-
-    const deletedIndexInShow = index;
-    const newCollapsedMessages = new Set();
-    for (const collapsedIdx of collapsedMessages.value) {
-      if (collapsedIdx < deletedIndexInShow) {
-        newCollapsedMessages.add(collapsedIdx);
-      } else if (collapsedIdx > deletedIndexInShow) {
-        newCollapsedMessages.add(collapsedIdx - 1);
-      }
-    }
-    collapsedMessages.value = newCollapsedMessages;
-
-    focusedMessageIndex.value = null;
-    console.log(history.value);
+  focusedMessageIndex.value = null;
 };
 
 const clearHistory = () => {
@@ -1720,23 +1730,23 @@ const focusOnInput = () => {
     chatInputRef.value?.focus({ cursor: 'end' });
   }, 100);
 };
+
+const handleCancelToolCall = (toolCallId) => {
+    const controller = toolCallControllers.value.get(toolCallId);
+    if (controller) {
+        controller.abort();
+        ElMessage.info('正在取消工具调用...');
+    }
+};
 </script>
 
 <template>
   <main>
     <el-container>
-      <ChatHeader 
-    :favicon="favicon" 
-    :modelMap="modelMap" 
-    :model="model" 
-    :autoCloseOnBlur="autoCloseOnBlur"
-    :temporary="temporary"
-    :is-mcp-loading="isMcpLoading"  
-    @save-window-size="handleSaveWindowSize"
-    @open-model-dialog="handleOpenModelDialog"
-    @toggle-pin="handleTogglePin"
-    @toggle-memory="handleToggleMemory" 
-    @save-session="handleSaveSession" />
+      <ChatHeader :favicon="favicon" :modelMap="modelMap" :model="model" :autoCloseOnBlur="autoCloseOnBlur"
+        :temporary="temporary" :is-mcp-loading="isMcpLoading" @save-window-size="handleSaveWindowSize"
+        @open-model-dialog="handleOpenModelDialog" @toggle-pin="handleTogglePin" @toggle-memory="handleToggleMemory"
+        @save-session="handleSaveSession" />
 
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
@@ -1747,7 +1757,7 @@ const focusOnInput = () => {
             :is-dark-mode="currentConfig.isDarkMode" @delete-message="handleDeleteMessage" @copy-text="handleCopyText"
             @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
             @avatar-click="onAvatarClick" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"
-            @edit-message="handleEditMessage" />
+            @edit-message="handleEditMessage" @cancel-tool-call="handleCancelToolCall" />
         </el-main>
 
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
@@ -1802,7 +1812,8 @@ const focusOnInput = () => {
       title="下载图片" />
   </div>
 
-  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP" width="540px" top="10vh" custom-class="mcp-dialog" @close="focusOnInput">
+  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP" width="540px" top="10vh" custom-class="mcp-dialog"
+    @close="focusOnInput">
     <div class="mcp-dialog-content">
       <div class="mcp-dialog-toolbar">
         <el-button-group>
@@ -1814,25 +1825,19 @@ const focusOnInput = () => {
         </el-button-group>
       </div>
       <div class="mcp-server-list custom-scrollbar">
-        <div
-          v-for="server in filteredMcpServers"
-          :key="server.id"
-          class="mcp-server-item"
+        <div v-for="server in filteredMcpServers" :key="server.id" class="mcp-server-item"
           :class="{ 'is-checked': sessionMcpServerIds.includes(server.id) }"
-          @click="toggleMcpServerSelection(server.id)"
-        >
-          <el-checkbox
-            :model-value="sessionMcpServerIds.includes(server.id)"
-            size="large"
-            @change="() => toggleMcpServerSelection(server.id)"
-            @click.stop
-          />
+          @click="toggleMcpServerSelection(server.id)">
+          <el-checkbox :model-value="sessionMcpServerIds.includes(server.id)" size="large"
+            @change="() => toggleMcpServerSelection(server.id)" @click.stop />
           <div class="mcp-server-content">
             <div class="mcp-server-header-row">
               <span class="mcp-server-name">{{ server.name }}</span>
               <div class="mcp-server-tags">
                 <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{ server.type }}</el-tag>
-                <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{ tag }}</el-tag>
+                <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
+                  tag
+                  }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
@@ -1844,7 +1849,8 @@ const focusOnInput = () => {
       </div>
     </div>
     <template #footer>
-      <el-button @click="selectAllMcpServers">全选当前</el-button>
+      <!-- 因为全选会出bug，当前无法解决，故隐藏该功能 -->
+      <!-- <el-button @click="selectAllMcpServers">全选当前</el-button> -->
       <el-button @click="clearMcpTools">清除全部</el-button>
       <el-button type="primary" @click="applyMcpTools">应用</el-button>
     </template>
@@ -2106,12 +2112,14 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
   gap: 8px;
   margin-bottom: 4px;
 }
+
 .mcp-server-name {
   font-weight: 500;
   color: var(--el-text-color-primary);
   min-width: 0;
   flex-grow: 1;
 }
+
 .mcp-server-tags {
   display: flex;
   flex-wrap: nowrap;
@@ -2178,14 +2186,16 @@ html.dark .mcp-dialog-footer-search {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 35vh; /* 您可以按需调整高度 */
+  max-height: 35vh;
+  /* 您可以按需调整高度 */
   overflow-y: auto;
   padding: 5px;
 }
 
 .mcp-server-item {
   display: flex;
-  align-items: flex-start; /* 顶部对齐 */
+  align-items: flex-start;
+  /* 顶部对齐 */
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--el-border-color-lighter);
@@ -2204,20 +2214,22 @@ html.dark .mcp-dialog-footer-search {
 }
 
 html.dark .mcp-server-item:hover {
-    background-color: var(--el-fill-color-darker);
+  background-color: var(--el-fill-color-darker);
 }
 
 html.dark .mcp-server-item.is-checked {
-    background-color: var(--el-fill-color-dark);
+  background-color: var(--el-fill-color-dark);
 }
 
 .mcp-server-item .el-checkbox {
-  margin-top: 1px; /* 微调复选框垂直位置 */
+  margin-top: 1px;
+  /* 微调复选框垂直位置 */
 }
 
 .mcp-server-content {
   flex: 1;
-  min-width: 0; /* 允许flex子元素收缩 */
+  min-width: 0;
+  /* 允许flex子元素收缩 */
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2242,7 +2254,8 @@ html.dark .mcp-server-item.is-checked {
 .mcp-server-tags {
   display: flex;
   gap: 6px;
-  flex-shrink: 0; /* 防止标签被压缩 */
+  flex-shrink: 0;
+  /* 防止标签被压缩 */
 }
 
 .mcp-server-description {
@@ -2259,7 +2272,8 @@ html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner {
 }
 
 html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::after {
-  border-color: #1d1d1d !important; /* 设置为深色 */
+  border-color: #1d1d1d !important;
+  /* 设置为深色 */
 }
 </style>
 

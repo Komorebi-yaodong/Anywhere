@@ -11,7 +11,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@langchain/mcp-adapters": "^1.0.0"
+    "@langchain/mcp-adapters": "^1.0.0",
+    "find-process": "^2.0.0"
   },
   "devDependencies": {
     "esbuild": "^0.25.2"

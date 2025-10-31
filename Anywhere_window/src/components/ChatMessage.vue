@@ -16,8 +16,7 @@ const props = defineProps({
   isDarkMode: Boolean
 });
 
-const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished']);
-
+const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished', 'cancel-tool-call']);
 const editInputRef = ref(null);
 const isEditing = ref(false);
 const editedContent = ref('');
@@ -315,25 +314,35 @@ const truncateFilename = (filename, maxLength = 30) => {
         <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-container">
             <el-collapse class="tool-collapse" accordion>
                 <el-collapse-item v-for="toolCall in message.tool_calls" :key="toolCall.id" :name="toolCall.id">
-                    <template #title>
-                        <div class="tool-call-title">
-                            <el-icon class="tool-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path><path d="m18 15 4-4"></path><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"></path></svg>
-                            </el-icon>
-                            <span class="tool-name">{{ toolCall.name }}</span>
-                        </div>
-                    </template>
-                    <div class="tool-call-details">
-                        <div class="tool-detail-section">
-                            <strong>参数:</strong>
-                            <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
-                        </div>
-                        <div class="tool-detail-section">
-                            <strong>结果:</strong>
-                            <pre><code>{{ toolCall.result }}</code></pre>
-                        </div>
-                    </div>
-                </el-collapse-item>
+                  <template #title>
+                      <div class="tool-call-title">
+                          <el-icon class="tool-icon">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path><path d="m18 15 4-4"></path><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"></path></svg>
+                          </el-icon>
+                          <span class="tool-name">{{ toolCall.name }}</span>
+                          <el-button
+                              v-if="toolCall.result === '执行中...'"
+                              @click.stop="$emit('cancel-tool-call', toolCall.id)"
+                              circle
+                              class="cancel-tool-button-header"
+                              title="取消此工具调用">
+                              <el-icon><Close /></el-icon>
+                          </el-button>
+                      </div>
+                  </template>
+                  <div class="tool-call-details">
+                      <div class="tool-detail-section">
+                          <strong>参数:</strong>
+                          <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
+                      </div>
+                      <div class="tool-detail-section">
+                          <strong>结果:</strong>
+                          <div class="tool-result-wrapper">
+                              <pre><code>{{ toolCall.result }}</code></pre>
+                          </div>
+                      </div>
+                  </div>
+              </el-collapse-item>
             </el-collapse>
         </div>
       </template>
@@ -390,7 +399,6 @@ html.dark .chat-message .user-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
     background-color: #ffffff;
     // border: 1px solid #e6e6e6;
-    max-width: 100%;
     padding-left: 4px;
   }
 
@@ -883,6 +891,7 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) { background-color: var(--
 /* MODIFICATION END */
 
 .tool-collapse {
+  min-width:50vw;
   border: none;
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-light);
@@ -920,16 +929,18 @@ html.dark .tool-collapse {
 .tool-call-title {
   display: flex;
   align-items: center;
+  width: 100%;
   gap: 8px;
-  font-size: 14px;
 }
-.tool-icon {
-  color: var(--el-text-color-secondary);
-}
+
 .tool-name {
   font-weight: 500;
   color: var(--el-text-color-primary);
 }
+.tool-icon {
+  color: var(--el-text-color-secondary);
+}
+
 
 .tool-call-details {
   .tool-detail-section {
@@ -988,5 +999,33 @@ html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb {
 }
 html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:hover {
   background: #999;
+}
+.tool-result-wrapper {
+  /* position: relative;  <-- 移除 */
+  display: flex;
+  align-items: flex-start;
+}
+
+.tool-result-wrapper pre {
+  flex-grow: 1;
+  /* margin-right: 28px; <-- 移除 */
+}
+
+.cancel-tool-button-header {
+  margin-left: auto; /* Push to the right */
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  
+  background-color: transparent;
+  border: none;
+  color: var(--el-text-color-placeholder);
+  transition: all 0.2s ease-in-out;
+
+  &:hover {
+    background-color: var(--el-color-danger);
+    color: white;
+    transform: scale(1.1);
+  }
 }
 </style>

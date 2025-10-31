@@ -88978,7 +88978,6 @@ var require_mcp = __commonJS({
         const currentIdSet = new Set(this.activeSessions.keys());
         const idsToClose = [...currentIdSet].filter((id) => !requestedIdSet.has(id));
         if (idsToClose.length > 0) {
-          console.log("MCP Manager: Closing sessions for", idsToClose);
           await Promise.all(idsToClose.map((id) => this.closeSession(id)));
         }
         const idsToLoad = [...requestedIdSet].filter((id) => !currentIdSet.has(id));
@@ -88993,7 +88992,6 @@ var require_mcp = __commonJS({
               this.closeSession(id);
               console.error(`MCP Manager: Failed to start session for '${id}':`, result.reason);
             } else {
-              console.log(`MCP Manager: Session for '${id}' was correctly aborted.`);
             }
           }
         });
@@ -89035,7 +89033,6 @@ var require_mcp = __commonJS({
         try {
           const tools = await client.getTools();
           if (!this.activeSessions.has(id)) {
-            console.log(`MCP Manager: Session for '${id}' was closed while loading, discarding results.`);
             await client.close();
             throw new Error("Session aborted during tool loading");
           }
@@ -89043,7 +89040,6 @@ var require_mcp = __commonJS({
           if (session) {
             session.tools = tools;
           }
-          console.log(`MCP Manager: Session for '${id}' started successfully.`);
         } catch (error) {
           await this.closeSession(id);
           if (error.name !== "AbortError" && !error.message.includes("aborted")) {
@@ -89060,7 +89056,6 @@ var require_mcp = __commonJS({
             await session.client.close();
           }
           this.activeSessions.delete(id);
-          console.log(`MCP Manager: Session for '${id}' has been closed.`);
         }
       }
     };
@@ -89079,12 +89074,12 @@ var require_mcp = __commonJS({
       }).filter(Boolean);
       return { openaiFormattedTools, successfulServerIds, failedServerIds };
     }
-    async function invokeMcpTool2(toolName, toolArgs) {
+    async function invokeMcpTool2(toolName, toolArgs, signal) {
       const toolToCall = langchainToolMap.get(toolName);
       if (!toolToCall) {
         throw new Error(`Tool "${toolName}" not found. It might have been closed or failed to load.`);
       }
-      return await toolToCall.invoke(toolArgs);
+      return await toolToCall.invoke(toolArgs, { signal });
     }
     module2.exports = {
       initializeMcpClient: initializeMcpClient2,
@@ -89248,7 +89243,6 @@ var commandHandlers = {
         content = payload;
       } else if (type === "img") {
         content = [{ type: "image_url", image_url: { url: payload } }];
-        console.log(content);
       } else if (type === "files") {
         content = await sendfileDirect(payload);
       } else {
