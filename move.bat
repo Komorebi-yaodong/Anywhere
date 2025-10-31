@@ -2,4 +2,3 @@
 
 @echo off
 python moveDist.py
-pause

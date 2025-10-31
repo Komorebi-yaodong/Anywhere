@@ -1,4 +1,3 @@
-const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
 const {
   getConfig,
   updateConfig,
@@ -29,72 +28,11 @@ const {
   handelReplyOpenAI,
 } = require('./input.js');
 
-// --- MCP State Management (within preload) ---
-let mcpClientInstance = null;
-let langchainToolMap = new Map();
-
-/**
- * [MCP Logic] Initializes a new MCP client in the preload environment.
- * @param {object} activeServersConfig - The configuration for active MCP servers.
- * @returns {Promise<object>} - An object containing openaiFormattedTools.
- */
-async function initializeMcpClient(activeServersConfig) {
-    if (mcpClientInstance) {
-        await mcpClientInstance.close();
-        mcpClientInstance = null;
-        langchainToolMap.clear();
-    }
-
-    if (!activeServersConfig || Object.keys(activeServersConfig).length === 0) {
-        return { openaiFormattedTools: [] };
-    }
-
-    mcpClientInstance = new MultiServerMCPClient(activeServersConfig);
-    const tools = await mcpClientInstance.getTools();
-    langchainToolMap = new Map(tools.map(t => [t.name, t]));
-    
-    const openaiFormattedTools = tools.map((tool) => {
-        if (!tool.schema) {
-            console.error(`Tool '${tool.name}' is missing schema definition.`);
-            return null;
-        }
-        return {
-            type: "function",
-            function: {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.schema,
-            },
-        };
-    }).filter(Boolean);
-
-    return { openaiFormattedTools };
-}
-
-/**
- * [MCP Logic] Closes the current MCP client instance.
- */
-async function closeMcpClient() {
-    if (mcpClientInstance) {
-        await mcpClientInstance.close();
-        mcpClientInstance = null;
-        langchainToolMap.clear();
-    }
-}
-
-/**
- * [MCP Logic] Invokes a specific tool by name.
- * @param {string} toolName - The name of the tool to invoke.
- * @param {object} toolArgs - The arguments for the tool.
- * @returns {Promise<any>} - The result of the tool invocation.
- */
-async function invokeMcpTool(toolName, toolArgs) {
-    const toolToCall = langchainToolMap.get(toolName);
-    if (!toolToCall) {
-        throw new Error(`Tool "${toolName}" not found in the current MCP client.`);
-    }
-    return await toolToCall.invoke(toolArgs);
-}
+// [MODIFIED] 引入重构后的 MCP 模块
+const { 
+  initializeMcpClient, 
+  invokeMcpTool 
+} = require('./mcp.js');
 
 window.api = {
   getConfig,
@@ -115,9 +53,9 @@ window.api = {
   savePromptWindowSettings,
   desktopCaptureSources: utools.desktopCaptureSources,
   copyImage: utools.copyImage,
-    initializeMcpClient,
-    closeMcpClient,
-    invokeMcpTool,
+  // [MODIFIED] 暴露重构后的 MCP 函数
+  initializeMcpClient,
+  invokeMcpTool,
 };
 
 // --- Command Handlers ---

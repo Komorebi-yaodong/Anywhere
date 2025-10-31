@@ -32,6 +32,1037 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// src/data.js
+var require_data = __commonJS({
+  "src/data.js"(exports2, module2) {
+    var webFrame = require("electron").webFrame;
+    var feature_suffix = "anywhere\u52A9\u624B^_^";
+    var defaultConfig2 = {
+      config: {
+        providers: {
+          "0": {
+            name: "default",
+            url: "https://api.openai.com/v1",
+            api_key: "",
+            modelList: [],
+            enable: true
+          }
+        },
+        providerOrder: ["0"],
+        prompts: {
+          AI: {
+            type: "over",
+            prompt: `\u4F60\u662F\u4E00\u4E2AAI\u52A9\u624B`,
+            showMode: "window",
+            model: "0|gpt-4o",
+            enable: true,
+            icon: "",
+            stream: true,
+            temperature: 0.7,
+            isTemperature: false,
+            isDirectSend_file: false,
+            isDirectSend_normal: true,
+            ifTextNecessary: false,
+            voice: null,
+            reasoning_effort: "default",
+            defaultMcpServers: [],
+            window_width: 540,
+            window_height: 700,
+            position_x: 0,
+            position_y: 0,
+            autoCloseOnBlur: true,
+            isAlwaysOnTop: true
+          }
+        },
+        mcpServers: {},
+        language: "zh",
+        tags: {},
+        skipLineBreak: false,
+        CtrlEnterToSend: false,
+        showNotification: true,
+        isDarkMode: false,
+        fix_position: false,
+        isAlwaysOnTop_global: true,
+        autoCloseOnBlur_global: true,
+        zoom: 1,
+        webdav: {
+          url: "",
+          username: "",
+          password: "",
+          path: "/anywhere",
+          dataPath: "/anywhere_data"
+        },
+        voiceList: [
+          "alloy-\u{1F469}",
+          "echo-\u{1F468}\u200D\u{1F9B0}\u6E05\u6670",
+          "nova-\u{1F469}\u6E05\u6670",
+          "sage-\u{1F467}\u5E74\u8F7B",
+          "shimmer-\u{1F467}\u660E\u4EAE",
+          "fable-\u{1F610}\u4E2D\u6027",
+          "coral-\u{1F469}\u5BA2\u670D",
+          "ash-\u{1F9D4}\u200D\u2642\uFE0F\u5546\u4E1A",
+          "ballad-\u{1F468}\u6545\u4E8B",
+          "verse-\u{1F468}\u8BD7\u6B4C",
+          "onyx-\u{1F468}\u200D\u{1F9B0}\u65B0\u95FB",
+          "Zephyr-\u{1F467}\u660E\u4EAE",
+          "Puck-\u{1F466}\u6B22\u5FEB",
+          "Charon-\u{1F466}\u4FE1\u606F\u4E30\u5BCC",
+          "Kore-\u{1F469}\u575A\u5B9A",
+          "Fenrir-\u{1F468}\u200D\u{1F9B0}\u6613\u6FC0\u52A8",
+          "Leda-\u{1F467}\u5E74\u8F7B",
+          "Orus-\u{1F468}\u200D\u{1F9B0}\u9274\u5B9A",
+          "Aoede-\u{1F469}\u8F7B\u677E",
+          "Callirrhoe-\u{1F469}\u968F\u548C",
+          "Autonoe-\u{1F469}\u660E\u4EAE",
+          "Enceladus-\u{1F9D4}\u200D\u2642\uFE0F\u547C\u5438\u611F",
+          "Iapetus-\u{1F466}\u6E05\u6670",
+          "Umbriel-\u{1F466}\u968F\u548C",
+          "Algieba-\u{1F466}\u5E73\u6ED1",
+          "Despina-\u{1F469}\u5E73\u6ED1",
+          "Erinome-\u{1F469}\u6E05\u6670",
+          "Algenib-\u{1F468}\u200D\u{1F9B0}\u6C99\u54D1",
+          "Rasalgethi-\u{1F468}\u200D\u{1F9B0}\u4FE1\u606F\u4E30\u5BCC",
+          "Laomedeia-\u{1F469}\u6B22\u5FEB",
+          "Achernar-\u{1F469}\u8F7B\u67D4",
+          "Alnilam-\u{1F466}\u575A\u5B9A",
+          "Schedar-\u{1F466}\u5E73\u7A33",
+          "Gacrux-\u{1F469}\u6210\u719F",
+          "Pulcherrima-\u{1F469}\u5411\u524D",
+          "Achird-\u{1F466}\u53CB\u597D",
+          "Zubenelgenubi-\u{1F466}\u4F11\u95F2",
+          "Vindemiatrix-\u{1F469}\u6E29\u67D4",
+          "Sadachbia-\u{1F468}\u200D\u{1F9B0}\u6D3B\u6CFC",
+          "Sadaltager-\u{1F468}\u200D\u{1F9B0}\u535A\u5B66",
+          "Sulafat-\u{1F469}\u6E29\u6696"
+        ]
+      }
+    };
+    function splitConfigForStorage(fullConfig) {
+      const { prompts, providers, mcpServers, ...restOfConfig } = fullConfig;
+      return {
+        baseConfigPart: { config: restOfConfig },
+        promptsPart: prompts,
+        providersPart: providers,
+        mcpServersPart: mcpServers
+      };
+    }
+    function getConfig2() {
+      let configDoc = utools.db.get("config");
+      if (!configDoc) {
+        console.log("Anywhere: Initializing configuration for a new user.");
+        const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(defaultConfig2.config);
+        utools.db.put({ _id: "config", data: baseConfigPart });
+        utools.db.put({ _id: "prompts", data: promptsPart });
+        utools.db.put({ _id: "providers", data: providersPart });
+        utools.db.put({ _id: "mcpServers", data: mcpServersPart });
+        return defaultConfig2;
+      }
+      if (configDoc.data.config && configDoc.data.config.prompts) {
+        console.warn("Anywhere: Old configuration format detected. Starting migration.");
+        const oldFullConfig = configDoc.data.config;
+        const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(oldFullConfig);
+        utools.db.put({ _id: "prompts", data: promptsPart });
+        utools.db.put({ _id: "providers", data: providersPart });
+        utools.db.put({ _id: "mcpServers", data: mcpServersPart });
+        const updateResult = utools.db.put({
+          _id: "config",
+          data: baseConfigPart,
+          _rev: configDoc._rev
+        });
+        if (updateResult.ok) {
+          console.log("Anywhere: Migration successful. Old config cleaned.");
+        } else {
+          console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
+        }
+        configDoc = utools.db.get("config");
+      }
+      const fullConfigData = configDoc.data;
+      const promptsDoc = utools.db.get("prompts");
+      fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig2.config.prompts;
+      const providersDoc = utools.db.get("providers");
+      fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig2.config.providers;
+      const mcpServersDoc = utools.db.get("mcpServers");
+      fullConfigData.config.mcpServers = mcpServersDoc ? mcpServersDoc.data : defaultConfig2.config.mcpServers || {};
+      return fullConfigData;
+    }
+    function checkConfig(config) {
+      let flag = false;
+      if (config.version !== "1.7.3") {
+        config.version = "1.7.3";
+        flag = true;
+      }
+      if (config.isAlwaysOnTop_global === void 0) {
+        config.isAlwaysOnTop_global = true;
+        flag = true;
+      }
+      if (config.autoCloseOnBlur_global === void 0) {
+        config.autoCloseOnBlur_global = true;
+        flag = true;
+      }
+      if (config.window_width || config.window_height) {
+        delete config.window_width;
+        delete config.window_height;
+        flag = true;
+      }
+      if (config.stream !== void 0) {
+        delete config.stream;
+        flag = true;
+      }
+      if (config.autoCloseOnBlur !== void 0) {
+        delete config.autoCloseOnBlur;
+        flag = true;
+      }
+      if (config.isAlwaysOnTop !== void 0) {
+        delete config.isAlwaysOnTop;
+        flag = true;
+      }
+      if (config.CtrlEnterToSend == void 0) {
+        config.CtrlEnterToSend = false;
+        flag = true;
+      }
+      if (config.showNotification == void 0) {
+        config.showNotification = false;
+        flag = true;
+      }
+      if (config.position_x || config.position_y) {
+        delete config.position_x;
+        delete config.position_y;
+        flag = true;
+      }
+      if (config.fix_position == void 0) {
+        config.fix_position = false;
+        flag = true;
+      }
+      if (config.zoom == void 0) {
+        config.zoom = 1;
+        flag = true;
+      }
+      if (config.inputLayout) {
+        delete config.inputLayout;
+        flag = true;
+      }
+      if (config.mcpServers === void 0) {
+        config.mcpServers = {};
+        flag = true;
+      }
+      if (config.voiceList === void 0) {
+        config.voiceList = [
+          "alloy-\u{1F469}",
+          "echo-\u{1F468}\u200D\u{1F9B0}\u6E05\u6670",
+          "nova-\u{1F469}\u6E05\u6670",
+          "sage-\u{1F467}\u5E74\u8F7B",
+          "shimmer-\u{1F467}\u660E\u4EAE",
+          "fable-\u{1F610}\u4E2D\u6027",
+          "coral-\u{1F469}\u5BA2\u670D",
+          "ash-\u{1F9D4}\u200D\u2642\uFE0F\u5546\u4E1A",
+          "ballad-\u{1F468}\u6545\u4E8B",
+          "verse-\u{1F468}\u8BD7\u6B4C",
+          "onyx-\u{1F468}\u200D\u{1F9B0}\u65B0\u95FB",
+          "Zephyr-\u{1F467}\u660E\u4EAE",
+          "Puck-\u{1F466}\u6B22\u5FEB",
+          "Charon-\u{1F466}\u4FE1\u606F\u4E30\u5BCC",
+          "Kore-\u{1F469}\u575A\u5B9A",
+          "Fenrir-\u{1F468}\u200D\u{1F9B0}\u6613\u6FC0\u52A8",
+          "Leda-\u{1F467}\u5E74\u8F7B",
+          "Orus-\u{1F468}\u200D\u{1F9B0}\u9274\u5B9A",
+          "Aoede-\u{1F469}\u8F7B\u677E",
+          "Callirrhoe-\u{1F469}\u968F\u548C",
+          "Autonoe-\u{1F469}\u660E\u4EAE",
+          "Enceladus-\u{1F9D4}\u200D\u2642\uFE0F\u547C\u5438\u611F",
+          "Iapetus-\u{1F466}\u6E05\u6670",
+          "Umbriel-\u{1F466}\u968F\u548C",
+          "Algieba-\u{1F466}\u5E73\u6ED1",
+          "Despina-\u{1F469}\u5E73\u6ED1",
+          "Erinome-\u{1F469}\u6E05\u6670",
+          "Algenib-\u{1F468}\u200D\u{1F9B0}\u6C99\u54D1",
+          "Rasalgethi-\u{1F468}\u200D\u{1F9B0}\u4FE1\u606F\u4E30\u5BCC",
+          "Laomedeia-\u{1F469}\u6B22\u5FEB",
+          "Achernar-\u{1F469}\u8F7B\u67D4",
+          "Alnilam-\u{1F466}\u575A\u5B9A",
+          "Schedar-\u{1F466}\u5E73\u7A33",
+          "Gacrux-\u{1F469}\u6210\u719F",
+          "Pulcherrima-\u{1F469}\u5411\u524D",
+          "Achird-\u{1F466}\u53CB\u597D",
+          "Zubenelgenubi-\u{1F466}\u4F11\u95F2",
+          "Vindemiatrix-\u{1F469}\u6E29\u67D4",
+          "Sadachbia-\u{1F468}\u200D\u{1F9B0}\u6D3B\u6CFC",
+          "Sadaltager-\u{1F468}\u200D\u{1F9B0}\u535A\u5B66",
+          "Sulafat-\u{1F469}\u6E29\u6696"
+        ];
+        flag = true;
+      }
+      if (config.webdav == void 0) {
+        config.webdav = {
+          url: "",
+          username: "",
+          password: "",
+          path: "/anywhere",
+          dataPath: "/anywhere_data"
+        };
+        flag = true;
+      }
+      if (config.webdav.dataPath == void 0) {
+        config.webdav.dataPath = "/anywhere_data";
+        flag = true;
+      }
+      if (config.apiUrl) {
+        config.providers["0"] = {
+          name: "default",
+          url: config.apiUrl,
+          api_key: config.apiKey,
+          modelList: [config.modelSelect].concat(config.ModelsListByUser),
+          enable: true
+        };
+        delete config.apiUrl;
+        delete config.apiKey;
+        delete config.modelList;
+        delete config.ModelsListByUser;
+        delete config.modelSelect;
+        delete config.activeProviderId;
+        config.providerOrder.unshift("0");
+        flag = true;
+      }
+      for (let key in config.prompts) {
+        if (config.prompts[key].defaultMcpServers === void 0) {
+          config.prompts[key].defaultMcpServers = [];
+          flag = true;
+        }
+        if (config.prompts[key].isAlwaysOnTop === void 0) {
+          config.prompts[key].isAlwaysOnTop = true;
+          flag = true;
+        }
+        if (config.prompts[key].autoCloseOnBlur === void 0) {
+          config.prompts[key].autoCloseOnBlur = true;
+          flag = true;
+        }
+        if (config.prompts[key].window_width === void 0) {
+          config.prompts[key].window_width = 540;
+          flag = true;
+        }
+        if (config.prompts[key].window_height === void 0) {
+          config.prompts[key].window_height = 700;
+          flag = true;
+        }
+        if (config.prompts[key].position_x === void 0) {
+          config.prompts[key].position_x = 0;
+          flag = true;
+        }
+        if (config.prompts[key].position_y === void 0) {
+          config.prompts[key].position_y = 0;
+          flag = true;
+        }
+        if (config.prompts[key].stream === void 0) {
+          config.prompts[key].stream = true;
+          flag = true;
+        }
+        if (config.prompts[key].voice === void 0 || config.prompts[key].voice === null) {
+          config.prompts[key].voice = "";
+          flag = true;
+        }
+        if (config.prompts[key].enable === void 0) {
+          config.prompts[key].enable = true;
+          flag = true;
+        }
+        if (config.prompts[key].isTemperature === void 0) {
+          config.prompts[key].isTemperature = false;
+          config.prompts[key].temperature = 0.7;
+          flag = true;
+        }
+        if (config.prompts[key].icon === void 0) {
+          config.prompts[key].icon = "";
+          flag = true;
+        }
+        if (config.prompts[key].isDirectSend_file === void 0) {
+          if (config.prompts[key].isDirectSend === void 0) {
+            config.prompts[key].isDirectSend_file = false;
+          } else {
+            config.prompts[key].isDirectSend_file = config.prompts[key].isDirectSend;
+            delete config.prompts[key].isDirectSend;
+          }
+          flag = true;
+        }
+        if (config.prompts[key].isDirectSend_normal === void 0) {
+          config.prompts[key].isDirectSend_normal = true;
+          flag = true;
+        }
+        if (config.prompts[key].ifTextNecessary === void 0) {
+          config.prompts[key].ifTextNecessary = false;
+          flag = true;
+        }
+        if (config.prompts[key].reasoning_effort === void 0) {
+          config.prompts[key].reasoning_effort = "default";
+          flag = true;
+        }
+      }
+      if (!config.tags) {
+        config.tags = {};
+        flag = true;
+      }
+      if (!config.language) {
+        config.language = "zh";
+        flag = true;
+      }
+      if (config.tool_list) {
+        delete config.tool_list;
+        flag = true;
+      }
+      if (config.ModelsListByUser) {
+        delete config.ModelsListByUser;
+        flag = true;
+      }
+      if (config.promptOrder) {
+        delete config.promptOrder;
+        flag = true;
+      }
+      for (let key in config.prompts) {
+        if (config.prompts[key].idex || config.prompts[key].idex === 0) {
+          delete config.prompts[key].idex;
+          flag = true;
+        }
+      }
+      for (let key in config.providers) {
+        if (config.providers[key].modelSelect) {
+          delete config.providers[key].modelSelect;
+          flag = true;
+        }
+        if (delete config.providers[key].modelListByUser) {
+          delete config.providers[key].modelListByUser;
+          flag = true;
+        }
+        if (config.providers[key].enable === void 0) {
+          config.providers[key].enable = true;
+          flag = true;
+        }
+      }
+      if (config.providerOrder.length === 0) {
+        for (let key in config.providers) {
+          config.providerOrder.push(key);
+        }
+        flag = true;
+      }
+      for (let i = 0; i < config.providerOrder.length; i++) {
+        if (typeof config.providerOrder[i] !== "string") {
+          config.providerOrder[i] = config.providerOrder[i].toString();
+          flag = true;
+        }
+        if (!config.providers[config.providerOrder[i]]) {
+          config.providerOrder.splice(i, 1);
+          flag = true;
+        }
+      }
+      for (let key in config.prompts) {
+        if (config.prompts[key].model) {
+          let model = config.prompts[key].model.split("|");
+          if (model.length === 2) {
+            if (!config.providers[model[0]]) {
+              config.prompts[key].model = "";
+              flag = true;
+            }
+          }
+        } else {
+          config.prompts[key].model = `${config.providerOrder[0]}|${config.providers[config.providerOrder[0]].modelList[0]}`;
+          flag = true;
+        }
+        if (config.prompts[key].model === "") {
+          config.prompts[key].model = `${config.providerOrder[0]}|${config.providers[config.providerOrder[0]].modelList[0]}`;
+          flag = true;
+        }
+      }
+      if (config.isDarkMode === void 0) {
+        config.isDarkMode = false;
+        flag = true;
+      }
+      if (flag) {
+        updateConfig2({ "config": config });
+      }
+    }
+    function saveSetting2(keyPath, value) {
+      const rootKey = keyPath.split(".")[0];
+      let docId;
+      let targetKeyPath = keyPath;
+      let isBaseConfig = false;
+      if (rootKey === "prompts") {
+        docId = "prompts";
+        targetKeyPath = keyPath.substring("prompts.".length);
+      } else if (rootKey === "providers") {
+        docId = "providers";
+        targetKeyPath = keyPath.substring("providers.".length);
+      } else if (rootKey === "mcpServers") {
+        docId = "mcpServers";
+        targetKeyPath = keyPath.substring("mcpServers.".length);
+      } else {
+        docId = "config";
+        isBaseConfig = true;
+      }
+      const doc = utools.db.get(docId);
+      if (!doc) {
+        console.error(`Config document "${docId}" not found, cannot save setting.`);
+        return { success: false, message: `Config document "${docId}" not found` };
+      }
+      let dataToUpdate = doc.data;
+      if (isBaseConfig) {
+        dataToUpdate = dataToUpdate.config;
+      }
+      const keys = targetKeyPath.split(".");
+      let current = dataToUpdate;
+      for (let i = 0; i < keys.length - 1; i++) {
+        const key = keys[i];
+        if (!current[key] || typeof current[key] !== "object") {
+          current[key] = {};
+        }
+        current = current[key];
+      }
+      current[keys[keys.length - 1]] = value;
+      const finalData = isBaseConfig ? { config: dataToUpdate } : dataToUpdate;
+      const result = utools.db.put({
+        _id: docId,
+        data: finalData,
+        _rev: doc._rev
+      });
+      if (result.ok) {
+        return { success: true };
+      } else {
+        return { success: false, message: result.message };
+      }
+    }
+    function updateConfigWithoutFeatures(newConfig) {
+      const plainConfig = JSON.parse(JSON.stringify(newConfig.config));
+      const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(plainConfig);
+      let configDoc = utools.db.get("config");
+      utools.db.put({
+        _id: "config",
+        data: baseConfigPart,
+        _rev: configDoc ? configDoc._rev : void 0
+      });
+      let promptsDoc = utools.db.get("prompts");
+      utools.db.put({
+        _id: "prompts",
+        data: promptsPart,
+        _rev: promptsDoc ? promptsDoc._rev : void 0
+      });
+      let providersDoc = utools.db.get("providers");
+      utools.db.put({
+        _id: "providers",
+        data: providersPart,
+        _rev: providersDoc ? providersDoc._rev : void 0
+      });
+      let mcpServersDoc = utools.db.get("mcpServers");
+      utools.db.put({
+        _id: "mcpServers",
+        data: mcpServersPart,
+        _rev: mcpServersDoc ? mcpServersDoc._rev : void 0
+      });
+    }
+    function updateConfig2(newConfig) {
+      const features = utools.getFeatures();
+      const featuresMap = new Map(features.map((feature) => [feature.code, feature]));
+      const currentPrompts = newConfig.config.prompts || {};
+      const enabledPromptKeys = /* @__PURE__ */ new Set();
+      for (let key in currentPrompts) {
+        const prompt = currentPrompts[key];
+        if (prompt.enable) {
+          enabledPromptKeys.add(key);
+          const featureCode = key;
+          const functionCmdCode = key + feature_suffix;
+          const expectedMatchFeature = {
+            code: featureCode,
+            explain: key,
+            mainHide: true,
+            cmds: [],
+            icon: prompt.icon || ""
+          };
+          if (prompt.type === "general") {
+            expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 1e38 });
+            expectedMatchFeature.cmds.push({ type: "img", label: key });
+            expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+          } else if (prompt.type === "files") {
+            expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+          } else if (prompt.type === "img") {
+            expectedMatchFeature.cmds.push({ type: "img", label: key });
+          } else if (prompt.type === "over") {
+            expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 1e38 });
+          }
+          utools.setFeature(expectedMatchFeature);
+          if (prompt.showMode === "window") {
+            utools.setFeature({
+              code: functionCmdCode,
+              explain: key,
+              mainHide: true,
+              cmds: [key],
+              icon: prompt.icon || ""
+            });
+          } else {
+            if (featuresMap.has(functionCmdCode)) {
+              utools.removeFeature(functionCmdCode);
+            }
+          }
+        }
+      }
+      for (const [code, feature] of featuresMap) {
+        if (code === "Anywhere Settings" || code === "Resume Conversation") continue;
+        const promptKey = feature.explain;
+        if (!enabledPromptKeys.has(promptKey) || currentPrompts[promptKey] && currentPrompts[promptKey].showMode !== "window" && code.endsWith(feature_suffix)) {
+          utools.removeFeature(code);
+        }
+      }
+      updateConfigWithoutFeatures(newConfig);
+    }
+    function getUser2() {
+      return utools.getUser();
+    }
+    function getPosition(config, promptCode) {
+      const promptConfig = config.prompts[promptCode];
+      const width = promptConfig?.window_width || 540;
+      const height = promptConfig?.window_height || 700;
+      let windowX = 0, windowY = 0;
+      if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
+        let set_position = {
+          x: promptConfig.position_x,
+          y: promptConfig.position_y
+        };
+        const displays = utools.getAllDisplays();
+        const primaryDisplay = utools.getPrimaryDisplay();
+        const currentDisplay = displays.find(
+          (display) => set_position.x >= display.bounds.x && set_position.x < display.bounds.x + display.bounds.width && set_position.y >= display.bounds.y && set_position.y < display.bounds.y + display.bounds.height
+        ) || primaryDisplay;
+        windowX = Math.floor(set_position.x);
+        windowY = Math.floor(set_position.y);
+        if (currentDisplay) {
+          windowX = Math.max(windowX, currentDisplay.bounds.x);
+          windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
+          windowY = Math.max(windowY, currentDisplay.bounds.y);
+          windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
+          if (windowY + height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
+            windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - height;
+          }
+        }
+      } else {
+        const mouse_position = utools.getCursorScreenPoint();
+        const displays = utools.getAllDisplays();
+        const primaryDisplay = utools.getPrimaryDisplay();
+        const currentDisplay = displays.find(
+          (display) => mouse_position.x >= display.bounds.x && mouse_position.x < display.bounds.x + display.bounds.width && mouse_position.y >= display.bounds.y && mouse_position.y < display.bounds.y + display.bounds.height
+        ) || primaryDisplay;
+        windowX = Math.floor(mouse_position.x - width / 2);
+        windowY = Math.floor(mouse_position.y);
+        if (currentDisplay) {
+          windowX = Math.max(windowX, currentDisplay.bounds.x);
+          windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
+          windowY = Math.max(windowY, currentDisplay.bounds.y);
+          windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
+          if (windowY + height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
+            windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - height;
+          }
+        }
+      }
+      return { x: windowX, y: windowY, width, height };
+    }
+    function getRandomItem2(list) {
+      if (typeof list === "string") {
+        if (list.includes(",")) {
+          list = list.split(",");
+          list = list.filter((item) => item.trim() !== "");
+        } else if (list.includes("\uFF0C")) {
+          list = list.split("\uFF0C");
+          list = list.filter((item) => item.trim() !== "");
+        } else {
+          return list;
+        }
+      }
+      if (list.length === 0) {
+        return "";
+      } else {
+        const resault = list[Math.floor(Math.random() * list.length)];
+        return resault;
+      }
+    }
+    async function chatOpenAI2(history, config, modelInfo, CODE, signal, selectedVoice = null, overrideReasoningEffort = null) {
+      let apiUrl = "";
+      let apiKey = "";
+      let model = "";
+      if (modelInfo.includes("|")) {
+        const [providerId, modelName] = modelInfo.split("|");
+        const provider = config.providers[providerId];
+        if (provider) {
+          apiUrl = provider.url;
+          apiKey = provider.api_key;
+          model = modelName;
+        }
+      }
+      if (config.prompts[CODE] && config.prompts[CODE].ifTextNecessary) {
+        const now = /* @__PURE__ */ new Date();
+        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+        let content = history[history.length - 1].content;
+        if (typeof content === "string") {
+          history[history.length - 1].content = timestamp + "\n\n" + content;
+        } else if (Array.isArray(content)) {
+          let flag = false;
+          for (let i = 0; i < content.length; i++) {
+            if (content[i].type === "text" && content[i].text && !(content[i].text.toLowerCase().startsWith("file name:") && content[i].text.toLowerCase().endsWith("file end"))) {
+              content[i].text = timestamp + "\n\n" + content[i].text;
+              flag = true;
+              break;
+            }
+          }
+          if (!flag) {
+            history[history.length - 1].content.push({
+              type: "text",
+              text: timestamp
+            });
+          }
+        }
+      }
+      let payload = {
+        model,
+        messages: history
+      };
+      if (selectedVoice && typeof selectedVoice === "string") {
+        payload.stream = false;
+        const voiceForAPI = selectedVoice.split("-")[0].trim();
+        payload.modalities = ["text", "audio"];
+        payload.audio = { voice: voiceForAPI, format: "wav" };
+      } else {
+        if (config.prompts[CODE] && typeof config.prompts[CODE].stream === "boolean") {
+          payload.stream = config.prompts[CODE].stream;
+        } else {
+          payload.stream = true;
+        }
+      }
+      if (config.prompts[CODE] && config.prompts[CODE].isTemperature) {
+        payload.temperature = config.prompts[CODE].temperature;
+      }
+      const reasoningEffort = overrideReasoningEffort;
+      if (reasoningEffort && reasoningEffort !== "default") {
+        payload.reasoning_effort = reasoningEffort;
+      }
+      const response = await fetch(apiUrl + "/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + getRandomItem2(apiKey)
+        },
+        body: JSON.stringify(payload),
+        signal
+        // 将 signal 传递给 fetch
+      });
+      return response;
+    }
+    function copyText2(content) {
+      utools.copyText(content);
+    }
+    async function sethotkey2(prompt_name, auto_copy) {
+      console.log("sethotkey");
+      utools.redirectHotKeySetting(prompt_name, auto_copy);
+    }
+    async function openWindow(config, msg) {
+      const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
+      const promptCode = msg.originalCode || msg.code;
+      const promptConfig = config.prompts[promptCode];
+      const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
+      let channel2 = "window";
+      const ubWindow = utools.createBrowserWindow(
+        "./window/index.html",
+        {
+          show: true,
+          title: "Anywhere",
+          useContentSize: true,
+          frame: true,
+          width,
+          height,
+          alwaysOnTop: isAlwaysOnTop,
+          // 使用快捷助手配置
+          shellOpenPath: true,
+          x,
+          y,
+          webPreferences: {
+            preload: "./window_preload.js",
+            devTools: true
+          }
+        },
+        () => {
+          ubWindow.webContents.send(channel2, msg);
+          ubWindow.webContents.show();
+          ubWindow.setAlwaysOnTop(isAlwaysOnTop, "floating");
+          ubWindow.setFullScreen(false);
+        }
+      );
+      ubWindow.webContents.openDevTools({ mode: "detach" });
+    }
+    async function coderedirect(label, payload) {
+      utools.redirect(label, payload);
+    }
+    function setZoomFactor2(factor) {
+      webFrame.setZoomFactor(factor);
+    }
+    async function savePromptWindowSettings2(promptKey, settings) {
+      const promptsDoc = utools.db.get("prompts");
+      if (!promptsDoc || !promptsDoc.data) {
+        return { success: false, message: "Prompts document not found" };
+      }
+      const promptsData = promptsDoc.data;
+      if (!promptsData[promptKey]) {
+        return { success: false, message: "Prompt not found in document" };
+      }
+      promptsData[promptKey] = {
+        ...promptsData[promptKey],
+        ...settings
+      };
+      const result = utools.db.put({
+        _id: "prompts",
+        data: promptsData,
+        _rev: promptsDoc._rev
+      });
+      if (result.ok) {
+        return { success: true };
+      } else {
+        return { success: false, message: result.message };
+      }
+    }
+    module2.exports = {
+      getConfig: getConfig2,
+      checkConfig,
+      updateConfig: updateConfig2,
+      saveSetting: saveSetting2,
+      updateConfigWithoutFeatures,
+      savePromptWindowSettings: savePromptWindowSettings2,
+      getUser: getUser2,
+      getPosition,
+      getRandomItem: getRandomItem2,
+      chatOpenAI: chatOpenAI2,
+      copyText: copyText2,
+      sethotkey: sethotkey2,
+      openWindow,
+      coderedirect,
+      setZoomFactor: setZoomFactor2,
+      feature_suffix,
+      defaultConfig: defaultConfig2
+    };
+  }
+});
+
+// src/file.js
+var require_file = __commonJS({
+  "src/file.js"(exports2, module2) {
+    var fs = require("fs/promises");
+    var fs_node = require("node:fs");
+    var path = require("path");
+    var parseTextFile = async (base64Data) => {
+      const s = base64Data.split(",")[1];
+      if (!s) throw new Error("Invalid base64 data for text file");
+      const bs = atob(s);
+      const ia = new Uint8Array(bs.length);
+      for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i);
+      return new TextDecoder().decode(ia);
+    };
+    var fileHandlers = {
+      text: {
+        extensions: [
+          // Common text files
+          ".txt",
+          ".md",
+          ".markdown",
+          ".json",
+          ".xml",
+          ".html",
+          ".css",
+          ".csv",
+          ".srt",
+          // Common code files
+          ".py",
+          ".js",
+          ".ts",
+          ".java",
+          ".c",
+          ".cpp",
+          ".h",
+          ".hpp",
+          ".cs",
+          ".go",
+          ".php",
+          ".rb",
+          ".rs",
+          ".sh",
+          ".sql",
+          ".vue"
+        ],
+        handler: async (file) => {
+          const textContent = await parseTextFile(file.url);
+          return { type: "text", text: `file name:${file.name}
+file content:${textContent}
+file end` };
+        }
+      },
+      // docx: {
+      //     extensions: ['.docx'],
+      //     handler: async (file) => {
+      //         const textContent = await parseWord(file.url);
+      //         return { type: "text", text: `file name:${file.name}\nfile content:${textContent}\nfile end` };
+      //     }
+      // },
+      image: {
+        extensions: [".png", ".jpg", ".jpeg", ".webp"],
+        // Strictly adhere to original types
+        handler: async (file) => {
+          return { type: "image_url", image_url: { url: file.url } };
+        }
+      },
+      audio: {
+        extensions: [".mp3", ".wav"],
+        // Strictly adhere to original types
+        handler: async (file) => {
+          const commaIndex = file.url.indexOf(",");
+          if (commaIndex > -1) {
+            return {
+              type: "input_audio",
+              input_audio: {
+                data: file.url.substring(commaIndex + 1),
+                format: file.name.split(".").pop().toLowerCase()
+              }
+            };
+          }
+          console.log(`\u97F3\u9891\u6587\u4EF6 ${file.name} \u683C\u5F0F\u4E0D\u6B63\u786E`);
+          return null;
+        }
+      },
+      pdf: {
+        extensions: [".pdf"],
+        handler: async (file) => {
+          return {
+            type: "file",
+            file: {
+              filename: file.name,
+              file_data: file.url
+            }
+          };
+        }
+      }
+    };
+    var getFileHandler = (fileName) => {
+      if (!fileName) return null;
+      const extension = ("." + fileName.split(".").pop()).toLowerCase();
+      for (const category in fileHandlers) {
+        if (fileHandlers[category].extensions.includes(extension)) {
+          return fileHandlers[category].handler;
+        }
+      }
+      return null;
+    };
+    var extensionToMimeType = {
+      // 文本和代码
+      ".txt": "text/plain",
+      ".md": "text/markdown",
+      ".markdown": "text/markdown",
+      ".json": "application/json",
+      ".xml": "application/xml",
+      ".html": "text/html",
+      ".css": "text/css",
+      ".csv": "text/csv",
+      ".py": "text/plain",
+      // 或 'application/x-python'
+      ".js": "application/javascript",
+      ".ts": "application/typescript",
+      ".java": "text/x-java-source",
+      ".c": "text/plain",
+      ".cpp": "text/plain",
+      ".h": "text/plain",
+      ".hpp": "text/plain",
+      ".cs": "text/plain",
+      ".go": "text/plain",
+      ".php": "application/x-httpd-php",
+      ".rb": "application/x-ruby",
+      ".rs": "text/rust",
+      ".sh": "application/x-sh",
+      ".sql": "application/sql",
+      ".vue": "text/plain",
+      // 文档
+      ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ".pdf": "application/pdf",
+      // 图片
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+      // 音频
+      ".mp3": "audio/mpeg",
+      ".wav": "audio/wav"
+    };
+    var handleFilePath2 = async (filePath) => {
+      try {
+        await fs.access(filePath);
+        const fileBuffer = await fs.readFile(filePath);
+        const fileName = path.basename(filePath);
+        const extension = path.extname(fileName).toLowerCase();
+        const mimeType = extensionToMimeType[extension] || "application/octet-stream";
+        const fileObject = new File([fileBuffer], fileName, { type: mimeType });
+        return fileObject;
+      } catch (error) {
+        console.error(`\u5904\u7406\u6587\u4EF6\u8DEF\u5F84\u5931\u8D25: ${filePath}`, error);
+        return null;
+      }
+    };
+    async function sendfileDirect(filePathList) {
+      if (!filePathList || filePathList.length === 0) {
+        return [];
+      }
+      const contentPromises = filePathList.map(async (item) => {
+        try {
+          const filePath = item.path;
+          if (!filePath || typeof filePath !== "string") {
+            return null;
+          }
+          const fileObject = await handleFilePath2(filePath);
+          if (!fileObject) {
+            utools.showNotification("\u65E0\u6CD5\u8BFB\u53D6\u6216\u8BBF\u95EE\u6587\u4EF6:", filePath);
+            return null;
+          }
+          const handler = getFileHandler(fileObject.name);
+          if (!handler) {
+            utools.showNotification(`\u4E0D\u652F\u6301\u7684\u6587\u4EF6\u7C7B\u578B: ${fileObject.name}`);
+            return null;
+          }
+          const base64String = fileObject.stream ? Buffer.from(await fileObject.arrayBuffer()).toString("base64") : "";
+          const dataUrl = `data:${fileObject.type};base64,${base64String}`;
+          const fileForHandler = {
+            name: fileObject.name,
+            size: fileObject.size,
+            type: fileObject.type,
+            url: dataUrl
+          };
+          const processedContent = await handler(fileForHandler);
+          return processedContent;
+        } catch (error) {
+          utools.showNotification("\u5904\u7406\u6587\u4EF6\u8DEF\u5F84\u65F6\u51FA\u9519:", item.path, error);
+          return null;
+        }
+      });
+      const contentList = (await Promise.all(contentPromises)).filter(Boolean);
+      return contentList;
+    }
+    function saveFile2(options) {
+      return new Promise((resolve, reject) => {
+        try {
+          const { fileContent, ...dialogOptions } = options;
+          const savePath = utools.showSaveDialog(dialogOptions);
+          if (!savePath) {
+            return reject(new Error("\u7528\u6237\u53D6\u6D88\u4E86\u4FDD\u5B58\u64CD\u4F5C"));
+          }
+          fs_node.writeFileSync(savePath, fileContent, "utf-8");
+          resolve({ success: true, path: savePath });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }
+    module2.exports = {
+      handleFilePath: handleFilePath2,
+      // (文件路径=>文件对象)
+      sendfileDirect,
+      //（文件路径=>文件对象=>文件列表=>对话格式）
+      saveFile: saveFile2
+    };
+  }
+});
+
 // node_modules/.pnpm/@langchain+mcp-adapters@1.0_422fcda27cc657832245d1643c939873/node_modules/@langchain/mcp-adapters/dist/_virtual/rolldown_runtime.cjs
 var require_rolldown_runtime = __commonJS({
   "node_modules/.pnpm/@langchain+mcp-adapters@1.0_422fcda27cc657832245d1643c939873/node_modules/@langchain/mcp-adapters/dist/_virtual/rolldown_runtime.cjs"(exports2) {
@@ -20329,7 +21360,7 @@ var require_serializable = __commonJS({
 });
 
 // node_modules/.pnpm/@langchain+core@1.0.2/node_modules/@langchain/core/dist/messages/content/data.cjs
-var require_data = __commonJS({
+var require_data2 = __commonJS({
   "node_modules/.pnpm/@langchain+core@1.0.2/node_modules/@langchain/core/dist/messages/content/data.cjs"(exports2) {
     function isDataContentBlock(content_block) {
       return typeof content_block === "object" && content_block !== null && "type" in content_block && typeof content_block.type === "string" && "source_type" in content_block && (content_block.source_type === "url" || content_block.source_type === "base64" || content_block.source_type === "text" || content_block.source_type === "id");
@@ -20775,9 +21806,9 @@ var require_anthropic = __commonJS({
 });
 
 // node_modules/.pnpm/@langchain+core@1.0.2/node_modules/@langchain/core/dist/messages/block_translators/data.cjs
-var require_data2 = __commonJS({
+var require_data3 = __commonJS({
   "node_modules/.pnpm/@langchain+core@1.0.2/node_modules/@langchain/core/dist/messages/block_translators/data.cjs"(exports2) {
-    var require_data6 = require_data();
+    var require_data6 = require_data2();
     var require_utils10 = require_utils();
     function convertToV1FromDataContentBlock(block) {
       if (require_data6.isURLContentBlock(block)) return {
@@ -20850,7 +21881,7 @@ var require_data2 = __commonJS({
 var require_openai = __commonJS({
   "node_modules/.pnpm/@langchain+core@1.0.2/node_modules/@langchain/core/dist/messages/block_translators/openai.cjs"(exports2) {
     var require_utils10 = require_utils();
-    var require_data6 = require_data2();
+    var require_data6 = require_data3();
     function convertToV1FromChatCompletions(message) {
       const blocks = [];
       if (typeof message.content === "string") blocks.push({
@@ -21119,9 +22150,9 @@ var require_format = __commonJS({
 var require_base = __commonJS({
   "node_modules/.pnpm/@langchain+core@1.0.2/node_modules/@langchain/core/dist/messages/base.cjs"(exports2) {
     var require_load_serializable = require_serializable();
-    var require_data6 = require_data();
+    var require_data6 = require_data2();
     var require_anthropic2 = require_anthropic();
-    var require_data$1 = require_data2();
+    var require_data$1 = require_data3();
     var require_openai2 = require_openai();
     var require_message3 = require_message();
     var require_format4 = require_format();
@@ -42120,7 +43151,7 @@ var require_content = __commonJS({
 var require_messages2 = __commonJS({
   "node_modules/.pnpm/@langchain+core@1.0.2/node_modules/@langchain/core/dist/messages/index.cjs"(exports2) {
     var require_rolldown_runtime5 = require_rolldown_runtime2();
-    var require_data6 = require_data();
+    var require_data6 = require_data2();
     var require_message3 = require_message();
     var require_base18 = require_base();
     var require_metadata2 = require_metadata();
@@ -43924,7 +44955,7 @@ var require_utils5 = __commonJS({
 var require_chat_models = __commonJS({
   "node_modules/.pnpm/@langchain+core@1.0.2/node_modules/@langchain/core/dist/language_models/chat_models.cjs"(exports2) {
     var require_rolldown_runtime5 = require_rolldown_runtime2();
-    var require_data6 = require_data();
+    var require_data6 = require_data2();
     var require_base18 = require_base();
     var require_ai2 = require_ai();
     var require_utils10 = require_utils3();
@@ -85143,7 +86174,7 @@ var require_rules = __commonJS({
 });
 
 // node_modules/.pnpm/ajv@6.12.6/node_modules/ajv/lib/data.js
-var require_data3 = __commonJS({
+var require_data4 = __commonJS({
   "node_modules/.pnpm/ajv@6.12.6/node_modules/ajv/lib/data.js"(exports2, module2) {
     "use strict";
     var KEYWORDS = [
@@ -85800,7 +86831,7 @@ var require_keyword = __commonJS({
 });
 
 // node_modules/.pnpm/ajv@6.12.6/node_modules/ajv/lib/refs/data.json
-var require_data4 = __commonJS({
+var require_data5 = __commonJS({
   "node_modules/.pnpm/ajv@6.12.6/node_modules/ajv/lib/refs/data.json"(exports2, module2) {
     module2.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
@@ -85833,7 +86864,7 @@ var require_ajv = __commonJS({
     var stableStringify = require_fast_json_stable_stringify();
     var formats = require_formats();
     var rules = require_rules();
-    var $dataMetaSchema = require_data3();
+    var $dataMetaSchema = require_data4();
     var util = require_util5();
     module2.exports = Ajv;
     Ajv.prototype.validate = validate2;
@@ -86121,7 +87152,7 @@ var require_ajv = __commonJS({
     function addDefaultMetaSchema(self2) {
       var $dataSchema;
       if (self2._opts.$data) {
-        $dataSchema = require_data4();
+        $dataSchema = require_data5();
         self2.addMetaSchema($dataSchema, $dataSchema.$id, true);
       }
       if (self2._opts.meta === false) return;
@@ -87411,7 +88442,7 @@ var require_client3 = __commonJS({
       }
       return false;
     }
-    var MultiServerMCPClient2 = class {
+    var MultiServerMCPClient = class {
       /**
       * Cached map of server names to tools
       */
@@ -87775,7 +88806,7 @@ var require_client3 = __commonJS({
         return allTools;
       }
     };
-    exports2.MultiServerMCPClient = MultiServerMCPClient2;
+    exports2.MultiServerMCPClient = MultiServerMCPClient;
   }
 });
 
@@ -87789,1040 +88820,137 @@ var require_dist8 = __commonJS({
   }
 });
 
-// src/data.js
-var require_data5 = __commonJS({
-  "src/data.js"(exports2, module2) {
-    var webFrame = require("electron").webFrame;
-    var feature_suffix = "anywhere\u52A9\u624B^_^";
-    var defaultConfig2 = {
-      config: {
-        providers: {
-          "0": {
-            name: "default",
-            url: "https://api.openai.com/v1",
-            api_key: "",
-            modelList: [],
-            enable: true
+// src/mcp.js
+var require_mcp = __commonJS({
+  "src/mcp.js"(exports2, module2) {
+    var { MultiServerMCPClient } = require_dist8();
+    var langchainToolMap = /* @__PURE__ */ new Map();
+    var mcpManager = {
+      // 存储每个服务器ID对应的 { client, tools, controller }
+      activeSessions: /* @__PURE__ */ new Map(),
+      // 核心同步函数：根据请求的ID列表，更新实际的连接状态
+      async sync(requestedServerIds = []) {
+        const requestedIdSet = new Set(requestedServerIds);
+        const currentIdSet = new Set(this.activeSessions.keys());
+        const idsToClose = [...currentIdSet].filter((id) => !requestedIdSet.has(id));
+        if (idsToClose.length > 0) {
+          console.log("MCP Manager: Closing sessions for", idsToClose);
+          await Promise.all(idsToClose.map((id) => this.closeSession(id)));
+        }
+        const idsToLoad = [...requestedIdSet].filter((id) => !currentIdSet.has(id));
+        const loadPromises = idsToLoad.map((id) => this.startSession(id));
+        const results = await Promise.allSettled(loadPromises);
+        const failedIds = [];
+        results.forEach((result, index) => {
+          if (result.status === "rejected") {
+            const id = idsToLoad[index];
+            if (result.reason.name !== "AbortError" && !result.reason.message.includes("aborted")) {
+              failedIds.push(id);
+              this.closeSession(id);
+              console.error(`MCP Manager: Failed to start session for '${id}':`, result.reason);
+            } else {
+              console.log(`MCP Manager: Session for '${id}' was correctly aborted.`);
+            }
           }
-        },
-        providerOrder: ["0"],
-        prompts: {
-          AI: {
-            type: "over",
-            prompt: `\u4F60\u662F\u4E00\u4E2AAI\u52A9\u624B`,
-            showMode: "window",
-            model: "0|gpt-4o",
-            enable: true,
-            icon: "",
-            stream: true,
-            temperature: 0.7,
-            isTemperature: false,
-            isDirectSend_file: false,
-            isDirectSend_normal: true,
-            ifTextNecessary: false,
-            voice: null,
-            reasoning_effort: "default",
-            defaultMcpServers: [],
-            window_width: 540,
-            window_height: 700,
-            position_x: 0,
-            position_y: 0,
-            autoCloseOnBlur: true,
-            isAlwaysOnTop: true
-          }
-        },
-        mcpServers: {},
-        language: "zh",
-        tags: {},
-        skipLineBreak: false,
-        CtrlEnterToSend: false,
-        showNotification: true,
-        isDarkMode: false,
-        fix_position: false,
-        isAlwaysOnTop_global: true,
-        autoCloseOnBlur_global: true,
-        zoom: 1,
-        webdav: {
-          url: "",
-          username: "",
-          password: "",
-          path: "/anywhere",
-          dataPath: "/anywhere_data"
-        },
-        voiceList: [
-          "alloy-\u{1F469}",
-          "echo-\u{1F468}\u200D\u{1F9B0}\u6E05\u6670",
-          "nova-\u{1F469}\u6E05\u6670",
-          "sage-\u{1F467}\u5E74\u8F7B",
-          "shimmer-\u{1F467}\u660E\u4EAE",
-          "fable-\u{1F610}\u4E2D\u6027",
-          "coral-\u{1F469}\u5BA2\u670D",
-          "ash-\u{1F9D4}\u200D\u2642\uFE0F\u5546\u4E1A",
-          "ballad-\u{1F468}\u6545\u4E8B",
-          "verse-\u{1F468}\u8BD7\u6B4C",
-          "onyx-\u{1F468}\u200D\u{1F9B0}\u65B0\u95FB",
-          "Zephyr-\u{1F467}\u660E\u4EAE",
-          "Puck-\u{1F466}\u6B22\u5FEB",
-          "Charon-\u{1F466}\u4FE1\u606F\u4E30\u5BCC",
-          "Kore-\u{1F469}\u575A\u5B9A",
-          "Fenrir-\u{1F468}\u200D\u{1F9B0}\u6613\u6FC0\u52A8",
-          "Leda-\u{1F467}\u5E74\u8F7B",
-          "Orus-\u{1F468}\u200D\u{1F9B0}\u9274\u5B9A",
-          "Aoede-\u{1F469}\u8F7B\u677E",
-          "Callirrhoe-\u{1F469}\u968F\u548C",
-          "Autonoe-\u{1F469}\u660E\u4EAE",
-          "Enceladus-\u{1F9D4}\u200D\u2642\uFE0F\u547C\u5438\u611F",
-          "Iapetus-\u{1F466}\u6E05\u6670",
-          "Umbriel-\u{1F466}\u968F\u548C",
-          "Algieba-\u{1F466}\u5E73\u6ED1",
-          "Despina-\u{1F469}\u5E73\u6ED1",
-          "Erinome-\u{1F469}\u6E05\u6670",
-          "Algenib-\u{1F468}\u200D\u{1F9B0}\u6C99\u54D1",
-          "Rasalgethi-\u{1F468}\u200D\u{1F9B0}\u4FE1\u606F\u4E30\u5BCC",
-          "Laomedeia-\u{1F469}\u6B22\u5FEB",
-          "Achernar-\u{1F469}\u8F7B\u67D4",
-          "Alnilam-\u{1F466}\u575A\u5B9A",
-          "Schedar-\u{1F466}\u5E73\u7A33",
-          "Gacrux-\u{1F469}\u6210\u719F",
-          "Pulcherrima-\u{1F469}\u5411\u524D",
-          "Achird-\u{1F466}\u53CB\u597D",
-          "Zubenelgenubi-\u{1F466}\u4F11\u95F2",
-          "Vindemiatrix-\u{1F469}\u6E29\u67D4",
-          "Sadachbia-\u{1F468}\u200D\u{1F9B0}\u6D3B\u6CFC",
-          "Sadaltager-\u{1F468}\u200D\u{1F9B0}\u535A\u5B66",
-          "Sulafat-\u{1F469}\u6E29\u6696"
-        ]
-      }
-    };
-    function splitConfigForStorage(fullConfig) {
-      const { prompts, providers, mcpServers, ...restOfConfig } = fullConfig;
-      return {
-        baseConfigPart: { config: restOfConfig },
-        promptsPart: prompts,
-        providersPart: providers,
-        mcpServersPart: mcpServers
-      };
-    }
-    function getConfig2() {
-      let configDoc = utools.db.get("config");
-      if (!configDoc) {
-        console.log("Anywhere: Initializing configuration for a new user.");
-        const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(defaultConfig2.config);
-        utools.db.put({ _id: "config", data: baseConfigPart });
-        utools.db.put({ _id: "prompts", data: promptsPart });
-        utools.db.put({ _id: "providers", data: providersPart });
-        utools.db.put({ _id: "mcpServers", data: mcpServersPart });
-        return defaultConfig2;
-      }
-      if (configDoc.data.config && configDoc.data.config.prompts) {
-        console.warn("Anywhere: Old configuration format detected. Starting migration.");
-        const oldFullConfig = configDoc.data.config;
-        const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(oldFullConfig);
-        utools.db.put({ _id: "prompts", data: promptsPart });
-        utools.db.put({ _id: "providers", data: providersPart });
-        utools.db.put({ _id: "mcpServers", data: mcpServersPart });
-        const updateResult = utools.db.put({
-          _id: "config",
-          data: baseConfigPart,
-          _rev: configDoc._rev
         });
-        if (updateResult.ok) {
-          console.log("Anywhere: Migration successful. Old config cleaned.");
-        } else {
-          console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
+        const allActiveTools = [];
+        const successfulServerIds = [];
+        for (const id of this.activeSessions.keys()) {
+          const session = this.activeSessions.get(id);
+          if (session && session.tools) {
+            allActiveTools.push(...session.tools);
+            successfulServerIds.push(id);
+          }
         }
-        configDoc = utools.db.get("config");
-      }
-      const fullConfigData = configDoc.data;
-      const promptsDoc = utools.db.get("prompts");
-      fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig2.config.prompts;
-      const providersDoc = utools.db.get("providers");
-      fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig2.config.providers;
-      const mcpServersDoc = utools.db.get("mcpServers");
-      fullConfigData.config.mcpServers = mcpServersDoc ? mcpServersDoc.data : defaultConfig2.config.mcpServers || {};
-      return fullConfigData;
-    }
-    function checkConfig(config) {
-      let flag = false;
-      if (config.version !== "1.7.3") {
-        config.version = "1.7.3";
-        flag = true;
-      }
-      if (config.isAlwaysOnTop_global === void 0) {
-        config.isAlwaysOnTop_global = true;
-        flag = true;
-      }
-      if (config.autoCloseOnBlur_global === void 0) {
-        config.autoCloseOnBlur_global = true;
-        flag = true;
-      }
-      if (config.window_width || config.window_height) {
-        delete config.window_width;
-        delete config.window_height;
-        flag = true;
-      }
-      if (config.stream !== void 0) {
-        delete config.stream;
-        flag = true;
-      }
-      if (config.autoCloseOnBlur !== void 0) {
-        delete config.autoCloseOnBlur;
-        flag = true;
-      }
-      if (config.isAlwaysOnTop !== void 0) {
-        delete config.isAlwaysOnTop;
-        flag = true;
-      }
-      if (config.CtrlEnterToSend == void 0) {
-        config.CtrlEnterToSend = false;
-        flag = true;
-      }
-      if (config.showNotification == void 0) {
-        config.showNotification = false;
-        flag = true;
-      }
-      if (config.position_x || config.position_y) {
-        delete config.position_x;
-        delete config.position_y;
-        flag = true;
-      }
-      if (config.fix_position == void 0) {
-        config.fix_position = false;
-        flag = true;
-      }
-      if (config.zoom == void 0) {
-        config.zoom = 1;
-        flag = true;
-      }
-      if (config.inputLayout) {
-        delete config.inputLayout;
-        flag = true;
-      }
-      if (config.mcpServers === void 0) {
-        config.mcpServers = {};
-        flag = true;
-      }
-      if (config.voiceList === void 0) {
-        config.voiceList = [
-          "alloy-\u{1F469}",
-          "echo-\u{1F468}\u200D\u{1F9B0}\u6E05\u6670",
-          "nova-\u{1F469}\u6E05\u6670",
-          "sage-\u{1F467}\u5E74\u8F7B",
-          "shimmer-\u{1F467}\u660E\u4EAE",
-          "fable-\u{1F610}\u4E2D\u6027",
-          "coral-\u{1F469}\u5BA2\u670D",
-          "ash-\u{1F9D4}\u200D\u2642\uFE0F\u5546\u4E1A",
-          "ballad-\u{1F468}\u6545\u4E8B",
-          "verse-\u{1F468}\u8BD7\u6B4C",
-          "onyx-\u{1F468}\u200D\u{1F9B0}\u65B0\u95FB",
-          "Zephyr-\u{1F467}\u660E\u4EAE",
-          "Puck-\u{1F466}\u6B22\u5FEB",
-          "Charon-\u{1F466}\u4FE1\u606F\u4E30\u5BCC",
-          "Kore-\u{1F469}\u575A\u5B9A",
-          "Fenrir-\u{1F468}\u200D\u{1F9B0}\u6613\u6FC0\u52A8",
-          "Leda-\u{1F467}\u5E74\u8F7B",
-          "Orus-\u{1F468}\u200D\u{1F9B0}\u9274\u5B9A",
-          "Aoede-\u{1F469}\u8F7B\u677E",
-          "Callirrhoe-\u{1F469}\u968F\u548C",
-          "Autonoe-\u{1F469}\u660E\u4EAE",
-          "Enceladus-\u{1F9D4}\u200D\u2642\uFE0F\u547C\u5438\u611F",
-          "Iapetus-\u{1F466}\u6E05\u6670",
-          "Umbriel-\u{1F466}\u968F\u548C",
-          "Algieba-\u{1F466}\u5E73\u6ED1",
-          "Despina-\u{1F469}\u5E73\u6ED1",
-          "Erinome-\u{1F469}\u6E05\u6670",
-          "Algenib-\u{1F468}\u200D\u{1F9B0}\u6C99\u54D1",
-          "Rasalgethi-\u{1F468}\u200D\u{1F9B0}\u4FE1\u606F\u4E30\u5BCC",
-          "Laomedeia-\u{1F469}\u6B22\u5FEB",
-          "Achernar-\u{1F469}\u8F7B\u67D4",
-          "Alnilam-\u{1F466}\u575A\u5B9A",
-          "Schedar-\u{1F466}\u5E73\u7A33",
-          "Gacrux-\u{1F469}\u6210\u719F",
-          "Pulcherrima-\u{1F469}\u5411\u524D",
-          "Achird-\u{1F466}\u53CB\u597D",
-          "Zubenelgenubi-\u{1F466}\u4F11\u95F2",
-          "Vindemiatrix-\u{1F469}\u6E29\u67D4",
-          "Sadachbia-\u{1F468}\u200D\u{1F9B0}\u6D3B\u6CFC",
-          "Sadaltager-\u{1F468}\u200D\u{1F9B0}\u535A\u5B66",
-          "Sulafat-\u{1F469}\u6E29\u6696"
-        ];
-        flag = true;
-      }
-      if (config.webdav == void 0) {
-        config.webdav = {
-          url: "",
-          username: "",
-          password: "",
-          path: "/anywhere",
-          dataPath: "/anywhere_data"
+        langchainToolMap = new Map(allActiveTools.map((t) => [t.name, t]));
+        return {
+          allTools: allActiveTools,
+          successfulServerIds,
+          failedServerIds: failedIds
         };
-        flag = true;
-      }
-      if (config.webdav.dataPath == void 0) {
-        config.webdav.dataPath = "/anywhere_data";
-        flag = true;
-      }
-      if (config.apiUrl) {
-        config.providers["0"] = {
-          name: "default",
-          url: config.apiUrl,
-          api_key: config.apiKey,
-          modelList: [config.modelSelect].concat(config.ModelsListByUser),
-          enable: true
-        };
-        delete config.apiUrl;
-        delete config.apiKey;
-        delete config.modelList;
-        delete config.ModelsListByUser;
-        delete config.modelSelect;
-        delete config.activeProviderId;
-        config.providerOrder.unshift("0");
-        flag = true;
-      }
-      for (let key in config.prompts) {
-        if (config.prompts[key].defaultMcpServers === void 0) {
-          config.prompts[key].defaultMcpServers = [];
-          flag = true;
+      },
+      // 启动并管理单个服务器的会话
+      async startSession(id) {
+        if (this.activeSessions.has(id)) {
+          await this.closeSession(id);
         }
-        if (config.prompts[key].isAlwaysOnTop === void 0) {
-          config.prompts[key].isAlwaysOnTop = true;
-          flag = true;
+        const controller = new AbortController();
+        const config = window.api.getConfig().config;
+        const serverConfig = config.mcpServers[id];
+        if (!serverConfig) {
+          throw new Error(`Server config for '${id}' not found.`);
         }
-        if (config.prompts[key].autoCloseOnBlur === void 0) {
-          config.prompts[key].autoCloseOnBlur = true;
-          flag = true;
-        }
-        if (config.prompts[key].window_width === void 0) {
-          config.prompts[key].window_width = 540;
-          flag = true;
-        }
-        if (config.prompts[key].window_height === void 0) {
-          config.prompts[key].window_height = 700;
-          flag = true;
-        }
-        if (config.prompts[key].position_x === void 0) {
-          config.prompts[key].position_x = 0;
-          flag = true;
-        }
-        if (config.prompts[key].position_y === void 0) {
-          config.prompts[key].position_y = 0;
-          flag = true;
-        }
-        if (config.prompts[key].stream === void 0) {
-          config.prompts[key].stream = true;
-          flag = true;
-        }
-        if (config.prompts[key].voice === void 0 || config.prompts[key].voice === null) {
-          config.prompts[key].voice = "";
-          flag = true;
-        }
-        if (config.prompts[key].enable === void 0) {
-          config.prompts[key].enable = true;
-          flag = true;
-        }
-        if (config.prompts[key].isTemperature === void 0) {
-          config.prompts[key].isTemperature = false;
-          config.prompts[key].temperature = 0.7;
-          flag = true;
-        }
-        if (config.prompts[key].icon === void 0) {
-          config.prompts[key].icon = "";
-          flag = true;
-        }
-        if (config.prompts[key].isDirectSend_file === void 0) {
-          if (config.prompts[key].isDirectSend === void 0) {
-            config.prompts[key].isDirectSend_file = false;
-          } else {
-            config.prompts[key].isDirectSend_file = config.prompts[key].isDirectSend;
-            delete config.prompts[key].isDirectSend;
+        const clientConfig = { [id]: {
+          transport: serverConfig.type,
+          command: serverConfig.command,
+          args: serverConfig.args,
+          url: serverConfig.baseUrl
+        } };
+        const client = new MultiServerMCPClient(clientConfig, { signal: controller.signal });
+        this.activeSessions.set(id, { client, tools: [], controller });
+        try {
+          const tools = await client.getTools();
+          if (!this.activeSessions.has(id)) {
+            console.log(`MCP Manager: Session for '${id}' was closed while loading, discarding results.`);
+            await client.close();
+            throw new Error("Session aborted during tool loading");
           }
-          flag = true;
-        }
-        if (config.prompts[key].isDirectSend_normal === void 0) {
-          config.prompts[key].isDirectSend_normal = true;
-          flag = true;
-        }
-        if (config.prompts[key].ifTextNecessary === void 0) {
-          config.prompts[key].ifTextNecessary = false;
-          flag = true;
-        }
-        if (config.prompts[key].reasoning_effort === void 0) {
-          config.prompts[key].reasoning_effort = "default";
-          flag = true;
-        }
-      }
-      if (!config.tags) {
-        config.tags = {};
-        flag = true;
-      }
-      if (!config.language) {
-        config.language = "zh";
-        flag = true;
-      }
-      if (config.tool_list) {
-        delete config.tool_list;
-        flag = true;
-      }
-      if (config.ModelsListByUser) {
-        delete config.ModelsListByUser;
-        flag = true;
-      }
-      if (config.promptOrder) {
-        delete config.promptOrder;
-        flag = true;
-      }
-      for (let key in config.prompts) {
-        if (config.prompts[key].idex || config.prompts[key].idex === 0) {
-          delete config.prompts[key].idex;
-          flag = true;
-        }
-      }
-      for (let key in config.providers) {
-        if (config.providers[key].modelSelect) {
-          delete config.providers[key].modelSelect;
-          flag = true;
-        }
-        if (delete config.providers[key].modelListByUser) {
-          delete config.providers[key].modelListByUser;
-          flag = true;
-        }
-        if (config.providers[key].enable === void 0) {
-          config.providers[key].enable = true;
-          flag = true;
-        }
-      }
-      if (config.providerOrder.length === 0) {
-        for (let key in config.providers) {
-          config.providerOrder.push(key);
-        }
-        flag = true;
-      }
-      for (let i = 0; i < config.providerOrder.length; i++) {
-        if (typeof config.providerOrder[i] !== "string") {
-          config.providerOrder[i] = config.providerOrder[i].toString();
-          flag = true;
-        }
-        if (!config.providers[config.providerOrder[i]]) {
-          config.providerOrder.splice(i, 1);
-          flag = true;
-        }
-      }
-      for (let key in config.prompts) {
-        if (config.prompts[key].model) {
-          let model = config.prompts[key].model.split("|");
-          if (model.length === 2) {
-            if (!config.providers[model[0]]) {
-              config.prompts[key].model = "";
-              flag = true;
-            }
+          const session = this.activeSessions.get(id);
+          if (session) {
+            session.tools = tools;
           }
-        } else {
-          config.prompts[key].model = `${config.providerOrder[0]}|${config.providers[config.providerOrder[0]].modelList[0]}`;
-          flag = true;
-        }
-        if (config.prompts[key].model === "") {
-          config.prompts[key].model = `${config.providerOrder[0]}|${config.providers[config.providerOrder[0]].modelList[0]}`;
-          flag = true;
-        }
-      }
-      if (config.isDarkMode === void 0) {
-        config.isDarkMode = false;
-        flag = true;
-      }
-      if (flag) {
-        updateConfig2({ "config": config });
-      }
-    }
-    function saveSetting2(keyPath, value) {
-      const rootKey = keyPath.split(".")[0];
-      let docId;
-      let targetKeyPath = keyPath;
-      let isBaseConfig = false;
-      if (rootKey === "prompts") {
-        docId = "prompts";
-        targetKeyPath = keyPath.substring("prompts.".length);
-      } else if (rootKey === "providers") {
-        docId = "providers";
-        targetKeyPath = keyPath.substring("providers.".length);
-      } else if (rootKey === "mcpServers") {
-        docId = "mcpServers";
-        targetKeyPath = keyPath.substring("mcpServers.".length);
-      } else {
-        docId = "config";
-        isBaseConfig = true;
-      }
-      const doc = utools.db.get(docId);
-      if (!doc) {
-        console.error(`Config document "${docId}" not found, cannot save setting.`);
-        return { success: false, message: `Config document "${docId}" not found` };
-      }
-      let dataToUpdate = doc.data;
-      if (isBaseConfig) {
-        dataToUpdate = dataToUpdate.config;
-      }
-      const keys = targetKeyPath.split(".");
-      let current = dataToUpdate;
-      for (let i = 0; i < keys.length - 1; i++) {
-        const key = keys[i];
-        if (!current[key] || typeof current[key] !== "object") {
-          current[key] = {};
-        }
-        current = current[key];
-      }
-      current[keys[keys.length - 1]] = value;
-      const finalData = isBaseConfig ? { config: dataToUpdate } : dataToUpdate;
-      const result = utools.db.put({
-        _id: docId,
-        data: finalData,
-        _rev: doc._rev
-      });
-      if (result.ok) {
-        return { success: true };
-      } else {
-        return { success: false, message: result.message };
-      }
-    }
-    function updateConfigWithoutFeatures(newConfig) {
-      const plainConfig = JSON.parse(JSON.stringify(newConfig.config));
-      const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(plainConfig);
-      let configDoc = utools.db.get("config");
-      utools.db.put({
-        _id: "config",
-        data: baseConfigPart,
-        _rev: configDoc ? configDoc._rev : void 0
-      });
-      let promptsDoc = utools.db.get("prompts");
-      utools.db.put({
-        _id: "prompts",
-        data: promptsPart,
-        _rev: promptsDoc ? promptsDoc._rev : void 0
-      });
-      let providersDoc = utools.db.get("providers");
-      utools.db.put({
-        _id: "providers",
-        data: providersPart,
-        _rev: providersDoc ? providersDoc._rev : void 0
-      });
-      let mcpServersDoc = utools.db.get("mcpServers");
-      utools.db.put({
-        _id: "mcpServers",
-        data: mcpServersPart,
-        _rev: mcpServersDoc ? mcpServersDoc._rev : void 0
-      });
-    }
-    function updateConfig2(newConfig) {
-      const features = utools.getFeatures();
-      const featuresMap = new Map(features.map((feature) => [feature.code, feature]));
-      const currentPrompts = newConfig.config.prompts || {};
-      const enabledPromptKeys = /* @__PURE__ */ new Set();
-      for (let key in currentPrompts) {
-        const prompt = currentPrompts[key];
-        if (prompt.enable) {
-          enabledPromptKeys.add(key);
-          const featureCode = key;
-          const functionCmdCode = key + feature_suffix;
-          const expectedMatchFeature = {
-            code: featureCode,
-            explain: key,
-            mainHide: true,
-            cmds: [],
-            icon: prompt.icon || ""
-          };
-          if (prompt.type === "general") {
-            expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 1e38 });
-            expectedMatchFeature.cmds.push({ type: "img", label: key });
-            expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
-          } else if (prompt.type === "files") {
-            expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
-          } else if (prompt.type === "img") {
-            expectedMatchFeature.cmds.push({ type: "img", label: key });
-          } else if (prompt.type === "over") {
-            expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 1e38 });
+          console.log(`MCP Manager: Session for '${id}' started successfully.`);
+        } catch (error) {
+          await this.closeSession(id);
+          if (error.name !== "AbortError" && !error.message.includes("aborted")) {
+            throw error;
           }
-          utools.setFeature(expectedMatchFeature);
-          if (prompt.showMode === "window") {
-            utools.setFeature({
-              code: functionCmdCode,
-              explain: key,
-              mainHide: true,
-              cmds: [key],
-              icon: prompt.icon || ""
-            });
-          } else {
-            if (featuresMap.has(functionCmdCode)) {
-              utools.removeFeature(functionCmdCode);
-            }
-          }
-        }
-      }
-      for (const [code, feature] of featuresMap) {
-        if (code === "Anywhere Settings" || code === "Resume Conversation") continue;
-        const promptKey = feature.explain;
-        if (!enabledPromptKeys.has(promptKey) || currentPrompts[promptKey] && currentPrompts[promptKey].showMode !== "window" && code.endsWith(feature_suffix)) {
-          utools.removeFeature(code);
-        }
-      }
-      updateConfigWithoutFeatures(newConfig);
-    }
-    function getUser2() {
-      return utools.getUser();
-    }
-    function getPosition(config, promptCode) {
-      const promptConfig = config.prompts[promptCode];
-      const width = promptConfig?.window_width || 540;
-      const height = promptConfig?.window_height || 700;
-      let windowX = 0, windowY = 0;
-      if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
-        let set_position = {
-          x: promptConfig.position_x,
-          y: promptConfig.position_y
-        };
-        const displays = utools.getAllDisplays();
-        const primaryDisplay = utools.getPrimaryDisplay();
-        const currentDisplay = displays.find(
-          (display) => set_position.x >= display.bounds.x && set_position.x < display.bounds.x + display.bounds.width && set_position.y >= display.bounds.y && set_position.y < display.bounds.y + display.bounds.height
-        ) || primaryDisplay;
-        windowX = Math.floor(set_position.x);
-        windowY = Math.floor(set_position.y);
-        if (currentDisplay) {
-          windowX = Math.max(windowX, currentDisplay.bounds.x);
-          windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
-          windowY = Math.max(windowY, currentDisplay.bounds.y);
-          windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
-          if (windowY + height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
-            windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - height;
-          }
-        }
-      } else {
-        const mouse_position = utools.getCursorScreenPoint();
-        const displays = utools.getAllDisplays();
-        const primaryDisplay = utools.getPrimaryDisplay();
-        const currentDisplay = displays.find(
-          (display) => mouse_position.x >= display.bounds.x && mouse_position.x < display.bounds.x + display.bounds.width && mouse_position.y >= display.bounds.y && mouse_position.y < display.bounds.y + display.bounds.height
-        ) || primaryDisplay;
-        windowX = Math.floor(mouse_position.x - width / 2);
-        windowY = Math.floor(mouse_position.y);
-        if (currentDisplay) {
-          windowX = Math.max(windowX, currentDisplay.bounds.x);
-          windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
-          windowY = Math.max(windowY, currentDisplay.bounds.y);
-          windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
-          if (windowY + height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
-            windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - height;
-          }
-        }
-      }
-      return { x: windowX, y: windowY, width, height };
-    }
-    function getRandomItem2(list) {
-      if (typeof list === "string") {
-        if (list.includes(",")) {
-          list = list.split(",");
-          list = list.filter((item) => item.trim() !== "");
-        } else if (list.includes("\uFF0C")) {
-          list = list.split("\uFF0C");
-          list = list.filter((item) => item.trim() !== "");
-        } else {
-          return list;
-        }
-      }
-      if (list.length === 0) {
-        return "";
-      } else {
-        const resault = list[Math.floor(Math.random() * list.length)];
-        return resault;
-      }
-    }
-    async function chatOpenAI2(history, config, modelInfo, CODE, signal, selectedVoice = null, overrideReasoningEffort = null) {
-      let apiUrl = "";
-      let apiKey = "";
-      let model = "";
-      if (modelInfo.includes("|")) {
-        const [providerId, modelName] = modelInfo.split("|");
-        const provider = config.providers[providerId];
-        if (provider) {
-          apiUrl = provider.url;
-          apiKey = provider.api_key;
-          model = modelName;
-        }
-      }
-      if (config.prompts[CODE] && config.prompts[CODE].ifTextNecessary) {
-        const now = /* @__PURE__ */ new Date();
-        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-        let content = history[history.length - 1].content;
-        if (typeof content === "string") {
-          history[history.length - 1].content = timestamp + "\n\n" + content;
-        } else if (Array.isArray(content)) {
-          let flag = false;
-          for (let i = 0; i < content.length; i++) {
-            if (content[i].type === "text" && content[i].text && !(content[i].text.toLowerCase().startsWith("file name:") && content[i].text.toLowerCase().endsWith("file end"))) {
-              content[i].text = timestamp + "\n\n" + content[i].text;
-              flag = true;
-              break;
-            }
-          }
-          if (!flag) {
-            history[history.length - 1].content.push({
-              type: "text",
-              text: timestamp
-            });
-          }
-        }
-      }
-      let payload = {
-        model,
-        messages: history
-      };
-      if (selectedVoice && typeof selectedVoice === "string") {
-        payload.stream = false;
-        const voiceForAPI = selectedVoice.split("-")[0].trim();
-        payload.modalities = ["text", "audio"];
-        payload.audio = { voice: voiceForAPI, format: "wav" };
-      } else {
-        if (config.prompts[CODE] && typeof config.prompts[CODE].stream === "boolean") {
-          payload.stream = config.prompts[CODE].stream;
-        } else {
-          payload.stream = true;
-        }
-      }
-      if (config.prompts[CODE] && config.prompts[CODE].isTemperature) {
-        payload.temperature = config.prompts[CODE].temperature;
-      }
-      const reasoningEffort = overrideReasoningEffort;
-      if (reasoningEffort && reasoningEffort !== "default") {
-        payload.reasoning_effort = reasoningEffort;
-      }
-      const response = await fetch(apiUrl + "/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + getRandomItem2(apiKey)
-        },
-        body: JSON.stringify(payload),
-        signal
-        // 将 signal 传递给 fetch
-      });
-      return response;
-    }
-    function copyText2(content) {
-      utools.copyText(content);
-    }
-    async function sethotkey2(prompt_name, auto_copy) {
-      console.log("sethotkey");
-      utools.redirectHotKeySetting(prompt_name, auto_copy);
-    }
-    async function openWindow(config, msg) {
-      const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
-      const promptCode = msg.originalCode || msg.code;
-      const promptConfig = config.prompts[promptCode];
-      const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
-      let channel2 = "window";
-      const ubWindow = utools.createBrowserWindow(
-        "./window/index.html",
-        {
-          show: true,
-          title: "Anywhere",
-          useContentSize: true,
-          frame: true,
-          width,
-          height,
-          alwaysOnTop: isAlwaysOnTop,
-          // 使用快捷助手配置
-          shellOpenPath: true,
-          x,
-          y,
-          webPreferences: {
-            preload: "./window_preload.js",
-            devTools: true
-          }
-        },
-        () => {
-          ubWindow.webContents.send(channel2, msg);
-          ubWindow.webContents.show();
-          ubWindow.setAlwaysOnTop(isAlwaysOnTop, "floating");
-          ubWindow.setFullScreen(false);
-        }
-      );
-      ubWindow.webContents.openDevTools({ mode: "detach" });
-    }
-    async function coderedirect(label, payload) {
-      utools.redirect(label, payload);
-    }
-    function setZoomFactor2(factor) {
-      webFrame.setZoomFactor(factor);
-    }
-    async function savePromptWindowSettings2(promptKey, settings) {
-      const promptsDoc = utools.db.get("prompts");
-      if (!promptsDoc || !promptsDoc.data) {
-        return { success: false, message: "Prompts document not found" };
-      }
-      const promptsData = promptsDoc.data;
-      if (!promptsData[promptKey]) {
-        return { success: false, message: "Prompt not found in document" };
-      }
-      promptsData[promptKey] = {
-        ...promptsData[promptKey],
-        ...settings
-      };
-      const result = utools.db.put({
-        _id: "prompts",
-        data: promptsData,
-        _rev: promptsDoc._rev
-      });
-      if (result.ok) {
-        return { success: true };
-      } else {
-        return { success: false, message: result.message };
-      }
-    }
-    module2.exports = {
-      getConfig: getConfig2,
-      checkConfig,
-      updateConfig: updateConfig2,
-      saveSetting: saveSetting2,
-      updateConfigWithoutFeatures,
-      savePromptWindowSettings: savePromptWindowSettings2,
-      getUser: getUser2,
-      getPosition,
-      getRandomItem: getRandomItem2,
-      chatOpenAI: chatOpenAI2,
-      copyText: copyText2,
-      sethotkey: sethotkey2,
-      openWindow,
-      coderedirect,
-      setZoomFactor: setZoomFactor2,
-      feature_suffix,
-      defaultConfig: defaultConfig2
-    };
-  }
-});
-
-// src/file.js
-var require_file = __commonJS({
-  "src/file.js"(exports2, module2) {
-    var fs = require("fs/promises");
-    var fs_node = require("node:fs");
-    var path = require("path");
-    var parseTextFile = async (base64Data) => {
-      const s = base64Data.split(",")[1];
-      if (!s) throw new Error("Invalid base64 data for text file");
-      const bs = atob(s);
-      const ia = new Uint8Array(bs.length);
-      for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i);
-      return new TextDecoder().decode(ia);
-    };
-    var fileHandlers = {
-      text: {
-        extensions: [
-          // Common text files
-          ".txt",
-          ".md",
-          ".markdown",
-          ".json",
-          ".xml",
-          ".html",
-          ".css",
-          ".csv",
-          ".srt",
-          // Common code files
-          ".py",
-          ".js",
-          ".ts",
-          ".java",
-          ".c",
-          ".cpp",
-          ".h",
-          ".hpp",
-          ".cs",
-          ".go",
-          ".php",
-          ".rb",
-          ".rs",
-          ".sh",
-          ".sql",
-          ".vue"
-        ],
-        handler: async (file) => {
-          const textContent = await parseTextFile(file.url);
-          return { type: "text", text: `file name:${file.name}
-file content:${textContent}
-file end` };
         }
       },
-      // docx: {
-      //     extensions: ['.docx'],
-      //     handler: async (file) => {
-      //         const textContent = await parseWord(file.url);
-      //         return { type: "text", text: `file name:${file.name}\nfile content:${textContent}\nfile end` };
-      //     }
-      // },
-      image: {
-        extensions: [".png", ".jpg", ".jpeg", ".webp"],
-        // Strictly adhere to original types
-        handler: async (file) => {
-          return { type: "image_url", image_url: { url: file.url } };
-        }
-      },
-      audio: {
-        extensions: [".mp3", ".wav"],
-        // Strictly adhere to original types
-        handler: async (file) => {
-          const commaIndex = file.url.indexOf(",");
-          if (commaIndex > -1) {
-            return {
-              type: "input_audio",
-              input_audio: {
-                data: file.url.substring(commaIndex + 1),
-                format: file.name.split(".").pop().toLowerCase()
-              }
-            };
+      // 强制关闭并清理单个服务器的会话
+      async closeSession(id) {
+        if (this.activeSessions.has(id)) {
+          const session = this.activeSessions.get(id);
+          session.controller.abort();
+          if (session.client) {
+            await session.client.close();
           }
-          console.log(`\u97F3\u9891\u6587\u4EF6 ${file.name} \u683C\u5F0F\u4E0D\u6B63\u786E`);
+          this.activeSessions.delete(id);
+          console.log(`MCP Manager: Session for '${id}' has been closed.`);
+        }
+      }
+    };
+    async function initializeMcpClient2(activeServerConfigs) {
+      const requestedServerIds = Object.keys(activeServerConfigs || {});
+      const { allTools, successfulServerIds, failedServerIds } = await mcpManager.sync(requestedServerIds);
+      const openaiFormattedTools = allTools.map((tool) => {
+        if (!tool.schema) {
+          console.error(`Tool '${tool.name}' is missing schema definition.`);
           return null;
         }
-      },
-      pdf: {
-        extensions: [".pdf"],
-        handler: async (file) => {
-          return {
-            type: "file",
-            file: {
-              filename: file.name,
-              file_data: file.url
-            }
-          };
-        }
-      }
-    };
-    var getFileHandler = (fileName) => {
-      if (!fileName) return null;
-      const extension = ("." + fileName.split(".").pop()).toLowerCase();
-      for (const category in fileHandlers) {
-        if (fileHandlers[category].extensions.includes(extension)) {
-          return fileHandlers[category].handler;
-        }
-      }
-      return null;
-    };
-    var extensionToMimeType = {
-      // 文本和代码
-      ".txt": "text/plain",
-      ".md": "text/markdown",
-      ".markdown": "text/markdown",
-      ".json": "application/json",
-      ".xml": "application/xml",
-      ".html": "text/html",
-      ".css": "text/css",
-      ".csv": "text/csv",
-      ".py": "text/plain",
-      // 或 'application/x-python'
-      ".js": "application/javascript",
-      ".ts": "application/typescript",
-      ".java": "text/x-java-source",
-      ".c": "text/plain",
-      ".cpp": "text/plain",
-      ".h": "text/plain",
-      ".hpp": "text/plain",
-      ".cs": "text/plain",
-      ".go": "text/plain",
-      ".php": "application/x-httpd-php",
-      ".rb": "application/x-ruby",
-      ".rs": "text/rust",
-      ".sh": "application/x-sh",
-      ".sql": "application/sql",
-      ".vue": "text/plain",
-      // 文档
-      ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ".pdf": "application/pdf",
-      // 图片
-      ".png": "image/png",
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".webp": "image/webp",
-      // 音频
-      ".mp3": "audio/mpeg",
-      ".wav": "audio/wav"
-    };
-    var handleFilePath2 = async (filePath) => {
-      try {
-        await fs.access(filePath);
-        const fileBuffer = await fs.readFile(filePath);
-        const fileName = path.basename(filePath);
-        const extension = path.extname(fileName).toLowerCase();
-        const mimeType = extensionToMimeType[extension] || "application/octet-stream";
-        const fileObject = new File([fileBuffer], fileName, { type: mimeType });
-        return fileObject;
-      } catch (error) {
-        console.error(`\u5904\u7406\u6587\u4EF6\u8DEF\u5F84\u5931\u8D25: ${filePath}`, error);
-        return null;
-      }
-    };
-    async function sendfileDirect(filePathList) {
-      if (!filePathList || filePathList.length === 0) {
-        return [];
-      }
-      const contentPromises = filePathList.map(async (item) => {
-        try {
-          const filePath = item.path;
-          if (!filePath || typeof filePath !== "string") {
-            return null;
-          }
-          const fileObject = await handleFilePath2(filePath);
-          if (!fileObject) {
-            utools.showNotification("\u65E0\u6CD5\u8BFB\u53D6\u6216\u8BBF\u95EE\u6587\u4EF6:", filePath);
-            return null;
-          }
-          const handler = getFileHandler(fileObject.name);
-          if (!handler) {
-            utools.showNotification(`\u4E0D\u652F\u6301\u7684\u6587\u4EF6\u7C7B\u578B: ${fileObject.name}`);
-            return null;
-          }
-          const base64String = fileObject.stream ? Buffer.from(await fileObject.arrayBuffer()).toString("base64") : "";
-          const dataUrl = `data:${fileObject.type};base64,${base64String}`;
-          const fileForHandler = {
-            name: fileObject.name,
-            size: fileObject.size,
-            type: fileObject.type,
-            url: dataUrl
-          };
-          const processedContent = await handler(fileForHandler);
-          return processedContent;
-        } catch (error) {
-          utools.showNotification("\u5904\u7406\u6587\u4EF6\u8DEF\u5F84\u65F6\u51FA\u9519:", item.path, error);
-          return null;
-        }
-      });
-      const contentList = (await Promise.all(contentPromises)).filter(Boolean);
-      return contentList;
+        return {
+          type: "function",
+          function: { name: tool.name, description: tool.description, parameters: tool.schema }
+        };
+      }).filter(Boolean);
+      return { openaiFormattedTools, successfulServerIds, failedServerIds };
     }
-    function saveFile2(options) {
-      return new Promise((resolve, reject) => {
-        try {
-          const { fileContent, ...dialogOptions } = options;
-          const savePath = utools.showSaveDialog(dialogOptions);
-          if (!savePath) {
-            return reject(new Error("\u7528\u6237\u53D6\u6D88\u4E86\u4FDD\u5B58\u64CD\u4F5C"));
-          }
-          fs_node.writeFileSync(savePath, fileContent, "utf-8");
-          resolve({ success: true, path: savePath });
-        } catch (error) {
-          reject(error);
-        }
-      });
+    async function invokeMcpTool2(toolName, toolArgs) {
+      const toolToCall = langchainToolMap.get(toolName);
+      if (!toolToCall) {
+        throw new Error(`Tool "${toolName}" not found. It might have been closed or failed to load.`);
+      }
+      return await toolToCall.invoke(toolArgs);
     }
     module2.exports = {
-      handleFilePath: handleFilePath2,
-      // (文件路径=>文件对象)
-      sendfileDirect,
-      //（文件路径=>文件对象=>文件列表=>对话格式）
-      saveFile: saveFile2
+      initializeMcpClient: initializeMcpClient2,
+      invokeMcpTool: invokeMcpTool2
     };
   }
 });
 
 // src/window_preload.js
 var { ipcRenderer } = require("electron");
-var { MultiServerMCPClient } = require_dist8();
 var {
   getConfig,
   updateConfig,
@@ -88835,56 +88963,16 @@ var {
   setZoomFactor,
   defaultConfig,
   savePromptWindowSettings
-} = require_data5();
+} = require_data();
 var {
   handleFilePath,
   saveFile
 } = require_file();
+var {
+  initializeMcpClient,
+  invokeMcpTool
+} = require_mcp();
 var channel = "window";
-var mcpClientInstance = null;
-var langchainToolMap = /* @__PURE__ */ new Map();
-async function initializeMcpClient(activeServersConfig) {
-  if (mcpClientInstance) {
-    await mcpClientInstance.close();
-    mcpClientInstance = null;
-    langchainToolMap.clear();
-  }
-  if (!activeServersConfig || Object.keys(activeServersConfig).length === 0) {
-    return { openaiFormattedTools: [] };
-  }
-  mcpClientInstance = new MultiServerMCPClient(activeServersConfig);
-  const tools = await mcpClientInstance.getTools();
-  langchainToolMap = new Map(tools.map((t) => [t.name, t]));
-  const openaiFormattedTools = tools.map((tool) => {
-    if (!tool.schema) {
-      console.error(`Tool '${tool.name}' is missing schema definition.`);
-      return null;
-    }
-    return {
-      type: "function",
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.schema
-      }
-    };
-  }).filter(Boolean);
-  return { openaiFormattedTools };
-}
-async function closeMcpClient() {
-  if (mcpClientInstance) {
-    await mcpClientInstance.close();
-    mcpClientInstance = null;
-    langchainToolMap.clear();
-  }
-}
-async function invokeMcpTool(toolName, toolArgs) {
-  const toolToCall = langchainToolMap.get(toolName);
-  if (!toolToCall) {
-    throw new Error(`Tool "${toolName}" not found in the current MCP client.`);
-  }
-  return await toolToCall.invoke(toolArgs);
-}
 window.preload = {
   receiveMsg: (callback) => {
     ipcRenderer.on(channel, (event, data) => {
@@ -88923,9 +89011,8 @@ window.api = {
   savePromptWindowSettings,
   desktopCaptureSources: utools.desktopCaptureSources,
   copyImage: utools.copyImage,
-  // --- Exposing MCP functions to the renderer process ---
+  // [MODIFIED] 暴露重构后的 MCP 函数
   initializeMcpClient,
-  closeMcpClient,
   invokeMcpTool
 };
 /*! Bundled license information:

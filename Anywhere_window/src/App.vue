@@ -1181,18 +1181,15 @@ function getRandomItem(list) {
 }
 
 async function applyMcpTools() {
-  // 1. 立即关闭弹窗，恢复流畅的UI体验和关闭动画
+  // 1. 立即关闭弹窗并显示加载状态
   isMcpDialogVisible.value = false;
-
-  // 2. 立即在顶部 Header 显示加载状态
   isMcpLoading.value = true;
-
-  // 使用 nextTick 确保UI更新（弹窗关闭）后再执行耗时操作
   await nextTick();
 
-  // 3. 在后台准备并执行工具加载任务
+  // 准备请求的服务器配置
   const activeServerConfigs = {};
-  for (const id of sessionMcpServerIds.value) {
+  const serverIdsToLoad = [...sessionMcpServerIds.value];
+  for (const id of serverIdsToLoad) {
     if (currentConfig.value.mcpServers[id]) {
       const serverConf = currentConfig.value.mcpServers[id];
       activeServerConfigs[id] = {
@@ -1205,21 +1202,39 @@ async function applyMcpTools() {
   }
 
   try {
-    const { openaiFormattedTools: newFormattedTools } = await window.api.initializeMcpClient(activeServerConfigs);
-    openaiFormattedTools.value = newFormattedTools;
+    // 2. 直接调用后端的同步函数，它现在是幂等的且能处理中止
+    const {
+        openaiFormattedTools: newFormattedTools,
+        successfulServerIds,
+        failedServerIds
+    } = await window.api.initializeMcpClient(activeServerConfigs);
 
-    // 4. 任务完成后给出提示消息
+    // 3. 根据返回结果更新UI
+    openaiFormattedTools.value = newFormattedTools;
+    sessionMcpServerIds.value = successfulServerIds;
+
+    if (failedServerIds && failedServerIds.length > 0) {
+        const failedNames = failedServerIds.map(id => currentConfig.value.mcpServers[id]?.name || id).join('、');
+        ElMessage.error({
+            message: `以下 MCP 服务加载失败，已自动取消勾选: ${failedNames}`,
+            duration: 5000
+        });
+    }
+
     if (newFormattedTools.length > 0) {
       ElMessage.success(`已成功启用 ${newFormattedTools.length} 个 MCP 工具`);
-    } else if (Object.keys(activeServerConfigs).length > 0 || openaiFormattedTools.value.length > 0) {
-      // 仅在确实执行了“清除”操作时提示
+    } else if (serverIdsToLoad.length > 0 && failedServerIds.length === serverIdsToLoad.length) {
+      ElMessage.info('所有选中的 MCP 工具均加载失败');
+    } else if (serverIdsToLoad.length === 0) {
       ElMessage.info('已清除所有 MCP 工具');
     }
+
   } catch (error) {
     console.error("Failed to initialize MCP tools:", error);
     ElMessage.error(`加载MCP工具失败: ${error.message}`);
+    openaiFormattedTools.value = [];
+    sessionMcpServerIds.value = [];
   } finally {
-    // 5. 无论成功或失败，最后都取消加载状态
     isMcpLoading.value = false;
   }
 }
@@ -1243,6 +1258,10 @@ function toggleMcpDialog() {
 
 const askAI = async (forceSend = false) => {
     if (loading.value) return;
+    if (isMcpLoading.value) {
+        ElMessage.info('正在加载工具，请稍后再试...');
+        return;
+    }
 
     // --- 1. 处理用户输入 ---
     if (!forceSend) {
@@ -1290,6 +1309,7 @@ const askAI = async (forceSend = false) => {
             apiKey: () => getRandomItem(api_key.value),
             baseURL: base_url.value,
             dangerouslyAllowBrowser: true,
+            maxRetries: 3,
         });
 
         // --- 3. 开始工具调用循环 ---
@@ -1782,7 +1802,7 @@ const focusOnInput = () => {
       title="下载图片" />
   </div>
 
-  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP 工具" width="540px" top="10vh" custom-class="mcp-dialog" @close="focusOnInput">
+  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP" width="540px" top="10vh" custom-class="mcp-dialog" @close="focusOnInput">
     <div class="mcp-dialog-content">
       <div class="mcp-dialog-toolbar">
         <el-button-group>
