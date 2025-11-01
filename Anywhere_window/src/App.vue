@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElTooltip, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckboxGroup, ElCheckbox, ElButtonGroup, ElTag } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElTooltip, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckboxGroup, ElCheckbox, ElButtonGroup, ElTag, ElAlert } from 'element-plus';
 import { createClient } from "webdav/web";
 
 import ChatHeader from './components/ChatHeader.vue';
@@ -12,6 +12,27 @@ import { DocumentCopy, Download, Search } from '@element-plus/icons-vue';
 
 import OpenAI from 'openai';
 // No longer import from mcp-client.js
+
+// 封装 ElMessage 以添加 showClose: true
+const showDismissibleMessage = (options) => {
+  const opts = typeof options === 'string' ? { message: options } : options;
+  let messageInstance = null;
+  const finalOpts = {
+    ...opts,
+    showClose: true,
+    onClick: () => {
+      if (messageInstance) {
+        messageInstance.close();
+      }
+    }
+  };
+  messageInstance = ElMessage(finalOpts);
+};
+showDismissibleMessage.success = (message) => showDismissibleMessage({ message, type: 'success' });
+showDismissibleMessage.error = (message) => showDismissibleMessage({ message, type: 'error' });
+showDismissibleMessage.info = (message) => showDismissibleMessage({ message, type: 'info' });
+showDismissibleMessage.warning = (message) => showDismissibleMessage({ message, type: 'warning' });
+
 
 const chatInputRef = ref(null);
 const lastSelectionStart = ref(null);
@@ -75,7 +96,7 @@ const fileHandlers = {
     handler: async (file) => {
       const commaIndex = file.url.indexOf(',');
       if (commaIndex > -1) return { type: "input_audio", input_audio: { data: file.url.substring(commaIndex + 1), format: file.name.split('.').pop().toLowerCase() } };
-      ElMessage.error(`音频文件 ${file.name} 格式不正确`); return null;
+      showDismissibleMessage.error(`音频文件 ${file.name} 格式不正确`); return null;
     }
   },
   pdf: {
@@ -312,9 +333,9 @@ const addCopyButtonsToCodeBlocks = async () => {
         event.stopPropagation();
         try {
           await navigator.clipboard.writeText(codeText.trimEnd());
-          ElMessage.success('Code copied to clipboard!');
+          showDismissibleMessage.success('Code copied to clipboard!');
         }
-        catch (err) { console.error('Failed to copy code:', err); ElMessage.error('Failed to copy code.'); }
+        catch (err) { console.error('Failed to copy code:', err); showDismissibleMessage.error('Failed to copy code.'); }
       });
       wrapper.appendChild(button);
     };
@@ -353,7 +374,7 @@ const handleChangeModel = (chosenModel) => {
   api_key.value = provider.api_key;
   changeModel_page.value = false;
   chatInputRef.value?.focus({ cursor: 'end' });
-  ElMessage.success(`模型已切换为: ${modelMap.value[chosenModel]}`);
+  showDismissibleMessage.success(`模型已切换为: ${modelMap.value[chosenModel]}`);
 };
 const handleTogglePin = () => {
   autoCloseOnBlur.value = !autoCloseOnBlur.value;
@@ -451,13 +472,13 @@ const handleWindowFocus = () => {
 
 const handleCopyImageFromViewer = (url) => {
   if (!url) return;
-  const loadingMessage = ElMessage({ message: '准备复制图片...', type: 'info', duration: 0 });
+  const loadingMessage = showDismissibleMessage({ message: '准备复制图片...', type: 'info', duration: 0 });
   (async () => {
     try {
       if (url.startsWith('data:image')) {
         await new Promise(resolve => setTimeout(resolve, 20));
         await window.api.copyImage(url);
-        ElMessage.success('图片已复制到剪贴板');
+        showDismissibleMessage.success('图片已复制到剪贴板');
         return;
       }
       const response = await fetch(url);
@@ -469,10 +490,10 @@ const handleCopyImageFromViewer = (url) => {
       loadingMessage.message = '正在写入剪贴板...';
       await new Promise(resolve => setTimeout(resolve, 50));
       await window.api.copyImage(uint8Array);
-      ElMessage.success('图片已复制到剪贴板');
+      showDismissibleMessage.success('图片已复制到剪贴板');
     } catch (error) {
       console.error('复制图片失败:', error);
-      ElMessage.error(`复制失败: ${error.message}`);
+      showDismissibleMessage.error(`复制失败: ${error.message}`);
     } finally {
       loadingMessage.close();
     }
@@ -487,11 +508,11 @@ const handleDownloadImageFromViewer = async (url) => {
     const arrayBuffer = await blob.arrayBuffer();
     const defaultFilename = `image_${Date.now()}.${blob.type.split('/')[1] || 'png'}`;
     await window.api.saveFile({ title: '保存图片', defaultPath: defaultFilename, buttonLabel: '保存', fileContent: new Uint8Array(arrayBuffer) });
-    ElMessage.success('图片保存成功！');
+    showDismissibleMessage.success('图片保存成功！');
   } catch (error) {
     if (!error.message.includes('User cancelled') && !error.message.includes('用户取消')) {
       console.error('下载图片失败:', error);
-      ElMessage.error(`下载失败: ${error.message}`);
+      showDismissibleMessage.error(`下载失败: ${error.message}`);
     }
   }
 };
@@ -573,7 +594,7 @@ const handleEditEnd = async ({ index, action, content }) => {
     // 先处理数据和状态
     if (action === 'save') {
       handleEditMessage(index, content);
-      ElMessage.success('消息已更新');
+      showDismissibleMessage.success('消息已更新');
     }
     childComponent.switchToShowMode();
   }
@@ -598,7 +619,7 @@ const saveSystemPrompt = async () => {
       // 更新现有快捷助手
       await window.api.saveSetting(`prompts.${CODE.value}.prompt`, newPromptContent);
       currentConfig.value.prompts[CODE.value].prompt = newPromptContent;
-      ElMessage.success('快捷助手提示词已更新');
+      showDismissibleMessage.success('快捷助手提示词已更新');
     } else {
       // 创建新的快捷助手
       const latestConfigData = await window.api.getConfig();
@@ -634,11 +655,11 @@ const saveSystemPrompt = async () => {
       await window.api.updateConfig(latestConfigData);
       currentConfig.value = latestConfigData.config;
       sourcePromptConfig.value = newPrompt; // 更新源配置为刚创建的新配置
-      ElMessage.success(`已为您创建并保存新的快捷助手: "${CODE.value}"`);
+      showDismissibleMessage.success(`已为您创建并保存新的快捷助手: "${CODE.value}"`);
     }
   } catch (error) {
     console.error("保存系统提示词失败:", error);
-    ElMessage.error(`保存失败: ${error.message}`);
+    showDismissibleMessage.error(`保存失败: ${error.message}`);
   }
 
   systemPromptDialogVisible.value = false;
@@ -670,7 +691,7 @@ onMounted(async () => {
   }
   catch (err) {
     currentConfig.value = defaultConfig.config;
-    ElMessage.error('加载配置失败，使用默认配置');
+    showDismissibleMessage.error('加载配置失败，使用默认配置');
   }
   zoomLevel.value = currentConfig.value.zoom || 1;
   if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(zoomLevel.value);
@@ -756,7 +777,7 @@ onMounted(async () => {
             if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(); await askAI(false); }
             else { chatInputRef.value?.focus({ cursor: 'end' }); scrollToBottom(); }
           }
-        } catch (error) { console.error("Error during initial file processing:", error); ElMessage.error("文件处理失败: " + error.message); }
+        } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
       if (currentPromptConfig?.defaultMcpServers && currentPromptConfig.defaultMcpServers.length > 0) {
@@ -825,7 +846,7 @@ onBeforeUnmount(async () => {
 
 const saveWindowSize = async () => {
   if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
-    ElMessage.warning('无法保存窗口设置，因为当前不是一个已定义的快捷助手。');
+    showDismissibleMessage.warning('无法保存窗口设置，因为当前不是一个已定义的快捷助手。');
     return;
   }
   const settingsToSave = {
@@ -838,12 +859,12 @@ const saveWindowSize = async () => {
   try {
     const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
     if (result.success) {
-      ElMessage.success('当前快捷助手的窗口大小、位置及缩放已保存');
+      showDismissibleMessage.success('当前快捷助手的窗口大小、位置及缩放已保存');
       currentConfig.value.prompts[CODE.value] = { ...currentConfig.value.prompts[CODE.value], ...settingsToSave };
-    } else { ElMessage.error(`保存失败: ${result.message}`); }
+    } else { showDismissibleMessage.error(`保存失败: ${result.message}`); }
   } catch (error) {
     console.error("Error saving window settings:", error);
-    ElMessage.error('保存窗口设置时出错');
+    showDismissibleMessage.error('保存窗口设置时出错');
   }
 }
 
@@ -875,11 +896,11 @@ const saveSessionToCloud = async () => {
       beforeClose: async (action, instance, done) => {
         if (action === 'confirm') {
           let finalBasename = inputValue.value.trim();
-          if (!finalBasename) { ElMessage.error('文件名不能为空'); return; }
+          if (!finalBasename) { showDismissibleMessage.error('文件名不能为空'); return; }
           if (finalBasename.toLowerCase().endsWith('.json')) finalBasename = finalBasename.slice(0, -5);
           const filename = finalBasename + '.json';
           instance.confirmButtonLoading = true;
-          ElMessage.info('正在保存到云端...');
+          showDismissibleMessage.info('正在保存到云端...');
           try {
             const sessionData = getSessionDataAsObject();
             const jsonString = JSON.stringify(sessionData, null, 2);
@@ -890,11 +911,11 @@ const saveSessionToCloud = async () => {
             if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
             await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
             defaultConversationName.value = finalBasename;
-            ElMessage.success('会话已成功保存到云端！');
+            showDismissibleMessage.success('会话已成功保存到云端！');
             done();
           } catch (error) {
             console.error("WebDAV save failed:", error);
-            ElMessage.error(`保存到云端失败: ${error.message}`);
+            showDismissibleMessage.error(`保存到云端失败: ${error.message}`);
           } finally { instance.confirmButtonLoading = false; }
         } else { done(); }
       }
@@ -955,17 +976,17 @@ const saveSessionAsMarkdown = async () => {
       beforeClose: async (action, instance, done) => {
         if (action === 'confirm') {
           let finalBasename = inputValue.value.trim();
-          if (!finalBasename) { ElMessage.error('文件名不能为空'); return; }
+          if (!finalBasename) { showDismissibleMessage.error('文件名不能为空'); return; }
           if (finalBasename.toLowerCase().endsWith('.md')) finalBasename = finalBasename.slice(0, -3);
           const finalFilename = finalBasename + '.md';
           instance.confirmButtonLoading = true;
           try {
             await window.api.saveFile({ title: '保存为 Markdown', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'Markdown 文件', extensions: ['md'] }, { name: '所有文件', extensions: ['*'] }], fileContent: markdownContent });
             defaultConversationName.value = finalBasename;
-            ElMessage.success('会话已成功保存为 Markdown！');
+            showDismissibleMessage.success('会话已成功保存为 Markdown！');
             done();
           } catch (error) {
-            if (!error.message.includes('canceled by the user')) { console.error('保存 Markdown 失败:', error); ElMessage.error(`保存失败: ${error.message}`); }
+            if (!error.message.includes('canceled by the user')) { console.error('保存 Markdown 失败:', error); showDismissibleMessage.error(`保存失败: ${error.message}`); }
             done();
           } finally { instance.confirmButtonLoading = false; }
         } else { done(); }
@@ -991,17 +1012,17 @@ const saveSessionAsJson = async () => {
       beforeClose: async (action, instance, done) => {
         if (action === 'confirm') {
           let finalBasename = inputValue.value.trim();
-          if (!finalBasename) { ElMessage.error('文件名不能为空'); return; }
+          if (!finalBasename) { showDismissibleMessage.error('文件名不能为空'); return; }
           if (finalBasename.toLowerCase().endsWith('.json')) finalBasename = finalBasename.slice(0, -5);
           const finalFilename = finalBasename + '.json';
           instance.confirmButtonLoading = true;
           try {
             await window.api.saveFile({ title: '保存聊天会话', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }], fileContent: jsonString });
             defaultConversationName.value = finalBasename;
-            ElMessage.success('会话已成功保存！');
+            showDismissibleMessage.success('会话已成功保存！');
             done();
           } catch (error) {
-            if (!error.message.includes('canceled by the user')) { console.error('保存会话失败:', error); ElMessage.error(`保存失败: ${error.message}`); }
+            if (!error.message.includes('canceled by the user')) { console.error('保存会话失败:', error); showDismissibleMessage.error(`保存失败: ${error.message}`); }
             done();
           } finally { instance.confirmButtonLoading = false; }
         } else { done(); }
@@ -1098,9 +1119,9 @@ const loadSession = async (jsonData) => {
       const provider = currentConfig.value.providers[currentProviderID.value];
       base_url.value = provider?.url;
       api_key.value = provider?.api_key;
-    } else { ElMessage.error("没有可用的模型。请检查您的服务商配置。"); loading.value = false; return; }
+    } else { showDismissibleMessage.error("没有可用的模型。请检查您的服务商配置。"); loading.value = false; return; }
     await nextTick(); scrollToBottom();
-  } catch (error) { console.error("加载会话失败:", error); ElMessage.error(`加载会话失败: ${error.message}`); }
+  } catch (error) { console.error("加载会话失败:", error); showDismissibleMessage.error(`加载会话失败: ${error.message}`); }
   finally { loading.value = false; }
 };
 
@@ -1124,21 +1145,21 @@ const file2fileList = async (file, idx) => {
   if (isSessionFile) { chatInputRef.value?.focus({ cursor: 'end' }); return; }
   return new Promise((resolve, reject) => {
     const handler = getFileHandler(file.name);
-    if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; ElMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }
+    if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; showDismissibleMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }
     const reader = new FileReader();
     reader.onload = (e) => { fileList.value.push({ uid: idx, name: file.name, size: file.size, type: file.type, url: e.target.result }); resolve(); };
-    reader.onerror = () => { const errorMsg = `读取文件 ${file.name} 失败`; ElMessage.error(errorMsg); reject(new Error(errorMsg)); }
+    reader.onerror = () => { const errorMsg = `读取文件 ${file.name} 失败`; showDismissibleMessage.error(errorMsg); reject(new Error(errorMsg)); }
     reader.readAsDataURL(file);
   });
 };
 
 const processFilePath = async (filePath) => {
-  if (!filePath || typeof filePath !== 'string') { ElMessage.error('无效的文件路径'); return; }
+  if (!filePath || typeof filePath !== 'string') { showDismissibleMessage.error('无效的文件路径'); return; }
   try {
     const fileObject = await window.api.handleFilePath(filePath);
     if (fileObject) await file2fileList(fileObject, fileList.value.length + 1);
-    else ElMessage.error('无法读取或访问该文件，请检查路径和权限');
-  } catch (error) { console.error('调用 handleFilePath 时发生意外错误:', error); ElMessage.error('处理文件路径时发生未知错误'); }
+    else showDismissibleMessage.error('无法读取或访问该文件，请检查路径和权限');
+  } catch (error) { console.error('调用 handleFilePath 时发生意外错误:', error); showDismissibleMessage.error('处理文件路径时发生未知错误'); }
 };
 
 const sendFile = async () => {
@@ -1147,8 +1168,8 @@ const sendFile = async () => {
     const handler = getFileHandler(currentFile.name);
     if (handler) {
       try { const processedContent = await handler(currentFile); if (processedContent) contentList.push(processedContent); }
-      catch (error) { ElMessage.error(`处理文件 ${currentFile.name} 失败:${error.message}`); }
-    } else ElMessage.warning(`文件类型不支持: ${currentFile.name}`);
+      catch (error) { showDismissibleMessage.error(`处理文件 ${currentFile.name} 失败:${error.message}`); }
+    } else showDismissibleMessage.warning(`文件类型不支持: ${currentFile.name}`);
   }
   fileList.value = []; return contentList;
 };
@@ -1216,23 +1237,23 @@ async function applyMcpTools() {
 
     if (failedServerIds && failedServerIds.length > 0) {
       const failedNames = failedServerIds.map(id => currentConfig.value.mcpServers[id]?.name || id).join('、');
-      ElMessage.error({
+      showDismissibleMessage.error({
         message: `以下 MCP 服务加载失败，已自动取消勾选: ${failedNames}`,
         duration: 5000
       });
     }
 
     if (newFormattedTools.length > 0) {
-      ElMessage.success(`已成功启用 ${newFormattedTools.length} 个 MCP 工具`);
+      showDismissibleMessage.success(`已成功启用 ${newFormattedTools.length} 个 MCP 工具`);
     } else if (serverIdsToLoad.length > 0 && failedServerIds.length === serverIdsToLoad.length) {
-      ElMessage.info('所有选中的 MCP 工具均加载失败');
+      showDismissibleMessage.info('所有选中的 MCP 工具均加载失败');
     } else if (serverIdsToLoad.length === 0) {
-      ElMessage.info('已清除所有 MCP 工具');
+      showDismissibleMessage.info('已清除所有 MCP 工具');
     }
 
   } catch (error) {
     console.error("Failed to initialize MCP tools:", error);
-    ElMessage.error(`加载MCP工具失败: ${error.message}`);
+    showDismissibleMessage.error(`加载MCP工具失败: ${error.message}`);
     openaiFormattedTools.value = [];
     sessionMcpServerIds.value = [];
   } finally {
@@ -1242,7 +1263,6 @@ async function applyMcpTools() {
 
 function clearMcpTools() {
   sessionMcpServerIds.value = [];
-  ElMessage.info('已清除所有选中的MCP工具，请点击“应用”生效');
 }
 
 function selectAllMcpServers() {
@@ -1260,7 +1280,7 @@ function toggleMcpDialog() {
 const askAI = async (forceSend = false) => {
   if (loading.value) return;
   if (isMcpLoading.value) {
-    ElMessage.info('正在加载工具，请稍后再试...');
+    showDismissibleMessage.info('正在加载工具，请稍后再试...');
     return;
   }
 
@@ -1549,7 +1569,7 @@ const reaskAI = async () => {
   const lastVisibleMessageIndexInHistory = history.value.findLastIndex(msg => msg.role !== 'tool');
 
   if (lastVisibleMessageIndexInHistory === -1) {
-    ElMessage.warning('没有可以重新提问的用户消息');
+    showDismissibleMessage.warning('没有可以重新提问的用户消息');
     return;
   }
 
@@ -1574,7 +1594,7 @@ const reaskAI = async () => {
     // 此处无需任何操作。
   } else {
     // 其他情况（如系统消息），不应触发重新提问。
-    ElMessage.warning('无法从此消息类型重新提问。');
+    showDismissibleMessage.warning('无法从此消息类型重新提问。');
     return;
   }
 
@@ -1586,14 +1606,14 @@ const reaskAI = async () => {
 
 const deleteMessage = (index) => {
   if (loading.value) {
-    ElMessage.warning('请等待当前回复完成后再操作');
+    showDismissibleMessage.warning('请等待当前回复完成后再操作');
     return;
   }
   if (index < 0 || index >= chat_show.value.length) return;
 
   const msgToDeleteInShow = chat_show.value[index];
   if (msgToDeleteInShow?.role === 'system') {
-    ElMessage.info('系统提示词不能被删除');
+    showDismissibleMessage.info('系统提示词不能被删除');
     return;
   }
 
@@ -1614,7 +1634,7 @@ const deleteMessage = (index) => {
 
   if (history_idx === -1) {
     console.error("关键错误: 无法将 chat_show 索引映射到 history 索引。中止删除。");
-    ElMessage.error("删除失败：消息状态不一致。");
+    showDismissibleMessage.error("删除失败：消息状态不一致。");
     return;
   }
 
@@ -1696,7 +1716,7 @@ const clearHistory = () => {
   focusedMessageIndex.value = null;
   defaultConversationName.value = "";
   chatInputRef.value?.focus({ cursor: 'end' });
-  ElMessage.success('历史记录已清除');
+  showDismissibleMessage.success('历史记录已清除');
 };
 
 const formatTimestamp = (dateString) => {
@@ -1735,7 +1755,7 @@ const handleCancelToolCall = (toolCallId) => {
     const controller = toolCallControllers.value.get(toolCallId);
     if (controller) {
         controller.abort();
-        ElMessage.info('正在取消工具调用...');
+        showDismissibleMessage.info('正在取消工具调用...');
     }
 };
 </script>
@@ -1849,10 +1869,15 @@ const handleCancelToolCall = (toolCallId) => {
       </div>
     </div>
     <template #footer>
-      <!-- 因为全选会出bug，当前无法解决，故隐藏该功能 -->
-      <!-- <el-button @click="selectAllMcpServers">全选当前</el-button> -->
-      <el-button @click="clearMcpTools">清除全部</el-button>
-      <el-button type="primary" @click="applyMcpTools">应用</el-button>
+      <div class="mcp-dialog-footer">
+        <span class="mcp-limit-hint">Utools 限制最多启用5个MCP服务</span>
+        <div>
+          <!-- 因为全选会出bug，当前无法解决，故隐藏该功能 -->
+          <!-- <el-button @click="selectAllMcpServers">全选当前</el-button> -->
+          <el-button @click="clearMcpTools">清除全部</el-button>
+          <el-button type="primary" @click="applyMcpTools">应用</el-button>
+        </div>
+      </div>
     </template>
   </el-dialog>
 </template>
@@ -2396,5 +2421,16 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
 html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #999;
   background-clip: content-box;
+}
+
+.mcp-dialog-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+.mcp-limit-hint {
+    font-size: 12px;
+    color: var(--el-color-warning);
 }
 </style>

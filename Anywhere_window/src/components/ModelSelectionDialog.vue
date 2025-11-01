@@ -1,5 +1,7 @@
 <script setup>
-import { ElDialog, ElTable, ElTableColumn, ElButton } from 'element-plus';
+import { ref, computed } from 'vue';
+import { ElDialog, ElTable, ElTableColumn, ElButton, ElInput } from 'element-plus';
+import { Search } from '@element-plus/icons-vue';
 
 const props = defineProps({
     modelValue: Boolean, // for v-model
@@ -9,14 +11,26 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'select']);
 
+const searchQuery = ref('');
+
+const filteredModelList = computed(() => {
+    if (!searchQuery.value) {
+        return props.modelList;
+    }
+    const lowerCaseQuery = searchQuery.value.toLowerCase();
+    return props.modelList.filter(model =>
+        model.label.toLowerCase().includes(lowerCaseQuery)
+    );
+});
+
 const tableSpanMethod = ({ row, column, rowIndex, columnIndex }) => {
     if (columnIndex === 0) {
-        if (rowIndex > 0 && props.modelList[rowIndex - 1].label.split("|")[0] === row.label.split("|")[0]) {
+        if (rowIndex > 0 && filteredModelList.value[rowIndex - 1].label.split("|")[0] === row.label.split("|")[0]) {
             return { rowspan: 0, colspan: 0 };
         }
         let rowspan = 1;
-        for (let i = rowIndex + 1; i < props.modelList.length; i++) {
-            if (props.modelList[i].label.split("|")[0] === row.label.split("|")[0]) {
+        for (let i = rowIndex + 1; i < filteredModelList.value.length; i++) {
+            if (filteredModelList.value[i].label.split("|")[0] === row.label.split("|")[0]) {
                 rowspan++;
             } else {
                 break;
@@ -26,14 +40,25 @@ const tableSpanMethod = ({ row, column, rowIndex, columnIndex }) => {
     }
 };
 
-const handleClose = () => emit('update:modelValue', false);
-const handleSelect = (modelValue) => emit('select', modelValue);
+const handleClose = () => {
+    searchQuery.value = ''; // 关闭时清空搜索词
+    emit('update:modelValue', false);
+};
 
+const handleSelect = (modelValue) => emit('select', modelValue);
 </script>
 
 <template>
     <el-dialog title="选择模型" :model-value="modelValue" @update:model-value="handleClose" width="70%" custom-class="model-dialog">
-        <el-table :data="modelList" stripe style="width: 100%; height: 400px;" :max-height="400" :border="true"
+        <div class="model-search-container">
+            <el-input
+                v-model="searchQuery"
+                placeholder="搜索服务商或模型名称..."
+                clearable
+                :prefix-icon="Search"
+            />
+        </div>
+        <el-table :data="filteredModelList" stripe style="width: 100%; height: 400px;" :max-height="400" :border="true"
             :span-method="tableSpanMethod" width="100%">
             <el-table-column label="服务商" align="center" prop="provider" width="100">
                 <template #default="scope">
@@ -54,6 +79,8 @@ const handleSelect = (modelValue) => emit('select', modelValue);
     </el-dialog>
 </template>
 
-<style>
-/* This dialog has no specific scoped styles, relies on global styles */
+<style scoped>
+.model-search-container {
+    padding: 0 0 15px 0;
+}
 </style>
