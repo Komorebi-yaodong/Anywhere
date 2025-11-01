@@ -155,10 +155,9 @@
     "typeLabel": "タイプ",
     "activeLabel": "有効",
     "typeOptions": {
-      "stdio": "標準入出力 (stdio)",
-      "streamableHttp": "ストリーミングHTTP",
-      "sse": "サーバー送信イベント (SSE)",
-      "http": "HTTP"
+      "stdio": "Stdio",
+      "http": "ストリーミングHTTP",
+      "sse": "SSE"
     },
     "stdio": {
       "command": "コマンド",

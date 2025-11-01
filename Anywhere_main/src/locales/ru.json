@@ -155,10 +155,9 @@
     "typeLabel": "Тип",
     "activeLabel": "Активен",
     "typeOptions": {
-      "stdio": "Стандартный ввод/вывод (stdio)",
-      "streamableHttp": "Потоковый HTTP",
-      "sse": "Серверные события (SSE)",
-      "http": "HTTP"
+      "stdio": "Stdio",
+      "http": "Потоковый HTTP",
+      "sse": "SSE"
     },
     "stdio": {
       "command": "Команда",

@@ -155,10 +155,9 @@
     "typeLabel": "Type",
     "activeLabel": "Active",
     "typeOptions": {
-      "stdio": "stdio",
-      "streamableHttp": "Streamable HTTP",
-      "sse": "Server-Sent Events (SSE)",
-      "http": "HTTP"
+      "stdio": "Stdio",
+      "http": "Streamable HTTP",
+      "sse": "SSE"
     },
     "stdio": {
       "command": "Command",

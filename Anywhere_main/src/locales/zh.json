@@ -155,10 +155,9 @@
     "typeLabel": "类型",
     "activeLabel": "启用",
     "typeOptions": {
-      "stdio": "标准输入/输出 (stdio)",
-      "streamableHttp": "可流式 HTTP",
-      "sse": "服务器发送事件 (SSE)",
-      "http": "HTTP"
+      "stdio": "Stdio",
+      "http": "可流式 HTTP",
+      "sse": "SSE"
     },
     "stdio": {
       "command": "命令",

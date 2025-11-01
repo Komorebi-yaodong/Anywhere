@@ -2,8 +2,6 @@
 
 const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
 
-// --- 最终健壮版 V3: 彻底修复异步引用错误，确保错误隔离 ---
-
 const TOTAL_CONCURRENCY_LIMIT = 5;
 const STDIO_RESERVED_LIMIT = 4;
 
@@ -11,8 +9,17 @@ let stdioClient = null;
 let fullToolInfoMap = new Map();
 let currentlyConnectedServerIds = new Set();
 
+function normalizeTransportType(transport) {
+  const streamableHttpRegex = /^streamable[\s_-]?http$/i;
+  if (streamableHttpRegex.test(transport)) {
+    return 'http';
+  }
+  return transport;
+}
+
+
 /**
- * [最终版] 增量式地初始化/同步 MCP 客户端
+ * 增量式地初始化/同步 MCP 客户端
  */
 async function initializeMcpClient(activeServerConfigs = {}) {
   const newIds = new Set(Object.keys(activeServerConfigs));
@@ -69,7 +76,11 @@ async function initializeMcpClient(activeServerConfigs = {}) {
         try {
           console.log(`[MCP Debug] [Pool] Attempting to connect to new server ${id}...`);
           
-          tempClient = new MultiServerMCPClient({ [id]: config }, { signal: controller.signal });
+          // 创建客户端前，使用辅助函数规范化 transport 类型
+          const modifiedConfig = { ...config };
+          modifiedConfig.transport = normalizeTransportType(modifiedConfig.transport);
+          
+          tempClient = new MultiServerMCPClient({ [id]: modifiedConfig }, { signal: controller.signal });
           const tools = await tempClient.getTools();
 
           tools.forEach(tool => {
@@ -77,7 +88,7 @@ async function initializeMcpClient(activeServerConfigs = {}) {
               schema: tool.schema,
               description: tool.description,
               isStdio: false,
-              serverConfig: config,
+              serverConfig: config, // 存储原始配置
             });
           });
 
@@ -188,6 +199,8 @@ function buildOpenaiFormattedTools() {
   return formattedTools;
 }
 
+// ./backend/src/mcp.js
+
 async function invokeMcpTool(toolName, toolArgs, signal) {
   const toolInfo = fullToolInfoMap.get(toolName);
   if (!toolInfo) {
@@ -208,7 +221,12 @@ async function invokeMcpTool(toolName, toolArgs, signal) {
     }
     try {
       console.log(`[MCP Debug] [Invoke] On-demand connecting to ${serverConfig.id} for tool: ${toolName}`);
-      tempClient = new MultiServerMCPClient({ [serverConfig.id]: serverConfig }, { signal: controller.signal });
+      
+      // 创建客户端前，使用辅助函数规范化 transport 类型
+      const modifiedConfig = { ...serverConfig };
+      modifiedConfig.transport = normalizeTransportType(modifiedConfig.transport);
+      
+      tempClient = new MultiServerMCPClient({ [serverConfig.id]: modifiedConfig }, { signal: controller.signal });
       const tools = await tempClient.getTools();
       const toolToCall = tools.find(t => t.name === toolName);
       if (!toolToCall) throw new Error(`Tool "${toolName}" not found on server during invocation.`);

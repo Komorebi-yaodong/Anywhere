@@ -88973,6 +88973,13 @@ var require_mcp = __commonJS({
     var stdioClient = null;
     var fullToolInfoMap = /* @__PURE__ */ new Map();
     var currentlyConnectedServerIds = /* @__PURE__ */ new Set();
+    function normalizeTransportType(transport) {
+      const streamableHttpRegex = /^streamable[\s_-]?http$/i;
+      if (streamableHttpRegex.test(transport)) {
+        return "http";
+      }
+      return transport;
+    }
     async function initializeMcpClient2(activeServerConfigs = {}) {
       const newIds = new Set(Object.keys(activeServerConfigs));
       const oldIds = new Set(currentlyConnectedServerIds);
@@ -89016,7 +89023,9 @@ var require_mcp = __commonJS({
             const controller = new AbortController();
             try {
               console.log(`[MCP Debug] [Pool] Attempting to connect to new server ${id}...`);
-              tempClient = new MultiServerMCPClient({ [id]: config }, { signal: controller.signal });
+              const modifiedConfig = { ...config };
+              modifiedConfig.transport = normalizeTransportType(modifiedConfig.transport);
+              tempClient = new MultiServerMCPClient({ [id]: modifiedConfig }, { signal: controller.signal });
               const tools = await tempClient.getTools();
               tools.forEach((tool) => {
                 fullToolInfoMap.set(tool.name, {
@@ -89024,6 +89033,7 @@ var require_mcp = __commonJS({
                   description: tool.description,
                   isStdio: false,
                   serverConfig: config
+                  // 存储原始配置
                 });
               });
               if (id) currentlyConnectedServerIds.add(id);
@@ -89140,7 +89150,9 @@ var require_mcp = __commonJS({
         }
         try {
           console.log(`[MCP Debug] [Invoke] On-demand connecting to ${serverConfig.id} for tool: ${toolName}`);
-          tempClient = new MultiServerMCPClient({ [serverConfig.id]: serverConfig }, { signal: controller.signal });
+          const modifiedConfig = { ...serverConfig };
+          modifiedConfig.transport = normalizeTransportType(modifiedConfig.transport);
+          tempClient = new MultiServerMCPClient({ [serverConfig.id]: modifiedConfig }, { signal: controller.signal });
           const tools = await tempClient.getTools();
           const toolToCall = tools.find((t) => t.name === toolName);
           if (!toolToCall) throw new Error(`Tool "${toolName}" not found on server during invocation.`);

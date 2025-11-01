@@ -1758,6 +1758,18 @@ const handleCancelToolCall = (toolCallId) => {
         showDismissibleMessage.info('正在取消工具调用...');
     }
 };
+
+function getDisplayTypeName(type) {
+  if (!type) return '';
+  const streamableHttpRegex = /^streamable[\s_-]?http$/i;
+  const lowerType = type.toLowerCase();
+
+  if (streamableHttpRegex.test(lowerType) || lowerType === 'http') {
+    return "可流式 HTTP";
+  }
+  
+  else return type
+}
 </script>
 
 <template>
@@ -1858,7 +1870,7 @@ const handleCancelToolCall = (toolCallId) => {
             <div class="mcp-server-header-row">
               <span class="mcp-server-name">{{ server.name }}</span>
               <div class="mcp-server-tags">
-                <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{ server.type }}</el-tag>
+                <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{ getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
                   }}</el-tag>

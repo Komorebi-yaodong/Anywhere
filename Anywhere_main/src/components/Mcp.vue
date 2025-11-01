@@ -12,7 +12,7 @@ const showJsonDialog = ref(false);
 const isNewServer = ref(false);
 const jsonEditorContent = ref('');
 const searchQuery = ref('');
-const advancedCollapse = ref([]); // 新增：控制高级设置折叠面板
+const advancedCollapse = ref([]);
 
 const defaultServer = {
     id: null,
@@ -31,7 +31,6 @@ const defaultServer = {
     tags: []
 };
 
-// Use a factory function to create a fresh object for the form
 const createEditingServerState = () => ({
     ...defaultServer,
     args: '',
@@ -41,6 +40,20 @@ const createEditingServerState = () => ({
 });
 
 const editingServer = reactive(createEditingServerState());
+
+const normalizedEditingServerType = computed({
+  get() {
+    const streamableHttpRegex = /^streamable[\s_-]?http$/i;
+    if (editingServer.type && (streamableHttpRegex.test(editingServer.type) || editingServer.type.toLowerCase() === 'http')) {
+      return 'http';
+    }
+    return editingServer.type;
+  },
+  set(newValue) {
+    // 将下拉框选择的新值赋给原始数据
+    editingServer.type = newValue;
+  }
+});
 
 const mcpServersList = computed(() => {
     if (!currentConfig.value || !currentConfig.value.mcpServers) return [];
@@ -61,6 +74,22 @@ const filteredMcpServersList = computed(() => {
         (server.tags && server.tags.some(tag => tag.toLowerCase().includes(lowerCaseQuery)))
     );
 });
+
+function getDisplayTypeName(type) {
+  if (!type) return '';
+  const streamableHttpRegex = /^streamable[\s_-]?http$/i;
+  const lowerType = type.toLowerCase();
+
+  if (streamableHttpRegex.test(lowerType) || lowerType === 'http') {
+    return t('mcp.typeOptions.http');
+  }
+  
+  switch (lowerType) {
+    case 'sse': return t('mcp.typeOptions.sse');
+    case 'stdio': return t('mcp.typeOptions.stdio');
+    default: return type;
+  }
+}
 
 function generateUniqueId() {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -102,26 +131,25 @@ const convertObjectToText = (obj) => {
 function prepareAddServer() {
     isNewServer.value = true;
     Object.assign(editingServer, createEditingServerState());
-    advancedCollapse.value = []; // 默认折叠高级选项
+    advancedCollapse.value = [];
     showEditDialog.value = true;
 }
 
 function prepareEditServer(server) {
     isNewServer.value = false;
     Object.assign(editingServer, {
-        ...createEditingServerState(), // Start with defaults to clear old state
-        ...server, // Then apply server data
+        ...createEditingServerState(),
+        ...server,
         args: convertLinesToText(server.args),
         env: convertObjectToText(server.env),
         headers: convertObjectToText(server.headers),
         tags: Array.isArray(server.tags) ? server.tags.join(', ') : ''
     });
-    advancedCollapse.value = []; // 默认折叠高级选项
+    advancedCollapse.value = [];
     showEditDialog.value = true;
 }
 
 async function saveServer() {
-    // A helper to add a property only if it's not empty/falsy
     const addIfPresent = (obj, key, value) => {
         if (value) obj[key] = value;
     };
@@ -132,9 +160,10 @@ async function saveServer() {
         if (value && Object.keys(value).length > 0) obj[key] = value;
     };
 
+    // [修正] 确保保存时使用的是用户选择的原始值
     const serverData = {
         name: editingServer.name,
-        type: editingServer.type,
+        type: editingServer.type, // 直接使用 editingServer.type
         isActive: editingServer.isActive,
     };
     
@@ -247,7 +276,7 @@ async function saveJson() {
                             </div>
                             <div class="mcp-card-footer">
                                 <div class="mcp-tags">
-                                    <el-tag v-if="server.type" size="small" type="info">{{ server.type }}</el-tag>
+                                    <el-tag v-if="server.type" size="small" type="info">{{ getDisplayTypeName(server.type) }}</el-tag>
                                     <el-tag v-for="tag in server.tags" :key="tag" size="small">{{ tag }}</el-tag>
                                 </div>
                                 <div class="mcp-actions">
@@ -283,9 +312,8 @@ async function saveJson() {
                     </el-col>
                     <el-col :span="6">
                         <el-form-item :label="t('mcp.typeLabel')">
-                            <el-select v-model="editingServer.type" style="width: 100%;">
+                            <el-select v-model="normalizedEditingServerType" style="width: 100%;">
                                 <el-option :label="t('mcp.typeOptions.sse')" value="sse" />
-                                <el-option :label="t('mcp.typeOptions.streamableHttp')" value="streamableHttp" />
                                 <el-option :label="t('mcp.typeOptions.http')" value="http" />
                                 <el-option :label="t('mcp.typeOptions.stdio')" value="stdio" />
                             </el-select>
@@ -304,7 +332,7 @@ async function saveJson() {
                 <el-divider content-position="left">连接设置</el-divider>
 
                 <!-- HTTP / SSE Fields -->
-                <template v-if="editingServer.type === 'streamableHttp' || editingServer.type === 'sse' || editingServer.type === 'http'">
+                <template v-if="normalizedEditingServerType === 'http' || normalizedEditingServerType === 'sse'">
                     <el-form-item :label="t('mcp.http.url')"><el-input v-model="editingServer.baseUrl" /></el-form-item>
                     <el-form-item :label="t('mcp.http.headers')"><el-input v-model="editingServer.headers" type="textarea" :rows="2" :placeholder="t('mcp.headersPlaceholder')" /></el-form-item>
                 </template>
