@@ -88968,122 +88968,205 @@ var require_dist8 = __commonJS({
 var require_mcp = __commonJS({
   "src/mcp.js"(exports2, module2) {
     var { MultiServerMCPClient } = require_dist8();
-    var langchainToolMap = /* @__PURE__ */ new Map();
-    var mcpManager = {
-      // 存储每个服务器ID对应的 { client, tools, controller }
-      activeSessions: /* @__PURE__ */ new Map(),
-      // 核心同步函数：根据请求的ID列表，更新实际的连接状态
-      async sync(requestedServerIds = []) {
-        const requestedIdSet = new Set(requestedServerIds);
-        const currentIdSet = new Set(this.activeSessions.keys());
-        const idsToClose = [...currentIdSet].filter((id) => !requestedIdSet.has(id));
-        if (idsToClose.length > 0) {
-          await Promise.all(idsToClose.map((id) => this.closeSession(id)));
-        }
-        const idsToLoad = [...requestedIdSet].filter((id) => !currentIdSet.has(id));
-        const loadPromises = idsToLoad.map((id) => this.startSession(id));
-        const results = await Promise.allSettled(loadPromises);
-        const failedIds = [];
-        results.forEach((result, index) => {
-          if (result.status === "rejected") {
-            const id = idsToLoad[index];
-            if (result.reason.name !== "AbortError" && !result.reason.message.includes("aborted")) {
-              failedIds.push(id);
-              this.closeSession(id);
-              console.error(`MCP Manager: Failed to start session for '${id}':`, result.reason);
-            } else {
+    var TOTAL_CONCURRENCY_LIMIT = 5;
+    var STDIO_RESERVED_LIMIT = 4;
+    var stdioClient = null;
+    var fullToolInfoMap = /* @__PURE__ */ new Map();
+    var currentlyConnectedServerIds = /* @__PURE__ */ new Set();
+    async function initializeMcpClient2(activeServerConfigs = {}) {
+      const newIds = new Set(Object.keys(activeServerConfigs));
+      const oldIds = new Set(currentlyConnectedServerIds);
+      const idsToAdd = new Set([...newIds].filter((id) => !oldIds.has(id)));
+      const idsToRemove = new Set([...oldIds].filter((id) => !newIds.has(id)));
+      if (idsToAdd.size === 0 && idsToRemove.size === 0) {
+        console.log("[MCP Debug] No changes detected.");
+        return { openaiFormattedTools: buildOpenaiFormattedTools(), successfulServerIds: [...currentlyConnectedServerIds], failedServerIds: [] };
+      }
+      const failedServerIds = [];
+      let stdioConfigChanged = false;
+      if (idsToRemove.size > 0) {
+        console.log(`[MCP Debug] Servers to remove:`, [...idsToRemove]);
+        const toolsToRemove = [];
+        for (const [toolName, toolInfo] of fullToolInfoMap.entries()) {
+          if (idsToRemove.has(toolInfo.serverConfig.id)) {
+            toolsToRemove.push(toolName);
+            if (toolInfo.serverConfig.transport === "stdio") {
+              stdioConfigChanged = true;
             }
           }
+        }
+        toolsToRemove.forEach((toolName) => fullToolInfoMap.delete(toolName));
+        idsToRemove.forEach((id) => currentlyConnectedServerIds.delete(id));
+      }
+      const stdioIdsToAdd = [...idsToAdd].filter((id) => activeServerConfigs[id] && activeServerConfigs[id].transport === "stdio");
+      if (stdioIdsToAdd.length > 0) {
+        stdioConfigChanged = true;
+      }
+      const httpIdsToAdd = [...idsToAdd].filter((id) => activeServerConfigs[id] && activeServerConfigs[id].transport !== "stdio");
+      if (httpIdsToAdd.length > 0) {
+        console.log(`[MCP Debug] Incrementally connecting to ${httpIdsToAdd.length} new HTTP/SSE servers...`);
+        const currentStdioCount = stdioClient ? Object.keys(stdioClient.clients).length : 0;
+        const availableConcurrency = TOTAL_CONCURRENCY_LIMIT - currentStdioCount;
+        const httpTasks = httpIdsToAdd.map((id) => ({ id, config: { id, ...activeServerConfigs[id] } }));
+        const pool = /* @__PURE__ */ new Set();
+        const allTasks = [];
+        for (const { id, config } of httpTasks) {
+          const taskPromise = (async () => {
+            let tempClient = null;
+            const controller = new AbortController();
+            try {
+              console.log(`[MCP Debug] [Pool] Attempting to connect to new server ${id}...`);
+              tempClient = new MultiServerMCPClient({ [id]: config }, { signal: controller.signal });
+              const tools = await tempClient.getTools();
+              tools.forEach((tool) => {
+                fullToolInfoMap.set(tool.name, {
+                  schema: tool.schema,
+                  description: tool.description,
+                  isStdio: false,
+                  serverConfig: config
+                });
+              });
+              if (id) currentlyConnectedServerIds.add(id);
+            } catch (error) {
+              if (error.name !== "AbortError") {
+                console.error(`[MCP Debug] [Pool] Failed to process server ${id}. It might have an incompatible configuration. Error:`, error.message);
+              }
+              failedServerIds.push(id);
+            } finally {
+              console.log(`[MCP Debug] [Pool] Cleaning up connection for ${id}.`);
+              controller.abort();
+              if (tempClient) await tempClient.close();
+            }
+          })();
+          allTasks.push(taskPromise);
+          pool.add(taskPromise);
+          const cleanup = () => pool.delete(taskPromise);
+          taskPromise.then(cleanup, cleanup);
+          if (pool.size >= availableConcurrency) {
+            await Promise.race(pool);
+          }
+        }
+        await Promise.all(allTasks);
+        console.log(`[MCP Debug] Finished incremental HTTP/SSE connection.`);
+      }
+      if (stdioConfigChanged) {
+        console.log("[MCP Debug] STDIO config changed. Rebuilding persistent client...");
+        if (stdioClient) {
+          await stdioClient.close();
+          stdioClient = null;
+        }
+        const allDesiredStdioConfigs = {};
+        newIds.forEach((id) => {
+          if (id && activeServerConfigs[id] && activeServerConfigs[id].transport === "stdio") {
+            allDesiredStdioConfigs[id] = { id, ...activeServerConfigs[id] };
+          }
         });
-        const allActiveTools = [];
-        const successfulServerIds = [];
-        for (const id of this.activeSessions.keys()) {
-          const session = this.activeSessions.get(id);
-          if (session && session.tools) {
-            allActiveTools.push(...session.tools);
-            successfulServerIds.push(id);
+        const desiredStdioCount = Object.keys(allDesiredStdioConfigs).length;
+        if (desiredStdioCount > 0) {
+          const allowedStdioConfigs = {};
+          const stdioIds = Object.keys(allDesiredStdioConfigs);
+          if (desiredStdioCount > STDIO_RESERVED_LIMIT) {
+            stdioIds.slice(STDIO_RESERVED_LIMIT).forEach((id) => {
+              console.error(`[MCP Debug] Stdio server '${activeServerConfigs[id].name}' not connected due to limits.`);
+              failedServerIds.push(id);
+            });
           }
-        }
-        langchainToolMap = new Map(allActiveTools.map((t) => [t.name, t]));
-        return {
-          allTools: allActiveTools,
-          successfulServerIds,
-          failedServerIds: failedIds
-        };
-      },
-      // 启动并管理单个服务器的会话
-      async startSession(id) {
-        if (this.activeSessions.has(id)) {
-          await this.closeSession(id);
-        }
-        const controller = new AbortController();
-        const config = window.api.getConfig().config;
-        const serverConfig = config.mcpServers[id];
-        if (!serverConfig) {
-          throw new Error(`Server config for '${id}' not found.`);
-        }
-        const clientConfig = { [id]: {
-          transport: serverConfig.type,
-          command: serverConfig.command,
-          args: serverConfig.args,
-          url: serverConfig.baseUrl
-        } };
-        const client = new MultiServerMCPClient(clientConfig, { signal: controller.signal });
-        this.activeSessions.set(id, { client, tools: [], controller });
-        try {
-          const tools = await client.getTools();
-          if (!this.activeSessions.has(id)) {
-            await client.close();
-            throw new Error("Session aborted during tool loading");
+          stdioIds.slice(0, STDIO_RESERVED_LIMIT).forEach((id) => allowedStdioConfigs[id] = allDesiredStdioConfigs[id]);
+          if (Object.keys(allowedStdioConfigs).length > 0) {
+            try {
+              stdioClient = new MultiServerMCPClient(allowedStdioConfigs);
+              const tools = await stdioClient.getTools();
+              const connectedStdioIds = Object.keys(allowedStdioConfigs);
+              tools.forEach((tool) => {
+                const serverId = tool.serverId && allowedStdioConfigs[tool.serverId] ? tool.serverId : connectedStdioIds.length === 1 ? connectedStdioIds[0] : null;
+                if (serverId) {
+                  fullToolInfoMap.set(tool.name, {
+                    instance: tool,
+                    schema: tool.schema,
+                    description: tool.description,
+                    isStdio: true,
+                    serverConfig: allowedStdioConfigs[serverId]
+                  });
+                } else {
+                  console.error(`[MCP Debug] Could not determine serverId for stdio tool '${tool.name}'.`);
+                }
+              });
+              connectedStdioIds.forEach((id) => {
+                if (id) currentlyConnectedServerIds.add(id);
+              });
+              console.log(`[MCP Debug] Successfully rebuilt stdio client for:`, connectedStdioIds);
+            } catch (error) {
+              console.error("[MCP Debug] Failed to rebuild stdio client:", error);
+              failedServerIds.push(...Object.keys(allowedStdioConfigs));
+              if (stdioClient) await stdioClient.close();
+              stdioClient = null;
+            }
           }
-          const session = this.activeSessions.get(id);
-          if (session) {
-            session.tools = tools;
-          }
-        } catch (error) {
-          await this.closeSession(id);
-          if (error.name !== "AbortError" && !error.message.includes("aborted")) {
-            throw error;
-          }
-        }
-      },
-      // 强制关闭并清理单个服务器的会话
-      async closeSession(id) {
-        if (this.activeSessions.has(id)) {
-          const session = this.activeSessions.get(id);
-          session.controller.abort();
-          if (session.client) {
-            await session.client.close();
-          }
-          this.activeSessions.delete(id);
         }
       }
-    };
-    async function initializeMcpClient2(activeServerConfigs) {
-      const requestedServerIds = Object.keys(activeServerConfigs || {});
-      const { allTools, successfulServerIds, failedServerIds } = await mcpManager.sync(requestedServerIds);
-      const openaiFormattedTools = allTools.map((tool) => {
-        if (!tool.schema) {
-          console.error(`Tool '${tool.name}' is missing schema definition.`);
-          return null;
+      return {
+        openaiFormattedTools: buildOpenaiFormattedTools(),
+        successfulServerIds: [...currentlyConnectedServerIds],
+        failedServerIds
+      };
+    }
+    function buildOpenaiFormattedTools() {
+      const formattedTools = [];
+      for (const [toolName, toolInfo] of fullToolInfoMap.entries()) {
+        if (toolInfo.schema) {
+          formattedTools.push({
+            type: "function",
+            function: { name: toolName, description: toolInfo.description, parameters: toolInfo.schema }
+          });
         }
-        return {
-          type: "function",
-          function: { name: tool.name, description: tool.description, parameters: tool.schema }
-        };
-      }).filter(Boolean);
-      return { openaiFormattedTools, successfulServerIds, failedServerIds };
+      }
+      return formattedTools;
     }
     async function invokeMcpTool2(toolName, toolArgs, signal) {
-      const toolToCall = langchainToolMap.get(toolName);
-      if (!toolToCall) {
-        throw new Error(`Tool "${toolName}" not found. It might have been closed or failed to load.`);
+      const toolInfo = fullToolInfoMap.get(toolName);
+      if (!toolInfo) {
+        throw new Error(`Tool "${toolName}" not found or its server is not available.`);
       }
-      return await toolToCall.invoke(toolArgs, { signal });
+      if (toolInfo.isStdio && toolInfo.instance) {
+        console.log(`[MCP Debug] [Invoke] Calling persistent stdio tool: ${toolName}`);
+        return await toolInfo.instance.invoke(toolArgs, { signal });
+      }
+      const serverConfig = toolInfo.serverConfig;
+      if (!toolInfo.isStdio && serverConfig) {
+        let tempClient = null;
+        const controller = new AbortController();
+        if (signal) {
+          signal.addEventListener("abort", () => controller.abort());
+        }
+        try {
+          console.log(`[MCP Debug] [Invoke] On-demand connecting to ${serverConfig.id} for tool: ${toolName}`);
+          tempClient = new MultiServerMCPClient({ [serverConfig.id]: serverConfig }, { signal: controller.signal });
+          const tools = await tempClient.getTools();
+          const toolToCall = tools.find((t) => t.name === toolName);
+          if (!toolToCall) throw new Error(`Tool "${toolName}" not found on server during invocation.`);
+          console.log(`[MCP Debug] [Invoke] Executing tool: ${toolName}`);
+          return await toolToCall.invoke(toolArgs, { signal: controller.signal });
+        } finally {
+          console.log(`[MCP Debug] [Invoke] Disconnecting from ${toolName}'s server...`);
+          controller.abort();
+          if (tempClient) await tempClient.close();
+        }
+      }
+      throw new Error(`Configuration error for tool "${toolName}".`);
+    }
+    async function closeMcpClient2() {
+      if (stdioClient) {
+        console.log(`[MCP Debug] Closing all persistent stdio clients.`);
+        await stdioClient.close();
+        stdioClient = null;
+      }
+      fullToolInfoMap.clear();
+      currentlyConnectedServerIds.clear();
     }
     module2.exports = {
       initializeMcpClient: initializeMcpClient2,
-      invokeMcpTool: invokeMcpTool2
+      invokeMcpTool: invokeMcpTool2,
+      closeMcpClient: closeMcpClient2
     };
   }
 });
@@ -89118,7 +89201,8 @@ var {
 } = require_input();
 var {
   initializeMcpClient,
-  invokeMcpTool
+  invokeMcpTool,
+  closeMcpClient
 } = require_mcp();
 window.api = {
   getConfig,
@@ -89141,7 +89225,8 @@ window.api = {
   copyImage: utools.copyImage,
   // [MODIFIED] 暴露重构后的 MCP 函数
   initializeMcpClient,
-  invokeMcpTool
+  invokeMcpTool,
+  closeMcpClient
 };
 var commandHandlers = {
   "Anywhere Settings": async () => {

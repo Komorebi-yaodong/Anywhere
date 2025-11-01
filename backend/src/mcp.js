@@ -1,180 +1,241 @@
+// ./backend/src/mcp.js
+
 const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
 
-// --- MCP State Management (Self-Contained Module) ---
+// --- 最终健壮版 V3: 彻底修复异步引用错误，确保错误隔离 ---
 
-// 全局的 langchainToolMap，由下面的管理器负责更新
-let langchainToolMap = new Map();
+const TOTAL_CONCURRENCY_LIMIT = 5;
+const STDIO_RESERVED_LIMIT = 4;
 
-// 状态管理器，长期存在，负责所有MCP连接的生命周期
-const mcpManager = {
-    // 存储每个服务器ID对应的 { client, tools, controller }
-    activeSessions: new Map(),
+let stdioClient = null;
+let fullToolInfoMap = new Map();
+let currentlyConnectedServerIds = new Set();
 
-    // 核心同步函数：根据请求的ID列表，更新实际的连接状态
-    async sync(requestedServerIds = []) {
-        const requestedIdSet = new Set(requestedServerIds);
-        const currentIdSet = new Set(this.activeSessions.keys());
+/**
+ * [最终版] 增量式地初始化/同步 MCP 客户端
+ */
+async function initializeMcpClient(activeServerConfigs = {}) {
+  const newIds = new Set(Object.keys(activeServerConfigs));
+  const oldIds = new Set(currentlyConnectedServerIds);
 
-        // 1. 识别并关闭不再需要的会话
-        const idsToClose = [...currentIdSet].filter(id => !requestedIdSet.has(id));
-        if (idsToClose.length > 0) {
-            await Promise.all(idsToClose.map(id => this.closeSession(id)));
+  const idsToAdd = new Set([...newIds].filter(id => !oldIds.has(id)));
+  const idsToRemove = new Set([...oldIds].filter(id => !newIds.has(id)));
+
+  if (idsToAdd.size === 0 && idsToRemove.size === 0) {
+    console.log("[MCP Debug] No changes detected.");
+    return { openaiFormattedTools: buildOpenaiFormattedTools(), successfulServerIds: [...currentlyConnectedServerIds], failedServerIds: [] };
+  }
+
+  const failedServerIds = [];
+
+  // --- 步骤 1: 处理移除 ---
+  let stdioConfigChanged = false;
+  if (idsToRemove.size > 0) {
+    console.log(`[MCP Debug] Servers to remove:`, [...idsToRemove]);
+    const toolsToRemove = [];
+    for (const [toolName, toolInfo] of fullToolInfoMap.entries()) {
+      if (idsToRemove.has(toolInfo.serverConfig.id)) {
+        toolsToRemove.push(toolName);
+        if (toolInfo.serverConfig.transport === 'stdio') {
+          stdioConfigChanged = true;
         }
+      }
+    }
+    toolsToRemove.forEach(toolName => fullToolInfoMap.delete(toolName));
+    idsToRemove.forEach(id => currentlyConnectedServerIds.delete(id));
+  }
 
-        // 2. 识别需要新启动的会话
-        const idsToLoad = [...requestedIdSet].filter(id => !currentIdSet.has(id));
+  // --- 步骤 2: 判断是否需要添加或重建 stdio ---
+  const stdioIdsToAdd = [...idsToAdd].filter(id => activeServerConfigs[id] && activeServerConfigs[id].transport === 'stdio');
+  if (stdioIdsToAdd.length > 0) {
+    stdioConfigChanged = true;
+  }
 
-        // 3. 并行加载所有新服务器
-        const loadPromises = idsToLoad.map(id => this.startSession(id));
-        const results = await Promise.allSettled(loadPromises);
+  // --- 步骤 3: 使用连接池增量连接 http/sse 服务 ---
+  const httpIdsToAdd = [...idsToAdd].filter(id => activeServerConfigs[id] && activeServerConfigs[id].transport !== 'stdio');
+  if (httpIdsToAdd.length > 0) {
+    console.log(`[MCP Debug] Incrementally connecting to ${httpIdsToAdd.length} new HTTP/SSE servers...`);
+    const currentStdioCount = stdioClient ? Object.keys(stdioClient.clients).length : 0;
+    const availableConcurrency = TOTAL_CONCURRENCY_LIMIT - currentStdioCount;
 
-        const failedIds = [];
-        results.forEach((result, index) => {
-            if (result.status === 'rejected') {
-                const id = idsToLoad[index];
-                // 忽略 AbortError，因为这是预期的取消操作
-                if (result.reason.name !== 'AbortError' && !result.reason.message.includes('aborted')) {
-                   failedIds.push(id);
-                   // 确保失败的会话被彻底清理
-                   this.closeSession(id);
-                   console.error(`MCP Manager: Failed to start session for '${id}':`, result.reason);
-                } else {
-                }
-            }
-        });
+    const httpTasks = httpIdsToAdd.map(id => ({ id, config: { id, ...activeServerConfigs[id] } }));
+    const pool = new Set();
+    const allTasks = [];
 
-        // 4. 汇总所有当前活跃的工具
-        const allActiveTools = [];
-        const successfulServerIds = [];
-        for (const id of this.activeSessions.keys()) {
-            const session = this.activeSessions.get(id);
-            if (session && session.tools) {
-                allActiveTools.push(...session.tools);
-                successfulServerIds.push(id);
-            }
-        }
-
-        // 5. 更新全局的 langchainToolMap
-        langchainToolMap = new Map(allActiveTools.map(t => [t.name, t]));
-
-        // 6. 返回结果，供前端更新UI
-        return {
-            allTools: allActiveTools,
-            successfulServerIds,
-            failedServerIds: failedIds,
-        };
-    },
-
-    // 启动并管理单个服务器的会话
-    async startSession(id) {
-        // 如果已存在，则先关闭（理论上不应发生，但作为保险）
-        if (this.activeSessions.has(id)) {
-            await this.closeSession(id);
-        }
-
+    for (const { id, config } of httpTasks) {
+      const taskPromise = (async () => {
+        let tempClient = null;
         const controller = new AbortController();
-        // 注意：这里依赖于调用它的 preload 脚本已经将 getConfig 挂载到了 window.api 上
-        const config = window.api.getConfig().config;
-        const serverConfig = config.mcpServers[id];
-        if (!serverConfig) {
-            // 在这里不需要从 activeSessions 中删除，因为它还未被添加
-            throw new Error(`Server config for '${id}' not found.`);
-        }
-
-        const clientConfig = { [id]: {
-            transport: serverConfig.type,
-            command: serverConfig.command,
-            args: serverConfig.args,
-            url: serverConfig.baseUrl,
-        }};
-
-        const client = new MultiServerMCPClient(clientConfig, { signal: controller.signal });
-
-        // --- 核心修复 ---
-        // 立即将会话（包含 client 实例和 controller）存入 activeSessions
-        // 这样即使在 getTools() 完成前调用 closeSession，也能找到 client 并执行 close()
-        this.activeSessions.set(id, { client, tools: [], controller });
-
         try {
-            const tools = await client.getTools();
+          console.log(`[MCP Debug] [Pool] Attempting to connect to new server ${id}...`);
+          
+          tempClient = new MultiServerMCPClient({ [id]: config }, { signal: controller.signal });
+          const tools = await tempClient.getTools();
 
-            // 检查在耗时的 getTools 操作后，会话是否已被外部命令中止
-            if (!this.activeSessions.has(id)) {
-                // 即使会话记录被删除，也要确保这个新创建的 client 实例被关闭
-                await client.close();
-                throw new Error("Session aborted during tool loading");
-            }
+          tools.forEach(tool => {
+            fullToolInfoMap.set(tool.name, {
+              schema: tool.schema,
+              description: tool.description,
+              isStdio: false,
+              serverConfig: config,
+            });
+          });
 
-            // 加载成功，更新会话中的 tools 列表
-            const session = this.activeSessions.get(id);
-            if (session) {
-                session.tools = tools;
-            }
+          if (id) currentlyConnectedServerIds.add(id);
 
         } catch (error) {
-            // 如果加载失败，确保清理
-            await this.closeSession(id);
-            // 不要重新抛出 AbortError，因为它表示操作被成功取消了
-            if (error.name !== 'AbortError' && !error.message.includes('aborted')) {
-                throw error; // 只重新抛出真正的错误
+          if (error.name !== 'AbortError') {
+            console.error(`[MCP Debug] [Pool] Failed to process server ${id}. It might have an incompatible configuration. Error:`, error.message);
+          }
+          failedServerIds.push(id);
+        } finally {
+          console.log(`[MCP Debug] [Pool] Cleaning up connection for ${id}.`);
+          controller.abort();
+          if (tempClient) await tempClient.close();
+        }
+      })();
+
+      // <<< 关键修复: 将任务清理逻辑移出任务本身 >>>
+      allTasks.push(taskPromise);
+      pool.add(taskPromise);
+
+      const cleanup = () => pool.delete(taskPromise);
+      taskPromise.then(cleanup, cleanup); // 无论成功或失败都执行清理
+
+      if (pool.size >= availableConcurrency) {
+        await Promise.race(pool);
+      }
+    }
+    await Promise.all(allTasks); // 等待所有任务完成
+    console.log(`[MCP Debug] Finished incremental HTTP/SSE connection.`);
+  }
+
+  // --- 步骤 4: 重建 stdio 客户端 (逻辑保持不变) ---
+  if (stdioConfigChanged) {
+    // ... (这部分代码是正确的，保持原样)
+    console.log("[MCP Debug] STDIO config changed. Rebuilding persistent client...");
+    if (stdioClient) {
+      await stdioClient.close();
+      stdioClient = null;
+    }
+
+    const allDesiredStdioConfigs = {};
+    newIds.forEach(id => {
+      if (id && activeServerConfigs[id] && activeServerConfigs[id].transport === 'stdio') {
+        allDesiredStdioConfigs[id] = { id, ...activeServerConfigs[id] };
+      }
+    });
+
+    const desiredStdioCount = Object.keys(allDesiredStdioConfigs).length;
+    if (desiredStdioCount > 0) {
+      const allowedStdioConfigs = {};
+      const stdioIds = Object.keys(allDesiredStdioConfigs);
+      if (desiredStdioCount > STDIO_RESERVED_LIMIT) {
+        stdioIds.slice(STDIO_RESERVED_LIMIT).forEach(id => {
+          console.error(`[MCP Debug] Stdio server '${activeServerConfigs[id].name}' not connected due to limits.`);
+          failedServerIds.push(id);
+        });
+      }
+      stdioIds.slice(0, STDIO_RESERVED_LIMIT).forEach(id => allowedStdioConfigs[id] = allDesiredStdioConfigs[id]);
+
+      if (Object.keys(allowedStdioConfigs).length > 0) {
+        try {
+          stdioClient = new MultiServerMCPClient(allowedStdioConfigs);
+          const tools = await stdioClient.getTools();
+          const connectedStdioIds = Object.keys(allowedStdioConfigs);
+
+          tools.forEach(tool => {
+            const serverId = tool.serverId && allowedStdioConfigs[tool.serverId] ? tool.serverId : connectedStdioIds.length === 1 ? connectedStdioIds[0] : null;
+            if (serverId) {
+              fullToolInfoMap.set(tool.name, {
+                instance: tool, schema: tool.schema, description: tool.description, isStdio: true, serverConfig: allowedStdioConfigs[serverId],
+              });
+            } else {
+              console.error(`[MCP Debug] Could not determine serverId for stdio tool '${tool.name}'.`);
             }
+          });
+          connectedStdioIds.forEach(id => { if (id) currentlyConnectedServerIds.add(id); });
+          console.log(`[MCP Debug] Successfully rebuilt stdio client for:`, connectedStdioIds);
+        } catch (error) {
+          console.error("[MCP Debug] Failed to rebuild stdio client:", error);
+          failedServerIds.push(...Object.keys(allowedStdioConfigs));
+          if (stdioClient) await stdioClient.close();
+          stdioClient = null;
         }
-    },
+      }
+    }
+  }
 
-    // 强制关闭并清理单个服务器的会话
-    async closeSession(id) {
-        if (this.activeSessions.has(id)) {
-            const session = this.activeSessions.get(id);
 
-            // 1. 立即中止任何正在进行的操作
-            session.controller.abort();
-
-            // 2. 如果客户端已创建，则关闭它
-            if (session.client) {
-                await session.client.close();
-            }
-
-            // 3. 从活动会话中移除
-            this.activeSessions.delete(id);
-        }
-    },
-};
-
-/**
- * [MCP Logic] Initializes/Syncs MCP clients. This is now a lightweight wrapper.
- */
-async function initializeMcpClient(activeServerConfigs) {
-    const requestedServerIds = Object.keys(activeServerConfigs || {});
-
-    const { allTools, successfulServerIds, failedServerIds } = await mcpManager.sync(requestedServerIds);
-
-    const openaiFormattedTools = allTools.map((tool) => {
-        if (!tool.schema) {
-            console.error(`Tool '${tool.name}' is missing schema definition.`);
-            return null;
-        }
-        return {
-            type: "function",
-            function: { name: tool.name, description: tool.description, parameters: tool.schema },
-        };
-    }).filter(Boolean);
-
-    return { openaiFormattedTools, successfulServerIds, failedServerIds };
+  return {
+    openaiFormattedTools: buildOpenaiFormattedTools(),
+    successfulServerIds: [...currentlyConnectedServerIds],
+    failedServerIds
+  };
 }
 
-/**
- * [MCP Logic] Invokes a tool by name.
- */
-async function invokeMcpTool(toolName, toolArgs, signal) { // Added signal parameter
-    const toolToCall = langchainToolMap.get(toolName);
-    if (!toolToCall) {
-        throw new Error(`Tool "${toolName}" not found. It might have been closed or failed to load.`);
+// buildOpenaiFormattedTools, invokeMcpTool, closeMcpClient 函数保持不变
+function buildOpenaiFormattedTools() {
+  const formattedTools = [];
+  for (const [toolName, toolInfo] of fullToolInfoMap.entries()) {
+    if (toolInfo.schema) {
+      formattedTools.push({
+        type: "function",
+        function: { name: toolName, description: toolInfo.description, parameters: toolInfo.schema }
+      });
     }
-    // Assume the invoke method accepts a config object with a signal
-    return await toolToCall.invoke(toolArgs, { signal });
+  }
+  return formattedTools;
+}
+
+async function invokeMcpTool(toolName, toolArgs, signal) {
+  const toolInfo = fullToolInfoMap.get(toolName);
+  if (!toolInfo) {
+    throw new Error(`Tool "${toolName}" not found or its server is not available.`);
+  }
+
+  if (toolInfo.isStdio && toolInfo.instance) {
+    console.log(`[MCP Debug] [Invoke] Calling persistent stdio tool: ${toolName}`);
+    return await toolInfo.instance.invoke(toolArgs, { signal });
+  }
+
+  const serverConfig = toolInfo.serverConfig;
+  if (!toolInfo.isStdio && serverConfig) {
+    let tempClient = null;
+    const controller = new AbortController();
+    if (signal) {
+      signal.addEventListener('abort', () => controller.abort());
+    }
+    try {
+      console.log(`[MCP Debug] [Invoke] On-demand connecting to ${serverConfig.id} for tool: ${toolName}`);
+      tempClient = new MultiServerMCPClient({ [serverConfig.id]: serverConfig }, { signal: controller.signal });
+      const tools = await tempClient.getTools();
+      const toolToCall = tools.find(t => t.name === toolName);
+      if (!toolToCall) throw new Error(`Tool "${toolName}" not found on server during invocation.`);
+      console.log(`[MCP Debug] [Invoke] Executing tool: ${toolName}`);
+      return await toolToCall.invoke(toolArgs, { signal: controller.signal });
+    } finally {
+      console.log(`[MCP Debug] [Invoke] Disconnecting from ${toolName}'s server...`);
+      controller.abort();
+      if (tempClient) await tempClient.close();
+    }
+  }
+
+  throw new Error(`Configuration error for tool "${toolName}".`);
+}
+
+async function closeMcpClient() {
+  if (stdioClient) {
+    console.log(`[MCP Debug] Closing all persistent stdio clients.`);
+    await stdioClient.close();
+    stdioClient = null;
+  }
+  fullToolInfoMap.clear();
+  currentlyConnectedServerIds.clear();
 }
 
 module.exports = {
-    initializeMcpClient,
-    invokeMcpTool,
+  initializeMcpClient,
+  invokeMcpTool,
+  closeMcpClient,
 };

@@ -31,7 +31,8 @@ const {
 // [MODIFIED] 引入重构后的 MCP 模块
 const { 
   initializeMcpClient, 
-  invokeMcpTool 
+  invokeMcpTool,
+  closeMcpClient
 } = require('./mcp.js');
 
 window.api = {
@@ -56,6 +57,7 @@ window.api = {
   // [MODIFIED] 暴露重构后的 MCP 函数
   initializeMcpClient,
   invokeMcpTool,
+  closeMcpClient,
 };
 
 // --- Command Handlers ---

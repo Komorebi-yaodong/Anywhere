@@ -1843,6 +1843,10 @@ const handleCancelToolCall = (toolCallId) => {
           <el-button :type="mcpFilter === 'unselected' ? 'primary' : ''" @click="mcpFilter = 'unselected'">未选
           </el-button>
         </el-button-group>
+        <el-button-group>
+          <el-button @click="selectAllMcpServers">全选当前</el-button>
+          <el-button @click="clearMcpTools">清除全部</el-button>
+        </el-button-group>
       </div>
       <div class="mcp-server-list custom-scrollbar">
         <div v-for="server in filteredMcpServers" :key="server.id" class="mcp-server-item"
@@ -1870,11 +1874,8 @@ const handleCancelToolCall = (toolCallId) => {
     </div>
     <template #footer>
       <div class="mcp-dialog-footer">
-        <span class="mcp-limit-hint">Utools 限制最多启用5个MCP服务</span>
+        <span class="mcp-limit-hint">Utools插件 最多同时使用5个MCP，STDIO启用即算使用，其它AI调用时才算使用</span>
         <div>
-          <!-- 因为全选会出bug，当前无法解决，故隐藏该功能 -->
-          <!-- <el-button @click="selectAllMcpServers">全选当前</el-button> -->
-          <el-button @click="clearMcpTools">清除全部</el-button>
           <el-button type="primary" @click="applyMcpTools">应用</el-button>
         </div>
       </div>
