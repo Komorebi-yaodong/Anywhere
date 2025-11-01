@@ -158,7 +158,7 @@
       "stdio": "標準入出力 (stdio)",
       "streamableHttp": "ストリーミングHTTP",
       "sse": "サーバー送信イベント (SSE)",
-      "inMemory": "インメモリ (In-Memory)"
+      "http": "HTTP"
     },
     "stdio": {
       "command": "コマンド",
@@ -168,9 +168,6 @@
     "http": {
       "url": "ベースURL",
       "headers": "リクエストヘッダー"
-    },
-    "inMemory": {
-      "provider": "プロバイダー"
     },
     "advanced": "詳細/オプション設定",
     "registryUrl": "レジストリURL",

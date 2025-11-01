@@ -158,7 +158,7 @@
       "stdio": "标准输入/输出 (stdio)",
       "streamableHttp": "可流式 HTTP",
       "sse": "服务器发送事件 (SSE)",
-      "inMemory": "内存中 (In-Memory)"
+      "http": "HTTP"
     },
     "stdio": {
       "command": "命令",
@@ -168,9 +168,6 @@
     "http": {
       "url": "基础 URL",
       "headers": "请求头"
-    },
-    "inMemory": {
-      "provider": "提供者"
     },
     "advanced": "高级/可选设置",
     "registryUrl": "注册表 URL",

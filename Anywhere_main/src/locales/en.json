@@ -158,7 +158,7 @@
       "stdio": "stdio",
       "streamableHttp": "Streamable HTTP",
       "sse": "Server-Sent Events (SSE)",
-      "inMemory": "In-Memory"
+      "http": "HTTP"
     },
     "stdio": {
       "command": "Command",
@@ -168,9 +168,6 @@
     "http": {
       "url": "Base URL",
       "headers": "Request Headers"
-    },
-    "inMemory": {
-      "provider": "Provider"
     },
     "advanced": "Advanced/Optional Settings",
     "registryUrl": "Registry URL",

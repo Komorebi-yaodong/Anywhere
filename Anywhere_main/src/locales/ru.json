@@ -158,7 +158,7 @@
       "stdio": "Стандартный ввод/вывод (stdio)",
       "streamableHttp": "Потоковый HTTP",
       "sse": "Серверные события (SSE)",
-      "inMemory": "В памяти (In-Memory)"
+      "http": "HTTP"
     },
     "stdio": {
       "command": "Команда",
@@ -168,9 +168,6 @@
     "http": {
       "url": "Базовый URL",
       "headers": "Заголовки запроса"
-    },
-    "inMemory": {
-      "provider": "Провайдер"
     },
     "advanced": "Расширенные/Опциональные настройки",
     "registryUrl": "URL Реестра",

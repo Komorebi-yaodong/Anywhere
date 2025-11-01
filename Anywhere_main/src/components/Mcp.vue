@@ -286,6 +286,7 @@ async function saveJson() {
                             <el-select v-model="editingServer.type" style="width: 100%;">
                                 <el-option :label="t('mcp.typeOptions.sse')" value="sse" />
                                 <el-option :label="t('mcp.typeOptions.streamableHttp')" value="streamableHttp" />
+                                <el-option :label="t('mcp.typeOptions.http')" value="http" />
                                 <el-option :label="t('mcp.typeOptions.stdio')" value="stdio" />
                             </el-select>
                         </el-form-item>
@@ -303,7 +304,7 @@ async function saveJson() {
                 <el-divider content-position="left">连接设置</el-divider>
 
                 <!-- HTTP / SSE Fields -->
-                <template v-if="editingServer.type === 'streamableHttp' || editingServer.type === 'sse'">
+                <template v-if="editingServer.type === 'streamableHttp' || editingServer.type === 'sse' || editingServer.type === 'http'">
                     <el-form-item :label="t('mcp.http.url')"><el-input v-model="editingServer.baseUrl" /></el-form-item>
                     <el-form-item :label="t('mcp.http.headers')"><el-input v-model="editingServer.headers" type="textarea" :rows="2" :placeholder="t('mcp.headersPlaceholder')" /></el-form-item>
                 </template>
