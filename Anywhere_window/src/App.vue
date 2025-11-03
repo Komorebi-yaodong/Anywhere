@@ -174,7 +174,8 @@ const availableMcpServers = computed(() => {
   if (!currentConfig.value || !currentConfig.value.mcpServers) return [];
   return Object.entries(currentConfig.value.mcpServers)
     .filter(([, server]) => server.isActive)
-    .map(([id, server]) => ({ id, ...server }));
+    .map(([id, server]) => ({ id, ...server }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 });
 
 const filteredMcpServers = computed(() => {
