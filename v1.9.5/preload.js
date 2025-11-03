@@ -89303,14 +89303,26 @@ var commandHandlers = {
     const config = getConfig().config;
     checkConfig(config);
     const assistantName = code.replace(feature_suffix, "");
-    const msg = {
-      os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
-      code: assistantName,
-      type: "over",
-      // Assistant commands are always treated as "over" type for window opening
-      payload: assistantName
-    };
-    await openWindow(config, msg);
+    if (config.prompts[assistantName].type === "img") {
+      utools.screenCapture((image) => {
+        const msg = {
+          os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+          code: assistantName,
+          type: "img",
+          payload: image
+        };
+        openWindow(config, msg);
+      });
+    } else {
+      const msg = {
+        os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+        code: assistantName,
+        type: "over",
+        // Assistant commands are always treated as "over" type for window opening
+        payload: assistantName
+      };
+      await openWindow(config, msg);
+    }
     utools.outPlugin();
   },
   handlePrompt: async ({ code, type, payload }) => {
