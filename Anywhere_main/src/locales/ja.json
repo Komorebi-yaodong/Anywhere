@@ -175,7 +175,7 @@
     "logoUrl": "ロゴURL",
     "tags": "タグ",
     "argsPlaceholder": "引数を1行に1つずつ入力",
-    "envPlaceholder": "KEY1=VALUE1\nKEY2=VALUE2",
+    "envPlaceholder": "KEY1: VALUE1\nKEY2: VALUE2",
     "headersPlaceholder": "Header-Name: Header-Value\nAuthorization: Bearer token",
     "tagsPlaceholder": "タグをカンマ区切りで入力",
     "alerts": {

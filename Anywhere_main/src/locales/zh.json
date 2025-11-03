@@ -175,7 +175,7 @@
     "logoUrl": "图标链接",
     "tags": "标签",
     "argsPlaceholder": "每行输入一个参数",
-    "envPlaceholder": "KEY1=VALUE1\nKEY2=VALUE2",
+    "envPlaceholder": "KEY1: VALUE1\nKEY2: VALUE2",
     "headersPlaceholder": "Header-Name: Header-Value\nAuthorization: Bearer token",
     "tagsPlaceholder": "输入标签，以逗号分隔",
     "alerts": {

@@ -175,7 +175,7 @@
     "logoUrl": "Logo URL",
     "tags": "Tags",
     "argsPlaceholder": "Enter one argument per line",
-    "envPlaceholder": "KEY1=VALUE1\nKEY2=VALUE2",
+    "envPlaceholder": "KEY1: VALUE1\nKEY2: VALUE2",
     "headersPlaceholder": "Header-Name: Header-Value\nAuthorization: Bearer token",
     "tagsPlaceholder": "Enter tags separated by commas",
     "alerts": {
