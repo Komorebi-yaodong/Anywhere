@@ -78,6 +78,7 @@
       "clipboard": "クリップボード",
       "window": "独立したウィンドウ"
     },
+    "promptKeyLabelShort":"名前",
     "modelLabel": "モデル",
     "llmParametersLabel": "モデルパラメータ",
     "llmParametersRemark": "現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります",

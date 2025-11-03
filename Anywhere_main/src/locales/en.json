@@ -78,6 +78,7 @@
       "clipboard": "Clipboard",
       "window": "Standalone Window"
     },
+    "promptKeyLabelShort":"Name",
     "modelLabel": "Model",
     "llmParametersLabel": "Model Parameters",
     "llmParametersRemark": "Only effective for the current Quick Prompt model; no longer effective after switching to other models",

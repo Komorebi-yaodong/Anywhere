@@ -701,6 +701,7 @@ onMounted(async () => {
   catch (err) { UserAvart.value = "user.png"; }
 
   try {
+
     window.preload.receiveMsg(async (data) => {
       sourcePromptConfig.value = currentConfig.value.prompts[data?.code];
 
@@ -740,6 +741,9 @@ onMounted(async () => {
       if (currentPromptConfig?.prompt) { history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }]; chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "", id: messageIdCounter.value++ }]; }
       else { history.value = []; chat_show.value = []; }
 
+      let shouldDirectSend = false;
+      let isFileDirectSend = false;
+
       if (basic_msg.value.type === "over" && basic_msg.value.payload) {
         let sessionLoaded = false;
         try {
@@ -752,7 +756,7 @@ onMounted(async () => {
             if (currentPromptConfig?.isDirectSend_normal) {
               history.value.push({ role: "user", content: basic_msg.value.payload });
               chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
-              scrollToBottom(); await askAI(true);
+              shouldDirectSend = true;
             } else { prompt.value = basic_msg.value.payload; scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' }); }
           }
         }
@@ -760,7 +764,7 @@ onMounted(async () => {
         if (currentPromptConfig?.isDirectSend_normal) {
           history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
           chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
-          scrollToBottom(); await askAI(true);
+          shouldDirectSend = true;
         } else {
           fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(basic_msg.value.payload) });
           scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' });
@@ -775,15 +779,28 @@ onMounted(async () => {
           if (!sessionLoaded) {
             const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
             await Promise.all(fileProcessingPromises);
-            if (currentPromptConfig?.isDirectSend_file) { scrollToBottom(); await askAI(false); }
+            if (currentPromptConfig?.isDirectSend_file) {
+              shouldDirectSend = true;
+              isFileDirectSend = true;
+            }
             else { chatInputRef.value?.focus({ cursor: 'end' }); scrollToBottom(); }
           }
         } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
       }
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
+
       if (currentPromptConfig?.defaultMcpServers && currentPromptConfig.defaultMcpServers.length > 0) {
         sessionMcpServerIds.value = [...currentPromptConfig.defaultMcpServers];
-        await applyMcpTools();
+        await applyMcpTools(); // 等待 MCP 加载完成
+      }
+
+      if (shouldDirectSend) {
+        scrollToBottom();
+        if (isFileDirectSend) {
+          await askAI(false);
+        } else {
+          await askAI(true);
+        }
       }
     });
   } catch (err) {
@@ -1432,9 +1449,9 @@ const askAI = async (forceSend = false) => {
 
         for await (const part of stream) {
           const delta = part.choices[0]?.delta;
-          
+
           if (!delta) continue;
-          if (delta.reasoning_content){
+          if (delta.reasoning_content) {
             aggregatedReasoningContent += delta.reasoning_content;
             if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
               chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
@@ -1448,7 +1465,7 @@ const askAI = async (forceSend = false) => {
           }
           if (delta.content) {
             aggregatedContent += delta.content;
-            if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking'){
+            if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking') {
               chat_show.value[currentAssistantChatShowIndex].status = 'end';
             }
 
@@ -1473,7 +1490,7 @@ const askAI = async (forceSend = false) => {
           }
         }
 
-        responseMessage = { role: 'assistant', content: aggregatedContent || null, reasoning_content: aggregatedReasoningContent || null};
+        responseMessage = { role: 'assistant', content: aggregatedContent || null, reasoning_content: aggregatedReasoningContent || null };
         if (aggregatedToolCalls.length > 0) {
           responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
         }
@@ -1551,7 +1568,7 @@ const askAI = async (forceSend = false) => {
         aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
       });
     }
-    if (chat_show.value[errorBubbleIndex].reasoning_content){
+    if (chat_show.value[errorBubbleIndex].reasoning_content) {
       chat_show.value[errorBubbleIndex].status = "error";
     }
     chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
@@ -1763,11 +1780,11 @@ const focusOnInput = () => {
 };
 
 const handleCancelToolCall = (toolCallId) => {
-    const controller = toolCallControllers.value.get(toolCallId);
-    if (controller) {
-        controller.abort();
-        showDismissibleMessage.info('正在取消工具调用...');
-    }
+  const controller = toolCallControllers.value.get(toolCallId);
+  if (controller) {
+    controller.abort();
+    showDismissibleMessage.info('正在取消工具调用...');
+  }
 };
 
 function getDisplayTypeName(type) {
@@ -1778,7 +1795,7 @@ function getDisplayTypeName(type) {
   if (streamableHttpRegex.test(lowerType) || lowerType === 'http') {
     return "可流式 HTTP";
   }
-  
+
   else return type
 }
 </script>
@@ -1881,10 +1898,11 @@ function getDisplayTypeName(type) {
             <div class="mcp-server-header-row">
               <span class="mcp-server-name">{{ server.name }}</span>
               <div class="mcp-server-tags">
-                <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{ getDisplayTypeName(server.type) }}</el-tag>
+                <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{
+                  getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                  }}</el-tag>
+                }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
@@ -2448,13 +2466,14 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 }
 
 .mcp-dialog-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
+
 .mcp-limit-hint {
-    font-size: 12px;
-    color: var(--el-color-warning);
+  font-size: 12px;
+  color: var(--el-color-warning);
 }
 </style>

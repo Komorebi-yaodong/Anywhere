@@ -78,6 +78,7 @@
       "clipboard": "剪贴板",
       "window": "独立窗口"
     },
+    "promptKeyLabelShort":"名称",
     "modelLabel": "模型",
     "llmParametersLabel": "模型参数",
     "llmParametersRemark": "仅当前 快捷助手 模型生效，更换其他模型后不再生效",
