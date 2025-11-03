@@ -1426,16 +1426,33 @@ const askAI = async (forceSend = false) => {
       if (useStream) {
         const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
 
+        let aggregatedReasoningContent = "";
         let aggregatedContent = "";
         let aggregatedToolCalls = [];
         let lastUpdateTime = Date.now();
 
         for await (const part of stream) {
           const delta = part.choices[0]?.delta;
+          
           if (!delta) continue;
+          if (delta.reasoning_content){
+            aggregatedReasoningContent += delta.reasoning_content;
+            if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
+              chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
+            }
 
+            if (Date.now() - lastUpdateTime > 100) {
+              chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+              scrollToBottom();
+              lastUpdateTime = Date.now();
+            }
+          }
           if (delta.content) {
             aggregatedContent += delta.content;
+            if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking'){
+              chat_show.value[currentAssistantChatShowIndex].status = 'end';
+            }
+
             if (Date.now() - lastUpdateTime > 100) {
               chat_show.value[currentAssistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
               scrollToBottom();
@@ -1457,7 +1474,7 @@ const askAI = async (forceSend = false) => {
           }
         }
 
-        responseMessage = { role: 'assistant', content: aggregatedContent || null };
+        responseMessage = { role: 'assistant', content: aggregatedContent || null, reasoning_content: aggregatedReasoningContent || null};
         if (aggregatedToolCalls.length > 0) {
           responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
         }
@@ -1472,6 +1489,10 @@ const askAI = async (forceSend = false) => {
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
       if (responseMessage.content) {
         currentBubble.content = [{ type: 'text', text: responseMessage.content }];
+      }
+      if (responseMessage.reasoning_content) {
+        currentBubble.reasoning_content = responseMessage.reasoning_content;
+        currentBubble.status = 'end';
       }
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
@@ -1542,6 +1563,9 @@ const askAI = async (forceSend = false) => {
         id: messageIdCounter.value++, role: "assistant", content: [],
         aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
       });
+    }
+    if (chat_show.value[errorBubbleIndex].reasoning_content){
+      chat_show.value[errorBubbleIndex].status = "error";
     }
     chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
 

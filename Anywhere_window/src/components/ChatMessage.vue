@@ -275,20 +275,8 @@ const truncateFilename = (filename, maxLength = 30) => {
           </div>
           <span class="timestamp" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp)}}</span>
         </div>
-        <Thinking v-if="message.status && message.status.length > 0" maxWidth="90%" :content="(message.reasoning_content || '').trim()"
-          :modelValue="false">
-          <template #status-icon="{ status }">
-            <span v-if="message.status === 'start'">😄</span>
-            <span v-else-if="message.status === 'thinking'">🤔</span>
-            <span v-else-if="message.status === 'end'">😊</span>
-            <span v-else-if="message.status === 'error'">😭</span>
-          </template>
-          <template #label>
-            <span v-if="message.status === 'start'">开始思考</span>
-            <span v-else-if="message.status === 'thinking'">正在思考</span>
-            <span v-else-if="message.status === 'end'">思考完毕</span>
-            <span v-else-if="message.status === 'error'">思考失败</span>
-          </template>
+        <Thinking v-if="message.reasoning_content && message.reasoning_content.trim().length > 0" maxWidth="90%" :content="(message.reasoning_content || '').trim()"
+          :modelValue="false" :status="message.status">
         </Thinking>
       </template>
       <template #content>
