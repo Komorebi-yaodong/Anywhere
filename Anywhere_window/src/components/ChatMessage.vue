@@ -360,8 +360,7 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 .chat-message .user-bubble,
 .chat-message .ai-bubble {
-  width: auto;
-  max-width: 90%;
+  width:100% !important;
 }
 
 .chat-message .user-bubble {
