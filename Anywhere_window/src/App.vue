@@ -1319,8 +1319,6 @@ const askAI = async (forceSend = false) => {
   const currentPromptConfig = currentConfig.value.prompts[CODE.value];
   const isVoiceReply = !!selectedVoice.value;
   let useStream = currentPromptConfig?.stream && !isVoiceReply;
-
-  const MAX_TOOL_CALLS = 5;
   let tool_calls_count = 0;
 
   let currentAssistantChatShowIndex = -1;
@@ -1334,7 +1332,7 @@ const askAI = async (forceSend = false) => {
     });
 
     // --- 3. 开始工具调用循环 ---
-    while (tool_calls_count < MAX_TOOL_CALLS && !signalController.value.signal.aborted) {
+    while (!signalController.value.signal.aborted) {
       chatInputRef.value?.focus({ cursor: 'end' });
 
       // --- 为本次请求创建临时消息列表 ---
@@ -1541,18 +1539,6 @@ const askAI = async (forceSend = false) => {
         break; // 如果没有工具调用，则退出循环
       }
     } // 循环结束
-
-    if (tool_calls_count >= MAX_TOOL_CALLS) {
-      const errorMsg = '错误: 工具调用次数超过限制。';
-      // 将错误消息同步到主 history 数组
-      history.value.push({ role: 'assistant', content: errorMsg });
-
-      chat_show.value.push({
-        id: messageIdCounter.value++, role: "assistant", content: [{ type: 'text', text: errorMsg }],
-        aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
-      });
-    }
-
   } catch (error) {
     let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
     if (error.name === 'AbortError') errorDisplay = "请求已取消";
