@@ -384,7 +384,7 @@ async function saveJson() {
         </el-dialog>
 
         <el-dialog v-model="showJsonDialog" :title="t('mcp.jsonDialog.title')" width="700px"
-            :close-on-click-modal="false">
+            :close-on-click-modal="false" top="5vh">
             <el-alert :title="t('mcp.jsonDialog.description')" type="warning" show-icon :closable="false"
                 style="margin-bottom: 15px;" />
             <el-input v-model="jsonEditorContent" type="textarea" :rows="15" />

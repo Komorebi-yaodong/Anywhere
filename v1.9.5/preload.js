@@ -89014,6 +89014,7 @@ var require_mcp = __commonJS({
           }
           try {
             console.log(`[MCP Debug] Creating new persistent client for STDIO server: ${id}`);
+            console.log(`[MCP Debug] STDIO Server Config for '${id}':`, JSON.parse(JSON.stringify({ id, ...config })));
             const client = new MultiServerMCPClient({ [id]: { id, ...config } });
             const tools = await client.getTools();
             tools.forEach((tool) => {

@@ -18,6 +18,8 @@ function normalizeTransportType(transport) {
 }
 
 
+// ./backend/src/mcp.js
+
 /**
  * 增量式地初始化/同步 MCP 客户端，为每个 STDIO 服务创建独立的客户端实例
  */
@@ -64,6 +66,7 @@ async function initializeMcpClient(activeServerConfigs = {}) {
       }
       try {
         console.log(`[MCP Debug] Creating new persistent client for STDIO server: ${id}`);
+        console.log(`[MCP Debug] STDIO Server Config for '${id}':`, JSON.parse(JSON.stringify({ id, ...config })));
         const client = new MultiServerMCPClient({ [id]: { id, ...config } });
         const tools = await client.getTools();
 

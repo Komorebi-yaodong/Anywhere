@@ -720,6 +720,7 @@ onMounted(async () => {
       }
 
       autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
+      console.log("autoCloseOnBlur1", autoCloseOnBlur.value);
       tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
       selectedVoice.value = currentPromptConfig?.voice || null;
@@ -751,7 +752,7 @@ onMounted(async () => {
           if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); chatInputRef.value?.focus({ cursor: 'end' }); }
         } catch (error) { }
         if (!sessionLoaded) {
-          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) { if (autoCloseOnBlur.value) handleTogglePin(); scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' }); }
+          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) {scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' }); }
           else {
             if (currentPromptConfig?.isDirectSend_normal) {
               history.value.push({ role: "user", content: basic_msg.value.payload });
@@ -787,6 +788,7 @@ onMounted(async () => {
           }
         } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
       }
+      console.log("autoCloseOnBlur2", autoCloseOnBlur.value);
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
 
       if (currentPromptConfig?.defaultMcpServers && currentPromptConfig.defaultMcpServers.length > 0) {
@@ -1237,6 +1239,7 @@ async function applyMcpTools() {
         command: serverConf.command,
         args: serverConf.args,
         url: serverConf.baseUrl,
+        env: serverConf.env,
       };
     }
   }
@@ -1721,19 +1724,26 @@ const deleteMessage = (index) => {
 };
 
 const clearHistory = () => {
-  if (loading.value) return;
+  if (loading.value) {
+    return;
+  }
 
-  // 检查当前快捷助手配置中是否存在系统提示词
-  const systemPrompt = currentConfig.value.prompts[CODE.value]?.prompt;
+  // 优先从当前配置中获取系统提示词
+  const systemPromptFromConfig = currentConfig.value.prompts[CODE.value]?.prompt;
 
-  if (systemPrompt) {
-    // 如果存在，则重置为仅包含该系统提示词的状态
-    const systemMsg = { role: "system", content: systemPrompt };
-    history.value = [systemMsg];
-    // 为 chat_show 中的消息添加唯一ID，确保UI正确更新
-    chat_show.value = [{ ...systemMsg, id: messageIdCounter.value++ }];
+  // 其次，检查当前会话历史中是否存在系统提示词
+  const firstMessageInHistory = history.value.length > 0 ? history.value[0] : null;
+  const systemPromptFromHistory = (firstMessageInHistory && firstMessageInHistory.role === 'system') ? firstMessageInHistory : null;
+
+  // 决定最终要保留的系统提示词（优先使用当前配置）
+  const systemPromptToKeep = systemPromptFromConfig ? { role: "system", content: systemPromptFromConfig } : systemPromptFromHistory;
+
+  if (systemPromptToKeep) {
+    // 如果有需要保留的系统提示词，则将历史记录重置为仅包含该提示词
+    history.value = [systemPromptToKeep];
+    chat_show.value = [{ ...systemPromptToKeep, id: messageIdCounter.value++ }];
   } else {
-    // 如果不存在系统提示词，则完全清空
+    // 否则，完全清空历史记录
     history.value = [];
     chat_show.value = [];
   }
