@@ -358,7 +358,9 @@ const truncateFilename = (filename, maxLength = 30) => {
   overflow-x: hidden;
 }
 
-.chat-message .user-bubble,
+.chat-message .user-bubble{
+  width: 90% !important;
+}
 .chat-message .ai-bubble {
   width:100% !important;
 }
@@ -370,6 +372,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     background-color: #f4f4f4;
     padding-top: 10px;
     padding-bottom: 10px;
+    margin-left: 10px;
     max-width: 100%;
   }
 }
