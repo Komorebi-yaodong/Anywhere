@@ -654,7 +654,7 @@ async function refreshPromptsConfig() {
               <el-tooltip :content="item.key" placement="top">
                 <span class="prompt-name" @click="prepareEditPrompt(item.key, activeTabName)">{{ item.key }}</span>
               </el-tooltip>
-              <el-tooltip v-if="item.showMode === 'window'" content="直接打开对话窗口" placement="top">
+              <el-tooltip v-if="item.showMode === 'window'&&item.enable" content="直接打开对话窗口" placement="top">
                 <el-button :icon="ChatLineRound " circle text
                   @click.stop="openPromptWindow(item.key)" class="open-prompt-btn" />
               </el-tooltip>
