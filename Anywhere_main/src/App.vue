@@ -40,12 +40,12 @@ onMounted(async () => {
     console.error("Error fetching config in App.vue:", error);
     config.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
   }
-  
+
   // [NEW] Immediately apply dark mode on mount
   if (config.value?.isDarkMode) {
-      document.documentElement.classList.add('dark');
+    document.documentElement.classList.add('dark');
   } else {
-      document.documentElement.classList.remove('dark');
+    document.documentElement.classList.remove('dark');
   }
 });
 
@@ -83,29 +83,45 @@ watch(locale, () => {
           <div class="tabs-container">
             <el-tooltip :content="t('app.tabs.chats')" placement="bottom">
               <el-button class="tab-button" text @click="changeTab(0)" :class="{ 'active-tab': tab === 0 }">
-                <el-icon :size="18"><ChatDotRound /></el-icon>
+                <el-icon :size="18">
+                  <ChatDotRound />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip :content="t('app.tabs.prompts')" placement="bottom">
               <el-button class="tab-button" text @click="changeTab(1)" :class="{ 'active-tab': tab === 1 }">
-                <el-icon :size="18"><MagicStick /></el-icon>
+                <el-icon :size="18">
+                  <MagicStick />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip :content="t('app.tabs.mcp')" placement="bottom">
               <el-button class="tab-button" text @click="changeTab(2)" :class="{ 'active-tab': tab === 2 }">
                 <el-icon :size="18">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hammer" aria-hidden="true"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"></path><path d="m18 15 4-4"></path><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"></path></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="lucide lucide-hammer" aria-hidden="true">
+                    <path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"></path>
+                    <path d="m18 15 4-4"></path>
+                    <path
+                      d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5">
+                    </path>
+                  </svg>
                 </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip :content="t('app.tabs.providers')" placement="bottom">
               <el-button class="tab-button" text @click="changeTab(3)" :class="{ 'active-tab': tab === 3 }">
-                <el-icon :size="18"><Cloudy /></el-icon>
+                <el-icon :size="18">
+                  <Cloudy />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip :content="t('app.tabs.settings')" placement="bottom">
               <el-button class="tab-button" text @click="changeTab(4)" :class="{ 'active-tab': tab === 4 }">
-                <el-icon :size="18"><SettingIcon /></el-icon>
+                <el-icon :size="18">
+                  <SettingIcon />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </div>
@@ -114,11 +130,11 @@ watch(locale, () => {
     </el-header>
 
     <el-main v-if="config">
-        <Chats v-if="tab === 0" />
-        <Prompts v-if="tab === 1" />
-        <Mcp v-if="tab === 2" />
-        <Providers v-if="tab === 3" />
-        <Setting v-if="tab === 4" />
+      <Chats v-if="tab === 0" key="chats" />
+      <Prompts v-if="tab === 1" key="prompts" />
+      <Mcp v-if="tab === 2" key="mcp" />
+      <Providers v-if="tab === 3" key="providers" />
+      <Setting v-if="tab === 4" key="settings" />
     </el-main>
   </el-container>
 </template>

@@ -1,15 +1,62 @@
 <script setup>
-
-import { ref, reactive, computed, inject } from 'vue';
-import { Plus, Delete, ArrowLeft, ArrowRight, Files, Close, UploadFilled, Position, QuestionFilled, Switch, Refresh } from '@element-plus/icons-vue';
+import { ref, reactive, computed, inject, watch, nextTick } from 'vue';
+import { Plus, Delete, Close, ChatLineRound , UploadFilled, Position, QuestionFilled, Switch, Refresh } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
 
 const { t } = useI18n();
 
 const currentConfig = inject('config');
-const activeCollapseNames = ref([]);
+const activeTabName = ref('__ALL_PROMPTS__');
 const searchQueries = reactive({});
+const tabsContainerRef = ref(null); // 确保 ref 已定义
+
+const openPromptWindow = (promptKey) => {
+  window.api.coderedirect(promptKey);
+};
+watch(activeTabName, (newTabName) => {
+  nextTick(() => {
+    if (!tabsContainerRef.value) return;
+    const scrollContainer = tabsContainerRef.value.$el.querySelector('.el-tabs__nav-wrap');
+    if (!scrollContainer) return;
+    const activeTabEl = scrollContainer.querySelector(`#tab-${newTabName}`);
+
+    if (activeTabEl) {
+      activeTabEl.scrollIntoView({
+        behavior: 'smooth', // 平滑滚动
+        inline: 'center',   // 水平居中
+        block: 'nearest'    // 垂直方向上保持最近
+      });
+    } else if (newTabName === '__ALL_PROMPTS__') {
+      scrollContainer.scrollTo({ left: 0, behavior: 'smooth' });
+    }
+  });
+});
+
+
+const activeTabPrompts = computed(() => {
+  const tab = activeTabName.value;
+  let prompts;
+  if (tab === '__ALL_PROMPTS__') {
+    prompts = allPrompts.value;
+  } else {
+    prompts = promptsInTag.value(tab);
+  }
+  return prompts.sort((a, b) => a.key.localeCompare(b.key));
+});
+
+const areAllPromptsEnabled = computed(() => {
+  if (allPromptsCount.value === 0) return false;
+  return allPrompts.value.every(p => p.enable);
+});
+
+function toggleAllPrompts(enableState) {
+  atomicSave(config => {
+    Object.keys(config.prompts).forEach(promptKey => {
+      config.prompts[promptKey].enable = enableState;
+    });
+  }, true);
+}
 
 function getFilteredPrompts(prompts, query) {
   if (!query) {
@@ -206,7 +253,8 @@ function addTag() {
 
   atomicSave(config => {
     config.tags[tagName] = [];
-    activeCollapseNames.value = [tagName];
+    // 切换到新创建的标签
+    activeTabName.value = tagName;
   });
 
   showAddTagDialog.value = false;
@@ -215,16 +263,12 @@ function addTag() {
 function deleteTag(tagName) {
   atomicSave(config => {
     delete config.tags[tagName];
-    // --- BUG FIX START ---
-    // In accordion mode, activeCollapseNames.value is a string.
-    // If we delete the currently active tag, we should close it.
-    if (activeCollapseNames.value === tagName) {
-      activeCollapseNames.value = '';
+    // 如果删除的是当前活动标签，则切换到“全部”标签
+    if (activeTabName.value === tagName) {
+      activeTabName.value = '__ALL_PROMPTS__';
     }
-    // --- BUG FIX END ---
   });
 }
-
 function toggleAllPromptsInTag(tagName, enableState) {
   atomicSave(config => {
     if (!config.tags[tagName]) return;
@@ -452,15 +496,12 @@ function assignSelectedPromptsToTag() {
 
 function formatDescription(text) {
   if (!text) return '';
-  const lines = text.split('\n');
-  const displayedLines = lines.slice(0, 2);
-  let formattedText = displayedLines.join('<br>');
-  if (lines.length > 2 || (lines.length === 2 && lines[1].trim() === '' && text.endsWith('\n'))) {
-    formattedText += '...';
-  } else if (lines.length === 1 && text.length > 60) {
-    formattedText = text.substring(0, 60) + '...';
+  const singleLineText = text.replace(/\n/g, ' ').trim();
+  const maxLength = 110;
+  if (singleLineText.length > maxLength) {
+    return singleLineText.substring(0, maxLength) + '...';
   }
-  return formattedText;
+  return singleLineText;
 }
 
 const handleIconUpload = (file) => {
@@ -548,106 +589,89 @@ async function refreshPromptsConfig() {
 
 <template>
   <div class="page-container">
+    <div class="prompts-header">
+      <!-- "全部"标签，使用新的两行布局 -->
+      <div class="custom-all-tab" :class="{ 'is-active': activeTabName === '__ALL_PROMPTS__' }"
+        @click="activeTabName = '__ALL_PROMPTS__'">
+        <div class="tab-label-multiline">
+          <span class="tab-name">{{ t('prompts.allPrompts') }}</span>
+          <span class="tab-count">({{ allEnabledPromptsCount }} / {{ allPromptsCount }})</span>
+        </div>
+      </div>
+
+      <el-tabs v-model="activeTabName" ref="tabsContainerRef" class="tags-tabs-container">
+        <el-tab-pane v-for="tagName in sortedTagNames" :key="tagName" :name="tagName">
+          <template #label>
+            <div class="tab-label-multiline">
+              <span class="tab-name">{{ tagName }}</span>
+              <span class="tab-count">({{ tagEabledPromptsCount(tagName) }} / {{ currentConfig.tags[tagName]?.length ||
+                0 }})</span>
+            </div>
+          </template>
+        </el-tab-pane>
+      </el-tabs>
+
+      <!-- 右侧操作按钮区域，顺序和禁用逻辑已调整 -->
+      <div class="tab-actions">
+        <el-tooltip v-if="activeTabName === '__ALL_PROMPTS__'" :content="areAllPromptsEnabled ? '全部禁用' : '全部启用'">
+          <el-switch :model-value="areAllPromptsEnabled" @change="(value) => toggleAllPrompts(value)"
+            class="tag-enable-toggle" />
+        </el-tooltip>
+        <el-tooltip v-else :content="areAllPromptsInTagEnabled(activeTabName) ? '全部禁用' : '全部启用'">
+          <el-switch :model-value="areAllPromptsInTagEnabled(activeTabName)"
+            @change="(value) => toggleAllPromptsInTag(activeTabName, value)" class="tag-enable-toggle"
+            :disabled="!currentConfig.tags[activeTabName] || currentConfig.tags[activeTabName].length === 0" />
+        </el-tooltip>
+
+        <el-tooltip :content="t('prompts.addExistingPrompt')" placement="top">
+          <el-button class="add-existing-prompt-btn" plain size="small" :icon="Plus" circle
+            @click="openAssignPromptDialog(activeTabName)"
+            :disabled="activeTabName === '__ALL_PROMPTS__' || !promptsAvailableToAssign(activeTabName) || promptsAvailableToAssign(activeTabName).length === 0" />
+        </el-tooltip>
+
+        <el-button type="danger" :icon="Delete" circle plain size="small" @click.stop="deleteTag(activeTabName)"
+          class="delete-tag-btn" :disabled="activeTabName === '__ALL_PROMPTS__'" />
+      </div>
+    </div>
+
     <el-scrollbar class="main-content-scrollbar">
       <div class="content-wrapper">
-        <el-collapse v-model="activeCollapseNames" accordion class="tags-collapse-container">
-          <el-collapse-item name="__ALL_PROMPTS__" class="tag-collapse-item">
-            <template #title>
-              <div class="tag-title-content">
-                <span class="tag-name-header">{{ t('prompts.allPrompts') }} ({{ allEnabledPromptsCount }} / {{
-                  allPromptsCount }})</span>
-              </div>
-            </template>
-            <div class="search-input-container">
-              <el-input v-model="searchQueries['__ALL_PROMPTS__']" :placeholder="t('prompts.searchPlaceholder')"
-                clearable />
-            </div>
-            <div class="prompts-grid-container">
-              <div v-if="allPromptsCount === 0" class="empty-tag-message">
-                <el-text type="info" size="small">{{ t('prompts.noPrompts') }}</el-text>
-              </div>
-              <div v-for="item in getFilteredPrompts(allPrompts, searchQueries['__ALL_PROMPTS__'])" :key="item.key"
-                class="prompt-card">
-                <div class="prompt-card-header">
-                  <el-avatar v-if="item.icon" :src="item.icon" shape="square" :size="28" class="prompt-card-icon" />
-                  <el-icon v-else :size="28" class="prompt-card-icon-default">
-                    <Position />
-                  </el-icon>
-                  <el-tooltip :content="item.key" placement="top">
-                    <span class="prompt-name" @click="prepareEditPrompt(item.key)">{{ item.key }}</span>
-                  </el-tooltip>
-                  <div class="prompt-actions-header">
-                    <el-switch v-model="item.enable" @change="(value) => handlePromptEnableChange(item.key, value)"
-                      size="small" class="prompt-enable-toggle" />
-                    <el-button type="danger" :icon="Delete" circle plain size="small" @click="deletePrompt(item.key)" />
-                  </div>
-                </div>
-                <div class="prompt-description-container" @click="prepareEditPrompt(item.key)"
-                  v-html="formatDescription(item.prompt)"></div>
+        <div class="search-input-container">
+          <el-input v-model="searchQueries[activeTabName]" :placeholder="t('prompts.searchPlaceholder')" clearable />
+        </div>
+        <div class="prompts-grid-container">
+          <div v-if="!activeTabPrompts.length" class="empty-tag-message">
+            <el-text type="info" size="small">{{ activeTabName === '__ALL_PROMPTS__' ? t('prompts.noPrompts') :
+              t('prompts.noPromptsInTag') }}</el-text>
+          </div>
+          <div v-for="item in getFilteredPrompts(activeTabPrompts, searchQueries[activeTabName])" :key="item.key"
+            class="prompt-card">
+            <div class="prompt-card-header">
+              <el-avatar v-if="item.icon" :src="item.icon" shape="square" :size="28" class="prompt-card-icon" />
+              <el-icon v-else :size="28" class="prompt-card-icon-default">
+                <Position />
+              </el-icon>
+              <el-tooltip :content="item.key" placement="top">
+                <span class="prompt-name" @click="prepareEditPrompt(item.key, activeTabName)">{{ item.key }}</span>
+              </el-tooltip>
+              <el-tooltip v-if="item.showMode === 'window'" content="直接打开对话窗口" placement="top">
+                <el-button :icon="ChatLineRound " circle text
+                  @click.stop="openPromptWindow(item.key)" class="open-prompt-btn" />
+              </el-tooltip>
+              <div class="prompt-card-tag-actions">
+                <el-switch v-model="item.enable" @change="(value) => handlePromptEnableChange(item.key, value)"
+                  size="small" class="prompt-enable-toggle" />
+                <el-button v-if="activeTabName !== '__ALL_PROMPTS__'" type="danger" :icon="Close" circle plain
+                  size="small" @click="removePromptFromTag(activeTabName, item.key)"
+                  :title="t('prompts.tooltips.removeFromTag')" />
+                <el-button v-else type="danger" :icon="Delete" circle plain size="small" @click="deletePrompt(item.key)"
+                  :title="'删除此快捷助手'" />
               </div>
             </div>
-          </el-collapse-item>
-
-          <el-collapse-item v-for="tagName in sortedTagNames" :key="tagName" :name="tagName" class="tag-collapse-item">
-            <template #title>
-              <div class="tag-title-content">
-                <span class="tag-name-header">{{ tagName }} ({{ tagEabledPromptsCount(tagName) }} / {{
-                  currentConfig.tags[tagName]?.length || 0 }})</span>
-                <div class="tag-actions">
-                  <template v-if="currentConfig.tags[tagName]?.length > 0">
-                    <el-tooltip :content="areAllPromptsInTagEnabled(tagName) ? '全部禁用' : '全部启用'">
-                      <el-switch :model-value="areAllPromptsInTagEnabled(tagName)"
-                        @change="(value) => toggleAllPromptsInTag(tagName, value)" size="small"
-                        class="tag-enable-toggle" />
-                    </el-tooltip>
-                  </template>
-                  <el-button type="danger" :icon="Delete" circle plain size="small" @click.stop="deleteTag(tagName)"
-                    class="delete-tag-btn" />
-                </div>
-              </div>
-            </template>
-            <div class="search-input-container">
-              <el-input v-model="searchQueries[tagName]" :placeholder="t('prompts.searchPlaceholder')" clearable />
-            </div>
-            <div class="prompts-grid-container">
-              <div v-if="!promptsInTag(tagName).length" class="empty-tag-message">
-                <el-text type="info" size="small">{{ t('prompts.noPromptsInTag') }}</el-text>
-              </div>
-              <div v-for="item in getFilteredPrompts(promptsInTag(tagName), searchQueries[tagName])" :key="item.key"
-                class="prompt-card">
-                <div class="prompt-card-header">
-                  <el-avatar v-if="item.icon" :src="item.icon" shape="square" :size="28" class="prompt-card-icon" />
-                  <el-icon v-else :size="28" class="prompt-card-icon-default">
-                    <Position />
-                  </el-icon>
-                  <el-tooltip :content="item.key" placement="top">
-                    <span class="prompt-name" @click="prepareEditPrompt(item.key, tagName)">{{ item.key }}</span>
-                  </el-tooltip>
-                  <div class="prompt-card-tag-actions">
-                    <el-button :icon="ArrowLeft" plain size="small" :disabled="isFirstInTag(tagName, item.key)"
-                      @click="changePromptOrderInTag(tagName, item.key, 'left')"
-                      :title="t('prompts.tooltips.moveLeft')" />
-                    <el-button :icon="ArrowRight" plain size="small" :disabled="isLastInTag(tagName, item.key)"
-                      @click="changePromptOrderInTag(tagName, item.key, 'right')"
-                      :title="t('prompts.tooltips.moveRight')" />
-                    <el-switch v-model="item.enable" @change="(value) => handlePromptEnableChange(item.key, value)"
-                      size="small" class="prompt-enable-toggle" />
-                    <el-button type="danger" :icon="Close" circle plain size="small"
-                      @click="removePromptFromTag(tagName, item.key)" :title="t('prompts.tooltips.removeFromTag')" />
-                  </div>
-                </div>
-                <div class="prompt-description-container" @click="prepareEditPrompt(item.key, tagName)"
-                  v-html="formatDescription(item.prompt)"></div>
-              </div>
-            </div>
-            <div class="add-existing-prompt-to-tag-container" v-if="promptsAvailableToAssign(tagName).length > 0">
-              <el-button class="add-existing-prompt-btn" plain size="small" :icon="Files"
-                @click="openAssignPromptDialog(tagName)">
-                {{ t('prompts.addExistingPrompt') }}
-              </el-button>
-            </div>
-          </el-collapse-item>
-        </el-collapse>
+            <div class="prompt-description-container" @click="prepareEditPrompt(item.key, activeTabName)"
+              v-html="formatDescription(item.prompt)"></div>
+          </div>
+        </div>
       </div>
     </el-scrollbar>
 
@@ -687,10 +711,10 @@ async function refreshPromptsConfig() {
                 <div class="icon-button-group">
                   <el-button class="icon-action-button" size="small" @click="downloadEditingIcon">{{
                     t('common.downloadIcon')
-                    }}</el-button>
+                  }}</el-button>
                   <el-button class="icon-action-button" size="small" @click="removeEditingIcon">{{
                     t('common.removeIcon')
-                    }}</el-button>
+                  }}</el-button>
                 </div>
               </div>
             </div>
@@ -965,6 +989,141 @@ async function refreshPromptsConfig() {
   background-color: var(--bg-primary);
 }
 
+.prompts-header {
+  display: flex;
+  align-items: center;
+  height: 60px;
+  padding: 0 12px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 16px;
+}
+
+.custom-all-tab {
+  display: flex;
+  align-items: center;
+  height: 60px;
+  padding: 0 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  flex-shrink: 0;
+  transition: color 0.3s, border-color 0.3s;
+}
+
+.custom-all-tab:hover {
+  color: var(--text-accent);
+}
+
+.custom-all-tab.is-active {
+  color: var(--text-accent);
+  border-bottom-color: var(--text-accent);
+}
+
+.tags-tabs-container {
+  flex-grow: 1;
+  min-width: 0;
+  height: 60px;
+}
+
+.tags-tabs-container :deep(.el-tabs__header) {
+  height: 60px;
+  margin-bottom: 0;
+}
+
+/* START: 滚动条样式修正 */
+.tags-tabs-container :deep(.el-tabs__nav-wrap) {
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: -8px;
+}
+
+/* 美化滚动条 (Webkit) */
+.tags-tabs-container :deep(.el-tabs__nav-wrap::-webkit-scrollbar) {
+  height: 6px;
+}
+
+.tags-tabs-container :deep(.el-tabs__nav-wrap::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+.tags-tabs-container :deep(.el-tabs__nav-wrap::-webkit-scrollbar-thumb) {
+  background-color: var(--border-primary);
+  border-radius: 3px;
+}
+
+.tags-tabs-container :deep(.el-tabs__nav-wrap::-webkit-scrollbar-thumb:hover) {
+  background-color: var(--text-tertiary);
+}
+
+/* 美化滚动条 (Firefox) */
+.tags-tabs-container :deep(.el-tabs__nav-wrap) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-primary) transparent;
+}
+
+/* END: 滚动条样式修正 */
+
+.tags-tabs-container :deep(.el-tabs__nav-prev),
+.tags-tabs-container :deep(.el-tabs__nav-next) {
+  display: none !important;
+}
+
+.tags-tabs-container :deep(.el-tabs__nav) {
+  white-space: nowrap;
+}
+
+.tags-tabs-container :deep(.el-tabs__item) {
+  flex-shrink: 0;
+  padding: 0 12px;
+  height: 60px;
+  color: var(--text-secondary);
+}
+
+.tags-tabs-container :deep(.el-tabs__nav-wrap::after) {
+  content: none;
+}
+
+.tags-tabs-container :deep(.el-tabs__item.is-active) {
+  color: var(--text-accent);
+}
+
+.tags-tabs-container :deep(.el-tabs__active-bar) {
+  background-color: var(--text-accent);
+}
+
+.tab-label-multiline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.3;
+  text-align: center;
+  padding: 8px 0;
+  width: 100%;
+}
+
+.tab-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tab-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
 .main-content-scrollbar {
   flex-grow: 1;
   height: 0;
@@ -979,127 +1138,37 @@ async function refreshPromptsConfig() {
   background-color: var(--text-secondary);
 }
 
-.prompt-textarea-scrollbar {
-  width: 100%;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-tertiary);
-}
-
-.prompt-textarea-scrollbar :deep(.el-textarea__inner) {
-  box-shadow: none !important;
-  background-color: transparent !important;
-  padding: 8px 12px;
-}
-
-.prompt-textarea-scrollbar :deep(.el-textarea__inner::-webkit-scrollbar) {
-  display: none;
-}
-
-html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb) {
-  background-color: var(--text-tertiary);
-}
-
-html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
-  background-color: var(--text-secondary);
-}
-
 .content-wrapper {
   max-width: 1200px;
   margin: 0 auto;
   padding: 24px 24px 90px 24px;
 }
 
-.tags-collapse-container {
-  border: none;
-  background-color: transparent;
-}
-
-.tag-collapse-item {
-  margin-bottom: 8px;
-  border: 1px solid var(--border-primary);
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  transition: box-shadow 0.3s ease;
-}
-
-.tag-collapse-item:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.tag-collapse-item :deep(.el-collapse-item__header) {
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid transparent;
-  padding: 0 20px;
-  height: 52px;
-  font-weight: 600;
-  border-radius: var(--radius-lg);
-  transition: border-radius 0.15s ease-out, background-color 0.2s;
-}
-
-.tag-collapse-item.is-active :deep(.el-collapse-item__header) {
+.search-input-container {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: var(--bg-secondary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border-bottom: 1px solid var(--border-primary);
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-html.dark .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
-  background-color: var(--bg-tertiary);
-}
-
-.tag-collapse-item :deep(.el-collapse-item__wrap) {
-  background-color: var(--bg-secondary);
-  border-top: none;
-  border-bottom-left-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-lg);
-}
-
-.tag-collapse-item :deep(.el-collapse-item__content) {
-  padding: 20px 24px;
-}
-
-.tag-title-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.tag-name-header {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 15px;
-}
-
-.tag-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  background-color: var(--bg-primary);
+    padding: 5px 0px 5px 0px;
+    margin: 0px 0px 5px 0px;
 }
 
 .prompts-grid-container {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  gap: 15px;
   padding-top: 4px;
 }
 
 .prompt-card {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
   padding: 16px;
   transition: all 0.25s ease;
   display: flex;
   flex-direction: column;
-  height: 130px;
+  height: 112px;
 }
 
 .prompt-card:hover {
@@ -1148,7 +1217,6 @@ html.dark .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
   color: var(--text-accent);
 }
 
-.prompt-actions-header,
 .prompt-card-tag-actions {
   display: flex;
   align-items: center;
@@ -1183,19 +1251,6 @@ html.dark .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
   color: var(--text-secondary);
 }
 
-.add-existing-prompt-to-tag-container {
-  margin-top: 20px;
-  padding: 10px;
-  text-align: center;
-  background-color: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-}
-
-.add-existing-prompt-btn {
-  border-style: dashed;
-  width: 100%;
-}
-
 .bottom-actions-container {
   position: fixed;
   bottom: 0;
@@ -1205,7 +1260,7 @@ html.dark .tag-collapse-item.is-active :deep(.el-collapse-item__header) {
   display: flex;
   justify-content: center;
   gap: 16px;
-  padding: 16px 24px;
+  padding: 12px 24px;
   background-color: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -1229,11 +1284,7 @@ html.dark .bottom-actions-container {
   color: var(--text-on-accent);
 }
 
-.edit-prompt-form :deep(.el-form-item) {
-  margin-bottom: 0;
-}
-
-.edit-prompt-form .el-form-item[label-position="top"]> :deep(.el-form-item__label) {
+.edit-prompt-dialog .el-form-item[label-position="top"]> :deep(.el-form-item__label) {
   font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: 6px !important;
@@ -1279,21 +1330,6 @@ html.dark .bottom-actions-container {
   grid-column: 2 / 4;
 }
 
-.grid-item-pair {
-  grid-column: 3 / 4;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.grid-item-pair .el-form-item {
-  flex-grow: 1;
-}
-
-.grid-item-pair label {
-  flex-shrink: 0;
-}
-
 .enable-switch-group {
   display: flex;
   align-items: center;
@@ -1304,7 +1340,6 @@ html.dark .bottom-actions-container {
 .enable-switch-group .el-form-item__label {
   margin-bottom: 0;
 }
-
 
 .icon-editor-area {
   display: flex;
@@ -1350,7 +1385,6 @@ html.dark .bottom-actions-container {
   margin: 0;
 }
 
-/* Remaining styles for params */
 .form-item-subtitle {
   font-size: 12px;
   color: var(--text-tertiary);
@@ -1438,6 +1472,35 @@ html.dark .bottom-actions-container {
   padding: 15px 24px !important;
 }
 
+.prompt-dialog-scrollbar :deep(.el-scrollbar__view) {
+  padding: 5px 20px 5px 5px;
+}
+
+.prompt-textarea-scrollbar {
+  width: 100%;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-tertiary);
+}
+
+.prompt-textarea-scrollbar :deep(.el-textarea__inner) {
+  box-shadow: none !important;
+  background-color: transparent !important;
+  padding: 8px 12px;
+}
+
+.prompt-textarea-scrollbar :deep(.el-textarea__inner::-webkit-scrollbar) {
+  display: none;
+}
+
+html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb) {
+  background-color: var(--text-tertiary);
+}
+
+html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
+  background-color: var(--text-secondary);
+}
+
 .refresh-fab-button {
   position: fixed;
   bottom: 20px;
@@ -1449,10 +1512,18 @@ html.dark .bottom-actions-container {
   box-shadow: var(--el-box-shadow-light);
 }
 
-.search-input-container {
-  padding: 0 4px 20px 4px;
+.edit-prompt-form :deep(.el-form-item) {
+  margin-bottom: 0;
 }
-.prompt-dialog-scrollbar :deep(.el-scrollbar__view) {
-  padding: 5px 20px 5px 5px;
+
+.open-prompt-btn {
+  margin-left: 8px;
+  color: var(--bg-accent);
+  font-size: 16px; 
+}
+
+.open-prompt-btn:hover {
+  color: var(--text-accent);
+  background-color: var(--bg-tertiary) !important;
 }
 </style>

@@ -424,7 +424,12 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
 }
 
 .search-bar-container {
-    margin-bottom: 24px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--bg-primary);
+    padding: 5px 0px 5px 0px;
+    margin: 0px 0px 5px 0px;
 }
 
 .empty-state {
@@ -438,14 +443,14 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
 .mcp-grid-container {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 20px;
+    gap: 15px;
 }
 
 .mcp-card {
-    background-color: var(--bg-secondary);
+    background-color: var(--bg-tertiary);
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-lg);
-    padding: 16px;
+    padding: 8px 8px 8px 8px;
     display: flex;
     flex-direction: column;
     transition: all 0.2s ease-in-out;
@@ -504,12 +509,13 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     font-size: 13px;
     color: var(--text-secondary);
     margin: 0;
+    line-height: 1.6;
     display: -webkit-box;
-    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
-    line-height: 1.6;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
 }
 
 .mcp-card-footer {
@@ -553,7 +559,7 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     display: flex;
     justify-content: center;
     gap: 16px;
-    padding: 16px 24px;
+    padding: 12px 24px;
     background-color: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);

@@ -885,7 +885,7 @@ async function openWindow(config, msg) {
   let channel = "window";
 
   const backgroundColor = config.isDarkMode ? '#181818' : '#ffffff';
-
+  console.log("backgroundColor", backgroundColor);
   const ubWindow = utools.createBrowserWindow(
     "./window/index.html",
     {

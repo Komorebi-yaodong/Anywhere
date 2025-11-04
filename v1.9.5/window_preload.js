@@ -762,6 +762,7 @@ var require_data = __commonJS({
       const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
       let channel2 = "window";
       const backgroundColor = config.isDarkMode ? "#181818" : "#ffffff";
+      console.log("backgroundColor", backgroundColor);
       const ubWindow = utools.createBrowserWindow(
         "./window/index.html",
         {
