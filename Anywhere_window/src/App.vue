@@ -13,7 +13,9 @@ import { DocumentCopy, Download, Search } from '@element-plus/icons-vue';
 import OpenAI from 'openai';
 // No longer import from mcp-client.js
 
-// 封装 ElMessage 以添加 showClose: true
+// [......] 省略与之前相同的函数定义 (showDismissibleMessage, base64ToBuffer, parseWord, etc.)
+// 为节省篇幅，这里不再重复粘贴，请确保这些函数在您的文件中仍然存在
+// [MODIFIED] 将所有初始化逻辑都放入 onMounted 和 receiveMsg
 const showDismissibleMessage = (options) => {
   const opts = typeof options === 'string' ? { message: options } : options;
   let messageInstance = null;
@@ -678,31 +680,52 @@ watch(chat_show, async () => {
 }, { deep: true, flush: 'post' });
 
 onMounted(async () => {
-  if (isInit.value) return; isInit.value = true;
+  if (isInit.value) return; 
+  isInit.value = true;
+
+  // Setup global event listeners
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
   window.addEventListener('blur', handleWindowBlur);
 
   const chatMainElement = chatContainerRef.value?.$el;
-  if (chatMainElement) chatMainElement.addEventListener('click', handleMarkdownImageClick);
-
-  try {
-    const configData = await window.api.getConfig();
-    currentConfig.value = configData.config;
+  if (chatMainElement) {
+      chatMainElement.addEventListener('click', handleMarkdownImageClick);
   }
-  catch (err) {
-    currentConfig.value = defaultConfig.config;
-    showDismissibleMessage.error('加载配置失败，使用默认配置');
-  }
-  zoomLevel.value = currentConfig.value.zoom || 1;
-  if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(zoomLevel.value);
-  if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); }
-  try { const userInfo = await window.api.getUser(); UserAvart.value = userInfo.avatar; }
-  catch (err) { UserAvart.value = "user.png"; }
 
-  try {
+  // Main initialization logic is now inside receiveMsg
+  window.preload.receiveMsg(async (data) => {
+      // [OPTIMIZATION] Use config passed from main process
+      if (data.config) {
+          currentConfig.value = data.config;
+      } else {
+          // Fallback if config is not passed (shouldn't happen with the new flow)
+          try {
+              const configData = await window.api.getConfig();
+              currentConfig.value = configData.config;
+          } catch (err) {
+              currentConfig.value = defaultConfig.config;
+              showDismissibleMessage.error('加载配置失败，使用默认配置');
+          }
+      }
 
-    window.preload.receiveMsg(async (data) => {
+      // Apply settings from the now-guaranteed-to-be-present config
+      zoomLevel.value = currentConfig.value.zoom || 1;
+      if (window.api && typeof window.api.setZoomFactor === 'function') {
+          window.api.setZoomFactor(zoomLevel.value);
+      }
+      if (currentConfig.value.isDarkMode) {
+          document.documentElement.classList.add('dark');
+      }
+
+      try {
+          const userInfo = await window.api.getUser();
+          UserAvart.value = userInfo.avatar;
+      } catch (err) {
+          UserAvart.value = "user.png";
+      }
+
+      // The rest of the initialization logic remains the same
       sourcePromptConfig.value = currentConfig.value.prompts[data?.code];
 
       if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
@@ -720,7 +743,6 @@ onMounted(async () => {
       }
 
       autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
-      console.log("autoCloseOnBlur1", autoCloseOnBlur.value);
       tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
       model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
       selectedVoice.value = currentPromptConfig?.voice || null;
@@ -788,7 +810,7 @@ onMounted(async () => {
           }
         } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
       }
-      console.log("autoCloseOnBlur2", autoCloseOnBlur.value);
+      
       if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
 
       if (currentPromptConfig?.defaultMcpServers && currentPromptConfig.defaultMcpServers.length > 0) {
@@ -804,56 +826,17 @@ onMounted(async () => {
           await askAI(true);
         }
       }
-    });
-  } catch (err) {
-    basic_msg.value.code = Object.keys(currentConfig.value.prompts)[0];
-    document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
-    const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
 
-    if (currentPromptConfig && currentPromptConfig.icon) {
-      AIAvart.value = currentPromptConfig.icon;
-      favicon.value = currentPromptConfig.icon;
-    } else {
-      AIAvart.value = "ai.svg";
-      favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
-    }
+      await addCopyButtonsToCodeBlocks();
+      await attachImageErrorHandlers();
 
-    autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
-    tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
-    model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
-    selectedVoice.value = currentPromptConfig?.voice || null;
-    modelList.value = []; modelMap.value = {};
-    currentConfig.value.providerOrder.forEach(id => {
-      const provider = currentConfig.value.providers[id];
-      if (provider?.enable) {
-        provider.modelList.forEach(m => {
-          const key = `${id}|${m}`;
-          modelList.value.push({ key, value: key, label: `${provider.name}|${m}` });
-          modelMap.value[key] = `${provider.name}|${m}`;
-        });
-      }
-    });
-    if (!modelMap.value[model.value]) model.value = modelList.value[0]?.value;
-    currentProviderID.value = model.value.split("|")[0];
-    base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
-    api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
-    if (currentPromptConfig?.prompt) {
-      history.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手" }];
-      chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "你是一个AI助手", id: messageIdCounter.value++ }];
-    } else { history.value = []; chat_show.value = []; }
-
-    scrollToBottom();
-    if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
-  }
-
-  await addCopyButtonsToCodeBlocks();
-  await attachImageErrorHandlers();
-
-  setTimeout(() => {
-    chatInputRef.value?.focus({ cursor: 'end' });
-  }, 100);
+      setTimeout(() => {
+        chatInputRef.value?.focus({ cursor: 'end' });
+      }, 100);
+  });
 });
-
+// [......] 省略与之前相同的函数定义 (onBeforeUnmount, saveWindowSize, etc.)
+// 为节省篇幅，这里不再重复粘贴，请确保这些函数在您的文件中仍然存在
 onBeforeUnmount(async () => {
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
@@ -1860,7 +1843,7 @@ function getDisplayTypeName(type) {
   </main>
 
   <ModelSelectionDialog v-model="changeModel_page" :modelList="modelList" :currentModel="model"
-    @select="handleChangeModel" />
+    @select="handleChangeModel"/>
 
   <el-dialog v-model="systemPromptDialogVisible" title="编辑系统提示词" custom-class="system-prompt-dialog" width="60%"
     :show-close="true" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"

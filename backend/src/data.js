@@ -121,20 +121,20 @@ function splitConfigForStorage(fullConfig) {
 }
 
 /**
- * [已重构] 从数据库读取配置，合并三部分数据，并处理旧版本数据迁移
- * @returns {object} - 返回合并后的完整配置对象
+ * 从数据库异步读取配置，合并分块数据，并处理旧版本数据迁移
+ * @returns {Promise<object>} - 返回包含完整配置对象的 Promise
  */
-function getConfig() {
-  let configDoc = utools.db.get("config");
+async function getConfig() {
+  let configDoc = await utools.db.promises.get("config");
 
   // --- 1. 新用户初始化 ---
   if (!configDoc) {
     console.log("Anywhere: Initializing configuration for a new user.");
     const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(defaultConfig.config);
-    utools.db.put({ _id: "config", data: baseConfigPart });
-    utools.db.put({ _id: "prompts", data: promptsPart });
-    utools.db.put({ _id: "providers", data: providersPart });
-    utools.db.put({ _id: "mcpServers", data: mcpServersPart });
+    await utools.db.promises.put({ _id: "config", data: baseConfigPart });
+    await utools.db.promises.put({ _id: "prompts", data: promptsPart });
+    await utools.db.promises.put({ _id: "providers", data: providersPart });
+    await utools.db.promises.put({ _id: "mcpServers", data: mcpServersPart });
     return defaultConfig;
   }
 
@@ -143,14 +143,12 @@ function getConfig() {
     console.warn("Anywhere: Old configuration format detected. Starting migration.");
     const oldFullConfig = configDoc.data.config;
     const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(oldFullConfig);
+
+    await utools.db.promises.put({ _id: "prompts", data: promptsPart });
+    await utools.db.promises.put({ _id: "providers", data: providersPart });
+    await utools.db.promises.put({ _id: "mcpServers", data: mcpServersPart });
     
-    // 写入新的分块文档
-    utools.db.put({ _id: "prompts", data: promptsPart });
-    utools.db.put({ _id: "providers", data: providersPart });
-    utools.db.put({ _id: "mcpServers", data: mcpServersPart });
-    
-    // 更新并清理旧的 config 文档
-    const updateResult = utools.db.put({
+    const updateResult = await utools.db.promises.put({
       _id: "config",
       data: baseConfigPart,
       _rev: configDoc._rev
@@ -160,21 +158,20 @@ function getConfig() {
         console.log("Anywhere: Migration successful. Old config cleaned.");
     } else {
         console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
-        // 即使清理失败，也继续使用新数据，避免阻塞用户
     }
-    configDoc = utools.db.get("config"); // 重新获取清理后的 config 文档
+    configDoc = await utools.db.promises.get("config");
   }
 
-  // --- 3. 读取新版分块数据并合并 ---
+  // --- 3. 异步读取新版分块数据并合并 ---
   const fullConfigData = configDoc.data;
 
-  const promptsDoc = utools.db.get("prompts");
+  const promptsDoc = await utools.db.promises.get("prompts");
   fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig.config.prompts;
 
-  const providersDoc = utools.db.get("providers");
+  const providersDoc = await utools.db.promises.get("providers");
   fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig.config.providers;
   
-  const mcpServersDoc = utools.db.get("mcpServers");
+  const mcpServersDoc = await utools.db.promises.get("mcpServers");
   fullConfigData.config.mcpServers = mcpServersDoc ? mcpServersDoc.data : defaultConfig.config.mcpServers || {};
   
   return fullConfigData;
@@ -879,38 +876,38 @@ async function sethotkey(prompt_name,auto_copy){
 }
 
 async function openWindow(config, msg) {
+  msg.config = config;
+
   const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
   const promptCode = msg.originalCode || msg.code;
   const promptConfig = config.prompts[promptCode];
-  const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true; // 从快捷助手配置读取
+  const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
   let channel = "window";
-  
+
+  const backgroundColor = config.isDarkMode ? '#181818' : '#ffffff';
+
   const ubWindow = utools.createBrowserWindow(
     "./window/index.html",
     {
-      show: true,
+      show: false,
+      backgroundColor: backgroundColor,
       title: "Anywhere",
-      useContentSize: true,
-      frame: true,
       width: width,
       height: height,
-      alwaysOnTop: isAlwaysOnTop, // 使用快捷助手配置
-      shellOpenPath: true,
+      alwaysOnTop: isAlwaysOnTop,
       x: x,
       y: y,
       webPreferences: {
         preload: "./window_preload.js",
-        devTools: true
+        // devTools: true
       },
     },
     () => {
       ubWindow.webContents.send(channel, msg);
-      ubWindow.webContents.show();
-      ubWindow.setAlwaysOnTop(isAlwaysOnTop, "floating"); // 再次确认置顶状态
-      ubWindow.setFullScreen(false);
+      ubWindow.show();
     }
   );
-  ubWindow.webContents.openDevTools({ mode: "detach" });
+  // ubWindow.webContents.openDevTools({ mode: "detach" });
 }
 
 async function coderedirect(label, payload) {
@@ -922,7 +919,7 @@ function setZoomFactor(factor){
 }
 
 /**
- * [已重构] 保存单个快捷助手的窗口设置，直接操作 "prompts" 文档
+ * 保存单个快捷助手的窗口设置，直接操作 "prompts" 文档
  * @param {string} promptKey - 快捷助手的 key
  * @param {object} settings - 要保存的窗口设置
  * @returns {Promise<{success: boolean, message?: string}>}

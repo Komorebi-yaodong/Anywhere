@@ -30,21 +30,16 @@ const selectedProvider = computed(() => {
 // 原子化保存函数
 async function atomicSave(updateFunction) {
   try {
-    // 1. 从数据库读取最新配置
     const latestConfigData = await window.api.getConfig();
     if (!latestConfigData || !latestConfigData.config) {
       throw new Error("Failed to get latest config from DB.");
     }
     const latestConfig = latestConfigData.config;
 
-    // 2. 在最新配置上执行修改逻辑
     updateFunction(latestConfig);
     
-    // 3. 将修改后的完整配置写回
-    // 使用 updateConfigWithoutFeatures 是因为它不触碰 features，适合这种场景
     await window.api.updateConfigWithoutFeatures({ config: latestConfig });
     
-    // 4. 更新当前组件的本地状态以反映变化
     currentConfig.value = latestConfig;
     
   } catch (error) {

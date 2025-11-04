@@ -146,25 +146,25 @@ var require_data = __commonJS({
         mcpServersPart: mcpServers
       };
     }
-    function getConfig2() {
-      let configDoc = utools.db.get("config");
+    async function getConfig2() {
+      let configDoc = await utools.db.promises.get("config");
       if (!configDoc) {
         console.log("Anywhere: Initializing configuration for a new user.");
         const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(defaultConfig2.config);
-        utools.db.put({ _id: "config", data: baseConfigPart });
-        utools.db.put({ _id: "prompts", data: promptsPart });
-        utools.db.put({ _id: "providers", data: providersPart });
-        utools.db.put({ _id: "mcpServers", data: mcpServersPart });
+        await utools.db.promises.put({ _id: "config", data: baseConfigPart });
+        await utools.db.promises.put({ _id: "prompts", data: promptsPart });
+        await utools.db.promises.put({ _id: "providers", data: providersPart });
+        await utools.db.promises.put({ _id: "mcpServers", data: mcpServersPart });
         return defaultConfig2;
       }
       if (configDoc.data.config && configDoc.data.config.prompts) {
         console.warn("Anywhere: Old configuration format detected. Starting migration.");
         const oldFullConfig = configDoc.data.config;
         const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(oldFullConfig);
-        utools.db.put({ _id: "prompts", data: promptsPart });
-        utools.db.put({ _id: "providers", data: providersPart });
-        utools.db.put({ _id: "mcpServers", data: mcpServersPart });
-        const updateResult = utools.db.put({
+        await utools.db.promises.put({ _id: "prompts", data: promptsPart });
+        await utools.db.promises.put({ _id: "providers", data: providersPart });
+        await utools.db.promises.put({ _id: "mcpServers", data: mcpServersPart });
+        const updateResult = await utools.db.promises.put({
           _id: "config",
           data: baseConfigPart,
           _rev: configDoc._rev
@@ -174,14 +174,14 @@ var require_data = __commonJS({
         } else {
           console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
         }
-        configDoc = utools.db.get("config");
+        configDoc = await utools.db.promises.get("config");
       }
       const fullConfigData = configDoc.data;
-      const promptsDoc = utools.db.get("prompts");
+      const promptsDoc = await utools.db.promises.get("prompts");
       fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig2.config.prompts;
-      const providersDoc = utools.db.get("providers");
+      const providersDoc = await utools.db.promises.get("providers");
       fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig2.config.providers;
-      const mcpServersDoc = utools.db.get("mcpServers");
+      const mcpServersDoc = await utools.db.promises.get("mcpServers");
       fullConfigData.config.mcpServers = mcpServersDoc ? mcpServersDoc.data : defaultConfig2.config.mcpServers || {};
       return fullConfigData;
     }
@@ -755,38 +755,34 @@ var require_data = __commonJS({
       utools.redirectHotKeySetting(prompt_name, auto_copy);
     }
     async function openWindow(config, msg) {
+      msg.config = config;
       const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
       const promptCode = msg.originalCode || msg.code;
       const promptConfig = config.prompts[promptCode];
       const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
       let channel2 = "window";
+      const backgroundColor = config.isDarkMode ? "#181818" : "#ffffff";
       const ubWindow = utools.createBrowserWindow(
         "./window/index.html",
         {
-          show: true,
+          show: false,
+          backgroundColor,
           title: "Anywhere",
-          useContentSize: true,
-          frame: true,
           width,
           height,
           alwaysOnTop: isAlwaysOnTop,
-          // 使用快捷助手配置
-          shellOpenPath: true,
           x,
           y,
           webPreferences: {
-            preload: "./window_preload.js",
-            devTools: true
+            preload: "./window_preload.js"
+            // devTools: true
           }
         },
         () => {
           ubWindow.webContents.send(channel2, msg);
-          ubWindow.webContents.show();
-          ubWindow.setAlwaysOnTop(isAlwaysOnTop, "floating");
-          ubWindow.setFullScreen(false);
+          ubWindow.show();
         }
       );
-      ubWindow.webContents.openDevTools({ mode: "detach" });
     }
     async function coderedirect(label, payload) {
       utools.redirect(label, payload);

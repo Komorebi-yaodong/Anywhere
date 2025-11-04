@@ -39,7 +39,6 @@ const formatBytes = (bytes, decimals = 2) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-// --- Lifecycle Hook ---
 onMounted(async () => {
     try {
         const result = await window.api.getConfig();

@@ -49,7 +49,7 @@ const handleSelect = (modelValue) => emit('select', modelValue);
 </script>
 
 <template>
-    <el-dialog title="选择模型" :model-value="modelValue" @update:model-value="handleClose" width="70%" custom-class="model-dialog">
+    <el-dialog title="选择模型" :model-value="modelValue" @update:model-value="handleClose" width="70%" custom-class="model-dialog" top="8vh">
         <div class="model-search-container">
             <el-input
                 v-model="searchQuery"

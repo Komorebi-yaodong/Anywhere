@@ -166,27 +166,22 @@ const promptsAvailableToAssign = computed(() => (tagName) => {
 
 async function atomicSave(updateFunction, syncFeatures = false) {
   try {
-    // 总是从数据库读取最新的配置开始操作
     const latestConfigData = await window.api.getConfig();
     if (!latestConfigData || !latestConfigData.config) {
       throw new Error("Failed to get latest config from DB.");
     }
     const latestConfig = latestConfigData.config;
 
-    // 在最新的配置上执行修改逻辑
     updateFunction(latestConfig);
 
-    // 准备要保存的完整配置对象
     const configToSave = { config: latestConfig };
 
-    // 根据需要决定是否同步 features
     if (syncFeatures) {
       await window.api.updateConfig(configToSave);
     } else {
       await window.api.updateConfigWithoutFeatures(configToSave);
     }
 
-    // [BUG修复] 更新当前组件的本地响应式状态以反映变化
     currentConfig.value = latestConfig;
 
   } catch (error) {
@@ -269,6 +264,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
   isNewPrompt.value = false;
 
   try {
+    // [MODIFIED] 使用 await 等待异步的 getConfig
     const latestConfigData = await window.api.getConfig();
     if (latestConfigData && latestConfigData.config) {
       currentConfig.value = latestConfigData.config;
@@ -293,7 +289,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
   Object.assign(editingPrompt, {
     originalKey: promptKey, key: promptKey, type: p.type, prompt: p.prompt,
     showMode: p.showMode, model: p.model, enable: p.enable, icon: p.icon || "",
-    selectedTag: belongingTags, // <--- 修改这里
+    selectedTag: belongingTags,
     stream: p.stream ?? true, isTemperature: p.isTemperature ?? false,
     temperature: p.temperature ?? 0.7, isDirectSend_file: p.isDirectSend_file ?? false,
     isDirectSend_normal: p.isDirectSend_normal ?? true, ifTextNecessary: p.ifTextNecessary ?? false,

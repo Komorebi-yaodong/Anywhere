@@ -28,7 +28,7 @@ const {
   handelReplyOpenAI,
 } = require('./input.js');
 
-// [MODIFIED] 引入重构后的 MCP 模块
+// 引入重构后的 MCP 模块
 const {
   initializeMcpClient,
   invokeMcpTool,
@@ -54,64 +54,59 @@ window.api = {
   savePromptWindowSettings,
   desktopCaptureSources: utools.desktopCaptureSources,
   copyImage: utools.copyImage,
-  // [MODIFIED] 暴露重构后的 MCP 函数
   initializeMcpClient,
   invokeMcpTool,
   closeMcpClient,
 };
 
-// --- Command Handlers ---
 const commandHandlers = {
   'Anywhere Settings': async () => {
-    const config = getConfig().config;
-    checkConfig(config);
-    // The main window will open automatically based on plugin.json, so no action needed here.
+    // [MODIFIED] 使用 await
+    const configResult = await getConfig();
+    checkConfig(configResult.config);
   },
 
   'Resume Conversation': async ({ type, payload }) => {
     utools.hideMainWindow();
-    const config = getConfig().config;
+    // [MODIFIED] 使用 await
+    const configResult = await getConfig();
+    const config = configResult.config;
     checkConfig(config);
 
-    let sessionPayloadString = null; // 存储会话内容的字符串
-    let sessionObject = null;        // 存储解析后的会话对象
+    let sessionPayloadString = null;
+    let sessionObject = null;
     let filename = null;
     let originalCode = null;
 
     try {
       if (type === "files" && Array.isArray(payload) && payload.length > 0 && payload[0].path) {
-        // --- 处理本地文件类型 ---
         const filePath = payload[0].path;
         if (filePath.toLowerCase().endsWith('.json')) {
-          const fs = require('fs'); // 直接在 preload 中使用 Node.js fs 模块
+          const fs = require('fs');
           sessionPayloadString = fs.readFileSync(filePath, 'utf-8');
           sessionObject = JSON.parse(sessionPayloadString);
           filename = payload[0].name;
         } else {
-          // 如果不是json文件，则将其作为普通文件处理
           sessionPayloadString = JSON.stringify(payload);
         }
       } else if (type === "over") {
-        // --- 处理文本/云端类型 ---
-        sessionPayloadString = payload; // payload 本身就是字符串
+        sessionPayloadString = payload;
         const parsedPayload = JSON.parse(sessionPayloadString);
 
-        if (parsedPayload && parsedPayload.sessionData) { // 云端对话格式
+        if (parsedPayload && parsedPayload.sessionData) {
           sessionObject = JSON.parse(parsedPayload.sessionData);
           filename = parsedPayload.filename || null;
-        } else if (parsedPayload && parsedPayload.anywhere_history === true) { // 本地保存的会话格式
+        } else if (parsedPayload && parsedPayload.anywhere_history === true) {
           sessionObject = parsedPayload;
         }
       }
     } catch (e) {
       console.warn("Payload is not a valid session JSON or file is unreadable. It will be opened as plain text/file.", e);
-      // 如果解析失败，保持 sessionPayloadString/sessionObject 为 null，后续逻辑会处理
       if (!sessionPayloadString) {
         sessionPayloadString = (typeof payload === 'object') ? JSON.stringify(payload) : payload;
       }
     }
 
-    // --- 统一提取原始 CODE ---
     if (sessionObject && sessionObject.CODE) {
       originalCode = sessionObject.CODE;
     }
@@ -121,11 +116,12 @@ const commandHandlers = {
     const msg = {
       os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
       code: "Resume Conversation",
-      type: "over", //最终都变为了 json文本 格式
-      payload: finalPayload, // 使用修复后的 payload
+      type: "over",
+      payload: finalPayload,
       filename: filename,
-      originalCode: originalCode // 将原始 CODE 传递给 openWindow
+      originalCode: originalCode
     };
+    // [MODIFIED] 传递 config
     await openWindow(config, msg);
 
     utools.outPlugin();
@@ -133,10 +129,12 @@ const commandHandlers = {
 
   handleAssistant: async ({ code, type, payload }) => {
     utools.hideMainWindow();
-    const config = getConfig().config;
+    // [MODIFIED] 使用 await
+    const configResult = await getConfig();
+    const config = configResult.config;
     checkConfig(config);
     const assistantName = code.replace(feature_suffix, "");
-    if (config.prompts[assistantName].type === "img") { // 如果类型是img，则调用截图功能
+    if (config.prompts[assistantName].type === "img") {
       utools.screenCapture((image) => {
         const msg = {
           os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
@@ -144,16 +142,17 @@ const commandHandlers = {
           type: "img",
           payload: image,
         };
+        // [MODIFIED] 传递 config
         openWindow(config, msg);
       });
-    }
-    else {
+    } else {
       const msg = {
         os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
         code: assistantName,
-        type: "over", // Assistant commands are always treated as "over" type for window opening
+        type: "over",
         payload: assistantName,
       };
+      // [MODIFIED] 传递 config
       await openWindow(config, msg);
     }
     utools.outPlugin();
@@ -161,7 +160,9 @@ const commandHandlers = {
 
   handlePrompt: async ({ code, type, payload }) => {
     utools.hideMainWindow();
-    const config = getConfig().config;
+    // [MODIFIED] 使用 await
+    const configResult = await getConfig();
+    const config = configResult.config;
     checkConfig(config);
 
     const promptConfig = config.prompts[code];
@@ -178,6 +179,7 @@ const commandHandlers = {
         type,
         payload,
       };
+      // [MODIFIED] 传递 config
       await openWindow(config, msg);
     } else {
       let content = null;
