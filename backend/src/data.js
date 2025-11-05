@@ -57,6 +57,7 @@ const defaultConfig = {
       password: "",
       path: "/anywhere",
       dataPath: "/anywhere_data",
+      localChatPath: ""
     },
     voiceList:[
     "alloy-👩",
@@ -304,6 +305,10 @@ function checkConfig(config) {
   }
   if (config.webdav.dataPath == undefined) {
     config.webdav.dataPath = "/anywhere_data";
+    flag = true;
+  }
+  if (config.webdav.localChatPath == undefined) {
+    config.webdav.localChatPath = "";
     flag = true;
   }
   

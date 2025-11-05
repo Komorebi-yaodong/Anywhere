@@ -1,7 +1,7 @@
 {
   "app": {
     "header": {
-      "chats": "云端对话 💬",
+      "chats": "对话 💬",
       "prompts": "快捷助手 🚀",
       "mcp": "MCP 服务 🔧",
       "providers": "服务商 ☁️",
@@ -18,7 +18,8 @@
   "chats": {
     "configRequired": {
       "title": "云端对话",
-      "description": "请先在“设置”中配置 WebDAV URL 和数据路径 (data_path) 以使用此功能"
+      "webdavDescription": "请先在“设置”中配置 WebDAV URL 和数据路径 (data_path) 以使用此功能",
+      "localPathDescription": "请先在“设置”页面配置您的本地对话存储路径"
     },
     "table": {
       "filename": "对话名称",
@@ -29,12 +30,21 @@
     "actions": {
       "chat": "聊天",
       "rename": "重命名",
-      "delete": "删除"
+      "delete": "删除",
+      "forceSync": "同步"
     },
     "rename": {
       "promptTitle": "重命名对话",
       "promptMessage": "请输入新的会话名称",
       "invalidFilename": "文件名无效，必须以 .json 结尾"
+    },
+    "tooltips": {
+      "syncToCloud": "上传至云端",
+      "syncFromCloud": "从云端同步",
+      "uploadChanges": "上传本地新增和较新的文件 ({count}个)",
+      "downloadChanges": "下载云端新增和较新的文件 ({count}个)",
+      "forceUpload": "强制上传此文件到云端 (覆盖)",
+      "forceDownload": "强制从云端下载此文件 (覆盖)"
     },
     "confirmDelete": "您确定要永久删除对话 '{filename}' 吗？",
     "alerts": {
@@ -46,7 +56,22 @@
       "restoreInitiated": "对话已开始",
       "restoreFailed": "恢复对话失败",
       "renameSuccess": "重命名成功",
-      "renameFailed": "重命名失败"
+      "renameFailed": "重命名失败",
+      "syncInProgress": "同步中...",
+      "syncPreparingUpload": "准备上传...",
+      "syncPreparingDownload": "准备下载...",
+      "syncProcessing": "处理中... {completed}/{total}",
+      "syncCancelled": "同步操作已取消",
+      "syncSuccessUpload": "{count}个文件成功同步到云端。",
+      "syncSuccessDownload": "{count}个文件成功同步到本地。",
+      "syncFailedPartially": "{failedCount}个文件失败。",
+      "syncFailed": "同步失败: {message}",
+      "syncConfirmUpload": "这将把所有本地对话上传到云端，同名文件将被覆盖。是否继续？",
+      "syncConfirmUploadTitle": "上传到云端",
+      "syncConfirmDownload": "这将把所有云端对话下载到本地，同名文件将被覆盖。是否继续？",
+      "syncConfirmDownloadTitle": "从云端同步",
+      "syncNoUpload": "所有本地文件均已是最新或云端版本较新，无需上传。",
+      "syncNoDownload": "所有云端文件均已同步或本地版本较新，无需下载。"
     }
   },
   "prompts": {
@@ -317,6 +342,9 @@
       "backupRestoreTitle": "配置备份与恢复",
       "backupButton": "备份到 WebDAV",
       "restoreButton": "管理备份",
+      "localChatPath": "本地对话路径",
+      "localChatPathPlaceholder": "请选择用于存放对话记录的本地文件夹",
+      "webdavDescription": "请先在“设置”页面配置 WebDAV URL 和数据路径",
       "backup": {
         "confirmTitle": "确认备份文件名",
         "confirmMessage": "请输入备份文件名建议使用默认文件名以保留时间戳",
@@ -373,7 +401,7 @@
     "downloadIcon": "下载",
     "warningTitle": "警告",
     "refresh": "刷新",
-    "deleteSelected": "删除选中",
+    "deleteSelected": "删除",
     "noFileSelected": "未选择任何文件",
     "confirmDeleteMultiple": "您确定要永久删除选中的 {count} 个文件吗？",
     "deleteSuccess": "删除成功",

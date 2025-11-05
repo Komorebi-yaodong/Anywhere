@@ -9,7 +9,7 @@ const parseTextFile = async (base64Data) => {
     return new TextDecoder().decode(ia);
 };
 
-// [NEW & IMPROVED] Centralized file handling configuration
+// Centralized file handling configuration
 const fileHandlers = {
     text: {
         extensions: [
@@ -249,8 +249,111 @@ function saveFile(options) {
     });
 }
 
+/**
+ * [新增] 弹出目录选择框
+ * @returns {Promise<string|null>} 返回选择的目录路径，如果取消则返回 null
+ */
+async function selectDirectory() {
+    const result = utools.showOpenDialog({
+        properties: ['openDirectory']
+    });
+    return result && result.length > 0 ? result[0] : null;
+}
+
+/**
+ * [新增] 读取指定目录下的所有 .json 文件信息
+ * @param {string} dirPath - 目录路径
+ * @returns {Promise<Array<object>>} 返回文件信息数组
+ */
+async function listJsonFiles(dirPath) {
+    if (!dirPath) return [];
+    const files = await fs.readdir(dirPath);
+    const jsonFiles = files.filter(file => path.extname(file).toLowerCase() === '.json');
+
+    const fileDetails = await Promise.all(
+        jsonFiles.map(async file => {
+            const filePath = path.join(dirPath, file);
+            try {
+                const stats = await fs_node.promises.stat(filePath);
+                return {
+                    basename: file,
+                    path: filePath,
+                    lastmod: stats.mtime.toISOString(),
+                    size: stats.size,
+                    type: 'file'
+                };
+            } catch (error) {
+                console.error(`无法获取文件信息: ${filePath}`, error);
+                return null;
+            }
+        })
+    );
+    return fileDetails.filter(Boolean).sort((a, b) => new Date(b.lastmod) - new Date(a.lastmod));
+}
+
+/**
+ * 取本地文件内容，支持 AbortSignal
+ * @param {string} filePath - 文件路径
+ * @param {AbortSignal} signal - 用于取消操作的信号
+ * @returns {Promise<string>} 文件内容
+ */
+async function readLocalFile(filePath, signal) {
+    return await fs.readFile(filePath, { encoding: 'utf-8', signal });
+}
+
+/**
+ * 重命名本地文件
+ * @param {string} oldPath 
+ * @param {string} newPath 
+ * @returns {Promise<void>}
+ */
+async function renameLocalFile(oldPath, newPath) {
+    return await fs.rename(oldPath, newPath);
+}
+
+/**
+ * 删除本地文件
+ * @param {string} filePath 
+ * @returns {Promise<void>}
+ */
+async function deleteLocalFile(filePath) {
+    return await fs.unlink(filePath);
+}
+
+/**
+ * 异步将内容写入本地文件，支持 AbortSignal
+ * @param {string} filePath - 文件的完整路径
+ * @param {string} content - 要写入的文件内容
+ * @param {AbortSignal} signal - 用于取消操作的信号
+ * @returns {Promise<void>}
+ */
+async function writeLocalFile(filePath, content, signal) {
+    return await fs.writeFile(filePath, content, { encoding: 'utf-8', signal });
+}
+
+/**
+ * 设置本地文件的修改时间
+ * @param {string} filePath - 文件的完整路径
+ * @param {Date | string | number} mtime - 新的修改时间
+ * @returns {Promise<void>}
+ */
+async function setFileMtime(filePath, mtime) {
+    const date = new Date(mtime);
+    // utimes 需要 access time 和 modification time
+    // 我们将 access time 也设置为 modification time
+    return await fs.utimes(filePath, date, date);
+}
+
 module.exports = {
     handleFilePath, // (文件路径=>文件对象)
     sendfileDirect, //（文件路径=>文件对象=>文件列表=>对话格式）
     saveFile,
+    
+    selectDirectory,
+    listJsonFiles,
+    readLocalFile,
+    renameLocalFile,
+    deleteLocalFile,
+    writeLocalFile,
+    setFileMtime,
 };

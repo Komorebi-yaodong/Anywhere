@@ -447,7 +447,7 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
 }
 
 .mcp-card {
-    background-color: var(--bg-tertiary);
+    background-color: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-lg);
     padding: 8px 8px 8px 8px;

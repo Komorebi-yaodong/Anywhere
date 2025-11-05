@@ -1,7 +1,7 @@
 {
   "app": {
     "header": {
-      "chats": "クラウドチャット 💬",
+      "chats": "対話 💬",
       "prompts": "クイックアシスタント 🚀",
       "mcp": "MCPサーバー 🔧",
       "providers": "サービスプロバイダー ☁️",
@@ -18,7 +18,8 @@
   "chats": {
     "configRequired": {
       "title": "クラウドチャット",
-      "description": "この機能を使用するには、「設定」でWebDAV URLとデータパス（data_path）を設定してください。"
+      "webdavDescription": "この機能を使用するには、「設定」でWebDAV URLとデータパス（data_path）を設定してください。",
+      "localPathDescription": "まず「設定」ページでローカルチャットの保存パスを設定してください"
     },
     "table": {
       "filename": "チャット名",
@@ -29,12 +30,21 @@
     "actions": {
       "chat": "チャット",
       "rename": "名前を変更",
-      "delete": "削除"
+      "delete": "削除",
+      "forceSync": "同期"
     },
     "rename": {
       "promptTitle": "チャットの名前を変更",
       "promptMessage": "新しい会話名を入力してください。",
       "invalidFilename": "ファイル名が無効です。'.json'で終わる必要があります。"
+    },
+    "tooltips": {
+      "syncToCloud": "クラウドへアップロード",
+      "syncFromCloud": "クラウドから同期",
+      "uploadChanges": "ローカルの新規および更新されたファイル（{count}個）をアップロード",
+      "downloadChanges": "クラウドの新規および更新されたファイル（{count}個）をダウンロード",
+      "forceUpload": "このファイルをクラウドに強制アップロード（上書き）",
+      "forceDownload": "このファイルをクラウドから強制ダウンロード（上書き）"
     },
     "confirmDelete": "チャット '{filename}' を完全に削除してもよろしいですか？",
     "alerts": {
@@ -46,12 +56,27 @@
       "restoreInitiated": "チャットが開始されました。",
       "restoreFailed": "チャットの復元に失敗しました。",
       "renameSuccess": "名前の変更に成功しました。",
-      "renameFailed": "名前の変更に失敗しました。"
+      "renameFailed": "名前の変更に失敗しました。",
+      "syncInProgress": "同期中...",
+      "syncPreparingUpload": "アップロード準備中...",
+      "syncPreparingDownload": "ダウンロード準備中...",
+      "syncProcessing": "処理中... {completed}/{total}",
+      "syncCancelled": "同期操作がキャンセルされました",
+      "syncSuccessUpload": "{count}個のファイルをクラウドに正常に同期しました。",
+      "syncSuccessDownload": "{count}個のファイルをクラウドから正常に同期しました。",
+      "syncFailedPartially": "{failedCount}個のファイルが失敗しました。",
+      "syncFailed": "同期に失敗しました: {message}",
+      "syncConfirmUpload": "これにより、すべてのローカル会話がクラウドにアップロードされ、同名のファイルは上書きされます。続行しますか？",
+      "syncConfirmUploadTitle": "クラウドにアップロード",
+      "syncConfirmDownload": "これにより、すべてのクラウド会話がローカルマシンにダウンロードされ、同名のファイルは上書きされます。続行しますか？",
+      "syncConfirmDownloadTitle": "クラウドから同期",
+      "syncNoUpload": "すべてのローカルファイルは最新であるか、クラウド版の方が新しいため、アップロードは不要です。",
+      "syncNoDownload": "すべてのクラウドファイルは同期済みであるか、ローカル版の方が新しいため、ダウンロードは不要です。"
     }
   },
   "prompts": {
     "allPrompts": "全部",
-    "searchPlaceholder":"名前または内容を検索...",
+    "searchPlaceholder": "名前または内容を検索...",
     "noPrompts": "まだクイックアシスタントは定義されていません。",
     "noPromptsInTag": "このタグにはクイックアシスタントがありません。",
     "addExistingPrompt": "既存のクイックアシスタントを追加",
@@ -78,7 +103,7 @@
       "clipboard": "クリップボード",
       "window": "独立したウィンドウ"
     },
-    "promptKeyLabelShort":"名前",
+    "promptKeyLabelShort": "名前",
     "modelLabel": "モデル",
     "llmParametersLabel": "モデルパラメータ",
     "llmParametersRemark": "現在のクイックアシスタントモデルにのみ有効、他のモデルに切り替えると無効になります",
@@ -317,6 +342,9 @@
       "backupRestoreTitle": "設定のバックアップと復元",
       "backupButton": "WebDAVへバックアップ",
       "restoreButton": "バックアップ管理",
+      "localChatPath": "ローカルのチャットパス",
+      "localChatPathPlaceholder": "会話履歴を保存するローカルフォルダを選択してください",
+      "webdavDescription": "まず、「設定」ページでWebDAVのURLとデータパスを設定してください",
       "backup": {
         "confirmTitle": "バックアップファイル名の確認",
         "confirmMessage": "バックアップファイル名を入力してください。タイムスタンプを保持するために、デフォルト名の使用をお勧めします。",
@@ -373,7 +401,7 @@
     "downloadIcon": "ダウンロード",
     "warningTitle": "警告",
     "refresh": "更新",
-    "deleteSelected": "選択を削除",
+    "deleteSelected": "削除",
     "noFileSelected": "ファイルが選択されていません。",
     "confirmDeleteMultiple": "選択した{count}個のファイルを本当に完全に削除しますか？",
     "deleteSuccess": "削除に成功しました。",

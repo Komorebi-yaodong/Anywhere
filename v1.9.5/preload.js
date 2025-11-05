@@ -90,7 +90,8 @@ var require_data = __commonJS({
           username: "",
           password: "",
           path: "/anywhere",
-          dataPath: "/anywhere_data"
+          dataPath: "/anywhere_data",
+          localChatPath: ""
         },
         voiceList: [
           "alloy-\u{1F469}",
@@ -303,6 +304,10 @@ var require_data = __commonJS({
       }
       if (config.webdav.dataPath == void 0) {
         config.webdav.dataPath = "/anywhere_data";
+        flag = true;
+      }
+      if (config.webdav.localChatPath == void 0) {
+        config.webdav.localChatPath = "";
         flag = true;
       }
       if (config.apiUrl) {
@@ -1051,12 +1056,65 @@ file end` };
         }
       });
     }
+    async function selectDirectory2() {
+      const result = utools.showOpenDialog({
+        properties: ["openDirectory"]
+      });
+      return result && result.length > 0 ? result[0] : null;
+    }
+    async function listJsonFiles2(dirPath) {
+      if (!dirPath) return [];
+      const files = await fs.readdir(dirPath);
+      const jsonFiles = files.filter((file) => path.extname(file).toLowerCase() === ".json");
+      const fileDetails = await Promise.all(
+        jsonFiles.map(async (file) => {
+          const filePath = path.join(dirPath, file);
+          try {
+            const stats = await fs_node.promises.stat(filePath);
+            return {
+              basename: file,
+              path: filePath,
+              lastmod: stats.mtime.toISOString(),
+              size: stats.size,
+              type: "file"
+            };
+          } catch (error) {
+            console.error(`\u65E0\u6CD5\u83B7\u53D6\u6587\u4EF6\u4FE1\u606F: ${filePath}`, error);
+            return null;
+          }
+        })
+      );
+      return fileDetails.filter(Boolean).sort((a, b) => new Date(b.lastmod) - new Date(a.lastmod));
+    }
+    async function readLocalFile2(filePath, signal) {
+      return await fs.readFile(filePath, { encoding: "utf-8", signal });
+    }
+    async function renameLocalFile2(oldPath, newPath) {
+      return await fs.rename(oldPath, newPath);
+    }
+    async function deleteLocalFile2(filePath) {
+      return await fs.unlink(filePath);
+    }
+    async function writeLocalFile2(filePath, content, signal) {
+      return await fs.writeFile(filePath, content, { encoding: "utf-8", signal });
+    }
+    async function setFileMtime2(filePath, mtime) {
+      const date = new Date(mtime);
+      return await fs.utimes(filePath, date, date);
+    }
     module2.exports = {
       handleFilePath: handleFilePath2,
       // (文件路径=>文件对象)
       sendfileDirect: sendfileDirect2,
       //（文件路径=>文件对象=>文件列表=>对话格式）
-      saveFile: saveFile2
+      saveFile: saveFile2,
+      selectDirectory: selectDirectory2,
+      listJsonFiles: listJsonFiles2,
+      readLocalFile: readLocalFile2,
+      renameLocalFile: renameLocalFile2,
+      deleteLocalFile: deleteLocalFile2,
+      writeLocalFile: writeLocalFile2,
+      setFileMtime: setFileMtime2
     };
   }
 });
@@ -89174,7 +89232,14 @@ var {
 var {
   handleFilePath,
   sendfileDirect,
-  saveFile
+  saveFile,
+  selectDirectory,
+  listJsonFiles,
+  readLocalFile,
+  renameLocalFile,
+  deleteLocalFile,
+  writeLocalFile,
+  setFileMtime
 } = require_file();
 var {
   requestTextOpenAI,
@@ -89197,6 +89262,13 @@ window.api = {
   handleFilePath,
   sendfileDirect,
   saveFile,
+  selectDirectory,
+  listJsonFiles,
+  readLocalFile,
+  renameLocalFile,
+  deleteLocalFile,
+  writeLocalFile,
+  setFileMtime,
   sethotkey,
   coderedirect,
   setZoomFactor,

@@ -1,7 +1,7 @@
 {
   "app": {
     "header": {
-      "chats": "Cloud Chats 💬",
+      "chats": "Chats 💬",
       "prompts": "Quick Prompts 🚀",
       "mcp": "MCP Servers 🔧",
       "providers": "Providers ☁️",
@@ -18,7 +18,8 @@
   "chats": {
     "configRequired": {
       "title": "Cloud Chats",
-      "description": "Please configure WebDAV URL and data path (data_path) in 'Settings' to use this feature."
+      "webdavDescription": "Please configure WebDAV URL and data path (data_path) in 'Settings' to use this feature.",
+      "localPathDescription": "Please configure your local chat storage path in the 'Settings' page first"
     },
     "table": {
       "filename": "Chat Name",
@@ -29,12 +30,21 @@
     "actions": {
       "chat": "Chat",
       "rename": "Rename",
-      "delete": "Delete"
+      "delete": "Delete",
+      "forceSync": "Sync"
     },
     "rename": {
       "promptTitle": "Rename Chat",
       "promptMessage": "Please enter the new conversation name.",
       "invalidFilename": "Invalid filename, must end with .json."
+    },
+    "tooltips": {
+      "syncToCloud": "Upload to Cloud",
+      "syncFromCloud": "Sync from Cloud",
+      "uploadChanges": "Upload {count} new or updated local files",
+      "downloadChanges": "Download {count} new or updated cloud files",
+      "forceUpload": "Force upload this file to the cloud (overwrite)",
+      "forceDownload": "Force download this file from the cloud (overwrite)"
     },
     "confirmDelete": "Are you sure you want to permanently delete chat '{filename}'?",
     "alerts": {
@@ -46,12 +56,27 @@
       "restoreInitiated": "Chat has started.",
       "restoreFailed": "Failed to restore chat.",
       "renameSuccess": "Rename successful.",
-      "renameFailed": "Rename failed."
+      "renameFailed": "Rename failed.",
+      "syncInProgress": "Syncing...",
+      "syncPreparingUpload": "Preparing to upload...",
+      "syncPreparingDownload": "Preparing to download...",
+      "syncProcessing": "Processing... {completed}/{total}",
+      "syncCancelled": "Sync operation has been cancelled",
+      "syncSuccessUpload": "{count} files successfully synced to the cloud.",
+      "syncSuccessDownload": "{count} files successfully synced from the cloud.",
+      "syncFailedPartially": "{failedCount} files failed.",
+      "syncFailed": "Sync failed: {message}",
+      "syncConfirmUpload": "This will upload all local conversations to the cloud, overwriting any files with the same name. Continue?",
+      "syncConfirmUploadTitle": "Upload to Cloud",
+      "syncConfirmDownload": "This will download all cloud conversations to your local machine, overwriting any files with the same name. Continue?",
+      "syncConfirmDownloadTitle": "Sync from Cloud",
+      "syncNoUpload": "All local files are up-to-date or newer on the cloud. Nothing to upload.",
+      "syncNoDownload": "All cloud files are synced or newer locally. Nothing to download."
     }
   },
   "prompts": {
     "allPrompts": "ALL",
-    "searchPlaceholder":"Search name or content...",
+    "searchPlaceholder": "Search name or content...",
     "noPrompts": "No prompts defined yet.",
     "noPromptsInTag": "No prompts in this tag.",
     "addExistingPrompt": "Add Existing Prompt",
@@ -78,7 +103,7 @@
       "clipboard": "Clipboard",
       "window": "Standalone Window"
     },
-    "promptKeyLabelShort":"Name",
+    "promptKeyLabelShort": "Name",
     "modelLabel": "Model",
     "llmParametersLabel": "Model Parameters",
     "llmParametersRemark": "Only effective for the current Quick Prompt model; no longer effective after switching to other models",
@@ -317,6 +342,9 @@
       "backupRestoreTitle": "Config Backup & Restore",
       "backupButton": "Backup to WebDAV",
       "restoreButton": "Manage Backups",
+      "localChatPath": "Local Chat Path",
+      "localChatPathPlaceholder": "Please select a local folder to store chat history",
+      "webdavDescription": "Please configure WebDAV URL and data path in 'Settings' first",
       "backup": {
         "confirmTitle": "Confirm Backup Filename",
         "confirmMessage": "Please enter the backup filename. It is recommended to use the default name to keep the timestamp.",
@@ -373,7 +401,7 @@
     "downloadIcon": "Download",
     "warningTitle": "Warning",
     "refresh": "Refresh",
-    "deleteSelected": "Delete Selected",
+    "deleteSelected": "Delete",
     "noFileSelected": "No files selected.",
     "confirmDeleteMultiple": "Are you sure you want to permanently delete the {count} selected files?",
     "deleteSuccess": "Deleted successfully.",

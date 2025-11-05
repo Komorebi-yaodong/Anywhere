@@ -727,7 +727,7 @@ onMounted(async () => {
   if (chatMainElement) {
     chatMainElement.addEventListener('click', handleMarkdownImageClick);
   }
-  
+
   // 统一的初始化函数，用于成功和失败两种情况
   const initializeWindow = async (data = null) => {
     // 步骤 1: 加载配置
@@ -768,11 +768,11 @@ onMounted(async () => {
         });
       }
     });
-    
+
     // 步骤 5: 根据传入数据或默认值设置窗口状态
     const code = data?.code || "AI"; // 如果没有传入code，则默认为 "AI"
     const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
-    
+
     CODE.value = code;
     document.title = code;
     sourcePromptConfig.value = currentPromptConfig;
@@ -785,15 +785,15 @@ onMounted(async () => {
       favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
     }
 
-    autoCloseOnBlur.value = currentPromptConfig.autoCloseOnBlur ?? true;
+    autoCloseOnBlur.value = currentPromptConfig.autoCloseOnBlur ?? false;
     tempReasoningEffort.value = currentPromptConfig.reasoning_effort || 'default';
     model.value = currentPromptConfig.model || modelList.value[0]?.value || '';
     selectedVoice.value = currentPromptConfig.voice || null;
 
     if (model.value) {
-        currentProviderID.value = model.value.split("|")[0];
-        base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
-        api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
+      currentProviderID.value = model.value.split("|")[0];
+      base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
+      api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
     }
 
     if (currentPromptConfig.prompt) {
@@ -801,68 +801,69 @@ onMounted(async () => {
       chat_show.value = [{ role: "system", content: currentPromptConfig.prompt, id: messageIdCounter.value++ }];
     } else {
       history.value = []; chat_show.value = [];
-    }
-
-    if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
+    }    
 
     // 步骤 6: 处理传入的 payload（如果有）
     let shouldDirectSend = false;
     let isFileDirectSend = false;
     if (data) {
-        basic_msg.value = { code: data.code, type: data.type, payload: data.payload };
-        if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
-        
-        // 此处是您原有的 payload 处理逻辑
-        if (data.type === "over" && data.payload) {
-            let sessionLoaded = false;
-            try {
-              let old_session = JSON.parse(data.payload);
-              if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); }
-            } catch (error) { }
-            if (!sessionLoaded) {
-              if (CODE.value.trim().toLowerCase().includes(data.payload.trim().toLowerCase())) { /* do nothing */ }
-              else {
-                if (currentPromptConfig.isDirectSend_normal) {
-                  history.value.push({ role: "user", content: data.payload });
-                  chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: data.payload }] });
-                  shouldDirectSend = true;
-                } else { prompt.value = data.payload; }
-              }
-            }
-        } else if (data.type === "img" && data.payload) {
+      basic_msg.value = { code: data.code, type: data.type, payload: data.payload };
+      if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
+
+      // 此处是您原有的 payload 处理逻辑
+      if (data.type === "over" && data.payload) {
+        let sessionLoaded = false;
+        try {
+          let old_session = JSON.parse(data.payload);
+          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); autoCloseOnBlur.value = false; }
+        } catch (error) { }
+        if (!sessionLoaded) {
+          if (CODE.value.trim().toLowerCase().includes(data.payload.trim().toLowerCase())) { /* do nothing */ }
+          else {
             if (currentPromptConfig.isDirectSend_normal) {
-              history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
-              chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
+              history.value.push({ role: "user", content: data.payload });
+              chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: data.payload }] });
               shouldDirectSend = true;
-            } else {
-              fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(data.payload) });
-            }
-        } else if (data.type === "files" && data.payload) {
-            try {
-              let sessionLoaded = false;
-              if (data.payload.length === 1 && data.payload[0].path.toLowerCase().endsWith('.json')) {
-                const fileObject = await window.api.handleFilePath(data.payload[0].path);
-                if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); }
-              }
-              if (!sessionLoaded) {
-                const fileProcessingPromises = data.payload.map((fileInfo) => processFilePath(fileInfo.path));
-                await Promise.all(fileProcessingPromises);
-                if (currentPromptConfig.isDirectSend_file) {
-                  shouldDirectSend = true;
-                  isFileDirectSend = true;
-                }
-              }
-            } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
+            } else { prompt.value = data.payload; }
+          }
         }
+      } else if (data.type === "img" && data.payload) {
+        if (currentPromptConfig.isDirectSend_normal) {
+          history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
+          chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
+          shouldDirectSend = true;
+        } else {
+          fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(data.payload) });
+        }
+      } else if (data.type === "files" && data.payload) {
+        try {
+          let sessionLoaded = false;
+          if (data.payload.length === 1 && data.payload[0].path.toLowerCase().endsWith('.json')) {
+            const fileObject = await window.api.handleFilePath(data.payload[0].path);
+            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); }
+          }
+          if (!sessionLoaded) {
+            const fileProcessingPromises = data.payload.map((fileInfo) => processFilePath(fileInfo.path));
+            await Promise.all(fileProcessingPromises);
+            if (currentPromptConfig.isDirectSend_file) {
+              shouldDirectSend = true;
+              isFileDirectSend = true;
+            }
+          }
+        } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
+      }
     }
-    
+    if (autoCloseOnBlur.value) {
+      window.addEventListener('blur', closePage);
+    }
+
     // 步骤 7: 自动发送和UI更新
     if (shouldDirectSend) {
       scrollToBottom();
       if (isFileDirectSend) await askAI(false);
       else await askAI(true);
     }
-    
+
     await addCopyButtonsToCodeBlocks();
     await attachImageErrorHandlers();
 
@@ -880,9 +881,9 @@ onMounted(async () => {
   } else {
     console.warn("window.preload.receiveMsg not found. Falling back to default initialization.");
     ElMessage.warning({
-        message: '窗口初始化数据缺失，已加载默认对话。可能是预加载脚本不匹配导致。',
-        duration: 5000,
-        showClose: true,
+      message: '窗口初始化数据缺失，已加载默认对话。可能是预加载脚本不匹配导致。',
+      duration: 5000,
+      showClose: true,
     });
     await initializeWindow(null);
   }
@@ -1847,22 +1848,22 @@ const handleSaveModel = async (modelToSave) => {
     showDismissibleMessage.warning('无法保存模型，因为当前不是一个已定义的快捷助手。');
     return;
   }
-  
+
   try {
     const result = await window.api.saveSetting(`prompts.${CODE.value}.model`, modelToSave);
     changeModel_page.value = false;
     if (result && result.success) {
-        // 更新本地配置
-        currentConfig.value.prompts[CODE.value].model = modelToSave;
-        showDismissibleMessage.success(`模型已为快捷助手 "${CODE.value}" 保存成功！`);
+      // 更新本地配置
+      currentConfig.value.prompts[CODE.value].model = modelToSave;
+      showDismissibleMessage.success(`模型已为快捷助手 "${CODE.value}" 保存成功！`);
     } else {
-        throw new Error(result?.message || '保存失败');
+      throw new Error(result?.message || '保存失败');
     }
   } catch (error) {
-      console.error("保存模型失败:", error);
-      showDismissibleMessage.error(`保存模型失败: ${error.message}`);
+    console.error("保存模型失败:", error);
+    showDismissibleMessage.error(`保存模型失败: ${error.message}`);
   }
-  
+
   changeModel_page.value = false; // 保存后关闭弹窗
 };
 </script>
@@ -1969,7 +1970,7 @@ const handleSaveModel = async (modelToSave) => {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                  }}</el-tag>
+                }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>

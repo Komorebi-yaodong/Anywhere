@@ -21,6 +21,13 @@ const {
   handleFilePath,
   sendfileDirect,
   saveFile,
+  selectDirectory,
+  listJsonFiles,
+  readLocalFile,
+  renameLocalFile,
+  deleteLocalFile,
+  writeLocalFile,
+  setFileMtime,
 } = require('./file.js');
 
 const {
@@ -47,6 +54,13 @@ window.api = {
   handleFilePath,
   sendfileDirect,
   saveFile,
+  selectDirectory,
+  listJsonFiles,
+  readLocalFile,
+  renameLocalFile,
+  deleteLocalFile,
+  writeLocalFile,
+  setFileMtime,
   sethotkey,
   coderedirect,
   setZoomFactor,

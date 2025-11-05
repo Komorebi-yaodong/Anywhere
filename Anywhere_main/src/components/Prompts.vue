@@ -590,7 +590,6 @@ async function refreshPromptsConfig() {
 <template>
   <div class="page-container">
     <div class="prompts-header">
-      <!-- "全部"标签，使用新的两行布局 -->
       <div class="custom-all-tab" :class="{ 'is-active': activeTabName === '__ALL_PROMPTS__' }"
         @click="activeTabName = '__ALL_PROMPTS__'">
         <div class="tab-label-multiline">
@@ -1161,7 +1160,7 @@ async function refreshPromptsConfig() {
 }
 
 .prompt-card {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
   padding: 16px;
