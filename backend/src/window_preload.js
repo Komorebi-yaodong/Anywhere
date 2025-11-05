@@ -17,6 +17,7 @@ const {
 const {
     handleFilePath,
     saveFile,
+    writeLocalFile,
 } = require('./file.js');
 
 // [MODIFIED] 引入重构后的 MCP 模块
@@ -63,6 +64,7 @@ window.api = {
     copyText,
     handleFilePath,
     saveFile,
+    writeLocalFile,
     sethotkey,
     setZoomFactor,
     defaultConfig,

@@ -1095,7 +1095,7 @@ file end` };
     async function deleteLocalFile(filePath) {
       return await fs.unlink(filePath);
     }
-    async function writeLocalFile(filePath, content, signal) {
+    async function writeLocalFile2(filePath, content, signal) {
       return await fs.writeFile(filePath, content, { encoding: "utf-8", signal });
     }
     async function setFileMtime(filePath, mtime) {
@@ -1113,7 +1113,7 @@ file end` };
       readLocalFile,
       renameLocalFile,
       deleteLocalFile,
-      writeLocalFile,
+      writeLocalFile: writeLocalFile2,
       setFileMtime
     };
   }
@@ -89083,7 +89083,8 @@ var {
 } = require_data();
 var {
   handleFilePath,
-  saveFile
+  saveFile,
+  writeLocalFile
 } = require_file();
 var {
   initializeMcpClient,
@@ -89122,6 +89123,7 @@ window.api = {
   copyText,
   handleFilePath,
   saveFile,
+  writeLocalFile,
   sethotkey,
   setZoomFactor,
   defaultConfig,

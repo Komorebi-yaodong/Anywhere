@@ -45,6 +45,8 @@ const focusedMessageIndex = ref(null);
 const lastPosition = ref({ x: null, y: null });
 let positionCheckInterval = null;
 
+let autoSaveInterval = null;
+
 const setMessageRef = (el, index) => {
   if (el) messageRefs.set(index, el);
   else messageRefs.delete(index, el);
@@ -739,16 +741,7 @@ onMounted(async () => {
       showDismissibleMessage.error('加载用户配置失败，使用默认配置。');
     }
 
-    // 步骤 2: 应用基础设置
-    zoomLevel.value = currentConfig.value.zoom || 1;
-    if (window.api && typeof window.api.setZoomFactor === 'function') {
-      window.api.setZoomFactor(zoomLevel.value);
-    }
-    if (currentConfig.value.isDarkMode) {
-      document.documentElement.classList.add('dark');
-    }
-
-    // 步骤 3: 获取用户信息
+    // 步骤 2: 获取用户信息
     try {
       const userInfo = await window.api.getUser();
       UserAvart.value = userInfo.avatar;
@@ -756,7 +749,7 @@ onMounted(async () => {
       UserAvart.value = "user.png";
     }
 
-    // 步骤 4: 设置模型列表
+    // 步骤 3: 设置模型列表
     modelList.value = []; modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
@@ -769,9 +762,18 @@ onMounted(async () => {
       }
     });
 
-    // 步骤 5: 根据传入数据或默认值设置窗口状态
+    // 步骤 4: 根据传入数据或默认值设置窗口状态
     const code = data?.code || "AI"; // 如果没有传入code，则默认为 "AI"
     const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
+
+    // BUG修复：从快捷助手配置中读取缩放，并提供全局和默认回退
+    zoomLevel.value = currentPromptConfig.zoom || currentConfig.value.zoom || 1;
+    if (window.api && typeof window.api.setZoomFactor === 'function') {
+      window.api.setZoomFactor(zoomLevel.value);
+    }
+    if (currentConfig.value.isDarkMode) {
+      document.documentElement.classList.add('dark');
+    }
 
     CODE.value = code;
     document.title = code;
@@ -801,16 +803,15 @@ onMounted(async () => {
       chat_show.value = [{ role: "system", content: currentPromptConfig.prompt, id: messageIdCounter.value++ }];
     } else {
       history.value = []; chat_show.value = [];
-    }    
+    }
 
-    // 步骤 6: 处理传入的 payload（如果有）
+    // 步骤 5: 处理传入的 payload（如果有）
     let shouldDirectSend = false;
     let isFileDirectSend = false;
     if (data) {
       basic_msg.value = { code: data.code, type: data.type, payload: data.payload };
       if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
 
-      // 此处是您原有的 payload 处理逻辑
       if (data.type === "over" && data.payload) {
         let sessionLoaded = false;
         try {
@@ -857,7 +858,7 @@ onMounted(async () => {
       window.addEventListener('blur', closePage);
     }
 
-    // 步骤 7: 自动发送和UI更新
+    // 步骤 6: 自动发送和UI更新
     if (shouldDirectSend) {
       scrollToBottom();
       if (isFileDirectSend) await askAI(false);
@@ -867,7 +868,7 @@ onMounted(async () => {
     await addCopyButtonsToCodeBlocks();
     await attachImageErrorHandlers();
 
-    // 步骤 8: 聚焦和启动位置轮询
+    // 步骤 7: 聚焦和启动位置轮询
     setTimeout(() => {
       chatInputRef.value?.focus({ cursor: 'end' });
       startPositionPolling();
@@ -887,7 +888,32 @@ onMounted(async () => {
     });
     await initializeWindow(null);
   }
+  if (autoSaveInterval) clearInterval(autoSaveInterval);
+  autoSaveInterval = setInterval(autoSaveSession, 15000);
 });
+
+const autoSaveSession = async () => {
+  // 检查是否满足自动保存的条件：
+  // 1. AI不在回复中 (loading.value === false)
+  // 2. 本地保存路径已配置
+  // 3. 当前会话有默认文件名 (通过加载或手动保存获得)
+  if (loading.value || !currentConfig.value?.webdav?.localChatPath || !defaultConversationName.value) {
+    return;
+  }
+
+  try {
+    const sessionData = getSessionDataAsObject();
+    const jsonString = JSON.stringify(sessionData, null, 2);
+    const filePath = `${currentConfig.value.webdav.localChatPath}/${defaultConversationName.value}.json`;
+    
+    // 调用后端API静默写入文件
+    await window.api.writeLocalFile(filePath, jsonString);
+    // console.log(`Auto-saved session to ${filePath}`); // 调试时可以取消注释
+  } catch (error) {
+    // 自动保存失败时，只在控制台打印错误，不打扰用户
+    console.error('Auto-save failed:', error);
+  }
+};
 
 onBeforeUnmount(async () => {
   if (positionCheckInterval) clearInterval(positionCheckInterval);
@@ -905,17 +931,23 @@ const saveWindowSize = async () => {
     showDismissibleMessage.warning('无法保存窗口设置，因为当前不是一个已定义的快捷助手。');
     return;
   }
+  
   const settingsToSave = {
-    window_height: window.innerHeight,
-    window_width: window.innerWidth,
+    window_height: Math.round(window.innerHeight * zoomLevel.value),
+    window_width: Math.round(window.innerWidth * zoomLevel.value),
     zoom: zoomLevel.value,
   };
+
   try {
     const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
     if (result.success) {
-      showDismissibleMessage.success('当前快捷助手的窗口大小及缩放已保存');
-      currentConfig.value.prompts[CODE.value] = { ...currentConfig.value.prompts[CODE.value], ...settingsToSave };
-    } else { showDismissibleMessage.error(`保存失败: ${result.message}`); }
+      showDismissibleMessage.success('当前快捷助手的窗口大小与缩放已保存');
+      if (currentConfig.value.prompts[CODE.value]) {
+         Object.assign(currentConfig.value.prompts[CODE.value], settingsToSave);
+      }
+    } else { 
+      showDismissibleMessage.error(`保存失败: ${result.message}`); 
+    }
   } catch (error) {
     console.error("Error saving window settings:", error);
     showDismissibleMessage.error('保存窗口设置时出错');
@@ -1048,6 +1080,7 @@ const saveSessionAsMarkdown = async () => {
     });
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
 };
+
 const saveSessionAsJson = async () => {
   const sessionData = getSessionDataAsObject();
   const jsonString = JSON.stringify(sessionData, null, 2);
@@ -1071,12 +1104,30 @@ const saveSessionAsJson = async () => {
           const finalFilename = finalBasename + '.json';
           instance.confirmButtonLoading = true;
           try {
-            await window.api.saveFile({ title: '保存聊天会话', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }], fileContent: jsonString });
+            let fullDefaultPath = finalFilename;
+            const localChatPath = currentConfig.value.webdav?.localChatPath;
+            if (localChatPath) {
+                // 根据操作系统拼接路径
+                const separator = basic_msg.value.os === 'win' ? '\\' : '/';
+                fullDefaultPath = `${localChatPath}${separator}${finalFilename}`;
+            }
+
+            await window.api.saveFile({ 
+                title: '保存聊天会话', 
+                defaultPath: fullDefaultPath, // <--- 修改此处
+                buttonLabel: '保存', 
+                filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }], 
+                fileContent: jsonString 
+            });
+
             defaultConversationName.value = finalBasename;
             showDismissibleMessage.success('会话已成功保存！');
             done();
           } catch (error) {
-            if (!error.message.includes('canceled by the user')) { console.error('保存会话失败:', error); showDismissibleMessage.error(`保存失败: ${error.message}`); }
+            if (!error.message.includes('canceled by the user') && !error.message.includes('用户取消')) { 
+                console.error('保存会话失败:', error); 
+                showDismissibleMessage.error(`保存失败: ${error.message}`); 
+            }
             done();
           } finally { instance.confirmButtonLoading = false; }
         } else { done(); }
@@ -1970,7 +2021,7 @@ const handleSaveModel = async (modelToSave) => {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                }}</el-tag>
+                  }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
