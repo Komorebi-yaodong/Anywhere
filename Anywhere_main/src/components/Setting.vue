@@ -588,7 +588,7 @@ async function selectLocalChatPath() {
               t('setting.dataManagement.exportButton')
               }}</el-button>
           </div>
-          <div class="setting-option-item no-border">
+          <div class="setting-option-item">
             <div class="setting-text-content">
               <span class="setting-option-label">{{ t('setting.dataManagement.importLabel') }}</span>
               <span class="setting-option-description">{{ t('setting.dataManagement.importDesc') }}</span>
@@ -596,6 +596,19 @@ async function selectLocalChatPath() {
             <el-button @click="importConfig" :icon="Upload" size="default" plain>{{
               t('setting.dataManagement.importButton')
               }}</el-button>
+          </div>
+          <div class="setting-option-item no-border">
+            <div class="setting-text-content">
+              <span class="setting-option-label">{{ t('setting.webdav.localChatPath') }}</span>
+              <span class="setting-option-description">{{ t('setting.webdav.localChatPathPlaceholder') }}</span>
+            </div>
+            <el-input v-model="currentConfig.webdav.localChatPath"
+              @change="(value) => saveSingleSetting('webdav.localChatPath', value)"
+              :placeholder="t('setting.webdav.localChatPathPlaceholder')" style="width: 320px;">
+              <template #append>
+                <el-button @click="selectLocalChatPath">选择文件夹</el-button>
+              </template>
+            </el-input>
           </div>
         </el-card>
 
@@ -623,16 +636,7 @@ async function selectLocalChatPath() {
             <el-form-item :label="t('setting.webdav.backupRestoreTitle')" class="no-margin-bottom">
               <el-button @click="backupToWebdav" :icon="Upload">{{ t('setting.webdav.backupButton') }}</el-button>
               <el-button @click="openBackupManager" :icon="FolderOpened">{{ t('setting.webdav.restoreButton')
-                }}</el-button>
-            </el-form-item>
-            <el-form-item :label="t('setting.webdav.localChatPath')">
-              <el-input v-model="currentConfig.webdav.localChatPath"
-                @change="(value) => saveSingleSetting('webdav.localChatPath', value)"
-                :placeholder="t('setting.webdav.localChatPathPlaceholder')">
-                <template #append>
-                  <el-button @click="selectLocalChatPath">选择文件夹</el-button>
-                </template>
-              </el-input>
+              }}</el-button>
             </el-form-item>
           </el-form>
         </el-card>
@@ -661,7 +665,7 @@ async function selectLocalChatPath() {
                 t('setting.webdav.manager.restore') }}</el-button>
               <el-divider direction="vertical" />
               <el-button link type="danger" @click="deleteFile(scope.row)">{{ t('setting.webdav.manager.delete')
-                }}</el-button>
+              }}</el-button>
             </div>
           </template>
         </el-table-column>

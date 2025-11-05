@@ -110,10 +110,15 @@ async function fetchCloudFiles() {
     } catch (error) { ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`); cloudChatFiles.value = []; } finally { isTableLoading.value = false; }
 }
 async function refreshData() {
-    if (localChatPath.value) await fetchLocalFiles();
-    if (isWebdavConfigValid.value) {
-        await fetchCloudFiles();
-        isCloudDataLoaded.value = true;
+    if (activeView.value === 'local') {
+        if (localChatPath.value) {
+            await fetchLocalFiles();
+        }
+    } else if (activeView.value === 'cloud') {
+        if (isWebdavConfigValid.value) {
+            await fetchCloudFiles();
+            isCloudDataLoaded.value = true;
+        }
     }
 }
 async function startChat(file) {
