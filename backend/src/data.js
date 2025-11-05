@@ -899,7 +899,7 @@ async function openWindow(config, msg) {
       y: y,
       webPreferences: {
         preload: "./window_preload.js",
-        // devTools: true
+        devTools: true
       },
     },
     () => {
@@ -907,7 +907,7 @@ async function openWindow(config, msg) {
       ubWindow.show();
     }
   );
-  // ubWindow.webContents.openDevTools({ mode: "detach" });
+  ubWindow.webContents.openDevTools({ mode: "detach" });
 }
 
 async function coderedirect(label, payload) {

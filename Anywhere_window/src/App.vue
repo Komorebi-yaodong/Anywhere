@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElTooltip, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckboxGroup, ElCheckbox, ElButtonGroup, ElTag, ElAlert } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag } from 'element-plus';
 import { createClient } from "webdav/web";
 
 import ChatHeader from './components/ChatHeader.vue';
@@ -11,11 +11,7 @@ import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 import { DocumentCopy, Download, Search } from '@element-plus/icons-vue';
 
 import OpenAI from 'openai';
-// No longer import from mcp-client.js
 
-// [......] 省略与之前相同的函数定义 (showDismissibleMessage, base64ToBuffer, parseWord, etc.)
-// 为节省篇幅，这里不再重复粘贴，请确保这些函数在您的文件中仍然存在
-// [MODIFIED] 将所有初始化逻辑都放入 onMounted 和 receiveMsg
 const showDismissibleMessage = (options) => {
   const opts = typeof options === 'string' ? { message: options } : options;
   let messageInstance = null;
@@ -46,9 +42,53 @@ const isForcingScroll = ref(false);
 const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
 
+const lastPosition = ref({ x: null, y: null });
+let positionCheckInterval = null;
+
 const setMessageRef = (el, index) => {
   if (el) messageRefs.set(index, el);
   else messageRefs.delete(index, el);
+};
+
+
+const saveWindowPosition = async () => {
+  if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
+    return; // 如果不是已定义的快捷助手，则不保存
+  }
+  const settingsToSave = {
+    position_x: window.screenX,
+    position_y: window.screenY,
+  };
+  try {
+    // 直接调用 API，不显示提示信息，以避免打扰
+    const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
+    if (result.success) {
+      // 更新本地配置以保持同步
+      if (currentConfig.value.prompts[CODE.value]) {
+        currentConfig.value.prompts[CODE.value].position_x = settingsToSave.position_x;
+        currentConfig.value.prompts[CODE.value].position_y = settingsToSave.position_y;
+      }
+    }
+  } catch (error) {
+    console.error("自动保存窗口位置失败:", error);
+  }
+};
+
+const startPositionPolling = () => {
+  if (positionCheckInterval) {
+    clearInterval(positionCheckInterval);
+  }
+  // 初始化起始位置
+  lastPosition.value.x = window.screenX;
+  lastPosition.value.y = window.screenY;
+
+  positionCheckInterval = setInterval(() => {
+    if (lastPosition.value.x !== window.screenX || lastPosition.value.y !== window.screenY) {
+      lastPosition.value.x = window.screenX;
+      lastPosition.value.y = window.screenY;
+      saveWindowPosition();
+    }
+  }, 500);
 };
 
 const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
@@ -375,9 +415,8 @@ const handleChangeModel = (chosenModel) => {
   const provider = currentConfig.value.providers[currentProviderID.value];
   base_url.value = provider.url;
   api_key.value = provider.api_key;
-  changeModel_page.value = false;
+  // changeModel_page.value = false;
   chatInputRef.value?.focus({ cursor: 'end' });
-  showDismissibleMessage.success(`模型已切换为: ${modelMap.value[chosenModel]}`);
 };
 const handleTogglePin = () => {
   autoCloseOnBlur.value = !autoCloseOnBlur.value;
@@ -619,15 +658,12 @@ const saveSystemPrompt = async () => {
   try {
     const promptExists = !!currentConfig.value.prompts[CODE.value];
     if (promptExists) {
-      // 更新现有快捷助手
       await window.api.saveSetting(`prompts.${CODE.value}.prompt`, newPromptContent);
       currentConfig.value.prompts[CODE.value].prompt = newPromptContent;
       showDismissibleMessage.success('快捷助手提示词已更新');
     } else {
-      // 创建新的快捷助手
       const latestConfigData = await window.api.getConfig();
 
-      // 使用窗口加载时保存的源配置作为基础，如果没有则回退到默认AI配置
       const baseConfig = sourcePromptConfig.value || defaultConfig.config.prompts.AI;
 
       const newPrompt = {
@@ -680,164 +716,180 @@ watch(chat_show, async () => {
 }, { deep: true, flush: 'post' });
 
 onMounted(async () => {
-  if (isInit.value) return; 
+  if (isInit.value) return;
   isInit.value = true;
 
-  // Setup global event listeners
+  // 初始化通用事件监听器
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
   window.addEventListener('blur', handleWindowBlur);
-
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) {
-      chatMainElement.addEventListener('click', handleMarkdownImageClick);
+    chatMainElement.addEventListener('click', handleMarkdownImageClick);
   }
+  
+  // 统一的初始化函数，用于成功和失败两种情况
+  const initializeWindow = async (data = null) => {
+    // 步骤 1: 加载配置
+    try {
+      const configData = data?.config ? { config: data.config } : await window.api.getConfig();
+      currentConfig.value = configData.config;
+    } catch (err) {
+      currentConfig.value = defaultConfig.config;
+      showDismissibleMessage.error('加载用户配置失败，使用默认配置。');
+    }
 
-  // Main initialization logic is now inside receiveMsg
-  window.preload.receiveMsg(async (data) => {
-      // [OPTIMIZATION] Use config passed from main process
-      if (data.config) {
-          currentConfig.value = data.config;
-      } else {
-          // Fallback if config is not passed (shouldn't happen with the new flow)
-          try {
-              const configData = await window.api.getConfig();
-              currentConfig.value = configData.config;
-          } catch (err) {
-              currentConfig.value = defaultConfig.config;
-              showDismissibleMessage.error('加载配置失败，使用默认配置');
-          }
+    // 步骤 2: 应用基础设置
+    zoomLevel.value = currentConfig.value.zoom || 1;
+    if (window.api && typeof window.api.setZoomFactor === 'function') {
+      window.api.setZoomFactor(zoomLevel.value);
+    }
+    if (currentConfig.value.isDarkMode) {
+      document.documentElement.classList.add('dark');
+    }
+
+    // 步骤 3: 获取用户信息
+    try {
+      const userInfo = await window.api.getUser();
+      UserAvart.value = userInfo.avatar;
+    } catch (err) {
+      UserAvart.value = "user.png";
+    }
+
+    // 步骤 4: 设置模型列表
+    modelList.value = []; modelMap.value = {};
+    currentConfig.value.providerOrder.forEach(id => {
+      const provider = currentConfig.value.providers[id];
+      if (provider?.enable) {
+        provider.modelList.forEach(m => {
+          const key = `${id}|${m}`;
+          modelList.value.push({ key, value: key, label: `${provider.name}|${m}` });
+          modelMap.value[key] = `${provider.name}|${m}`;
+        });
       }
+    });
+    
+    // 步骤 5: 根据传入数据或默认值设置窗口状态
+    const code = data?.code || "AI"; // 如果没有传入code，则默认为 "AI"
+    const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
+    
+    CODE.value = code;
+    document.title = code;
+    sourcePromptConfig.value = currentPromptConfig;
 
-      // Apply settings from the now-guaranteed-to-be-present config
-      zoomLevel.value = currentConfig.value.zoom || 1;
-      if (window.api && typeof window.api.setZoomFactor === 'function') {
-          window.api.setZoomFactor(zoomLevel.value);
-      }
-      if (currentConfig.value.isDarkMode) {
-          document.documentElement.classList.add('dark');
-      }
+    if (currentPromptConfig.icon) {
+      AIAvart.value = currentPromptConfig.icon;
+      favicon.value = currentPromptConfig.icon;
+    } else {
+      AIAvart.value = "ai.svg";
+      favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
+    }
 
-      try {
-          const userInfo = await window.api.getUser();
-          UserAvart.value = userInfo.avatar;
-      } catch (err) {
-          UserAvart.value = "user.png";
-      }
+    autoCloseOnBlur.value = currentPromptConfig.autoCloseOnBlur ?? true;
+    tempReasoningEffort.value = currentPromptConfig.reasoning_effort || 'default';
+    model.value = currentPromptConfig.model || modelList.value[0]?.value || '';
+    selectedVoice.value = currentPromptConfig.voice || null;
 
-      // The rest of the initialization logic remains the same
-      sourcePromptConfig.value = currentConfig.value.prompts[data?.code];
+    if (model.value) {
+        currentProviderID.value = model.value.split("|")[0];
+        base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
+        api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
+    }
 
-      if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
-      else defaultConversationName.value = "";
-      basic_msg.value = { code: data?.code, type: data?.type, payload: data?.payload };
-      document.title = basic_msg.value.code; CODE.value = basic_msg.value.code;
-      const currentPromptConfig = currentConfig.value.prompts[basic_msg.value.code];
+    if (currentPromptConfig.prompt) {
+      history.value = [{ role: "system", content: currentPromptConfig.prompt }];
+      chat_show.value = [{ role: "system", content: currentPromptConfig.prompt, id: messageIdCounter.value++ }];
+    } else {
+      history.value = []; chat_show.value = [];
+    }
 
-      if (currentPromptConfig && currentPromptConfig.icon) {
-        AIAvart.value = currentPromptConfig.icon;
-        favicon.value = currentPromptConfig.icon;
-      } else {
-        AIAvart.value = "ai.svg";
-        favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
-      }
+    if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
 
-      autoCloseOnBlur.value = currentPromptConfig?.autoCloseOnBlur ?? true;
-      tempReasoningEffort.value = currentPromptConfig?.reasoning_effort || 'default';
-      model.value = currentPromptConfig?.model || defaultConfig.config.prompts.AI.model;
-      selectedVoice.value = currentPromptConfig?.voice || null;
-      modelList.value = []; modelMap.value = {};
-      currentConfig.value.providerOrder.forEach(id => {
-        const provider = currentConfig.value.providers[id];
-        if (provider?.enable) {
-          provider.modelList.forEach(m => {
-            const key = `${id}|${m}`;
-            modelList.value.push({ key, value: key, label: `${provider.name}|${m}` });
-            modelMap.value[key] = `${provider.name}|${m}`;
-          });
-        }
-      });
-      if (!modelMap.value[model.value]) model.value = modelList.value[0]?.value;
-      currentProviderID.value = model.value.split("|")[0];
-      base_url.value = currentConfig.value.providers[currentProviderID.value]?.url;
-      api_key.value = currentConfig.value.providers[currentProviderID.value]?.api_key;
-      if (currentPromptConfig?.prompt) { history.value = [{ role: "system", content: currentPromptConfig?.prompt || "" }]; chat_show.value = [{ role: "system", content: currentPromptConfig?.prompt || "", id: messageIdCounter.value++ }]; }
-      else { history.value = []; chat_show.value = []; }
-
-      let shouldDirectSend = false;
-      let isFileDirectSend = false;
-
-      if (basic_msg.value.type === "over" && basic_msg.value.payload) {
-        let sessionLoaded = false;
-        try {
-          let old_session = JSON.parse(basic_msg.value.payload);
-          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); chatInputRef.value?.focus({ cursor: 'end' }); }
-        } catch (error) { }
-        if (!sessionLoaded) {
-          if (CODE.value.trim().toLowerCase().includes(basic_msg.value.payload.trim().toLowerCase())) {scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' }); }
-          else {
-            if (currentPromptConfig?.isDirectSend_normal) {
-              history.value.push({ role: "user", content: basic_msg.value.payload });
-              chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: basic_msg.value.payload }] });
-              shouldDirectSend = true;
-            } else { prompt.value = basic_msg.value.payload; scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' }); }
-          }
-        }
-      } else if (basic_msg.value.type === "img" && basic_msg.value.payload) {
-        if (currentPromptConfig?.isDirectSend_normal) {
-          history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
-          chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(basic_msg.value.payload) } }] });
-          shouldDirectSend = true;
-        } else {
-          fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(basic_msg.value.payload) });
-          scrollToBottom(); chatInputRef.value?.focus({ cursor: 'end' });
-        }
-      } else if (basic_msg.value.type === "files" && basic_msg.value.payload) {
-        try {
-          let sessionLoaded = false;
-          if (basic_msg.value.payload.length === 1 && basic_msg.value.payload[0].path.toLowerCase().endsWith('.json')) {
-            const fileObject = await window.api.handleFilePath(basic_msg.value.payload[0].path);
-            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); chatInputRef.value?.focus({ cursor: 'end' }); }
-          }
-          if (!sessionLoaded) {
-            const fileProcessingPromises = basic_msg.value.payload.map((fileInfo) => processFilePath(fileInfo.path));
-            await Promise.all(fileProcessingPromises);
-            if (currentPromptConfig?.isDirectSend_file) {
-              shouldDirectSend = true;
-              isFileDirectSend = true;
+    // 步骤 6: 处理传入的 payload（如果有）
+    let shouldDirectSend = false;
+    let isFileDirectSend = false;
+    if (data) {
+        basic_msg.value = { code: data.code, type: data.type, payload: data.payload };
+        if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
+        
+        // 此处是您原有的 payload 处理逻辑
+        if (data.type === "over" && data.payload) {
+            let sessionLoaded = false;
+            try {
+              let old_session = JSON.parse(data.payload);
+              if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); }
+            } catch (error) { }
+            if (!sessionLoaded) {
+              if (CODE.value.trim().toLowerCase().includes(data.payload.trim().toLowerCase())) { /* do nothing */ }
+              else {
+                if (currentPromptConfig.isDirectSend_normal) {
+                  history.value.push({ role: "user", content: data.payload });
+                  chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: data.payload }] });
+                  shouldDirectSend = true;
+                } else { prompt.value = data.payload; }
+              }
             }
-            else { chatInputRef.value?.focus({ cursor: 'end' }); scrollToBottom(); }
-          }
-        } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
-      }
-      
-      if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
-
-      if (currentPromptConfig?.defaultMcpServers && currentPromptConfig.defaultMcpServers.length > 0) {
-        sessionMcpServerIds.value = [...currentPromptConfig.defaultMcpServers];
-        await applyMcpTools(); // 等待 MCP 加载完成
-      }
-
-      if (shouldDirectSend) {
-        scrollToBottom();
-        if (isFileDirectSend) {
-          await askAI(false);
-        } else {
-          await askAI(true);
+        } else if (data.type === "img" && data.payload) {
+            if (currentPromptConfig.isDirectSend_normal) {
+              history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
+              chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
+              shouldDirectSend = true;
+            } else {
+              fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(data.payload) });
+            }
+        } else if (data.type === "files" && data.payload) {
+            try {
+              let sessionLoaded = false;
+              if (data.payload.length === 1 && data.payload[0].path.toLowerCase().endsWith('.json')) {
+                const fileObject = await window.api.handleFilePath(data.payload[0].path);
+                if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); }
+              }
+              if (!sessionLoaded) {
+                const fileProcessingPromises = data.payload.map((fileInfo) => processFilePath(fileInfo.path));
+                await Promise.all(fileProcessingPromises);
+                if (currentPromptConfig.isDirectSend_file) {
+                  shouldDirectSend = true;
+                  isFileDirectSend = true;
+                }
+              }
+            } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
         }
-      }
+    }
+    
+    // 步骤 7: 自动发送和UI更新
+    if (shouldDirectSend) {
+      scrollToBottom();
+      if (isFileDirectSend) await askAI(false);
+      else await askAI(true);
+    }
+    
+    await addCopyButtonsToCodeBlocks();
+    await attachImageErrorHandlers();
 
-      await addCopyButtonsToCodeBlocks();
-      await attachImageErrorHandlers();
+    // 步骤 8: 聚焦和启动位置轮询
+    setTimeout(() => {
+      chatInputRef.value?.focus({ cursor: 'end' });
+      startPositionPolling();
+    }, 100);
+  };
 
-      setTimeout(() => {
-        chatInputRef.value?.focus({ cursor: 'end' });
-      }, 100);
-  });
+  if (window.preload && typeof window.preload.receiveMsg === 'function') {
+    window.preload.receiveMsg(async (data) => {
+      await initializeWindow(data);
+    });
+  } else {
+    console.warn("window.preload.receiveMsg not found. Falling back to default initialization.");
+    ElMessage.warning({
+        message: '窗口初始化数据缺失，已加载默认对话。可能是预加载脚本不匹配导致。',
+        duration: 5000,
+        showClose: true,
+    });
+    await initializeWindow(null);
+  }
 });
-// [......] 省略与之前相同的函数定义 (onBeforeUnmount, saveWindowSize, etc.)
-// 为节省篇幅，这里不再重复粘贴，请确保这些函数在您的文件中仍然存在
+
 onBeforeUnmount(async () => {
+  if (positionCheckInterval) clearInterval(positionCheckInterval);
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('blur', handleWindowBlur);
@@ -855,14 +907,12 @@ const saveWindowSize = async () => {
   const settingsToSave = {
     window_height: window.innerHeight,
     window_width: window.innerWidth,
-    position_x: window.screenX,
-    position_y: window.screenY,
     zoom: zoomLevel.value,
   };
   try {
     const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
     if (result.success) {
-      showDismissibleMessage.success('当前快捷助手的窗口大小、位置及缩放已保存');
+      showDismissibleMessage.success('当前快捷助手的窗口大小及缩放已保存');
       currentConfig.value.prompts[CODE.value] = { ...currentConfig.value.prompts[CODE.value], ...settingsToSave };
     } else { showDismissibleMessage.error(`保存失败: ${result.message}`); }
   } catch (error) {
@@ -1791,6 +1841,30 @@ function getDisplayTypeName(type) {
 
   else return type
 }
+
+const handleSaveModel = async (modelToSave) => {
+  if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
+    showDismissibleMessage.warning('无法保存模型，因为当前不是一个已定义的快捷助手。');
+    return;
+  }
+  
+  try {
+    const result = await window.api.saveSetting(`prompts.${CODE.value}.model`, modelToSave);
+    changeModel_page.value = false;
+    if (result && result.success) {
+        // 更新本地配置
+        currentConfig.value.prompts[CODE.value].model = modelToSave;
+        showDismissibleMessage.success(`模型已为快捷助手 "${CODE.value}" 保存成功！`);
+    } else {
+        throw new Error(result?.message || '保存失败');
+    }
+  } catch (error) {
+      console.error("保存模型失败:", error);
+      showDismissibleMessage.error(`保存模型失败: ${error.message}`);
+  }
+  
+  changeModel_page.value = false; // 保存后关闭弹窗
+};
 </script>
 
 <template>
@@ -1843,7 +1917,7 @@ function getDisplayTypeName(type) {
   </main>
 
   <ModelSelectionDialog v-model="changeModel_page" :modelList="modelList" :currentModel="model"
-    @select="handleChangeModel"/>
+    @select="handleChangeModel" @save-model="handleSaveModel" />
 
   <el-dialog v-model="systemPromptDialogVisible" title="编辑系统提示词" custom-class="system-prompt-dialog" width="60%"
     :show-close="true" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"
@@ -1895,7 +1969,7 @@ function getDisplayTypeName(type) {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                }}</el-tag>
+                  }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>

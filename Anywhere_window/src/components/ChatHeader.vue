@@ -24,7 +24,7 @@ const emit = defineEmits([
   <el-header class="header">
     <div class="header-content-wrapper">
       <div class="header-left">
-        <el-tooltip content="保存窗口大小、位置及缩放" placement="bottom">
+        <el-tooltip content="保存窗口大小与缩放" placement="bottom">
           <el-button @click="emit('save-window-size')">
             <img :src="favicon" class="windows-logo" alt="App logo">
           </el-button>

@@ -31,7 +31,6 @@ const channel = "window";
 window.preload = {
     receiveMsg: (callback) => {
         ipcRenderer.on(channel, (event, data) => {
-            parentId = event.senderId;
             if (data) {
                 callback(data);
             }

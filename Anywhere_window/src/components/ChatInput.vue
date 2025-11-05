@@ -265,7 +265,7 @@ const stopRecordingAndCleanup = () => {
 const handleCancelRecording = () => {
     isCancelledByButton.value = true;
     ElMessage.info('录音已取消');
-    
+
     if (currentRecordingSource.value === 'microphone' && recorder) {
         recorder.stop(() => {
             stopRecordingAndCleanup();
@@ -284,8 +284,8 @@ const handleConfirmAndSendRecording = () => {
     if (currentRecordingSource.value === 'microphone' && recorder) {
         recorder.stop((blob) => {
             if (isCancelledByButton.value) {
-                 stopRecordingAndCleanup();
-                 return;
+                stopRecordingAndCleanup();
+                return;
             }
             const now = new Date();
             const timestamp = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
@@ -367,13 +367,14 @@ defineExpose({ focus, senderRef });
             <el-col :span="22">
                 <div class="waveform-display-area">
                     <!-- [MODIFIED] Conditionally render waveform or text -->
-                    <div v-if="currentRecordingSource === 'microphone'" ref="waveformCanvasContainer" class="waveform-canvas"></div>
+                    <div v-if="currentRecordingSource === 'microphone'" ref="waveformCanvasContainer"
+                        class="waveform-canvas"></div>
                     <span v-else class="recording-status-text">正在录制系统音频...</span>
                 </div>
             </el-col>
             <el-col :span="1" />
         </el-row>
-        
+
         <!-- [MODIFIED] Redesigned Audio Source Selector -->
         <el-row v-if="isAudioSourceSelectorVisible" class="option-selector-row">
             <el-col :span="1" />
@@ -438,12 +439,9 @@ defineExpose({ focus, senderRef });
             <el-col :span="22">
                 <div class="chat-input-area-vertical">
                     <div class="input-wrapper">
-                        <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt"
-                            type="textarea" 
+                        <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
                             :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容'"
-                            :autosize="{ minRows: 1, maxRows: 15 }"
-                            resize="none" 
-                            @keydown="handleKeyDown"
+                            :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleKeyDown"
                             :disabled="isRecording" />
                     </div>
                     <div class="input-actions-bar">
@@ -454,12 +452,9 @@ defineExpose({ focus, senderRef });
                                     circle :disabled="isRecording" /></el-tooltip>
 
                             <el-tooltip :content="reasoningTooltipContent">
-                                <el-button 
-                                    :class="{ 'is-active-special': tempReasoningEffort && tempReasoningEffort !== 'default' }" 
-                                    size="default" 
-                                    circle 
-                                    :disabled="isRecording"
-                                    @click="toggleReasoningSelector">
+                                <el-button
+                                    :class="{ 'is-active-special': tempReasoningEffort && tempReasoningEffort !== 'default' }"
+                                    size="default" circle :disabled="isRecording" @click="toggleReasoningSelector">
                                     <el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                                             <path fill="currentColor"
@@ -471,10 +466,7 @@ defineExpose({ focus, senderRef });
                             </el-tooltip>
 
                             <el-tooltip content="语音回复设置">
-                                <el-button 
-                                    size="default" 
-                                    circle 
-                                    :disabled="isRecording"
+                                <el-button size="default" circle :disabled="isRecording"
                                     :class="{ 'is-active-special': selectedVoice }"
                                     @click="toggleVoiceSelector"><el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
@@ -487,14 +479,19 @@ defineExpose({ focus, senderRef });
                                     </el-icon></el-button>
                             </el-tooltip>
                             <el-tooltip content="MCP工具">
-                                <el-button 
-                                    size="default" 
-                                    circle 
-                                    :disabled="isRecording"
-                                    :class="{ 'is-active-special': isMcpActive }"
-                                    @click="$emit('open-mcp-dialog')">
+                                <el-button size="default" circle :disabled="isRecording"
+                                    :class="{ 'is-active-special': isMcpActive }" @click="$emit('open-mcp-dialog')">
                                     <el-icon :size="18">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hammer" aria-hidden="true"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"></path><path d="m18 15 4-4"></path><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"></path></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hammer"
+                                            aria-hidden="true">
+                                            <path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"></path>
+                                            <path d="m18 15 4-4"></path>
+                                            <path
+                                                d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5">
+                                            </path>
+                                        </svg>
                                     </el-icon>
                                 </el-button>
                             </el-tooltip>
@@ -510,8 +507,10 @@ defineExpose({ focus, senderRef });
                                 <el-tooltip content="发送语音"><el-button :icon="Microphone" size="default"
                                         @click="toggleAudioSourceSelector" circle /></el-tooltip>
                                 <el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle
-                                    :disabled="loading" /><el-button v-else :icon="Close" @click="onCancel"
-                                    circle></el-button>
+                                    :disabled="loading" />
+                                <el-button v-else @click="onCancel" circle class="cancel-button-animated">
+                                    <div class="cancel-spinner"></div>
+                                </el-button>
                             </template>
                         </div>
                     </div>
@@ -636,9 +635,17 @@ html.dark .drag-overlay {
 }
 
 @keyframes pulse-text {
-  0% { opacity: 0.7; }
-  50% { opacity: 1; }
-  100% { opacity: 0.7; }
+    0% {
+        opacity: 0.7;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.7;
+    }
 }
 
 html.dark .waveform-display-area {
@@ -665,7 +672,8 @@ html.dark .option-selector-wrapper {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    align-items: center; /* Vertically align items */
+    align-items: center;
+    /* Vertically align items */
 }
 
 .option-selector-content .el-button {
@@ -680,14 +688,16 @@ html.dark .option-selector-wrapper {
 .selector-label {
     font-size: 14px;
     color: var(--el-text-color);
-    margin: 0 4px 0 8px; /* Added left margin */
+    margin: 0 4px 0 8px;
+    /* Added left margin */
     white-space: nowrap;
 }
 
 .el-divider--vertical {
     height: 1.2em;
     border-left: 1px solid var(--el-border-color-lighter);
-    margin: 0 4px; /* Space around divider */
+    margin: 0 4px;
+    /* Space around divider */
 }
 
 html.dark .el-divider--vertical {
@@ -876,5 +886,41 @@ html.dark .el-button--success.is-plain:focus {
     background-color: var(--el-color-success-light-3);
     border-color: var(--el-color-success-light-3);
     color: #ffffff;
+}
+
+.cancel-button-animated {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cancel-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--el-text-color-regular);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.cancel-spinner::before {
+  content: '✕';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--el-text-color-regular);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

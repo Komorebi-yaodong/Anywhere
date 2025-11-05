@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { ElDialog, ElTable, ElTableColumn, ElButton, ElInput } from 'element-plus';
+import { ElDialog, ElTable, ElTableColumn, ElButton, ElInput, ElTooltip } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
 
 const props = defineProps({
@@ -9,7 +9,7 @@ const props = defineProps({
     currentModel: String,
 });
 
-const emit = defineEmits(['update:modelValue', 'select']);
+const emit = defineEmits(['update:modelValue', 'select', 'save-model']);
 
 const searchQuery = ref('');
 
@@ -40,6 +40,16 @@ const tableSpanMethod = ({ row, column, rowIndex, columnIndex }) => {
     }
 };
 
+const onModelClick = (model) => {
+    if (model.value === props.currentModel) {
+        // 如果点击的是当前模型，触发保存事件
+        emit('save-model', model.value);
+    } else {
+        // 否则，触发选择事件
+        emit('select', model.value);
+    }
+};
+
 const handleClose = () => {
     searchQuery.value = ''; // 关闭时清空搜索词
     emit('update:modelValue', false);
@@ -49,14 +59,10 @@ const handleSelect = (modelValue) => emit('select', modelValue);
 </script>
 
 <template>
-    <el-dialog title="选择模型" :model-value="modelValue" @update:model-value="handleClose" width="70%" custom-class="model-dialog" top="8vh">
+    <el-dialog title="选择模型" :model-value="modelValue" @update:model-value="handleClose" width="70%"
+        custom-class="model-dialog" top="8vh">
         <div class="model-search-container">
-            <el-input
-                v-model="searchQuery"
-                placeholder="搜索服务商或模型名称..."
-                clearable
-                :prefix-icon="Search"
-            />
+            <el-input v-model="searchQuery" placeholder="搜索服务商或模型名称..." clearable :prefix-icon="Search" />
         </div>
         <el-table :data="filteredModelList" stripe style="width: 100%; height: 400px;" :max-height="400" :border="true"
             :span-method="tableSpanMethod" width="100%">
@@ -67,9 +73,13 @@ const handleSelect = (modelValue) => emit('select', modelValue);
             </el-table-column>
             <el-table-column label="模型" align="center" prop="modelName">
                 <template #default="scope">
-                    <el-button link size="large" @click="handleSelect(scope.row.value)" :disabled="scope.row.value === currentModel">
-                        {{ scope.row.label.split("|")[1] }}
-                    </el-button>
+                    <el-tooltip :content="scope.row.value === currentModel ? '当前模型，再次点击可保存为默认' : '选择此模型'"
+                        placement="top" :enterable="false">
+                        <el-button link size="large" @click="onModelClick(scope.row)"
+                            :class="{ 'is-current-model': scope.row.value === currentModel }">
+                            {{ scope.row.label.split("|")[1] }}
+                        </el-button>
+                    </el-tooltip>
                 </template>
             </el-table-column>
         </el-table>
@@ -82,5 +92,13 @@ const handleSelect = (modelValue) => emit('select', modelValue);
 <style scoped>
 .model-search-container {
     padding: 0 0 15px 0;
+}
+.el-button.is-link.is-current-model {
+  color: #E6A23C; /* Element Plus 的金色/黄色 */
+  font-weight: bold;
+}
+
+.el-button.is-link.is-current-model:hover {
+  color: #ebb563;
 }
 </style>

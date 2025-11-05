@@ -775,8 +775,8 @@ var require_data = __commonJS({
           x,
           y,
           webPreferences: {
-            preload: "./window_preload.js"
-            // devTools: true
+            preload: "./window_preload.js",
+            devTools: true
           }
         },
         () => {
@@ -784,6 +784,7 @@ var require_data = __commonJS({
           ubWindow.show();
         }
       );
+      ubWindow.webContents.openDevTools({ mode: "detach" });
     }
     async function coderedirect(label, payload) {
       utools.redirect(label, payload);
@@ -89035,7 +89036,6 @@ var channel = "window";
 window.preload = {
   receiveMsg: (callback) => {
     ipcRenderer.on(channel, (event, data) => {
-      parentId = event.senderId;
       if (data) {
         callback(data);
       }
