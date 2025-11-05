@@ -130,7 +130,7 @@ const availableModels = computed(() => {
   return models;
 });
 
-// 新增：获取可用的MCP服务列表
+// 获取可用的MCP服务列表
 const availableMcpServers = computed(() => {
   if (!currentConfig.value || !currentConfig.value.mcpServers) return [];
   return Object.entries(currentConfig.value.mcpServers)
@@ -138,7 +138,8 @@ const availableMcpServers = computed(() => {
     .map(([id, server]) => ({
       value: id,
       label: server.name,
-    }));
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label)); // 新增此行以按名称排序
 });
 
 // [新增] 计算所有快捷助手中正在使用的模型列表 (用于替换模型的源模型下拉)
@@ -840,6 +841,25 @@ async function refreshPromptsConfig() {
                     <div class="spacer"></div>
                     <el-switch v-model="editingPrompt.ifTextNecessary" />
                   </div>
+                  <div v-if="editingPrompt.showMode === 'window'" class="param-item">
+                    <span class="param-label">{{ t('prompts.isAlwaysOnTopLabel') }}</span>
+                    <el-tooltip :content="t('prompts.tooltips.isAlwaysOnTopTooltip')" placement="top"><el-icon
+                        class="tip-icon">
+                        <QuestionFilled />
+                      </el-icon></el-tooltip>
+                    <div class="spacer"></div>
+                    <el-switch v-model="editingPrompt.isAlwaysOnTop" />
+                  </div>
+                  <div v-if="editingPrompt.showMode === 'window'" class="param-item">
+                    <span class="param-label">{{ t('prompts.autoCloseOnBlurLabel') }}</span>
+                    <el-tooltip :content="t('prompts.tooltips.autoCloseOnBlurTooltip')" placement="top"><el-icon
+                        class="tip-icon">
+                        <QuestionFilled />
+                      </el-icon></el-tooltip>
+                    <div class="spacer"></div>
+                    <el-switch v-model="editingPrompt.autoCloseOnBlur" />
+                  </div>
+                  
                   <div class="param-item voice-param">
                     <span class="param-label">{{ t('prompts.voiceLabel') }}</span>
                     <el-tooltip :content="t('prompts.voiceTooltip')" placement="top"><el-icon class="tip-icon">
@@ -864,24 +884,6 @@ async function refreshPromptsConfig() {
                       <el-option v-for="server in availableMcpServers" :key="server.value" :label="server.label"
                         :value="server.value" />
                     </el-select>
-                  </div>
-                  <div v-if="editingPrompt.showMode === 'window'" class="param-item">
-                    <span class="param-label">{{ t('prompts.isAlwaysOnTopLabel') }}</span>
-                    <el-tooltip :content="t('prompts.tooltips.isAlwaysOnTopTooltip')" placement="top"><el-icon
-                        class="tip-icon">
-                        <QuestionFilled />
-                      </el-icon></el-tooltip>
-                    <div class="spacer"></div>
-                    <el-switch v-model="editingPrompt.isAlwaysOnTop" />
-                  </div>
-                  <div v-if="editingPrompt.showMode === 'window'" class="param-item">
-                    <span class="param-label">{{ t('prompts.autoCloseOnBlurLabel') }}</span>
-                    <el-tooltip :content="t('prompts.tooltips.autoCloseOnBlurTooltip')" placement="top"><el-icon
-                        class="tip-icon">
-                        <QuestionFilled />
-                      </el-icon></el-tooltip>
-                    <div class="spacer"></div>
-                    <el-switch v-model="editingPrompt.autoCloseOnBlur" />
                   </div>
                   <el-row :gutter="20" v-if="editingPrompt.showMode === 'window'" class="dimensions-group-row">
                     <el-col :span="12">

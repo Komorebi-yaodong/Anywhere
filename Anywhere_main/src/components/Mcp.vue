@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox, ElScrollbar, ElAlert } from 'element-plus';
 import { Plus, Delete, Edit, CopyDocument, Tools, Search } from '@element-plus/icons-vue';
 
 const { t } = useI18n();
@@ -113,13 +113,31 @@ const convertLinesToText = (lines) => Array.isArray(lines) ? lines.join('\n') : 
 
 const convertTextToObject = (text) => {
     if (!text) return {};
-    return text.split('\n').filter(Boolean).reduce((acc, line) => {
-        const separatorIndex = line.indexOf(':');
-        if (separatorIndex > 0) {
-            const key = line.substring(0, separatorIndex).trim();
-            const value = line.substring(separatorIndex + 1).trim();
-            if (key) acc[key] = value;
+    return text.split('\n').reduce((acc, line) => {
+        const trimmedLine = line.trim();
+
+        // 忽略空行或注释行 (以 # 开头)
+        if (!trimmedLine || trimmedLine.startsWith('#')) {
+            return acc;
         }
+
+        // 寻找第一个 '=' 或 ':' 作为分隔符
+        const separatorIndex = trimmedLine.search(/[=:]/);
+
+        if (separatorIndex > 0) {
+            const key = trimmedLine.substring(0, separatorIndex).trim();
+            let value = trimmedLine.substring(separatorIndex + 1).trim();
+
+            // 如果值被匹配的引号包裹 (例如 "value" 或 'value')，则移除引号
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.substring(1, value.length - 1);
+            }
+
+            if (key) {
+                acc[key] = value;
+            }
+        }
+
         return acc;
     }, {});
 };
@@ -384,10 +402,12 @@ async function saveJson() {
         </el-dialog>
 
         <el-dialog v-model="showJsonDialog" :title="t('mcp.jsonDialog.title')" width="700px"
-            :close-on-click-modal="false" top="5vh">
+            :close-on-click-modal="false" top="5vh" custom-class="mcp-json-dialog">
             <el-alert :title="t('mcp.jsonDialog.description')" type="warning" show-icon :closable="false"
                 style="margin-bottom: 15px;" />
-            <el-input v-model="jsonEditorContent" type="textarea" :rows="15" />
+            <el-scrollbar max-height="50vh" class="json-editor-scrollbar">
+                <el-input v-model="jsonEditorContent" type="textarea" :autosize="true" resize="none" />
+            </el-scrollbar>
             <template #footer>
                 <el-button @click="showJsonDialog = false">{{ t('common.cancel') }}</el-button>
                 <el-button type="primary" @click="saveJson">{{ t('common.confirm') }}</el-button>
@@ -628,10 +648,28 @@ html.dark .advanced-collapse :deep(.el-collapse-item__header.is-active) {
 
 html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
     background-color: transparent;
-    /* 优化：内容区域与面板背景一致 */
 }
 
 .mcp-dialog-scrollbar :deep(.el-scrollbar__view) {
-  padding: 5px 20px 5px 5px;
+    padding: 5px 20px 5px 5px;
+}
+
+.json-editor-scrollbar {
+  border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
+  border: 1px solid var(--el-border-color);
+  background-color: var(--el-fill-color-blank);
+  transition: border-color .2s;
+}
+
+.json-editor-scrollbar:has(:focus-within) {
+  border-color: var(--el-color-primary);
+}
+
+.json-editor-scrollbar :deep(.el-textarea__inner) {
+  background-color: transparent;
+  border: none;
+  box-shadow: none !important;
+  padding: 5px 11px; /* 匹配 Element Plus 默认内边距 */
+  resize: none;
 }
 </style>
