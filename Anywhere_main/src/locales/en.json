@@ -71,7 +71,9 @@
       "syncConfirmDownload": "This will download all cloud conversations to your local machine, overwriting any files with the same name. Continue?",
       "syncConfirmDownloadTitle": "Sync from Cloud",
       "syncNoUpload": "All local files are up-to-date or newer on the cloud. Nothing to upload.",
-      "syncNoDownload": "All cloud files are synced or newer locally. Nothing to download."
+      "syncNoDownload": "All cloud files are synced or newer locally. Nothing to download.",
+      "confirmSyncDeleteTitle": "Confirm Sync Deletion",
+      "confirmSyncDeleteMessage": "{count} of the selected files also exist on the {location}. Do you want to delete them from there as well?"
     }
   },
   "prompts": {

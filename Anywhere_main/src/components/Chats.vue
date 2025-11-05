@@ -163,33 +163,68 @@ async function renameFile(file) {
     }
 }
 async function deleteFiles(filesToDelete) {
-    if (filesToDelete.length === 0) return ElMessage.warning(t('common.noFileSelected'));
+    if (filesToDelete.length === 0) {
+        ElMessage.warning(t('common.noFileSelected'));
+        return;
+    }
+
     try {
         await ElMessageBox.confirm(t('common.confirmDeleteMultiple', { count: filesToDelete.length }), t('common.warningTitle'), { type: 'warning' });
-        for (const file of filesToDelete) {
-            if (activeView.value === 'local') {
-                await window.api.deleteLocalFile(file.path);
-                if (isWebdavConfigValid.value && cloudChatFiles.value.some(f => f.basename === file.basename)) {
-                    const confirm = await ElMessageBox.confirm(`云端也存在文件 "${file.basename}"，是否同步删除？`, '同步操作提示', { type: 'info' }).catch(() => false);
-                    if (confirm) {
-                        const client = createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password });
-                        await client.deleteFile(`${webdavConfig.value.data_path}/${file.basename}`);
-                    }
-                }
-            } else { // cloud
-                const client = createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password });
-                await client.deleteFile(`${webdavConfig.value.data_path}/${file.basename}`);
-                if (localChatFiles.value.some(f => f.basename === file.basename)) {
-                    const confirm = await ElMessageBox.confirm(`本地也存在文件 "${file.basename}"，是否同步删除？`, '同步操作提示', { type: 'info' }).catch(() => false);
-                    if (confirm) await window.api.deleteLocalFile(`${localChatPath.value}/${file.basename}`);
+
+        let syncDeletions = false;
+        
+        if (isWebdavConfigValid.value && localChatPath.value) {
+            const localMap = new Map(localChatFiles.value.map(f => [f.basename, f]));
+            const cloudMap = new Map(cloudChatFiles.value.map(f => [f.basename, f]));
+            
+            const counterpartFiles = filesToDelete.filter(file => {
+                return activeView.value === 'local' ? cloudMap.has(file.basename) : localMap.has(file.basename);
+            });
+
+            if (counterpartFiles.length > 0) {
+                const location = activeView.value === 'local' ? '云端' : '本地';
+                try {
+                    await ElMessageBox.confirm(
+                        t('chats.alerts.confirmSyncDeleteMessage', { count: counterpartFiles.length, location: location }),
+                        t('chats.alerts.confirmSyncDeleteTitle'),
+                        { type: 'info' }
+                    );
+                    syncDeletions = true;
+                } catch (e) {
+                    syncDeletions = false;
                 }
             }
         }
+
+        isTableLoading.value = true;
+        const client = isWebdavConfigValid.value ? createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password }) : null;
+
+        for (const file of filesToDelete) {
+            if (activeView.value === 'local') {
+                await window.api.deleteLocalFile(file.path);
+                if (syncDeletions && client && cloudChatFiles.value.some(f => f.basename === file.basename)) {
+                    await client.deleteFile(`${webdavConfig.value.data_path}/${file.basename}`);
+                }
+            } else { // cloud view
+                if (client) {
+                    await client.deleteFile(`${webdavConfig.value.data_path}/${file.basename}`);
+                    if (syncDeletions && localChatFiles.value.some(f => f.basename === file.basename)) {
+                        await window.api.deleteLocalFile(`${localChatPath.value}/${file.basename}`);
+                    }
+                }
+            }
+        }
+
         ElMessage.success(t('common.deleteSuccessMultiple'));
         await refreshData();
         selectedFiles.value = [];
+
     } catch (error) {
-        if (error !== 'cancel' && error !== 'close') ElMessage.error(`${t('common.deleteFailedMultiple')}: ${error.message}`);
+        if (error !== 'cancel' && error !== 'close') {
+            ElMessage.error(`${t('common.deleteFailedMultiple')}: ${error.message}`);
+        }
+    } finally {
+        isTableLoading.value = false;
     }
 }
 const handleSelectionChange = (val) => selectedFiles.value = val;

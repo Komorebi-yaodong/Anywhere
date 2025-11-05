@@ -71,7 +71,9 @@
       "syncConfirmDownload": "これにより、すべてのクラウド会話がローカルマシンにダウンロードされ、同名のファイルは上書きされます。続行しますか？",
       "syncConfirmDownloadTitle": "クラウドから同期",
       "syncNoUpload": "すべてのローカルファイルは最新であるか、クラウド版の方が新しいため、アップロードは不要です。",
-      "syncNoDownload": "すべてのクラウドファイルは同期済みであるか、ローカル版の方が新しいため、ダウンロードは不要です。"
+      "syncNoDownload": "すべてのクラウドファイルは同期済みであるか、ローカル版の方が新しいため、ダウンロードは不要です。",
+      "confirmSyncDeleteTitle": "同期削除の確認",
+      "confirmSyncDeleteMessage": "選択したファイルのうち{count}個が{location}にも存在します。そちらも一緒に削除しますか？"
     }
   },
   "prompts": {

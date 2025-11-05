@@ -71,7 +71,9 @@
       "syncConfirmDownload": "这将把所有云端对话下载到本地，同名文件将被覆盖。是否继续？",
       "syncConfirmDownloadTitle": "从云端同步",
       "syncNoUpload": "所有本地文件均已是最新或云端版本较新，无需上传。",
-      "syncNoDownload": "所有云端文件均已同步或本地版本较新，无需下载。"
+      "syncNoDownload": "所有云端文件均已同步或本地版本较新，无需下载。",
+      "confirmSyncDeleteTitle": "同步删除确认",
+      "confirmSyncDeleteMessage": "您选择的文件中，有 {count} 个在 {location} 也存在。是否要一并删除？"
     }
   },
   "prompts": {
