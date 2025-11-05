@@ -694,62 +694,65 @@ function getUser() {
 
 function getPosition(config, promptCode) {
     const promptConfig = config.prompts[promptCode];
-    const width = promptConfig?.window_width || 540;
-    const height = promptConfig?.window_height || 700;
+
+    // 1. 获取用户期望的初始尺寸
+    let width = promptConfig?.window_width || 540;
+    let height = promptConfig?.window_height || 700;
     
     let windowX = 0, windowY = 0;
-    
-    if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
-        let set_position = {
-            x: promptConfig.position_x,
-            y: promptConfig.position_y
-        };
+    let currentDisplay;
 
-        const displays = utools.getAllDisplays();
-        const primaryDisplay = utools.getPrimaryDisplay();
-        const currentDisplay = displays.find(display =>
+    const displays = utools.getAllDisplays();
+    const primaryDisplay = utools.getPrimaryDisplay();
+    
+    // 2. 根据设置（固定位置或鼠标位置）确定目标显示器
+    if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
+        let set_position = { x: promptConfig.position_x, y: promptConfig.position_y };
+        currentDisplay = displays.find(display =>
             set_position.x >= display.bounds.x &&
             set_position.x < display.bounds.x + display.bounds.width &&
             set_position.y >= display.bounds.y &&
             set_position.y < display.bounds.y + display.bounds.height
         ) || primaryDisplay;
-
-        windowX = Math.floor(set_position.x);
-        windowY = Math.floor(set_position.y);
-
-        if (currentDisplay) {
-            windowX = Math.max(windowX, currentDisplay.bounds.x);
-            windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
-            windowY = Math.max(windowY, currentDisplay.bounds.y);
-            windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
-            if (windowY + height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
-                windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - height;
-            }
-        }
     } else {
         const mouse_position = utools.getCursorScreenPoint();
-        const displays = utools.getAllDisplays();
-        const primaryDisplay = utools.getPrimaryDisplay();
-        const currentDisplay = displays.find(display =>
+        currentDisplay = displays.find(display =>
             mouse_position.x >= display.bounds.x &&
             mouse_position.x < display.bounds.x + display.bounds.width &&
             mouse_position.y >= display.bounds.y &&
             mouse_position.y < display.bounds.y + display.bounds.height
         ) || primaryDisplay;
+    }
 
+    // 3. 【核心修改】将期望尺寸与显示器尺寸比较，确保窗口不会超过屏幕大小
+    if (currentDisplay) {
+        width = Math.min(width, currentDisplay.bounds.width);
+        height = Math.min(height, currentDisplay.bounds.height);
+    }
+
+    // 4. 使用修正后的尺寸来计算最终位置
+    if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
+        windowX = Math.floor(promptConfig.position_x);
+        windowY = Math.floor(promptConfig.position_y);
+    } else {
+        const mouse_position = utools.getCursorScreenPoint();
         windowX = Math.floor(mouse_position.x - (width / 2));
         windowY = Math.floor(mouse_position.y);
-
-        if (currentDisplay) {
-            windowX = Math.max(windowX, currentDisplay.bounds.x);
-            windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
-            windowY = Math.max(windowY, currentDisplay.bounds.y);
-            windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
-            if (windowY + height > currentDisplay.bounds.y + currentDisplay.bounds.height) {
-                windowY = currentDisplay.bounds.y + currentDisplay.bounds.height - height;
-            }
-        }
     }
+
+    // 5. 确保窗口完整显示在屏幕内（防止左右和上下溢出）
+    if (currentDisplay) {
+        // 确保窗口左侧不超出屏幕左边界
+        windowX = Math.max(windowX, currentDisplay.bounds.x);
+        // 确保窗口右侧不超出屏幕右边界
+        windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
+        // 确保窗口顶部不超出屏幕上边界
+        windowY = Math.max(windowY, currentDisplay.bounds.y);
+        // 确保窗口底部不超出屏幕下边界
+        windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
+    }
+    
+    // 6. 返回经过计算和限制的最终尺寸与位置
     return { x: windowX, y: windowY, width, height };
 }
 
@@ -884,6 +887,8 @@ async function openWindow(config, msg) {
   msg.config = config;
 
   const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
+  console.log("x, y, width, height");
+  console.log(x, y, width, height);
   const promptCode = msg.originalCode || msg.code;
   const promptConfig = config.prompts[promptCode];
   const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;

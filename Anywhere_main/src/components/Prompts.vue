@@ -886,13 +886,13 @@ async function refreshPromptsConfig() {
                   <el-row :gutter="20" v-if="editingPrompt.showMode === 'window'" class="dimensions-group-row">
                     <el-col :span="12">
                       <el-form-item :label="t('setting.dimensions.widthLabel')" label-position="top">
-                        <el-input-number v-model="editingPrompt.window_width" :min="200" :max="1200"
+                        <el-input-number v-model="editingPrompt.window_width" :min="200"
                           controls-position="right" style="width: 100%;" />
                       </el-form-item>
                     </el-col>
                     <el-col :span="12">
                       <el-form-item :label="t('setting.dimensions.heightLabel')" label-position="top">
-                        <el-input-number v-model="editingPrompt.window_height" :min="150" :max="900"
+                        <el-input-number v-model="editingPrompt.window_height" :min="150"
                           controls-position="right" style="width: 100%;" />
                       </el-form-item>
                     </el-col>
