@@ -932,9 +932,10 @@ const saveWindowSize = async () => {
     return;
   }
   
+  // 使用 outerHeight/outerWidth 获取窗口绝对尺寸
   const settingsToSave = {
-    window_height: Math.round(window.innerHeight * zoomLevel.value),
-    window_width: Math.round(window.innerWidth * zoomLevel.value),
+    window_height: window.outerHeight,
+    window_width: window.outerWidth,
     zoom: zoomLevel.value,
   };
 
