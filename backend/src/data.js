@@ -694,44 +694,29 @@ function getUser() {
 
 function getPosition(config, promptCode) {
     const promptConfig = config.prompts[promptCode];
+    const TOLERANCE = 10; // 定义一个10像素的容差
 
-    // 1. 获取用户期望的初始尺寸
     let width = promptConfig?.window_width || 540;
     let height = promptConfig?.window_height || 700;
-    
     let windowX = 0, windowY = 0;
+    
+    const primaryDisplay = utools.getPrimaryDisplay();
     let currentDisplay;
 
-    const displays = utools.getAllDisplays();
-    const primaryDisplay = utools.getPrimaryDisplay();
-    
+    // 检查坐标是否存在使用 '!= null'，这可以正确处理 0
+    const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
+
     // 2. 根据设置（固定位置或鼠标位置）确定目标显示器
-    if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
+    if (hasFixedPosition) {
         let set_position = { x: promptConfig.position_x, y: promptConfig.position_y };
-        currentDisplay = displays.find(display =>
-            set_position.x >= display.bounds.x &&
-            set_position.x < display.bounds.x + display.bounds.width &&
-            set_position.y >= display.bounds.y &&
-            set_position.y < display.bounds.y + display.bounds.height
-        ) || primaryDisplay;
+        currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
     } else {
         const mouse_position = utools.getCursorScreenPoint();
-        currentDisplay = displays.find(display =>
-            mouse_position.x >= display.bounds.x &&
-            mouse_position.x < display.bounds.x + display.bounds.width &&
-            mouse_position.y >= display.bounds.y &&
-            mouse_position.y < display.bounds.y + display.bounds.height
-        ) || primaryDisplay;
+        currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
     }
 
-    // 3. 【核心修改】将期望尺寸与显示器尺寸比较，确保窗口不会超过屏幕大小
-    if (currentDisplay) {
-        width = Math.min(width, currentDisplay.bounds.width);
-        height = Math.min(height, currentDisplay.bounds.height);
-    }
-
-    // 4. 使用修正后的尺寸来计算最终位置
-    if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
+    // 3. 计算最终位置 (非全屏模式)
+    if (hasFixedPosition) {
         windowX = Math.floor(promptConfig.position_x);
         windowY = Math.floor(promptConfig.position_y);
     } else {
@@ -740,20 +725,22 @@ function getPosition(config, promptCode) {
         windowY = Math.floor(mouse_position.y);
     }
 
-    // 5. 确保窗口完整显示在屏幕内（防止左右和上下溢出）
+    // 4. 确保窗口位置不会离目标屏幕太远
     if (currentDisplay) {
-        // 确保窗口左侧不超出屏幕左边界
-        windowX = Math.max(windowX, currentDisplay.bounds.x);
-        // 确保窗口右侧不超出屏幕右边界
-        windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
-        // 确保窗口顶部不超出屏幕上边界
-        windowY = Math.max(windowY, currentDisplay.bounds.y);
-        // 确保窗口底部不超出屏幕下边界
-        windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
+        const display = currentDisplay.bounds;
+        const minX = display.x - TOLERANCE;
+        const maxX = display.x + display.width + TOLERANCE;
+        const minY = display.y - TOLERANCE;
+        const maxY = display.y + display.height + TOLERANCE;
+
+        if (windowX + width < minX || windowX > maxX || windowY + height < minY || windowY > maxY) {
+             windowX = display.x + (display.width - width) / 2;
+             windowY = display.y + (display.height - height) / 2;
+        }
     }
-    
-    // 6. 返回经过计算和限制的最终尺寸与位置
-    return { x: windowX, y: windowY, width, height };
+
+    // 5. 返回最终计算的位置和原始保存的尺寸
+    return { x: Math.round(windowX), y: Math.round(windowY), width, height };
 }
 
 function getRandomItem(list) {
@@ -879,45 +866,47 @@ function copyText(content) {
 }
 
 async function sethotkey(prompt_name,auto_copy){
-  console.log("sethotkey")
   utools.redirectHotKeySetting(prompt_name,auto_copy);
 }
 
 async function openWindow(config, msg) {
   msg.config = config;
 
-  const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
-  console.log("x, y, width, height");
-  console.log(x, y, width, height);
   const promptCode = msg.originalCode || msg.code;
+  const { x, y, width, height } = getPosition(config, promptCode);
   const promptConfig = config.prompts[promptCode];
   const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
   let channel = "window";
-
+  
   const backgroundColor = config.isDarkMode ? '#181818' : '#ffffff';
-  console.log("backgroundColor", backgroundColor);
+
+  const windowOptions = {
+    show: false,
+    backgroundColor: backgroundColor,
+    title: "Anywhere",
+    width: width,
+    height: height,
+    alwaysOnTop: isAlwaysOnTop,
+    x: x,
+    y: y,
+    webPreferences: {
+      preload: "./window_preload.js",
+      devTools: true
+    },
+  };
+  
+  // 检查是否需要全屏显示
+  const display = utools.getDisplayNearestPoint({x, y});
+
   const ubWindow = utools.createBrowserWindow(
     "./window/index.html",
-    {
-      show: false,
-      backgroundColor: backgroundColor,
-      title: "Anywhere",
-      width: width,
-      height: height,
-      alwaysOnTop: isAlwaysOnTop,
-      x: x,
-      y: y,
-      webPreferences: {
-        preload: "./window_preload.js",
-        devTools: true
-      },
-    },
+    windowOptions,
     () => {
       ubWindow.webContents.send(channel, msg);
       ubWindow.show();
     }
   );
-  ubWindow.webContents.openDevTools({ mode: "detach" });
+  // ubWindow.webContents.openDevTools({ mode: "detach" });
 }
 
 async function coderedirect(label, payload) {
@@ -935,34 +924,51 @@ function setZoomFactor(factor){
  * @returns {Promise<{success: boolean, message?: string}>}
  */
 async function savePromptWindowSettings(promptKey, settings) {
-    const promptsDoc = utools.db.get("prompts");
-    if (!promptsDoc || !promptsDoc.data) {
-        return { success: false, message: "Prompts document not found" };
+    const MAX_RETRIES = 5;
+    let attempt = 0;
+
+    while (attempt < MAX_RETRIES) {
+        const promptsDoc = utools.db.get("prompts");
+        if (!promptsDoc || !promptsDoc.data) {
+            return { success: false, message: "Prompts document not found" };
+        }
+
+        const promptsData = promptsDoc.data;
+        if (!promptsData[promptKey]) {
+            // 如果快捷助手不存在，则无法更新。这是一个错误情况。
+            return { success: false, message: `Prompt with key '${promptKey}' not found in document` };
+        }
+
+        // 将新的设置合并到现有的快捷助手配置中
+        promptsData[promptKey] = {
+            ...promptsData[promptKey],
+            ...settings
+        };
+
+        // 尝试保存更新后的文档
+        const result = utools.db.put({
+            _id: "prompts",
+            data: promptsData,
+            _rev: promptsDoc._rev
+        });
+
+        if (result.ok) {
+            return { success: true, rev: result.rev }; // 成功！
+        }
+
+        if (result.error && result.name === 'conflict') {
+            // 检测到冲突。增加尝试次数，循环将自动重试。
+            attempt++;
+            // (可选) 为调试记录冲突，但不打扰用户。
+            console.log(`Anywhere: DB conflict on saving window settings (attempt ${attempt}/${MAX_RETRIES}). Retrying...`);
+        } else {
+            // 发生了其他错误（例如验证失败），因此立即失败。
+            return { success: false, message: result.message || 'An unknown database error occurred.' };
+        }
     }
 
-    const promptsData = promptsDoc.data;
-    if (!promptsData[promptKey]) {
-        return { success: false, message: "Prompt not found in document" };
-    }
-    
-    // 更新指定快捷助手的设置
-    promptsData[promptKey] = {
-        ...promptsData[promptKey],
-        ...settings
-    };
-
-    // 将更新后的整个 prompts 对象写回
-    const result = utools.db.put({
-        _id: "prompts",
-        data: promptsData,
-        _rev: promptsDoc._rev
-    });
-
-    if (result.ok) {
-        return { success: true };
-    } else {
-        return { success: false, message: result.message };
-    }
+    // 如果退出循环，意味着已超出重试次数。
+    return { success: false, message: `Failed to save settings after ${MAX_RETRIES} attempts due to persistent database conflicts.` };
 }
 
 
@@ -974,7 +980,6 @@ module.exports = {
   updateConfigWithoutFeatures,
   savePromptWindowSettings,
   getUser,
-  getPosition,
   getRandomItem,
   chatOpenAI,
   copyText,

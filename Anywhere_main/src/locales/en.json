@@ -16,6 +16,12 @@
     }
   },
   "chats": {
+    "info": {
+      "title": "Information",
+      "localDesc": "· <strong>Local Chats</strong>: Named conversations (saved, loaded from JSON, or opened from cloud) are auto-saved every 15 seconds. All conversations are stored in JSON format at <code>{path}</code>. Different paths can be used on different devices.",
+      "pathNotSet": "Not configured",
+      "cloudDesc": "· <strong>Cloud Chats</strong>: Conversations uploaded to the cloud, which can be pulled to local at any time."
+    },
     "configRequired": {
       "title": "Cloud Chats",
       "webdavDescription": "Please configure WebDAV URL and data path (data_path) in 'Settings' to use this feature.",

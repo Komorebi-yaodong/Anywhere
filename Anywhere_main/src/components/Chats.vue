@@ -1,8 +1,8 @@
 <script setup>
-import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
-import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch } from '@element-plus/icons-vue'
+import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, ElProgress } from 'element-plus'
 
 const { t } = useI18n();
@@ -177,11 +177,11 @@ async function deleteFiles(filesToDelete) {
         await ElMessageBox.confirm(t('common.confirmDeleteMultiple', { count: filesToDelete.length }), t('common.warningTitle'), { type: 'warning' });
 
         let syncDeletions = false;
-        
+
         if (isWebdavConfigValid.value && localChatPath.value) {
             const localMap = new Map(localChatFiles.value.map(f => [f.basename, f]));
             const cloudMap = new Map(cloudChatFiles.value.map(f => [f.basename, f]));
-            
+
             const counterpartFiles = filesToDelete.filter(file => {
                 return activeView.value === 'local' ? cloudMap.has(file.basename) : localMap.has(file.basename);
             });
@@ -243,7 +243,7 @@ const cancelSync = () => {
 async function runConcurrentTasks(tasks, signal, concurrencyLimit = 3) {
     const results = { completed: 0, failed: 0, failedFiles: [] };
     const queue = [...tasks];
-    
+
     const worker = async () => {
         while (queue.length > 0) {
             if (signal.aborted) throw new Error("Cancelled");
@@ -266,7 +266,7 @@ async function runConcurrentTasks(tasks, signal, concurrencyLimit = 3) {
             }
         }
     };
-    
+
     const workers = Array(concurrencyLimit).fill(null).map(worker);
     await Promise.all(workers);
     return results;
@@ -281,7 +281,7 @@ async function intelligentUpload() {
     if (filesToUpload.length === 0) return ElMessage.info(t('chats.alerts.syncNoUpload'));
 
     try {
-        await ElMessageBox.confirm(t('chats.tooltips.uploadChanges', {count: filesToUpload.length}) + ' 是否继续？', t('chats.alerts.syncConfirmUploadTitle'), { type: 'info' });
+        await ElMessageBox.confirm(t('chats.tooltips.uploadChanges', { count: filesToUpload.length }) + ' 是否继续？', t('chats.alerts.syncConfirmUploadTitle'), { type: 'info' });
         const tasks = filesToUpload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'upload', signal) }));
         await executeSync(tasks, t('chats.alerts.syncConfirmUploadTitle'));
     } catch (error) {
@@ -297,9 +297,9 @@ async function intelligentDownload() {
         return !localFile || new Date(cloud.lastmod) > new Date(localFile.lastmod);
     });
     if (filesToDownload.length === 0) return ElMessage.info(t('chats.alerts.syncNoDownload'));
-    
+
     try {
-        await ElMessageBox.confirm(t('chats.tooltips.downloadChanges', {count: filesToDownload.length}) + ' 是否继续？', t('chats.alerts.syncConfirmDownloadTitle'), { type: 'info' });
+        await ElMessageBox.confirm(t('chats.tooltips.downloadChanges', { count: filesToDownload.length }) + ' 是否继续？', t('chats.alerts.syncConfirmDownloadTitle'), { type: 'info' });
         const tasks = filesToDownload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'download', signal) }));
         await executeSync(tasks, t('chats.alerts.syncConfirmDownloadTitle'));
     } catch (error) {
@@ -322,7 +322,7 @@ async function executeSync(tasks, title) {
         await refreshData();
     } catch (error) {
         if (error.message === 'Cancelled') {
-             ElMessage.warning(t('chats.alerts.syncCancelled'));
+            ElMessage.warning(t('chats.alerts.syncCancelled'));
         } else {
             ElMessage.error(t('chats.alerts.syncFailed', { message: error.message }));
         }
@@ -342,7 +342,7 @@ async function forceSyncFile(basename, direction, signal) {
         if (direction === 'upload') {
             const localFile = localChatFiles.value.find(f => f.basename === basename);
             if (!localFile) throw new Error(`本地文件 "${basename}" 未找到`);
-            
+
             const content = await window.api.readLocalFile(localPath, signal);
             await client.putFileContents(remotePath, content, { overwrite: true, signal });
 
@@ -382,15 +382,30 @@ async function forceSyncFile(basename, direction, signal) {
 <template>
     <div class="chats-page-container">
         <div class="chats-content-wrapper">
+            <div class="info-button-container">
+                <el-popover placement="bottom-start" :title="t('chats.info.title')" :width="450" trigger="click">
+                    <template #reference>
+                        <el-button :icon="QuestionFilled" circle />
+                    </template>
+                    <div class="info-popover-content">
+                        <p v-html="t('chats.info.localDesc', { path: localChatPath || t('chats.info.pathNotSet') })">
+                        </p>
+                        <p v-html="t('chats.info.cloudDesc')"></p>
+                    </div>
+                </el-popover>
+            </div>
             <div class="sync-buttons-container">
                 <el-tooltip :content="t('chats.tooltips.uploadChanges', { count: uploadableCount })" placement="bottom">
                     <el-badge :value="uploadableCount" :hidden="uploadableCount === 0" type="primary">
-                        <el-button :icon="Upload" @click="intelligentUpload" circle :disabled="!isWebdavConfigValid || !localChatPath" />
+                        <el-button :icon="Upload" @click="intelligentUpload" circle
+                            :disabled="!isWebdavConfigValid || !localChatPath" />
                     </el-badge>
                 </el-tooltip>
-                <el-tooltip :content="t('chats.tooltips.downloadChanges', { count: downloadableCount })" placement="bottom">
-                     <el-badge :value="downloadableCount" :hidden="downloadableCount === 0" type="success">
-                        <el-button :icon="Download" @click="intelligentDownload" circle :disabled="!isWebdavConfigValid || !localChatPath" />
+                <el-tooltip :content="t('chats.tooltips.downloadChanges', { count: downloadableCount })"
+                    placement="bottom">
+                    <el-badge :value="downloadableCount" :hidden="downloadableCount === 0" type="success">
+                        <el-button :icon="Download" @click="intelligentDownload" circle
+                            :disabled="!isWebdavConfigValid || !localChatPath" />
                     </el-badge>
                 </el-tooltip>
             </div>
@@ -413,7 +428,7 @@ async function forceSyncFile(basename, direction, signal) {
                 </div>
 
                 <div v-else-if="activeView === 'cloud' && !isWebdavConfigValid" class="config-prompt-small">
-                   <el-empty :description="t('chats.configRequired.webdavDescription')">
+                    <el-empty :description="t('chats.configRequired.webdavDescription')">
                         <template #image>
                             <el-icon :size="50" color="#909399">
                                 <Edit />
@@ -421,16 +436,20 @@ async function forceSyncFile(basename, direction, signal) {
                         </template>
                     </el-empty>
                 </div>
-                
-                <el-table v-else :data="paginatedFiles" v-loading="isTableLoading" @selection-change="handleSelectionChange" style="width: 100%" height="100%" border stripe>
+
+                <el-table v-else :data="paginatedFiles" v-loading="isTableLoading"
+                    @selection-change="handleSelectionChange" style="width: 100%" height="100%" border stripe>
                     <el-table-column type="selection" width="50" align="center" />
-                    <el-table-column prop="basename" :label="t('chats.table.filename')" sortable show-overflow-tooltip min-width="160">
-                         <template #default="scope">
-                            <span class="filename-text">{{ scope.row.basename.endsWith('.json') ? scope.row.basename.slice(0, -5) : scope.row.basename }}</span>
+                    <el-table-column prop="basename" :label="t('chats.table.filename')" sortable show-overflow-tooltip
+                        min-width="160">
+                        <template #default="scope">
+                            <span class="filename-text">{{ scope.row.basename.endsWith('.json') ?
+                                scope.row.basename.slice(0, -5) : scope.row.basename }}</span>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="170" sortable align="center">
-                         <template #default="scope">{{ formatDate(scope.row.lastmod) }}</template>
+                    <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="170" sortable
+                        align="center">
+                        <template #default="scope">{{ formatDate(scope.row.lastmod) }}</template>
                     </el-table-column>
                     <el-table-column prop="size" :label="t('chats.table.size')" width="100" sortable align="center">
                         <template #default="scope">{{ formatBytes(scope.row.size) }}</template>
@@ -438,17 +457,24 @@ async function forceSyncFile(basename, direction, signal) {
                     <el-table-column :label="t('chats.table.actions')" width="300" align="center">
                         <template #default="scope">
                             <div class="action-buttons-container">
-                                <el-button link type="primary" :icon="ChatDotRound" @click="startChat(scope.row)">{{ t('chats.actions.chat') }}</el-button>
+                                <el-button link type="primary" :icon="ChatDotRound" @click="startChat(scope.row)">{{
+                                    t('chats.actions.chat') }}</el-button>
                                 <el-divider direction="vertical" />
-                                <el-tooltip :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')" placement="top">
-                                    <el-button link type="primary" :icon="Switch" @click="forceSyncFile(scope.row.basename, activeView === 'local' ? 'upload' : 'download')" :loading="singleFileSyncing[scope.row.basename]">
+                                <el-tooltip
+                                    :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')"
+                                    placement="top">
+                                    <el-button link type="primary" :icon="Switch"
+                                        @click="forceSyncFile(scope.row.basename, activeView === 'local' ? 'upload' : 'download')"
+                                        :loading="singleFileSyncing[scope.row.basename]">
                                         {{ t('chats.actions.forceSync') }}
                                     </el-button>
                                 </el-tooltip>
                                 <el-divider direction="vertical" />
-                                <el-button link type="warning" :icon="Edit" @click="renameFile(scope.row)">{{ t('chats.actions.rename') }}</el-button>
+                                <el-button link type="warning" :icon="Edit" @click="renameFile(scope.row)">{{
+                                    t('chats.actions.rename') }}</el-button>
                                 <el-divider direction="vertical" />
-                                <el-button link type="danger" :icon="DeleteIcon" @click="deleteFiles([scope.row])">{{ t('chats.actions.delete') }}</el-button>
+                                <el-button link type="danger" :icon="DeleteIcon" @click="deleteFiles([scope.row])">{{
+                                    t('chats.actions.delete') }}</el-button>
                             </div>
                         </template>
                     </el-table-column>
@@ -473,8 +499,8 @@ async function forceSyncFile(basename, direction, signal) {
             </div>
         </div>
     </div>
-    <el-dialog v-model="isSyncing" :title="t('chats.alerts.syncInProgress')" :close-on-click-modal="false" :show-close="false"
-        :close-on-press-escape="false" width="400px" center>
+    <el-dialog v-model="isSyncing" :title="t('chats.alerts.syncInProgress')" :close-on-click-modal="false"
+        :show-close="false" :close-on-press-escape="false" width="400px" center>
         <div class="sync-progress-container">
             <el-progress :percentage="syncProgress" :stroke-width="10" striped striped-flow />
             <p class="sync-status-text">{{ syncStatusText }}</p>
@@ -715,9 +741,46 @@ async function forceSyncFile(basename, direction, signal) {
     transform: translateY(-50%) translateX(70%);
 }
 
-/* [新增] 修复深色模式下 primary 徽章的颜色 */
+/* 修复深色模式下 primary 徽章的颜色 */
 html.dark .sync-buttons-container :deep(.el-badge__content--primary) {
     background-color: var(--el-color-primary);
-    color: var(--bg-primary); /* 使用深色背景作为文字颜色 */
+    color: var(--bg-primary);
+    /* 使用深色背景作为文字颜色 */
+}
+
+.info-button-container {
+    position: absolute;
+    top: 8px;
+    left: 20px;
+    z-index: 10;
+}
+
+.info-button-container .el-button {
+    width: 32px;
+    height: 32px;
+}
+
+/* 弹出框内容的样式 */
+.info-popover-content p {
+    margin: 0 0 8px 0;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.info-popover-content p:last-child {
+    margin-bottom: 0;
+}
+
+.info-popover-content strong {
+    color: var(--text-primary);
+}
+
+.info-popover-content code {
+    background-color: var(--bg-tertiary);
+    color: var(--el-color-primary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    word-break: break-all;
 }
 </style>

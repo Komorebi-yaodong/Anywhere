@@ -617,28 +617,21 @@ var require_data = __commonJS({
     }
     function getPosition(config, promptCode) {
       const promptConfig = config.prompts[promptCode];
+      const TOLERANCE = 10;
       let width = promptConfig?.window_width || 540;
       let height = promptConfig?.window_height || 700;
       let windowX = 0, windowY = 0;
-      let currentDisplay;
-      const displays = utools.getAllDisplays();
       const primaryDisplay = utools.getPrimaryDisplay();
-      if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
+      let currentDisplay;
+      const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
+      if (hasFixedPosition) {
         let set_position = { x: promptConfig.position_x, y: promptConfig.position_y };
-        currentDisplay = displays.find(
-          (display) => set_position.x >= display.bounds.x && set_position.x < display.bounds.x + display.bounds.width && set_position.y >= display.bounds.y && set_position.y < display.bounds.y + display.bounds.height
-        ) || primaryDisplay;
+        currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
       } else {
         const mouse_position = utools.getCursorScreenPoint();
-        currentDisplay = displays.find(
-          (display) => mouse_position.x >= display.bounds.x && mouse_position.x < display.bounds.x + display.bounds.width && mouse_position.y >= display.bounds.y && mouse_position.y < display.bounds.y + display.bounds.height
-        ) || primaryDisplay;
+        currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
       }
-      if (currentDisplay) {
-        width = Math.min(width, currentDisplay.bounds.width);
-        height = Math.min(height, currentDisplay.bounds.height);
-      }
-      if (config.fix_position && promptConfig && promptConfig.position_x && promptConfig.position_y) {
+      if (hasFixedPosition) {
         windowX = Math.floor(promptConfig.position_x);
         windowY = Math.floor(promptConfig.position_y);
       } else {
@@ -647,12 +640,17 @@ var require_data = __commonJS({
         windowY = Math.floor(mouse_position.y);
       }
       if (currentDisplay) {
-        windowX = Math.max(windowX, currentDisplay.bounds.x);
-        windowX = Math.min(windowX, currentDisplay.bounds.x + currentDisplay.bounds.width - width);
-        windowY = Math.max(windowY, currentDisplay.bounds.y);
-        windowY = Math.min(windowY, currentDisplay.bounds.y + currentDisplay.bounds.height - height);
+        const display = currentDisplay.bounds;
+        const minX = display.x - TOLERANCE;
+        const maxX = display.x + display.width + TOLERANCE;
+        const minY = display.y - TOLERANCE;
+        const maxY = display.y + display.height + TOLERANCE;
+        if (windowX + width < minX || windowX > maxX || windowY + height < minY || windowY > maxY) {
+          windowX = display.x + (display.width - width) / 2;
+          windowY = display.y + (display.height - height) / 2;
+        }
       }
-      return { x: windowX, y: windowY, width, height };
+      return { x: Math.round(windowX), y: Math.round(windowY), width, height };
     }
     function getRandomItem2(list) {
       if (typeof list === "string") {
@@ -748,42 +746,39 @@ var require_data = __commonJS({
       utools.copyText(content);
     }
     async function sethotkey2(prompt_name, auto_copy) {
-      console.log("sethotkey");
       utools.redirectHotKeySetting(prompt_name, auto_copy);
     }
     async function openWindow(config, msg) {
       msg.config = config;
-      const { x, y, width, height } = getPosition(config, msg.originalCode || msg.code);
-      console.log("x, y, width, height");
-      console.log(x, y, width, height);
       const promptCode = msg.originalCode || msg.code;
+      const { x, y, width, height } = getPosition(config, promptCode);
       const promptConfig = config.prompts[promptCode];
       const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
       let channel2 = "window";
       const backgroundColor = config.isDarkMode ? "#181818" : "#ffffff";
-      console.log("backgroundColor", backgroundColor);
+      const windowOptions = {
+        show: false,
+        backgroundColor,
+        title: "Anywhere",
+        width,
+        height,
+        alwaysOnTop: isAlwaysOnTop,
+        x,
+        y,
+        webPreferences: {
+          preload: "./window_preload.js",
+          devTools: true
+        }
+      };
+      const display = utools.getDisplayNearestPoint({ x, y });
       const ubWindow = utools.createBrowserWindow(
         "./window/index.html",
-        {
-          show: false,
-          backgroundColor,
-          title: "Anywhere",
-          width,
-          height,
-          alwaysOnTop: isAlwaysOnTop,
-          x,
-          y,
-          webPreferences: {
-            preload: "./window_preload.js",
-            devTools: true
-          }
-        },
+        windowOptions,
         () => {
           ubWindow.webContents.send(channel2, msg);
           ubWindow.show();
         }
       );
-      ubWindow.webContents.openDevTools({ mode: "detach" });
     }
     async function coderedirect(label, payload) {
       utools.redirect(label, payload);
@@ -792,28 +787,37 @@ var require_data = __commonJS({
       webFrame.setZoomFactor(factor);
     }
     async function savePromptWindowSettings2(promptKey, settings) {
-      const promptsDoc = utools.db.get("prompts");
-      if (!promptsDoc || !promptsDoc.data) {
-        return { success: false, message: "Prompts document not found" };
+      const MAX_RETRIES = 5;
+      let attempt = 0;
+      while (attempt < MAX_RETRIES) {
+        const promptsDoc = utools.db.get("prompts");
+        if (!promptsDoc || !promptsDoc.data) {
+          return { success: false, message: "Prompts document not found" };
+        }
+        const promptsData = promptsDoc.data;
+        if (!promptsData[promptKey]) {
+          return { success: false, message: `Prompt with key '${promptKey}' not found in document` };
+        }
+        promptsData[promptKey] = {
+          ...promptsData[promptKey],
+          ...settings
+        };
+        const result = utools.db.put({
+          _id: "prompts",
+          data: promptsData,
+          _rev: promptsDoc._rev
+        });
+        if (result.ok) {
+          return { success: true, rev: result.rev };
+        }
+        if (result.error && result.name === "conflict") {
+          attempt++;
+          console.log(`Anywhere: DB conflict on saving window settings (attempt ${attempt}/${MAX_RETRIES}). Retrying...`);
+        } else {
+          return { success: false, message: result.message || "An unknown database error occurred." };
+        }
       }
-      const promptsData = promptsDoc.data;
-      if (!promptsData[promptKey]) {
-        return { success: false, message: "Prompt not found in document" };
-      }
-      promptsData[promptKey] = {
-        ...promptsData[promptKey],
-        ...settings
-      };
-      const result = utools.db.put({
-        _id: "prompts",
-        data: promptsData,
-        _rev: promptsDoc._rev
-      });
-      if (result.ok) {
-        return { success: true };
-      } else {
-        return { success: false, message: result.message };
-      }
+      return { success: false, message: `Failed to save settings after ${MAX_RETRIES} attempts due to persistent database conflicts.` };
     }
     module2.exports = {
       getConfig: getConfig2,
@@ -823,7 +827,6 @@ var require_data = __commonJS({
       updateConfigWithoutFeatures,
       savePromptWindowSettings: savePromptWindowSettings2,
       getUser: getUser2,
-      getPosition,
       getRandomItem: getRandomItem2,
       chatOpenAI: chatOpenAI2,
       copyText: copyText2,

@@ -42,10 +42,6 @@ const isForcingScroll = ref(false);
 const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
 
-const lastPosition = ref({ x: null, y: null });
-let positionSaveTimer = null; // 用于防抖的计时器
-let animationFrameId = null;  // 用于取消 requestAnimationFrame 循环
-
 let autoSaveInterval = null;
 
 const setMessageRef = (el, index) => {
@@ -53,75 +49,6 @@ const setMessageRef = (el, index) => {
   else messageRefs.delete(index, el);
 };
 
-
-const saveWindowPosition = async () => {
-  if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
-    return; // 如果不是已定义的快捷助手，则不保存
-  }
-  const settingsToSave = {
-    position_x: window.screenX,
-    position_y: window.screenY,
-  };
-  try {
-    // 直接调用 API，不显示提示信息，以避免打扰
-    const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
-    if (result.success) {
-      // 更新本地配置以保持同步
-      if (currentConfig.value.prompts[CODE.value]) {
-        currentConfig.value.prompts[CODE.value].position_x = settingsToSave.position_x;
-        currentConfig.value.prompts[CODE.value].position_y = settingsToSave.position_y;
-      }
-    }
-  } catch (error) {
-    console.error("自动保存窗口位置失败:", error);
-  }
-};
-
-const startPositionObserver = () => {
-  // 确保旧的循环被清除
-  if (animationFrameId) cancelAnimationFrame(animationFrameId);
-  if (positionSaveTimer) clearTimeout(positionSaveTimer);
-
-  lastPosition.value.x = window.screenX;
-  lastPosition.value.y = window.screenY;
-  
-  const checkPosition = () => {
-    // 检查位置是否发生变化
-    if (lastPosition.value.x !== window.screenX || lastPosition.value.y !== window.screenY) {
-      lastPosition.value.x = window.screenX;
-      lastPosition.value.y = window.screenY;
-      
-      // 使用防抖来保存位置
-      clearTimeout(positionSaveTimer);
-      positionSaveTimer = setTimeout(() => {
-        saveWindowPosition();
-      }, 500); // 停止移动 500 毫秒后保存
-    }
-    
-    // 请求下一帧继续检查
-    animationFrameId = requestAnimationFrame(checkPosition);
-  };
-  
-  // 启动循环
-  animationFrameId = requestAnimationFrame(checkPosition);
-};
-
-const startPositionPolling = () => {
-  if (positionCheckInterval) {
-    clearInterval(positionCheckInterval);
-  }
-  // 初始化起始位置
-  lastPosition.value.x = window.screenX;
-  lastPosition.value.y = window.screenY;
-
-  positionCheckInterval = setInterval(() => {
-    if (lastPosition.value.x !== window.screenX || lastPosition.value.y !== window.screenY) {
-      lastPosition.value.x = window.screenX;
-      lastPosition.value.y = window.screenY;
-      saveWindowPosition();
-    }
-  }, 500);
-};
 
 const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
 const parseWord = async (base64Data) => {
@@ -901,7 +828,6 @@ onMounted(async () => {
     // 步骤 7: 聚焦和启动位置轮询
     setTimeout(() => {
       chatInputRef.value?.focus({ cursor: 'end' });
-      startPositionObserver();
     }, 100);
   };
 
@@ -947,7 +873,6 @@ const autoSaveSession = async () => {
 
 onBeforeUnmount(async () => {
   if (animationFrameId) cancelAnimationFrame(animationFrameId);
-  if (positionSaveTimer) clearTimeout(positionSaveTimer);
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('blur', handleWindowBlur);
@@ -962,18 +887,27 @@ const saveWindowSize = async () => {
     showDismissibleMessage.warning('无法保存窗口设置，因为当前不是一个已定义的快捷助手。');
     return;
   }
-  
-  // 使用 outerHeight/outerWidth 获取窗口绝对尺寸
+
+  // 检查窗口是否处于全屏状态
+  if (window.fullScreen) {
+    showDismissibleMessage.warning('无法在全屏模式下保存窗口位置和大小。');
+    return;
+  }
+
+  // 将位置信息一并加入待保存的设置中
   const settingsToSave = {
     window_height: window.outerHeight,
     window_width: window.outerWidth,
     zoom: zoomLevel.value,
+    position_x: window.screenX,
+    position_y: window.screenY,
   };
 
   try {
     const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
     if (result.success) {
-      showDismissibleMessage.success('当前快捷助手的窗口大小与缩放已保存');
+      // 更新成功提示信息
+      showDismissibleMessage.success('当前快捷助手的窗口大小、位置与缩放已保存');
       if (currentConfig.value.prompts[CODE.value]) {
          Object.assign(currentConfig.value.prompts[CODE.value], settingsToSave);
       }
