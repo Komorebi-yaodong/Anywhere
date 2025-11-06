@@ -43,7 +43,8 @@ const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
 
 const lastPosition = ref({ x: null, y: null });
-let positionCheckInterval = null;
+let positionSaveTimer = null; // 用于防抖的计时器
+let animationFrameId = null;  // 用于取消 requestAnimationFrame 循环
 
 let autoSaveInterval = null;
 
@@ -74,6 +75,35 @@ const saveWindowPosition = async () => {
   } catch (error) {
     console.error("自动保存窗口位置失败:", error);
   }
+};
+
+const startPositionObserver = () => {
+  // 确保旧的循环被清除
+  if (animationFrameId) cancelAnimationFrame(animationFrameId);
+  if (positionSaveTimer) clearTimeout(positionSaveTimer);
+
+  lastPosition.value.x = window.screenX;
+  lastPosition.value.y = window.screenY;
+  
+  const checkPosition = () => {
+    // 检查位置是否发生变化
+    if (lastPosition.value.x !== window.screenX || lastPosition.value.y !== window.screenY) {
+      lastPosition.value.x = window.screenX;
+      lastPosition.value.y = window.screenY;
+      
+      // 使用防抖来保存位置
+      clearTimeout(positionSaveTimer);
+      positionSaveTimer = setTimeout(() => {
+        saveWindowPosition();
+      }, 500); // 停止移动 500 毫秒后保存
+    }
+    
+    // 请求下一帧继续检查
+    animationFrameId = requestAnimationFrame(checkPosition);
+  };
+  
+  // 启动循环
+  animationFrameId = requestAnimationFrame(checkPosition);
 };
 
 const startPositionPolling = () => {
@@ -871,7 +901,7 @@ onMounted(async () => {
     // 步骤 7: 聚焦和启动位置轮询
     setTimeout(() => {
       chatInputRef.value?.focus({ cursor: 'end' });
-      startPositionPolling();
+      startPositionObserver();
     }, 100);
   };
 
@@ -916,7 +946,8 @@ const autoSaveSession = async () => {
 };
 
 onBeforeUnmount(async () => {
-  if (positionCheckInterval) clearInterval(positionCheckInterval);
+  if (animationFrameId) cancelAnimationFrame(animationFrameId);
+  if (positionSaveTimer) clearTimeout(positionSaveTimer);
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('blur', handleWindowBlur);
