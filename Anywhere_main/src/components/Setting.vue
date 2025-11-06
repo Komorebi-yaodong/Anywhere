@@ -47,7 +47,7 @@ onMounted(() => {
   selectedLanguage.value = locale.value;
 });
 
-// [修改] 新的、更精确的保存函数
+// 新的、更精确的保存函数
 async function saveSingleSetting(keyPath, value) {
   try {
     if (window.api && window.api.saveSetting) {
@@ -62,7 +62,7 @@ async function saveSingleSetting(keyPath, value) {
   }
 }
 
-// [修改] 保存整个配置的函数，仅用于语音列表等复杂操作
+//  保存整个配置的函数，仅用于语音列表等复杂操作
 async function saveFullConfig() {
   if (!currentConfig.value) return;
   try {
@@ -86,7 +86,7 @@ function handleLanguageChange(lang) {
   // 语言设置不属于config，所以不需要保存到utools数据库
 }
 
-// --- [新增] 全局开关处理函数 ---
+// --- 全局开关处理函数 ---
 async function handleGlobalToggleChange(key, value) {
   if (!currentConfig.value || !currentConfig.value.prompts) return;
 
@@ -109,12 +109,18 @@ async function handleGlobalToggleChange(key, value) {
   await saveFullConfig();
   ElMessage.success(t('common.save') + '成功！');
 }
-// --- [新增结束] ---
 
 async function exportConfig() {
   if (!currentConfig.value) return;
   try {
+    // 创建配置的深拷贝以进行修改，不影响当前应用的配置
     const configToExport = JSON.parse(JSON.stringify(currentConfig.value));
+    
+    // 在导出前移除本地对话路径
+    if (configToExport.webdav && configToExport.webdav.localChatPath) {
+      delete configToExport.webdav.localChatPath;
+    }
+
     const jsonString = JSON.stringify(configToExport, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -141,10 +147,22 @@ function importConfig() {
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
+          // 在导入新配置前，先保存当前的本地对话路径
+          const currentLocalChatPath = currentConfig.value.webdav?.localChatPath;
+
           const importedData = JSON.parse(e.target.result);
           if (typeof importedData !== 'object' || importedData === null) {
             throw new Error("Imported file is not a valid configuration object.");
           }
+
+          // 将保存的本地路径写回到即将应用的配置中
+          if (currentLocalChatPath) {
+            if (!importedData.webdav) {
+              importedData.webdav = {}; // 确保 webdav 对象存在
+            }
+            importedData.webdav.localChatPath = currentLocalChatPath;
+          }
+
           if (window.api && window.api.updateConfig) {
             await window.api.updateConfig({ config: importedData });
             const result = await window.api.getConfig();
@@ -285,7 +303,12 @@ async function backupToWebdav() {
               await client.createDirectory(remoteDir, { recursive: true });
             }
 
+            //在备份前移除本地对话路径
             const configToBackup = JSON.parse(JSON.stringify(currentConfig.value));
+            if (configToBackup.webdav && configToBackup.webdav.localChatPath) {
+              delete configToBackup.webdav.localChatPath;
+            }
+
             const jsonString = JSON.stringify(configToBackup, null, 2);
             await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
 
@@ -375,6 +398,10 @@ async function restoreFromWebdav(file) {
     );
 
     ElMessage.info(t('setting.webdav.alerts.restoreInProgress'));
+
+    // 在恢复前保存当前的本地对话路径
+    const currentLocalChatPath = currentConfig.value.webdav?.localChatPath;
+
     const { url, username, password, path } = currentConfig.value.webdav;
     const client = createClient(url, { username, password });
     const remoteDir = path.endsWith('/') ? path.slice(0, -1) : path;
@@ -385,6 +412,13 @@ async function restoreFromWebdav(file) {
 
     if (typeof importedData !== 'object' || importedData === null) {
       throw new Error("Downloaded file is not a valid configuration object.");
+    }
+
+    if (currentLocalChatPath) {
+      if (!importedData.webdav) {
+        importedData.webdav = {};
+      }
+      importedData.webdav.localChatPath = currentLocalChatPath;
     }
 
     if (window.api && window.api.updateConfig) {
