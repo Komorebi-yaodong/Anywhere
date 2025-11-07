@@ -18,9 +18,9 @@
   "chats": {
     "info": {
       "title": "Information",
-      "localDesc": "· <strong>Local Chats</strong>: Named conversations (saved, loaded from JSON, or opened from cloud) are auto-saved every 15 seconds. All conversations are stored in JSON format at <code>{path}</code>. Different paths can be used on different devices.",
+      "localDesc": "· Local Chats: Named conversations (saved, loaded from JSON, or opened from cloud) are auto-saved every 15 seconds. All conversations are stored in JSON format at {path}. Different paths can be used on different devices.",
       "pathNotSet": "Not configured",
-      "cloudDesc": "· <strong>Cloud Chats</strong>: Conversations uploaded to the cloud, which can be pulled to local at any time."
+      "cloudDesc": "· Cloud Chats: Conversations uploaded to the cloud, which can be pulled to local at any time."
     },
     "configRequired": {
       "title": "Cloud Chats",
@@ -101,7 +101,7 @@
     "orClickToUpload": "or click",
     "regex": {
       "label": "Custom Regex Match",
-      "tooltip": "When the input type is 'Text', you can set a regular expression here to match specific content.<br/>1. Format must be /.../flags, e.g., <code>/^https?:\\/\\//</code> to match URLs.<br/>2. <b>Important</b>: Backslashes <code>\\</code> in the expression must be escaped as <code>\\\\</code>.<br/>3. <code>flags</code> are optional, like <code>i</code> for case-insensitivity (e.g., <code>/hello/i</code>).<br/>4. Leave empty to match any text.<br/><br/><b>Quick Reference:</b><br/>• <code>.</code> - Matches any character except newline<br/>• <code>\\d</code> - Matches any digit<br/>• <code>\\s</code> - Matches any whitespace (space, tab, newline)<br/>• <code>\\S</code> - Matches any non-whitespace<br/>• <code>\\w</code> - Matches word characters (a-z, A-Z, 0-9, _)<br/>• <code>[...]</code> - Matches any character in the set, e.g., <code>[abc]</code><br/>• <code>*</code> - Matches 0 or more times<br/>• <code>+</code> - Matches 1 or more times<br/>• <code>?</code> - Matches 0 or 1 time<br/>• <code>^</code> - Matches start of string<br/>• <code>$</code> - Matches end of string",
+      "tooltip": "When the input type is 'Text', you can set a regular expression here to match specific content.1. Format must be /.../flags, e.g., /^https?:\\/\\// to match URLs.2. Important: Backslashes \\ in the expression must be escaped as \\\\.3. flags are optional, like i for case-insensitivity (e.g., /hello/i).4. Leave empty to match any text.Quick Reference:• . - Matches any character except newline• \\d - Matches any digit• \\s - Matches any whitespace (space, tab, newline)• \\S - Matches any non-whitespace• \\w - Matches word characters (a-z, A-Z, 0-9, _)• [...] - Matches any character in the set, e.g., [abc]• * - Matches 0 or more times• + - Matches 1 or more times• ? - Matches 0 or 1 time• ^ - Matches start of string• $ - Matches end of string",
       "placeholder": "/.../flags (empty for any text)"
     },
     "typeOptions": {

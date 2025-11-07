@@ -90,7 +90,7 @@ var require_data = __commonJS({
           username: "",
           password: "",
           path: "/anywhere",
-          dataPath: "/anywhere_data",
+          data_path: "/anywhere_data",
           localChatPath: ""
         },
         voiceList: [
@@ -188,8 +188,8 @@ var require_data = __commonJS({
     }
     function checkConfig(config) {
       let flag = false;
-      if (config.version !== "1.9.7") {
-        config.version = "1.9.7";
+      if (config.version !== "1.9.6") {
+        config.version = "1.9.6";
         flag = true;
       }
       if (config.isAlwaysOnTop_global === void 0) {
@@ -298,12 +298,19 @@ var require_data = __commonJS({
           username: "",
           password: "",
           path: "/anywhere",
-          dataPath: "/anywhere_data"
+          data_path: "/anywhere_data"
         };
         flag = true;
       }
-      if (config.webdav.dataPath == void 0) {
-        config.webdav.dataPath = "/anywhere_data";
+      if (config.webdav.dataPath && config.webdav.data_path == void 0) {
+        config.webdav.data_path = config.webdav.dataPath;
+        delete config.webdav.dataPath;
+        flag = true;
+      } else if (config.webdav.dataPath) {
+        delete config.webdav.dataPath;
+      }
+      if (config.webdav.data_path == void 0) {
+        config.webdav.data_path = "/anywhere_data";
         flag = true;
       }
       if (config.webdav.localChatPath == void 0) {
@@ -510,21 +517,19 @@ var require_data = __commonJS({
       }
       let dataToUpdate = isBaseConfig ? doc.data.config : doc.data;
       const pathParts = targetKeyPath.split(".");
-      if (pathParts.length < 2) {
-        dataToUpdate[targetKeyPath] = value;
-      } else {
-        const finalKey = pathParts.pop();
-        const objectId = pathParts.join(".");
-        if (!dataToUpdate[objectId] || typeof dataToUpdate[objectId] !== "object") {
-          console.warn(`Object with id "${objectId}" not found in "${docId}", creating it.`);
-          dataToUpdate[objectId] = {};
+      let current = dataToUpdate;
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        const part = pathParts[i];
+        if (current[part] === void 0 || typeof current[part] !== "object") {
+          current[part] = {};
         }
-        dataToUpdate[objectId][finalKey] = value;
+        current = current[part];
       }
-      const finalData = isBaseConfig ? { config: doc.data } : dataToUpdate;
+      current[pathParts[pathParts.length - 1]] = value;
       const result = utools.db.put({
         _id: docId,
-        data: finalData,
+        data: doc.data,
+        // 直接使用被引用的、已更新的 doc.data
         _rev: doc._rev
       });
       if (result.ok) {

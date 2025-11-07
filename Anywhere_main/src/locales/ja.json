@@ -18,9 +18,9 @@
   "chats": {
     "info": {
       "title": "Information",
-      "localDesc": "· <strong>Local Chats</strong>: Named conversations (saved, loaded from JSON, or opened from cloud) are auto-saved every 15 seconds. All conversations are stored in JSON format at <code>{path}</code>. Different paths can be used on different devices.",
+      "localDesc": "· Local Chats: Named conversations (saved, loaded from JSON, or opened from cloud) are auto-saved every 15 seconds. All conversations are stored in JSON format at {path}. Different paths can be used on different devices.",
       "pathNotSet": "Not configured",
-      "cloudDesc": "· <strong>Cloud Chats</strong>: Conversations uploaded to the cloud, which can be pulled to local at any time."
+      "cloudDesc": "· Cloud Chats: Conversations uploaded to the cloud, which can be pulled to local at any time."
     },
     "configRequired": {
       "title": "クラウドチャット",
@@ -101,7 +101,7 @@
     "orClickToUpload": "またはクリック",
     "regex": {
       "label": "カスタム正規表現",
-      "tooltip": "入力タイプが「テキスト」の場合、ここで正規表現を設定して特定のコンテンツにマッチさせることができます。<br/>1. フォーマットは /.../flags である必要があります。例：<code>/^https?:\\/\\//</code> はURLにマッチします。<br/>2. <b>重要</b>：式中のバックスラッシュ <code>\\</code> は <code>\\\\</code> としてエスケープする必要があります。<br/>3. <code>flags</code> はオプションのフラグです。例えば <code>i</code> は大文字小文字を区別しません (例: <code>/hello/i</code>)。<br/>4. 空白のままにすると、任意のテキストにマッチします。<br/><br/><b>クイックリファレンス:</b><br/>• <code>.</code> - 改行を除く任意の1文字<br/>• <code>\\d</code> - 任意の数字<br/>• <code>\\s</code> - 任意の空白文字 (スペース, タブ, 改行)<br/>• <code>\\S</code> - 任意の非空白文字<br/>• <code>\\w</code> - 単語構成文字 (英数字, _)<br/>• <code>[...]</code> - カッコ内のいずれか1文字, 例 <code>[abc]</code><br/>• <code>*</code> - 0回以上<br/>• <code>+</code> - 1回以上<br/>• <code>?</code> - 0回または1回<br/>• <code>^</code> - 先頭にマッチ<br/>• <code>$</code> - 末尾にマッチ",
+      "tooltip": "入力タイプが「テキスト」の場合、ここで正規表現を設定して特定のコンテンツにマッチさせることができます。1. フォーマットは /.../flags である必要があります。例：/^https?:\\/\\// はURLにマッチします。2. 重要：式中のバックスラッシュ \\ は \\\\ としてエスケープする必要があります。3. flags はオプションのフラグです。例えば i は大文字小文字を区別しません (例: /hello/i)。4. 空白のままにすると、任意のテキストにマッチします。クイックリファレンス:• . - 改行を除く任意の1文字• \\d - 任意の数字• \\s - 任意の空白文字 (スペース, タブ, 改行)• \\S - 任意の非空白文字• \\w - 単語構成文字 (英数字, _)• [...] - カッコ内のいずれか1文字, 例 [abc]• * - 0回以上• + - 1回以上• ? - 0回または1回• ^ - 先頭にマッチ• $ - 末尾にマッチ",
       "placeholder": "/.../flags (空の場合は任意テキスト)"
     },
     "typeOptions": {

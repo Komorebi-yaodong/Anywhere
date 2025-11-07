@@ -859,17 +859,18 @@ onMounted(async () => {
       await initializeWindow(data);
     });
   } else {
-    const data = {
-      os:  "win",
-      code: "助理",
-      config: await window.api.getConfig().config,
-    };
-    // ElMessage.warning({
-    //   message: '窗口初始化数据缺失，已加载默认对话。可能是预加载脚本不匹配导致。',
-    //   duration: 5000,
-    //   showClose: true,
-    // });
-    await initializeWindow(data);
+    // const data = {
+    //   os:  "win",
+    //   code: "助理",
+    //   config: await window.api.getConfig().config,
+    // };
+    ElMessage.warning({
+      message: '窗口初始化数据缺失，已加载默认对话。可能是预加载脚本不匹配导致。',
+      duration: 5000,
+      showClose: true,
+    });
+    // await initializeWindow(data);
+    await initializeWindow(null);
   }
   if (autoSaveInterval) clearInterval(autoSaveInterval);
   autoSaveInterval = setInterval(autoSaveSession, 15000);

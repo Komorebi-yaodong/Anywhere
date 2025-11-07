@@ -56,7 +56,7 @@ const defaultConfig = {
       username: "",
       password: "",
       path: "/anywhere",
-      dataPath: "/anywhere_data",
+      data_path: "/anywhere_data",
       localChatPath: ""
     },
     voiceList:[
@@ -181,8 +181,8 @@ async function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  if (config.version !== "1.9.7") {
-    config.version = "1.9.7";
+  if (config.version !== "1.9.6") {
+    config.version = "1.9.6";
     flag = true;
   }
   if (config.isAlwaysOnTop_global === undefined) {
@@ -299,12 +299,21 @@ function checkConfig(config) {
       username: "",
       password: "",
       path: "/anywhere",
-      dataPath: "/anywhere_data",
+      data_path: "/anywhere_data",
     };
     flag = true;
   }
-  if (config.webdav.dataPath == undefined) {
-    config.webdav.dataPath = "/anywhere_data";
+  // 删除错误的存储参数
+  if (config.webdav.dataPath && config.webdav.data_path == undefined) {
+    config.webdav.data_path = config.webdav.dataPath;
+    delete config.webdav.dataPath;
+    flag = true;
+    
+  }else if (config.webdav.dataPath) {
+    delete config.webdav.dataPath;
+  }
+  if (config.webdav.data_path == undefined) {
+    config.webdav.data_path = "/anywhere_data";
     flag = true;
   }
   if (config.webdav.localChatPath == undefined) {
@@ -517,7 +526,7 @@ function checkConfig(config) {
 }
 
 /**
- * [已重构] 保存单个设置项，自动判断应写入哪个文档
+ * 保存单个设置项，自动判断应写入哪个文档
  * @param {string} keyPath - 属性路径，如 "prompts.AI.enable" 或 "mcpServers.@id/with.dots.isPersistent"
  * @param {*} value - 要设置的值
  * @returns {{success: boolean, message?: string}} - 返回操作结果
@@ -552,29 +561,19 @@ function saveSetting(keyPath, value) {
 
   // 使用更稳健的路径解析逻辑，以处理包含点号的ID
   const pathParts = targetKeyPath.split('.');
-  if (pathParts.length < 2) {
-    // 处理简单路径，例如 'isDarkMode' 或直接在文档根部的属性
-    dataToUpdate[targetKeyPath] = value;
-  } else {
-    // 处理嵌套路径，例如 'some-id.isPersistent'，其中 'some-id' 可能包含点
-    const finalKey = pathParts.pop(); // 取出最后一个部分，即 'isPersistent'
-    const objectId = pathParts.join('.'); // 将剩余部分重新组合成完整的ID
-    
-    // 确保目标对象存在
-    if (!dataToUpdate[objectId] || typeof dataToUpdate[objectId] !== 'object') {
-      console.warn(`Object with id "${objectId}" not found in "${docId}", creating it.`);
-      dataToUpdate[objectId] = {};
+  let current = dataToUpdate;
+  for (let i = 0; i < pathParts.length - 1; i++) {
+    const part = pathParts[i];
+    if (current[part] === undefined || typeof current[part] !== 'object') {
+      current[part] = {};
     }
-    
-    // 设置最终的值
-    dataToUpdate[objectId][finalKey] = value;
+    current = current[part];
   }
-  
-  const finalData = isBaseConfig ? { config: doc.data } : dataToUpdate;
-  
+  current[pathParts[pathParts.length - 1]] = value;
+
   const result = utools.db.put({
     _id: docId,
-    data: finalData,
+    data: doc.data, // 直接使用被引用的、已更新的 doc.data
     _rev: doc._rev
   });
 
