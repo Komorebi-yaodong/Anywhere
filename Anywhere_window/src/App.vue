@@ -317,28 +317,6 @@ const navigateToNextMessage = () => {
 
 const isCollapsed = (index) => collapsedMessages.value.has(index);
 
-const attachImageErrorHandlers = async () => {
-  await nextTick();
-  const processImage = (img) => {
-    if (img.hasAttribute('data-error-handler-attached')) return;
-    img.setAttribute('data-error-handler-attached', 'true');
-    const originalSrc = img.src;
-    const handleError = () => {
-      if (!img.parentNode || img.parentNode.classList.contains('image-error-container')) return;
-      const container = document.createElement('div'); container.className = 'image-error-container';
-      const retryButton = document.createElement('button'); retryButton.className = 'image-retry-button'; retryButton.textContent = '图片加载失败，点击重试';
-      container.appendChild(retryButton); img.parentNode.replaceChild(container, img);
-      retryButton.onclick = (e) => {
-        e.stopPropagation(); const newImg = document.createElement('img'); newImg.src = `${originalSrc}?t=${new Date().getTime()}`;
-        processImage(newImg); container.parentNode.replaceChild(newImg, container);
-      };
-    };
-    img.onerror = handleError;
-    if (img.complete && img.naturalHeight === 0 && img.src) { setTimeout(() => { if (img.naturalHeight === 0) handleError(); }, 50); }
-  };
-  document.querySelectorAll('.markdown-body img:not([data-error-handler-attached])').forEach(processImage);
-};
-
 const addCopyButtonsToCodeBlocks = async () => {
   await nextTick();
   document.querySelectorAll('.markdown-body pre.hljs').forEach(pre => {
@@ -689,7 +667,6 @@ watch(zoomLevel, (newZoom) => {
 });
 watch(chat_show, async () => {
   await addCopyButtonsToCodeBlocks();
-  await attachImageErrorHandlers();
 }, { deep: true, flush: 'post' });
 
 onMounted(async () => {
@@ -838,7 +815,7 @@ onMounted(async () => {
       sessionMcpServerIds.value = [...defaultMcpServers];
       tempSessionMcpServerIds.value = [...defaultMcpServers];
       // 立即应用这些默认服务
-      await applyMcpTools();
+      await applyMcpTools(false);
     }
 
     // 步骤 6: 自动发送和UI更新
@@ -849,8 +826,6 @@ onMounted(async () => {
     }
 
     await addCopyButtonsToCodeBlocks();
-    await attachImageErrorHandlers();
-
     // 步骤 7: 聚焦和启动位置轮询
     setTimeout(() => {
       chatInputRef.value?.focus({ cursor: 'end' });
@@ -877,6 +852,8 @@ onMounted(async () => {
   }
   if (autoSaveInterval) clearInterval(autoSaveInterval);
   autoSaveInterval = setInterval(autoSaveSession, 15000);
+  window.addEventListener('error', handleGlobalImageError, true);
+  window.addEventListener('keydown', handleGlobalKeyDown);
 });
 
 const autoSaveSession = async () => {
@@ -910,6 +887,8 @@ onBeforeUnmount(async () => {
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
   await window.api.closeMcpClient();
+  window.removeEventListener('error', handleGlobalImageError, true);
+  window.removeEventListener('keydown', handleGlobalKeyDown);
 });
 
 const saveWindowSize = async () => {
@@ -972,7 +951,18 @@ const saveSessionToCloud = async () => {
       title: '保存到云端',
       message: () => h('div', null, [
         h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入要保存到云端的会话名称。'),
-        h(ElInput, { modelValue: inputValue.value, 'onUpdate:modelValue': (val) => { inputValue.value = val; }, placeholder: '文件名', autofocus: true },
+        h(ElInput, { 
+          modelValue: inputValue.value, 
+          'onUpdate:modelValue': (val) => { inputValue.value = val; }, 
+          placeholder: '文件名', 
+          autofocus: true,
+          onKeydown: (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
+            }
+          }
+        },
           { append: () => h('div', { class: 'input-suffix-display' }, '.json') })]),
       showCancelButton: true, confirmButtonText: '确认', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
       beforeClose: async (action, instance, done) => {
@@ -1052,7 +1042,18 @@ const saveSessionAsMarkdown = async () => {
       title: '保存为 Markdown',
       message: () => h('div', null, [
         h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
-        h(ElInput, { modelValue: inputValue.value, 'onUpdate:modelValue': (val) => { inputValue.value = val; }, placeholder: '文件名', autofocus: true },
+        h(ElInput, { 
+            modelValue: inputValue.value, 
+            'onUpdate:modelValue': (val) => { inputValue.value = val; }, 
+            placeholder: '文件名', 
+            autofocus: true,
+            onKeydown: (event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
+              }
+            }
+        },
           { append: () => h('div', { class: 'input-suffix-display' }, '.md') })]),
       showCancelButton: true, confirmButtonText: '保存', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
       beforeClose: async (action, instance, done) => {
@@ -1076,7 +1077,6 @@ const saveSessionAsMarkdown = async () => {
     });
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
 };
-
 const saveSessionAsJson = async () => {
   const sessionData = getSessionDataAsObject();
   const jsonString = JSON.stringify(sessionData, null, 2);
@@ -1089,7 +1089,18 @@ const saveSessionAsJson = async () => {
       title: '保存为 JSON',
       message: () => h('div', null, [
         h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
-        h(ElInput, { modelValue: inputValue.value, 'onUpdate:modelValue': (val) => { inputValue.value = val; }, placeholder: '文件名', autofocus: true },
+        h(ElInput, { 
+            modelValue: inputValue.value, 
+            'onUpdate:modelValue': (val) => { inputValue.value = val; }, 
+            placeholder: '文件名', 
+            autofocus: true,
+            onKeydown: (event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
+              }
+            }
+        },
           { append: () => h('div', { class: 'input-suffix-display' }, '.json') })]),
       showCancelButton: true, confirmButtonText: '保存', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
       beforeClose: async (action, instance, done) => {
@@ -1103,14 +1114,13 @@ const saveSessionAsJson = async () => {
             let fullDefaultPath = finalFilename;
             const localChatPath = currentConfig.value.webdav?.localChatPath;
             if (localChatPath) {
-              // 根据操作系统拼接路径
               const separator = basic_msg.value.os === 'win' ? '\\' : '/';
               fullDefaultPath = `${localChatPath}${separator}${finalFilename}`;
             }
 
             await window.api.saveFile({
               title: '保存聊天会话',
-              defaultPath: fullDefaultPath, // <--- 修改此处
+              defaultPath: fullDefaultPath,
               buttonLabel: '保存',
               filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }],
               fileContent: jsonString
@@ -1131,6 +1141,7 @@ const saveSessionAsJson = async () => {
     });
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
 };
+
 const handleSaveAction = async () => {
   if (autoCloseOnBlur.value) handleTogglePin();
   const isCloudEnabled = currentConfig.value.webdav?.url && currentConfig.value.webdav?.data_path;
@@ -1160,10 +1171,10 @@ const loadSession = async (jsonData) => {
     const mcpServersToLoad = jsonData.currentPromptConfig?.defaultMcpServers || [];
     if (Array.isArray(mcpServersToLoad) && mcpServersToLoad.length > 0) {
       sessionMcpServerIds.value = [...mcpServersToLoad];
-      await applyMcpTools();
+      await applyMcpTools(false);
     } else {
       sessionMcpServerIds.value = [];
-      await applyMcpTools();
+      await applyMcpTools(false);
     }
     history.value = jsonData.history; chat_show.value = jsonData.chat_show;
     selectedVoice.value = jsonData.selectedVoice || '';
@@ -1303,7 +1314,7 @@ function getRandomItem(list) {
   }
 }
 
-async function applyMcpTools() {
+async function applyMcpTools(show_none=true) {
   // 1. 立即关闭弹窗并显示加载状态
   isMcpDialogVisible.value = false;
   isMcpLoading.value = true;
@@ -1350,7 +1361,7 @@ async function applyMcpTools() {
       showDismissibleMessage.success(`已成功启用 ${newFormattedTools.length} 个 MCP 工具`);
     } else if (serverIdsToLoad.length > 0 && failedServerIds.length === serverIdsToLoad.length) {
       showDismissibleMessage.info('所有选中的 MCP 工具均加载失败');
-    } else if (serverIdsToLoad.length === 0) {
+    } else if (serverIdsToLoad.length === 0 && show_none) {
       showDismissibleMessage.info('已清除所有 MCP 工具');
     }
 
@@ -1941,6 +1952,71 @@ const handleSaveModel = async (modelToSave) => {
   }
 
   changeModel_page.value = false; // 保存后关闭弹窗
+};
+
+const handleGlobalImageError = (event) => {
+  const img = event.target;
+
+  // Step 1: Check if the error is from an IMG tag inside our chat content
+  if (!(img instanceof HTMLImageElement) || !img.closest('.markdown-wrapper')) {
+    return;
+  }
+
+  // Step 2: Prevent the browser's default broken image icon from appearing
+  event.preventDefault();
+
+  // Step 3: The rest of the logic is to create and replace the image with our retry UI
+  // (This is similar to before, but now it's guaranteed to run)
+  const originalSrc = img.src;
+
+  // Avoid replacing if it's already been replaced
+  if (img.parentNode && img.parentNode.classList.contains('image-error-container')) {
+      return;
+  }
+
+  const container = document.createElement('div');
+  container.className = 'image-error-container';
+  container.title = '图片加载失败，点击重试';
+
+  const svgIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svgIcon.setAttribute('viewBox', '0 0 24 24');
+  svgIcon.innerHTML = `<path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="currentColor"></path>`;
+  
+  const textLabel = document.createElement('span');
+  textLabel.textContent = 'Image';
+
+  container.appendChild(svgIcon);
+  container.appendChild(textLabel);
+  
+  if (img.parentNode) {
+      img.parentNode.replaceChild(container, img);
+  }
+
+  container.onclick = (e) => {
+    e.stopPropagation();
+    const newImg = document.createElement('img');
+    // Add timestamp to bypass cache
+    newImg.src = `${originalSrc}?t=${new Date().getTime()}`;
+    // The global listener will automatically catch an error if this new image fails again.
+    if (container.parentNode) {
+        container.parentNode.replaceChild(newImg, container);
+    }
+  };
+};
+
+const handleGlobalKeyDown = (event) => {
+  // 检查是否按下了 Ctrl+S (Windows/Linux) 或 Cmd+S (macOS)
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    // 阻止浏览器的默认保存页面行为
+    event.preventDefault();
+    
+    // 如果当前已经有其他弹窗，则不执行任何操作，避免弹窗重叠
+    if (document.querySelector('.el-dialog, .el-message-box')) {
+      return;
+    }
+    // 调用已有的保存操作函数
+    handleSaveAction();
+  }
 };
 </script>
 
@@ -2643,5 +2719,31 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 .mcp-limit-hint.warning {
   color: var(--el-color-danger);
   font-weight: bold;
+}
+
+:deep(.image-error-container) {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    border: 1px dashed var(--el-border-color);
+    border-radius: 8px;
+    background-color: var(--el-fill-color-light);
+    color: var(--el-text-color-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+:deep(.image-error-container:hover) {
+    border-color: var(--el-color-primary);
+    color: var(--el-color-primary);
+    background-color: var(--el-color-primary-light-9);
+}
+
+:deep(.image-error-container svg) {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
 }
 </style>
