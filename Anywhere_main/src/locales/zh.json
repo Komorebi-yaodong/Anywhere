@@ -84,7 +84,7 @@
   },
   "prompts": {
     "allPrompts": "全部",
-    "searchPlaceholder":"搜索名称或内容...",
+    "searchPlaceholder": "搜索名称或内容...",
     "noPrompts": "尚未定义任何快捷助手",
     "noPromptsInTag": "此标签下没有快捷助手",
     "addExistingPrompt": "添加已有快捷助手",
@@ -116,7 +116,7 @@
       "clipboard": "剪贴板",
       "window": "独立窗口"
     },
-    "promptKeyLabelShort":"名称",
+    "promptKeyLabelShort": "名称",
     "modelLabel": "模型",
     "llmParametersLabel": "模型参数",
     "llmParametersRemark": "仅当前 快捷助手 模型生效，更换其他模型后不再生效",
@@ -229,6 +229,10 @@
     "jsonDialog": {
       "title": "编辑 MCP 服务 JSON",
       "description": "警告：直接编辑 JSON 可能会导致问题，如果格式不正确。请谨慎操作。"
+    },
+    "persistent": {
+      "label": "持久连接",
+      "tooltip": "开启后将保持长连接，会占用总连接数（最多5个），适合部分无法断开的Stdio服务。"
     }
   },
   "providers": {
@@ -321,8 +325,8 @@
     "darkMode": {
       "label": "主题",
       "description": "浅色模式或深色模式",
-      "dark":"深色",
-      "light":"浅色"
+      "dark": "深色",
+      "light": "浅色"
     },
     "fixPosition": {
       "label": "固定窗口位置",

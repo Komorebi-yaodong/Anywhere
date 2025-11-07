@@ -229,6 +229,10 @@
     "jsonDialog": {
       "title": "Edit MCP Servers JSON",
       "description": "Warning: Directly editing the JSON can cause issues if the format is incorrect. Proceed with caution."
+    },
+    "persistent": {
+      "label": "Persistent Connection",
+      "tooltip": "After enabling, a persistent connection will be maintained, which will occupy one slot of the total number of connections (up to 5). This is suitable for certain Stdio services that cannot be disconnected."
     }
   },
   "providers": {

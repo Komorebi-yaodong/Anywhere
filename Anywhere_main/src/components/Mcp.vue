@@ -2,7 +2,7 @@
 import { ref, reactive, computed, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox, ElScrollbar, ElAlert } from 'element-plus';
-import { Plus, Delete, Edit, CopyDocument, Tools, Search } from '@element-plus/icons-vue';
+import { Plus, Delete, Edit, CopyDocument, Tools, Search, Refresh, QuestionFilled } from '@element-plus/icons-vue';
 
 const { t } = useI18n();
 const currentConfig = inject('config');
@@ -20,6 +20,7 @@ const defaultServer = {
     description: '',
     type: 'sse',
     isActive: true,
+    isPersistent: false, // 持久化连接标记
     baseUrl: '',
     command: '',
     args: [],
@@ -50,7 +51,6 @@ const normalizedEditingServerType = computed({
         return editingServer.type;
     },
     set(newValue) {
-        // 将下拉框选择的新值赋给原始数据
         editingServer.type = newValue;
     }
 });
@@ -58,8 +58,9 @@ const normalizedEditingServerType = computed({
 const mcpServersList = computed(() => {
     if (!currentConfig.value || !currentConfig.value.mcpServers) return [];
     return Object.entries(currentConfig.value.mcpServers)
+        .filter(([id, value]) => value && typeof value === 'object' && typeof value.name === 'string')
         .map(([id, value]) => ({ id, ...value }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 });
 
 const filteredMcpServersList = computed(() => {
@@ -115,29 +116,16 @@ const convertTextToObject = (text) => {
     if (!text) return {};
     return text.split('\n').reduce((acc, line) => {
         const trimmedLine = line.trim();
-
-        // 忽略空行或注释行 (以 # 开头)
-        if (!trimmedLine || trimmedLine.startsWith('#')) {
-            return acc;
-        }
-
-        // 寻找第一个 '=' 或 ':' 作为分隔符
+        if (!trimmedLine || trimmedLine.startsWith('#')) return acc;
         const separatorIndex = trimmedLine.search(/[=:]/);
-
         if (separatorIndex > 0) {
             const key = trimmedLine.substring(0, separatorIndex).trim();
             let value = trimmedLine.substring(separatorIndex + 1).trim();
-
-            // 如果值被匹配的引号包裹 (例如 "value" 或 'value')，则移除引号
             if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
                 value = value.substring(1, value.length - 1);
             }
-
-            if (key) {
-                acc[key] = value;
-            }
+            if (key) acc[key] = value;
         }
-
         return acc;
     }, {});
 };
@@ -178,11 +166,11 @@ async function saveServer() {
         if (value && Object.keys(value).length > 0) obj[key] = value;
     };
 
-    // [修正] 确保保存时使用的是用户选择的原始值
     const serverData = {
         name: editingServer.name,
-        type: editingServer.type, // 直接使用 editingServer.type
+        type: editingServer.type,
         isActive: editingServer.isActive,
+        isPersistent: editingServer.isPersistent, // 保存持久化标记
     };
 
     addIfPresent(serverData, 'description', editingServer.description);
@@ -221,10 +209,11 @@ function deleteServer(serverId, serverName) {
     }).catch(() => { });
 }
 
-async function handleActiveChange(serverId, isActive) {
+// [修改] 将开关状态的更新也改为原子操作
+async function handleSwitchChange(serverId, key, value) {
     await atomicSave(config => {
         if (config.mcpServers && config.mcpServers[serverId]) {
-            config.mcpServers[serverId].isActive = isActive;
+            config.mcpServers[serverId][key] = value;
         }
     });
 }
@@ -259,6 +248,21 @@ async function saveJson() {
         ElMessage.error(`${t('mcp.alerts.invalidJson')}: ${error.message}`);
     }
 }
+
+async function refreshMcpConfig() {
+  try {
+    const latestConfigData = await window.api.getConfig();
+    if (latestConfigData && latestConfigData.config) {
+      currentConfig.value = latestConfigData.config;
+      ElMessage.success('MCP 服务配置已刷新！');
+    } else {
+      throw new Error("未能获取到有效的配置数据。");
+    }
+  } catch (error) {
+    console.error("刷新MCP配置失败:", error);
+    ElMessage.error('刷新配置失败，请稍后重试。');
+  }
+}
 </script>
 
 <template>
@@ -289,7 +293,7 @@ async function saveJson() {
                                     <span class="mcp-provider" v-if="server.provider">{{ server.provider }}</span>
                                 </div>
                                 <el-switch :model-value="server.isActive"
-                                    @change="(value) => handleActiveChange(server.id, value)" size="small"
+                                    @change="(value) => handleSwitchChange(server.id, 'isActive', value)" size="small"
                                     class="mcp-active-toggle" />
                             </div>
                             <div class="mcp-card-body">
@@ -300,6 +304,14 @@ async function saveJson() {
                                     <el-tag v-if="server.type" size="small" type="info">{{
                                         getDisplayTypeName(server.type) }}</el-tag>
                                     <el-tag v-for="tag in server.tags" :key="tag" size="small">{{ tag }}</el-tag>
+                                </div>
+                                <!-- 新增持久连接开关 -->
+                                <div class="mcp-persistent-toggle">
+                                    <el-tooltip :content="t('mcp.persistent.tooltip')" placement="top">
+                                        <el-switch :model-value="server.isPersistent"
+                                            @change="(value) => handleSwitchChange(server.id, 'isPersistent', value)"
+                                            size="small" style="--el-switch-on-color: #67C23A;" />
+                                    </el-tooltip>
                                 </div>
                                 <div class="mcp-actions">
                                     <el-button :icon="Edit" text circle @click="prepareEditServer(server)" />
@@ -328,7 +340,7 @@ async function saveJson() {
             <el-scrollbar max-height="60vh" class="mcp-dialog-scrollbar">
                 <el-form :model="editingServer" label-position="top" @submit.prevent="saveServer">
                     <el-row :gutter="20">
-                        <el-col :span="14">
+                        <el-col :span="12">
                             <el-form-item :label="t('mcp.nameLabel')" required>
                                 <el-input v-model="editingServer.name" />
                             </el-form-item>
@@ -342,11 +354,29 @@ async function saveJson() {
                                 </el-select>
                             </el-form-item>
                         </el-col>
-                        <el-col :span="4" style="text-align: center;">
-                            <el-form-item :label="t('mcp.activeLabel')">
-                                <el-switch v-model="editingServer.isActive"
-                                    style="--el-switch-on-color: var(--el-color-primary);" />
-                            </el-form-item>
+                        <!-- [修改] 增加持久连接开关 -->
+                        <el-col :span="6">
+                            <el-row justify="space-around">
+                                <el-col :span="12" style="text-align: center;">
+                                    <el-form-item :label="t('mcp.activeLabel')">
+                                        <el-switch v-model="editingServer.isActive" />
+                                    </el-form-item>
+                                </el-col>
+                                <el-col :span="12" style="text-align: center;">
+                                    <el-form-item>
+                                        <template #label>
+                                            <span>{{ t('mcp.persistent.label') }}</span>
+                                            <el-tooltip :content="t('mcp.persistent.tooltip')" placement="top">
+                                                <el-icon style="margin-left: 4px; cursor: help;">
+                                                    <QuestionFilled />
+                                                </el-icon>
+                                            </el-tooltip>
+                                        </template>
+                                        <el-switch v-model="editingServer.isPersistent"
+                                            style="--el-switch-on-color: #67C23A;" />
+                                    </el-form-item>
+                                </el-col>
+                            </el-row>
                         </el-col>
                     </el-row>
                     <el-form-item :label="t('mcp.descriptionLabel')">
@@ -355,7 +385,6 @@ async function saveJson() {
 
                     <el-divider content-position="left">连接设置</el-divider>
 
-                    <!-- HTTP / SSE Fields -->
                     <template v-if="normalizedEditingServerType === 'http' || normalizedEditingServerType === 'sse'">
                         <el-form-item :label="t('mcp.http.url')"><el-input
                                 v-model="editingServer.baseUrl" /></el-form-item>
@@ -363,7 +392,6 @@ async function saveJson() {
                                 type="textarea" :rows="2" :placeholder="t('mcp.headersPlaceholder')" /></el-form-item>
                     </template>
 
-                    <!-- Stdio Fields -->
                     <template v-if="editingServer.type === 'stdio'">
                         <el-form-item :label="t('mcp.stdio.command')"><el-input
                                 v-model="editingServer.command" /></el-form-item>
@@ -413,6 +441,15 @@ async function saveJson() {
                 <el-button type="primary" @click="saveJson">{{ t('common.confirm') }}</el-button>
             </template>
         </el-dialog>
+        <!-- 悬浮刷新按钮 -->
+        <el-button 
+            class="refresh-fab-button" 
+            :icon="Refresh" 
+            type="primary" 
+            circle 
+            @click="refreshMcpConfig" 
+            title="刷新 MCP 服务配置"
+        />
     </div>
 </template>
 
@@ -470,7 +507,7 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-lg);
-    padding: 8px 8px 8px 8px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     transition: all 0.2s ease-in-out;
@@ -542,7 +579,8 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-top: 16px;
+    margin-top: 0px;
+    margin-bottom: 0px;
     gap: 12px;
 }
 
@@ -552,6 +590,14 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     gap: 6px;
     flex-grow: 1;
     min-width: 0;
+    margin-top: 0px;
+    padding-top: 0px;
+}
+
+.mcp-persistent-toggle {
+    display: flex;
+    align-items: center;
+    margin: 0px 8px 5px 0px;
 }
 
 .mcp-actions {
@@ -613,7 +659,6 @@ html.dark .bottom-actions-container {
     line-height: 1;
     height: 36px;
     background-color: transparent;
-    /* 优化：确保背景透明 */
 }
 
 .advanced-collapse :deep(.el-collapse-item__header.is-active) {
@@ -624,7 +669,6 @@ html.dark .bottom-actions-container {
     border-bottom: none;
     padding-top: 20px;
     background-color: transparent;
-    /* 优化：确保背景透明 */
 }
 
 .advanced-collapse :deep(.el-collapse-item__content) {
@@ -633,7 +677,6 @@ html.dark .bottom-actions-container {
 
 html.dark .advanced-collapse {
     background-color: var(--bg-primary);
-    /* 优化：为整个折叠面板提供一个基础背景色 */
     border-radius: var(--radius-md);
     border: 1px solid var(--border-primary);
 }
@@ -655,21 +698,32 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
 }
 
 .json-editor-scrollbar {
-  border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
-  border: 1px solid var(--el-border-color);
-  background-color: var(--el-fill-color-blank);
-  transition: border-color .2s;
+    border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
+    border: 1px solid var(--el-border-color);
+    background-color: var(--el-fill-color-blank);
+    transition: border-color .2s;
 }
 
 .json-editor-scrollbar:has(:focus-within) {
-  border-color: var(--el-color-primary);
+    border-color: var(--el-color-primary);
 }
 
 .json-editor-scrollbar :deep(.el-textarea__inner) {
-  background-color: transparent;
-  border: none;
-  box-shadow: none !important;
-  padding: 5px 11px; /* 匹配 Element Plus 默认内边距 */
-  resize: none;
+    background-color: transparent;
+    border: none;
+    box-shadow: none !important;
+    padding: 5px 11px;
+    resize: none;
+}
+
+.refresh-fab-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 21;
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  box-shadow: var(--el-box-shadow-light);
 }
 </style>

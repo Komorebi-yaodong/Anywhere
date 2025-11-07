@@ -1,7 +1,8 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElSwitch, ElTooltip, ElIcon } from 'element-plus';
 import { createClient } from "webdav/web";
+import { QuestionFilled } from '@element-plus/icons-vue';
 
 import ChatHeader from './components/ChatHeader.vue';
 import ChatMessage from './components/ChatMessage.vue';
@@ -158,7 +159,6 @@ const imageViewerVisible = ref(false);
 const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
 
-const senderRef = ref();
 const toolCallControllers = ref(new Map());
 
 // --- MCP State ---
@@ -170,6 +170,23 @@ const isMcpLoading = ref(false);
 const mcpFilter = ref('all'); // 新增：MCP过滤器状态, 'all', 'selected', 'unselected'
 
 const isMcpActive = computed(() => sessionMcpServerIds.value.length > 0);
+
+// 计算MCP连接数
+const mcpConnectionCount = computed(() => {
+  if (!currentConfig.value || !currentConfig.value.mcpServers) return 0;
+
+  const persistentCount = sessionMcpServerIds.value.filter(id => {
+    const server = currentConfig.value.mcpServers[id];
+    return server && server.isPersistent;
+  }).length;
+
+  const hasOnDemand = sessionMcpServerIds.value.some(id => {
+    const server = currentConfig.value.mcpServers[id];
+    return server && !server.isPersistent;
+  });
+
+  return persistentCount + (hasOnDemand ? 1 : 0);
+});
 
 const availableMcpServers = computed(() => {
   if (!currentConfig.value || !currentConfig.value.mcpServers) return [];
@@ -815,6 +832,12 @@ onMounted(async () => {
       window.addEventListener('blur', closePage);
     }
 
+    const defaultMcpServers = currentPromptConfig.defaultMcpServers;
+    if (Array.isArray(defaultMcpServers) && defaultMcpServers.length > 0) {
+        sessionMcpServerIds.value = [...defaultMcpServers];
+        await applyMcpTools();
+    }
+
     // 步骤 6: 自动发送和UI更新
     if (shouldDirectSend) {
       scrollToBottom();
@@ -836,13 +859,17 @@ onMounted(async () => {
       await initializeWindow(data);
     });
   } else {
-    console.warn("window.preload.receiveMsg not found. Falling back to default initialization.");
-    ElMessage.warning({
-      message: '窗口初始化数据缺失，已加载默认对话。可能是预加载脚本不匹配导致。',
-      duration: 5000,
-      showClose: true,
-    });
-    await initializeWindow(null);
+    const data = {
+      os:  "win",
+      code: "助理",
+      config: await window.api.getConfig().config,
+    };
+    // ElMessage.warning({
+    //   message: '窗口初始化数据缺失，已加载默认对话。可能是预加载脚本不匹配导致。',
+    //   duration: 5000,
+    //   showClose: true,
+    // });
+    await initializeWindow(data);
   }
   if (autoSaveInterval) clearInterval(autoSaveInterval);
   autoSaveInterval = setInterval(autoSaveSession, 15000);
@@ -861,7 +888,7 @@ const autoSaveSession = async () => {
     const sessionData = getSessionDataAsObject();
     const jsonString = JSON.stringify(sessionData, null, 2);
     const filePath = `${currentConfig.value.webdav.localChatPath}/${defaultConversationName.value}.json`;
-    
+
     // 调用后端API静默写入文件
     await window.api.writeLocalFile(filePath, jsonString);
     // console.log(`Auto-saved session to ${filePath}`); // 调试时可以取消注释
@@ -872,7 +899,6 @@ const autoSaveSession = async () => {
 };
 
 onBeforeUnmount(async () => {
-  if (animationFrameId) cancelAnimationFrame(animationFrameId);
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('blur', handleWindowBlur);
@@ -909,10 +935,10 @@ const saveWindowSize = async () => {
       // 更新成功提示信息
       showDismissibleMessage.success('当前快捷助手的窗口大小、位置与缩放已保存');
       if (currentConfig.value.prompts[CODE.value]) {
-         Object.assign(currentConfig.value.prompts[CODE.value], settingsToSave);
+        Object.assign(currentConfig.value.prompts[CODE.value], settingsToSave);
       }
-    } else { 
-      showDismissibleMessage.error(`保存失败: ${result.message}`); 
+    } else {
+      showDismissibleMessage.error(`保存失败: ${result.message}`);
     }
   } catch (error) {
     console.error("Error saving window settings:", error);
@@ -1073,26 +1099,26 @@ const saveSessionAsJson = async () => {
             let fullDefaultPath = finalFilename;
             const localChatPath = currentConfig.value.webdav?.localChatPath;
             if (localChatPath) {
-                // 根据操作系统拼接路径
-                const separator = basic_msg.value.os === 'win' ? '\\' : '/';
-                fullDefaultPath = `${localChatPath}${separator}${finalFilename}`;
+              // 根据操作系统拼接路径
+              const separator = basic_msg.value.os === 'win' ? '\\' : '/';
+              fullDefaultPath = `${localChatPath}${separator}${finalFilename}`;
             }
 
-            await window.api.saveFile({ 
-                title: '保存聊天会话', 
-                defaultPath: fullDefaultPath, // <--- 修改此处
-                buttonLabel: '保存', 
-                filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }], 
-                fileContent: jsonString 
+            await window.api.saveFile({
+              title: '保存聊天会话',
+              defaultPath: fullDefaultPath, // <--- 修改此处
+              buttonLabel: '保存',
+              filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }],
+              fileContent: jsonString
             });
 
             defaultConversationName.value = finalBasename;
             showDismissibleMessage.success('会话已成功保存！');
             done();
           } catch (error) {
-            if (!error.message.includes('canceled by the user') && !error.message.includes('用户取消')) { 
-                console.error('保存会话失败:', error); 
-                showDismissibleMessage.error(`保存失败: ${error.message}`); 
+            if (!error.message.includes('canceled by the user') && !error.message.includes('用户取消')) {
+              console.error('保存会话失败:', error);
+              showDismissibleMessage.error(`保存失败: ${error.message}`);
             }
             done();
           } finally { instance.confirmButtonLoading = false; }
@@ -1291,6 +1317,7 @@ async function applyMcpTools() {
         args: serverConf.args,
         url: serverConf.baseUrl,
         env: serverConf.env,
+        isPersistent: serverConf.isPersistent,
       };
     }
   }
@@ -1347,6 +1374,31 @@ function selectAllMcpServers() {
 
 function toggleMcpDialog() {
   isMcpDialogVisible.value = !isMcpDialogVisible.value;
+}
+
+// 切换并保存MCP服务的持久化状态
+async function toggleMcpPersistence(serverId, isPersistent) {
+    if (!currentConfig.value.mcpServers[serverId]) return;
+
+    // 构造正确的扁平化键路径
+    const keyPath = `mcpServers.${serverId}.isPersistent`;
+
+    try {
+        // 调用 preload API 保存单个设置
+        const result = await window.api.saveSetting(keyPath, isPersistent);
+        
+        if (result && result.success) {
+            // 只有在后端保存成功后才更新前端UI状态
+            currentConfig.value.mcpServers[serverId].isPersistent = isPersistent;
+            showDismissibleMessage.success(`'${currentConfig.value.mcpServers[serverId].name}' 的持久化设置已更新`);
+        } else {
+            // 如果后端保存失败，抛出错误
+            throw new Error(result?.message || '保存设置到数据库失败');
+        }
+    } catch (error) {
+        console.error("Failed to save MCP persistence setting:", error);
+        showDismissibleMessage.error("保存持久化设置失败");
+    }
 }
 
 const askAI = async (forceSend = false) => {
@@ -1982,6 +2034,11 @@ const handleSaveModel = async (modelToSave) => {
           <div class="mcp-server-content">
             <div class="mcp-server-header-row">
               <span class="mcp-server-name">{{ server.name }}</span>
+              <el-tooltip :content="server.isPersistent ? '关闭持久连接(所有工具共用一个连接数)' : '开启持久连接(使用工具后将单独占用一个连接数)'" placement="top">
+                <el-switch :model-value="server.isPersistent" @click.stop
+                  @change="(value) => toggleMcpPersistence(server.id, value)" size="small"
+                  style="--el-switch-on-color: #67C23A; margin-left: auto; margin-right: 8px;" />
+              </el-tooltip>
               <div class="mcp-server-tags">
                 <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{
                   getDisplayTypeName(server.type) }}</el-tag>
@@ -2000,7 +2057,18 @@ const handleSaveModel = async (modelToSave) => {
     </div>
     <template #footer>
       <div class="mcp-dialog-footer">
-        <span class="mcp-limit-hint">Utools插件 最多同时使用5个MCP，STDIO启用即算使用，其它AI调用时才算使用</span>
+        <span class="mcp-limit-hint" :class="{ 'warning': mcpConnectionCount > 5 }">
+          【Utools限制】剩余连接数：{{ 5 - mcpConnectionCount }}/5
+          <el-tooltip placement="top">
+            <template #content>
+              持久连接各占1个名额<br>
+              所有临时连接共占1个名额
+            </template>
+            <el-icon style="vertical-align: middle; margin-left: 4px; cursor: help;">
+              <QuestionFilled />
+            </el-icon>
+          </el-tooltip>
+        </span>
         <div>
           <el-button type="primary" @click="applyMcpTools">应用</el-button>
         </div>
@@ -2560,5 +2628,11 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 .mcp-limit-hint {
   font-size: 12px;
   color: var(--el-color-warning);
+}
+
+/* 当连接数超限时，提示变为红色 */
+.mcp-limit-hint.warning {
+    color: var(--el-color-danger);
+    font-weight: bold;
 }
 </style>

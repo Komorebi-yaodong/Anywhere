@@ -518,7 +518,7 @@ function checkConfig(config) {
 
 /**
  * [已重构] 保存单个设置项，自动判断应写入哪个文档
- * @param {string} keyPath - 属性路径，如 "prompts.AI.enable" 或 "isDarkMode"
+ * @param {string} keyPath - 属性路径，如 "prompts.AI.enable" 或 "mcpServers.@id/with.dots.isPersistent"
  * @param {*} value - 要设置的值
  * @returns {{success: boolean, message?: string}} - 返回操作结果
  */
@@ -528,19 +528,18 @@ function saveSetting(keyPath, value) {
   let targetKeyPath = keyPath;
   let isBaseConfig = false;
 
-  // 根据 keyPath 的第一部分确定目标文档
   if (rootKey === 'prompts') {
     docId = 'prompts';
-    targetKeyPath = keyPath.substring('prompts.'.length); // 移除 "prompts." 前缀
+    targetKeyPath = keyPath.substring('prompts.'.length);
   } else if (rootKey === 'providers') {
     docId = 'providers';
-    targetKeyPath = keyPath.substring('providers.'.length); // 移除 "providers." 前缀
+    targetKeyPath = keyPath.substring('providers.'.length);
   } else if (rootKey === 'mcpServers') {
     docId = 'mcpServers';
     targetKeyPath = keyPath.substring('mcpServers.'.length);
   } else {
     docId = 'config';
-    isBaseConfig = true; // 目标是基础配置
+    isBaseConfig = true;
   }
 
   const doc = utools.db.get(docId);
@@ -549,29 +548,30 @@ function saveSetting(keyPath, value) {
     return { success: false, message: `Config document "${docId}" not found` };
   }
 
-  // 获取要更新的数据部分
-  let dataToUpdate = doc.data;
-  // 基础配置有额外的 .config 层级
-  if (isBaseConfig) {
-    dataToUpdate = dataToUpdate.config;
-  }
-  
-  // 使用路径字符串来设置嵌套属性
-  const keys = targetKeyPath.split('.');
-  let current = dataToUpdate;
-  for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i];
-    if (!current[key] || typeof current[key] !== 'object') {
-      current[key] = {}; // 如果路径不存在，则创建它
-    }
-    current = current[key];
-  }
-  current[keys[keys.length - 1]] = value;
+  let dataToUpdate = isBaseConfig ? doc.data.config : doc.data;
 
-  // 准备最终要写入的数据
-  const finalData = isBaseConfig ? { config: dataToUpdate } : dataToUpdate;
+  // 使用更稳健的路径解析逻辑，以处理包含点号的ID
+  const pathParts = targetKeyPath.split('.');
+  if (pathParts.length < 2) {
+    // 处理简单路径，例如 'isDarkMode' 或直接在文档根部的属性
+    dataToUpdate[targetKeyPath] = value;
+  } else {
+    // 处理嵌套路径，例如 'some-id.isPersistent'，其中 'some-id' 可能包含点
+    const finalKey = pathParts.pop(); // 取出最后一个部分，即 'isPersistent'
+    const objectId = pathParts.join('.'); // 将剩余部分重新组合成完整的ID
+    
+    // 确保目标对象存在
+    if (!dataToUpdate[objectId] || typeof dataToUpdate[objectId] !== 'object') {
+      console.warn(`Object with id "${objectId}" not found in "${docId}", creating it.`);
+      dataToUpdate[objectId] = {};
+    }
+    
+    // 设置最终的值
+    dataToUpdate[objectId][finalKey] = value;
+  }
   
-  // 将更新后的数据写回对应的数据库文档
+  const finalData = isBaseConfig ? { config: doc.data } : dataToUpdate;
+  
   const result = utools.db.put({
     _id: docId,
     data: finalData,
@@ -581,6 +581,7 @@ function saveSetting(keyPath, value) {
   if (result.ok) {
     return { success: true };
   } else {
+    console.error(`Failed to save setting to "${docId}"`, result);
     return { success: false, message: result.message };
   }
 }
@@ -909,9 +910,6 @@ async function openWindow(config, msg) {
       devTools: true
     },
   };
-  
-  // 检查是否需要全屏显示
-  const display = utools.getDisplayNearestPoint({x, y});
 
   const ubWindow = utools.createBrowserWindow(
     "./window/index.html",
@@ -921,7 +919,7 @@ async function openWindow(config, msg) {
       ubWindow.show();
     }
   );
-  // ubWindow.webContents.openDevTools({ mode: "detach" });
+  ubWindow.webContents.openDevTools({ mode: "detach" });
 }
 
 async function coderedirect(label, payload) {
