@@ -709,7 +709,7 @@ function getUser() {
 
 function getPosition(config, promptCode) {
     const promptConfig = config.prompts[promptCode];
-    const TOLERANCE = 10; // 定义一个10像素的容差
+    const OVERFLOW_ALLOWANCE = 10; // 允许窗口超出屏幕边界的最大像素值
 
     let width = promptConfig?.window_width || 540;
     let height = promptConfig?.window_height || 700;
@@ -721,40 +721,54 @@ function getPosition(config, promptCode) {
     // 检查坐标是否存在使用 '!= null'，这可以正确处理 0
     const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
 
-    // 2. 根据设置（固定位置或鼠标位置）确定目标显示器
+    // 1. 根据设置（固定位置或鼠标位置）确定目标显示器和初始位置
     if (hasFixedPosition) {
         let set_position = { x: promptConfig.position_x, y: promptConfig.position_y };
         currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
-    } else {
-        const mouse_position = utools.getCursorScreenPoint();
-        currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
-    }
-
-    // 3. 计算最终位置 (非全屏模式)
-    if (hasFixedPosition) {
         windowX = Math.floor(promptConfig.position_x);
         windowY = Math.floor(promptConfig.position_y);
     } else {
         const mouse_position = utools.getCursorScreenPoint();
+        currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
         windowX = Math.floor(mouse_position.x - (width / 2));
         windowY = Math.floor(mouse_position.y);
     }
 
-    // 4. 确保窗口位置不会离目标屏幕太远
+    // 2. 确保窗口在目标显示器边界内
     if (currentDisplay) {
         const display = currentDisplay.bounds;
-        const minX = display.x - TOLERANCE;
-        const maxX = display.x + display.width + TOLERANCE;
-        const minY = display.y - TOLERANCE;
-        const maxY = display.y + display.height + TOLERANCE;
 
-        if (windowX + width < minX || windowX > maxX || windowY + height < minY || windowY > maxY) {
+        // 检查并修正窗口大小，确保不超过显示器尺寸
+        if (width > display.width) {
+            width = display.width;
+        }
+        if (height > display.height) {
+            height = display.height;
+        }
+
+        // 定义显示器的有效边界（考虑允许的溢出）
+        const minX = display.x - OVERFLOW_ALLOWANCE;
+        const maxX = display.x + display.width - width + OVERFLOW_ALLOWANCE;
+        const minY = display.y - OVERFLOW_ALLOWANCE;
+        const maxY = display.y + display.height - height + OVERFLOW_ALLOWANCE;
+
+        // 检查窗口是否完全在显示器之外，如果是，则将其居中
+        if (
+            (windowX + width < display.x) || (windowX > display.x + display.width) ||
+            (windowY + height < display.y) || (windowY > display.y + display.height)
+           ) {
              windowX = display.x + (display.width - width) / 2;
              windowY = display.y + (display.height - height) / 2;
+        } else {
+            // 如果窗口部分在显示器外，则将其拉回边界内
+            if (windowX < minX) windowX = minX;
+            if (windowX > maxX) windowX = maxX;
+            if (windowY < minY) windowY = minY;
+            if (windowY > maxY) windowY = maxY;
         }
     }
 
-    // 5. 返回最终计算的位置和原始保存的尺寸
+    // 3. 返回最终计算的位置和尺寸
     return { x: Math.round(windowX), y: Math.round(windowY), width, height };
 }
 

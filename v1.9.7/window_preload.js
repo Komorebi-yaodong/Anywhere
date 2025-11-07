@@ -635,7 +635,7 @@ var require_data = __commonJS({
     }
     function getPosition(config, promptCode) {
       const promptConfig = config.prompts[promptCode];
-      const TOLERANCE = 10;
+      const OVERFLOW_ALLOWANCE = 10;
       let width = promptConfig?.window_width || 540;
       let height = promptConfig?.window_height || 700;
       let windowX = 0, windowY = 0;
@@ -645,27 +645,34 @@ var require_data = __commonJS({
       if (hasFixedPosition) {
         let set_position = { x: promptConfig.position_x, y: promptConfig.position_y };
         currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
-      } else {
-        const mouse_position = utools.getCursorScreenPoint();
-        currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
-      }
-      if (hasFixedPosition) {
         windowX = Math.floor(promptConfig.position_x);
         windowY = Math.floor(promptConfig.position_y);
       } else {
         const mouse_position = utools.getCursorScreenPoint();
+        currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
         windowX = Math.floor(mouse_position.x - width / 2);
         windowY = Math.floor(mouse_position.y);
       }
       if (currentDisplay) {
         const display = currentDisplay.bounds;
-        const minX = display.x - TOLERANCE;
-        const maxX = display.x + display.width + TOLERANCE;
-        const minY = display.y - TOLERANCE;
-        const maxY = display.y + display.height + TOLERANCE;
-        if (windowX + width < minX || windowX > maxX || windowY + height < minY || windowY > maxY) {
+        if (width > display.width) {
+          width = display.width;
+        }
+        if (height > display.height) {
+          height = display.height;
+        }
+        const minX = display.x - OVERFLOW_ALLOWANCE;
+        const maxX = display.x + display.width - width + OVERFLOW_ALLOWANCE;
+        const minY = display.y - OVERFLOW_ALLOWANCE;
+        const maxY = display.y + display.height - height + OVERFLOW_ALLOWANCE;
+        if (windowX + width < display.x || windowX > display.x + display.width || windowY + height < display.y || windowY > display.y + display.height) {
           windowX = display.x + (display.width - width) / 2;
           windowY = display.y + (display.height - height) / 2;
+        } else {
+          if (windowX < minX) windowX = minX;
+          if (windowX > maxX) windowX = maxX;
+          if (windowY < minY) windowY = minY;
+          if (windowY > maxY) windowY = maxY;
         }
       }
       return { x: Math.round(windowX), y: Math.round(windowY), width, height };
