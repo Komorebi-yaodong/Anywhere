@@ -160,6 +160,7 @@ const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
 
 const toolCallControllers = ref(new Map());
+const tempSessionMcpServerIds = ref([]);
 
 // --- MCP State ---
 const isMcpDialogVisible = ref(false);
@@ -201,9 +202,9 @@ const filteredMcpServers = computed(() => {
 
   // Filter by selection status
   if (mcpFilter.value === 'selected') {
-    servers = servers.filter(server => sessionMcpServerIds.value.includes(server.id));
+    servers = servers.filter(server => tempSessionMcpServerIds.value.includes(server.id));
   } else if (mcpFilter.value === 'unselected') {
-    servers = servers.filter(server => !sessionMcpServerIds.value.includes(server.id));
+    servers = servers.filter(server => !tempSessionMcpServerIds.value.includes(server.id));
   }
 
   // Filter by search query
@@ -740,7 +741,6 @@ onMounted(async () => {
     const code = data?.code || "AI"; // 如果没有传入code，则默认为 "AI"
     const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
 
-    // BUG修复：从快捷助手配置中读取缩放，并提供全局和默认回退
     zoomLevel.value = currentPromptConfig.zoom || currentConfig.value.zoom || 1;
     if (window.api && typeof window.api.setZoomFactor === 'function') {
       window.api.setZoomFactor(zoomLevel.value);
@@ -834,8 +834,11 @@ onMounted(async () => {
 
     const defaultMcpServers = currentPromptConfig.defaultMcpServers;
     if (Array.isArray(defaultMcpServers) && defaultMcpServers.length > 0) {
-        sessionMcpServerIds.value = [...defaultMcpServers];
-        await applyMcpTools();
+      // 将默认服务ID同时设置给 session (生效状态) 和 temp (临时编辑状态)
+      sessionMcpServerIds.value = [...defaultMcpServers];
+      tempSessionMcpServerIds.value = [...defaultMcpServers];
+      // 立即应用这些默认服务
+      await applyMcpTools();
     }
 
     // 步骤 6: 自动发送和UI更新
@@ -860,7 +863,7 @@ onMounted(async () => {
     });
   } else {
     const data = {
-      os:  "win",
+      os: "win",
       code: "助理",
       config: await window.api.getConfig().config,
     };
@@ -1362,44 +1365,47 @@ async function applyMcpTools() {
 }
 
 function clearMcpTools() {
-  sessionMcpServerIds.value = [];
+  tempSessionMcpServerIds.value = [];
 }
 
 function selectAllMcpServers() {
   const allVisibleIds = filteredMcpServers.value.map(server => server.id);
-  const selectedIdsSet = new Set(sessionMcpServerIds.value);
+  const selectedIdsSet = new Set(tempSessionMcpServerIds.value);
   allVisibleIds.forEach(id => selectedIdsSet.add(id));
-  sessionMcpServerIds.value = Array.from(selectedIdsSet);
+  tempSessionMcpServerIds.value = Array.from(selectedIdsSet);
 }
 
 
 function toggleMcpDialog() {
+  if (!isMcpDialogVisible.value) {
+    tempSessionMcpServerIds.value = [...sessionMcpServerIds.value];
+  }
   isMcpDialogVisible.value = !isMcpDialogVisible.value;
 }
 
 // 切换并保存MCP服务的持久化状态
 async function toggleMcpPersistence(serverId, isPersistent) {
-    if (!currentConfig.value.mcpServers[serverId]) return;
+  if (!currentConfig.value.mcpServers[serverId]) return;
 
-    // 构造正确的扁平化键路径
-    const keyPath = `mcpServers.${serverId}.isPersistent`;
+  // 构造正确的扁平化键路径
+  const keyPath = `mcpServers.${serverId}.isPersistent`;
 
-    try {
-        // 调用 preload API 保存单个设置
-        const result = await window.api.saveSetting(keyPath, isPersistent);
-        
-        if (result && result.success) {
-            // 只有在后端保存成功后才更新前端UI状态
-            currentConfig.value.mcpServers[serverId].isPersistent = isPersistent;
-            showDismissibleMessage.success(`'${currentConfig.value.mcpServers[serverId].name}' 的持久化设置已更新`);
-        } else {
-            // 如果后端保存失败，抛出错误
-            throw new Error(result?.message || '保存设置到数据库失败');
-        }
-    } catch (error) {
-        console.error("Failed to save MCP persistence setting:", error);
-        showDismissibleMessage.error("保存持久化设置失败");
+  try {
+    // 调用 preload API 保存单个设置
+    const result = await window.api.saveSetting(keyPath, isPersistent);
+
+    if (result && result.success) {
+      // 只有在后端保存成功后才更新前端UI状态
+      currentConfig.value.mcpServers[serverId].isPersistent = isPersistent;
+      showDismissibleMessage.success(`'${currentConfig.value.mcpServers[serverId].name}' 的持久化设置已更新`);
+    } else {
+      // 如果后端保存失败，抛出错误
+      throw new Error(result?.message || '保存设置到数据库失败');
     }
+  } catch (error) {
+    console.error("Failed to save MCP persistence setting:", error);
+    showDismissibleMessage.error("保存持久化设置失败");
+  }
 }
 
 const askAI = async (forceSend = false) => {
@@ -1879,11 +1885,11 @@ const truncateText = (text, maxLength = 40) => {
 };
 
 function toggleMcpServerSelection(serverId) {
-  const index = sessionMcpServerIds.value.indexOf(serverId);
+  const index = tempSessionMcpServerIds.value.indexOf(serverId);
   if (index === -1) {
-    sessionMcpServerIds.value.push(serverId);
+    tempSessionMcpServerIds.value.push(serverId);
   } else {
-    sessionMcpServerIds.value.splice(index, 1);
+    tempSessionMcpServerIds.value.splice(index, 1);
   }
 }
 
@@ -2028,14 +2034,15 @@ const handleSaveModel = async (modelToSave) => {
       </div>
       <div class="mcp-server-list custom-scrollbar">
         <div v-for="server in filteredMcpServers" :key="server.id" class="mcp-server-item"
-          :class="{ 'is-checked': sessionMcpServerIds.includes(server.id) }"
+          :class="{ 'is-checked': tempSessionMcpServerIds.includes(server.id) }"
           @click="toggleMcpServerSelection(server.id)">
-          <el-checkbox :model-value="sessionMcpServerIds.includes(server.id)" size="large"
+          <el-checkbox :model-value="tempSessionMcpServerIds.includes(server.id)" size="large"
             @change="() => toggleMcpServerSelection(server.id)" @click.stop />
           <div class="mcp-server-content">
             <div class="mcp-server-header-row">
               <span class="mcp-server-name">{{ server.name }}</span>
-              <el-tooltip :content="server.isPersistent ? '关闭持久连接(所有工具共用一个连接数)' : '开启持久连接(使用工具后将单独占用一个连接数)'" placement="top">
+              <el-tooltip :content="server.isPersistent ? '关闭持久连接(所有工具共用一个连接数)' : '开启持久连接(使用工具后将单独占用一个连接数)'"
+                placement="top">
                 <el-switch :model-value="server.isPersistent" @click.stop
                   @change="(value) => toggleMcpPersistence(server.id, value)" size="small"
                   style="--el-switch-on-color: #67C23A; margin-left: auto; margin-right: 8px;" />
@@ -2045,7 +2052,7 @@ const handleSaveModel = async (modelToSave) => {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                  }}</el-tag>
+                }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
@@ -2071,7 +2078,8 @@ const handleSaveModel = async (modelToSave) => {
           </el-tooltip>
         </span>
         <div>
-          <el-button type="primary" @click="applyMcpTools">应用</el-button>
+          <el-button type="primary"
+            @click="sessionMcpServerIds = [...tempSessionMcpServerIds]; applyMcpTools();">应用</el-button>
         </div>
       </div>
     </template>
@@ -2633,7 +2641,7 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 
 /* 当连接数超限时，提示变为红色 */
 .mcp-limit-hint.warning {
-    color: var(--el-color-danger);
-    font-weight: bold;
+  color: var(--el-color-danger);
+  font-weight: bold;
 }
 </style>
