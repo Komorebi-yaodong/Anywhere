@@ -99,6 +99,11 @@
     "iconUploadTip": "支持 {formats} 格式，最大 {maxSize}",
     "dragIconHere": "拖拽",
     "orClickToUpload": "或点击",
+    "regex": {
+      "label": "自定义正则匹配",
+      "tooltip": "当输入类型为'文本'时，可通过此项设置正则表达式来匹配特定内容。<br/>1. 格式必须为 /.../flags，例如 <code>/^https?:\\/\\//</code> 用于匹配网址。<br/>2. <b>重要</b>：表达式中的反斜杠 <code>\\</code> 必须转义写成 <code>\\\\</code>。<br/>3. <code>flags</code> 是可选标志，如 <code>i</code> 表示不区分大小写 (例如 <code>/hello/i</code>)。<br/>4. 如果留空，则会匹配任意文本。<br/><br/><b>常用符号速查:</b><br/>• <code>.</code> - 匹配除换行外的任意字符<br/>• <code>\\d</code> - 匹配任意数字<br/>• <code>\\s</code> - 匹配任意空白符 (空格, tab, 换行)<br/>• <code>\\S</code> - 匹配任意非空白符<br/>• <code>\\w</code> - 匹配字母、数字、下划线<br/>• <code>[...]</code> - 匹配括号内任一字符, 如 <code>[abc]</code><br/>• <code>*</code> - 匹配0次或多次<br/>• <code>+</code> - 匹配1次或多次<br/>• <code>?</code> - 匹配0次或1次<br/>• <code>^</code> - 匹配开头<br/>• <code>$</code> - 匹配结尾",
+      "placeholder": "/.../flags (留空则匹配任意文本)"
+    },
     "typeOptions": {
       "general": "通用",
       "text": "文本",

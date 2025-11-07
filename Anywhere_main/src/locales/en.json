@@ -99,6 +99,11 @@
     "iconUploadTip": "Supports {formats} format, max size {maxSize}.",
     "dragIconHere": "Drag ",
     "orClickToUpload": "or click",
+    "regex": {
+      "label": "Custom Regex Match",
+      "tooltip": "When the input type is 'Text', you can set a regular expression here to match specific content.<br/>1. Format must be /.../flags, e.g., <code>/^https?:\\/\\//</code> to match URLs.<br/>2. <b>Important</b>: Backslashes <code>\\</code> in the expression must be escaped as <code>\\\\</code>.<br/>3. <code>flags</code> are optional, like <code>i</code> for case-insensitivity (e.g., <code>/hello/i</code>).<br/>4. Leave empty to match any text.<br/><br/><b>Quick Reference:</b><br/>• <code>.</code> - Matches any character except newline<br/>• <code>\\d</code> - Matches any digit<br/>• <code>\\s</code> - Matches any whitespace (space, tab, newline)<br/>• <code>\\S</code> - Matches any non-whitespace<br/>• <code>\\w</code> - Matches word characters (a-z, A-Z, 0-9, _)<br/>• <code>[...]</code> - Matches any character in the set, e.g., <code>[abc]</code><br/>• <code>*</code> - Matches 0 or more times<br/>• <code>+</code> - Matches 1 or more times<br/>• <code>?</code> - Matches 0 or 1 time<br/>• <code>^</code> - Matches start of string<br/>• <code>$</code> - Matches end of string",
+      "placeholder": "/.../flags (empty for any text)"
+    },
     "typeOptions": {
       "general": "General",
       "text": "Text",

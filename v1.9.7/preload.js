@@ -188,8 +188,8 @@ var require_data = __commonJS({
     }
     function checkConfig2(config) {
       let flag = false;
-      if (config.version !== "1.7.3") {
-        config.version = "1.7.3";
+      if (config.version !== "1.9.7") {
+        config.version = "1.9.7";
         flag = true;
       }
       if (config.isAlwaysOnTop_global === void 0) {
@@ -328,6 +328,10 @@ var require_data = __commonJS({
         flag = true;
       }
       for (let key in config.prompts) {
+        if (config.prompts[key].type === "over" && config.prompts[key].matchRegex === void 0) {
+          config.prompts[key].matchRegex = "";
+          flag = true;
+        }
         if (config.prompts[key].defaultMcpServers === void 0) {
           config.prompts[key].defaultMcpServers = [];
           flag = true;
@@ -585,7 +589,16 @@ var require_data = __commonJS({
           } else if (prompt.type === "img") {
             expectedMatchFeature.cmds.push({ type: "img", label: key });
           } else if (prompt.type === "over") {
-            expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 1e38 });
+            if (prompt.matchRegex && prompt.matchRegex.trim() !== "") {
+              expectedMatchFeature.cmds.push({
+                type: "regex",
+                label: key,
+                match: prompt.matchRegex,
+                minLength: 1
+              });
+            } else {
+              expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 1e38 });
+            }
           }
           utools.setFeature(expectedMatchFeature);
           if (prompt.showMode === "window") {

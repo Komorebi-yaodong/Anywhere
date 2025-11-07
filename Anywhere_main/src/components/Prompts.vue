@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, inject, watch, nextTick } from 'vue';
-import { Plus, Delete, Close, ChatLineRound , UploadFilled, Position, QuestionFilled, Switch, Refresh } from '@element-plus/icons-vue';
+import { Plus, Delete, Close, ChatLineRound, UploadFilled, Position, QuestionFilled, Switch, Refresh } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
 
@@ -88,11 +88,12 @@ const editingPrompt = reactive({
   ifTextNecessary: false,
   voice: '',
   reasoning_effort: "default",
-  defaultMcpServers: [], // 新增
+  defaultMcpServers: [],
   window_width: 540,
   window_height: 700,
   isAlwaysOnTop: true,
   autoCloseOnBlur: true,
+  matchRegex: "", // 新增
 });
 const isNewPrompt = ref(false);
 
@@ -301,6 +302,7 @@ function prepareAddPrompt() {
     position_x: 0, position_y: 0,
     isAlwaysOnTop: currentConfig.value.isAlwaysOnTop_global,
     autoCloseOnBlur: currentConfig.value.autoCloseOnBlur_global,
+    matchRegex: "", // 新增
   });
   showPromptEditDialog.value = true;
 }
@@ -342,6 +344,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     defaultMcpServers: p.defaultMcpServers ?? [],
     window_width: p.window_width ?? 540, window_height: p.window_height ?? 700,
     isAlwaysOnTop: p.isAlwaysOnTop ?? true, autoCloseOnBlur: p.autoCloseOnBlur ?? true,
+    matchRegex: p.matchRegex || "", // 新增
   });
   showPromptEditDialog.value = true;
 }
@@ -367,6 +370,7 @@ function savePrompt() {
       defaultMcpServers: editingPrompt.defaultMcpServers,
       window_width: editingPrompt.window_width, window_height: editingPrompt.window_height,
       isAlwaysOnTop: editingPrompt.isAlwaysOnTop, autoCloseOnBlur: editingPrompt.autoCloseOnBlur,
+      matchRegex: editingPrompt.matchRegex, // 新增
     };
 
     // 1. 更新或创建 prompts 对象中的条目
@@ -654,9 +658,9 @@ async function refreshPromptsConfig() {
               <el-tooltip :content="item.key" placement="top">
                 <span class="prompt-name" @click="prepareEditPrompt(item.key, activeTabName)">{{ item.key }}</span>
               </el-tooltip>
-              <el-tooltip v-if="item.showMode === 'window'&&item.enable" content="直接打开对话窗口" placement="top">
-                <el-button :icon="ChatLineRound " circle text
-                  @click.stop="openPromptWindow(item.key)" class="open-prompt-btn" />
+              <el-tooltip v-if="item.showMode === 'window' && item.enable" content="直接打开对话窗口" placement="top">
+                <el-button :icon="ChatLineRound" circle text @click.stop="openPromptWindow(item.key)"
+                  class="open-prompt-btn" />
               </el-tooltip>
               <div class="prompt-card-tag-actions">
                 <el-switch v-model="item.enable" @change="(value) => handlePromptEnableChange(item.key, value)"
@@ -751,6 +755,20 @@ async function refreshPromptsConfig() {
                       </el-form-item>
                     </el-col>
                   </el-row>
+                  <el-form-item v-if="editingPrompt.type === 'over'" class="regex-form-item">
+                    <template #label>
+                      <span>{{ t('prompts.regex.label') }}</span>
+                      <el-tooltip placement="right" raw-content>
+                        <template #content>
+                          <div v-html="t('prompts.regex.tooltip')"></div>
+                        </template>
+                        <el-icon class="tip-icon" style="margin-left: 4px;">
+                          <QuestionFilled />
+                        </el-icon>
+                      </el-tooltip>
+                    </template>
+                    <el-input v-model="editingPrompt.matchRegex" :placeholder="t('prompts.regex.placeholder')" />
+                  </el-form-item>
                 </div>
 
                 <label class="el-form-item__label">{{ t('prompts.modelLabel') }}</label>
@@ -859,7 +877,7 @@ async function refreshPromptsConfig() {
                     <div class="spacer"></div>
                     <el-switch v-model="editingPrompt.autoCloseOnBlur" />
                   </div>
-                  
+
                   <div class="param-item voice-param">
                     <span class="param-label">{{ t('prompts.voiceLabel') }}</span>
                     <el-tooltip :content="t('prompts.voiceTooltip')" placement="top"><el-icon class="tip-icon">
@@ -888,14 +906,14 @@ async function refreshPromptsConfig() {
                   <el-row :gutter="20" v-if="editingPrompt.showMode === 'window'" class="dimensions-group-row">
                     <el-col :span="12">
                       <el-form-item :label="t('setting.dimensions.widthLabel')" label-position="top">
-                        <el-input-number v-model="editingPrompt.window_width" :min="200"
-                          controls-position="right" style="width: 100%;" />
+                        <el-input-number v-model="editingPrompt.window_width" :min="200" controls-position="right"
+                          style="width: 100%;" />
                       </el-form-item>
                     </el-col>
                     <el-col :span="12">
                       <el-form-item :label="t('setting.dimensions.heightLabel')" label-position="top">
-                        <el-input-number v-model="editingPrompt.window_height" :min="150"
-                          controls-position="right" style="width: 100%;" />
+                        <el-input-number v-model="editingPrompt.window_height" :min="150" controls-position="right"
+                          style="width: 100%;" />
                       </el-form-item>
                     </el-col>
                   </el-row>
@@ -1150,8 +1168,8 @@ async function refreshPromptsConfig() {
   top: 0;
   z-index: 10;
   background-color: var(--bg-primary);
-    padding: 5px 0px 5px 0px;
-    margin: 0px 0px 5px 0px;
+  padding: 5px 0px 5px 0px;
+  margin: 0px 0px 5px 0px;
 }
 
 .prompts-grid-container {
@@ -1520,11 +1538,15 @@ html.dark .prompt-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
 .open-prompt-btn {
   margin-left: 8px;
   color: var(--bg-accent);
-  font-size: 16px; 
+  font-size: 16px;
 }
 
 .open-prompt-btn:hover {
   color: var(--text-accent);
   background-color: var(--bg-tertiary) !important;
+}
+
+.regex-form-item {
+  margin-top: 10px;
 }
 </style>

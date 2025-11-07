@@ -181,8 +181,8 @@ async function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  if (config.version !== "1.7.3") {
-    config.version = "1.7.3";
+  if (config.version !== "1.9.7") {
+    config.version = "1.9.7";
     flag = true;
   }
   if (config.isAlwaysOnTop_global === undefined) {
@@ -332,6 +332,11 @@ function checkConfig(config) {
   }
 
   for (let key in config.prompts) {
+    // 为 over 类型的快捷助手添加 matchRegex 字段
+    if (config.prompts[key].type === 'over' && config.prompts[key].matchRegex === undefined) {
+      config.prompts[key].matchRegex = "";
+      flag = true;
+    }
     if (config.prompts[key].defaultMcpServers === undefined) {
       config.prompts[key].defaultMcpServers = [];
       flag = true;
@@ -652,7 +657,17 @@ function updateConfig(newConfig) {
       } else if (prompt.type === "img") {
           expectedMatchFeature.cmds.push({ type: "img", label: key });
       } else if (prompt.type === "over") {
-          expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
+          // 根据 matchRegex 决定生成 regex 还是 over 类型的 cmd
+          if (prompt.matchRegex && prompt.matchRegex.trim() !== '') {
+              expectedMatchFeature.cmds.push({
+                  type: "regex",
+                  label: key,
+                  match: prompt.matchRegex,
+                  minLength: 1
+              });
+          } else {
+              expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
+          }
       }
       utools.setFeature(expectedMatchFeature);
 
