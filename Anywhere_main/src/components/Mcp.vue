@@ -250,18 +250,18 @@ async function saveJson() {
 }
 
 async function refreshMcpConfig() {
-  try {
-    const latestConfigData = await window.api.getConfig();
-    if (latestConfigData && latestConfigData.config) {
-      currentConfig.value = latestConfigData.config;
-      ElMessage.success('MCP 服务配置已刷新！');
-    } else {
-      throw new Error("未能获取到有效的配置数据。");
+    try {
+        const latestConfigData = await window.api.getConfig();
+        if (latestConfigData && latestConfigData.config) {
+            currentConfig.value = latestConfigData.config;
+            ElMessage.success('MCP 服务配置已刷新！');
+        } else {
+            throw new Error("未能获取到有效的配置数据。");
+        }
+    } catch (error) {
+        console.error("刷新MCP配置失败:", error);
+        ElMessage.error('刷新配置失败，请稍后重试。');
     }
-  } catch (error) {
-    console.error("刷新MCP配置失败:", error);
-    ElMessage.error('刷新配置失败，请稍后重试。');
-  }
 }
 </script>
 
@@ -354,51 +354,62 @@ async function refreshMcpConfig() {
                                 </el-select>
                             </el-form-item>
                         </el-col>
-                        <!-- [修改] 增加持久连接开关 -->
-                        <el-col :span="6">
-                            <el-row justify="space-around">
-                                <el-col :span="12" style="text-align: center;">
-                                    <el-form-item :label="t('mcp.activeLabel')">
-                                        <el-switch v-model="editingServer.isActive" />
-                                    </el-form-item>
-                                </el-col>
-                                <el-col :span="12" style="text-align: center;">
-                                    <el-form-item>
-                                        <template #label>
-                                            <span>{{ t('mcp.persistent.label') }}</span>
-                                            <el-tooltip :content="t('mcp.persistent.tooltip')" placement="top">
-                                                <el-icon style="margin-left: 4px; cursor: help;">
-                                                    <QuestionFilled />
-                                                </el-icon>
-                                            </el-tooltip>
-                                        </template>
-                                        <el-switch v-model="editingServer.isPersistent"
-                                            style="--el-switch-on-color: #67C23A;" />
-                                    </el-form-item>
-                                </el-col>
-                            </el-row>
+                        <el-col :span="6" class="switches-container">
+                            <el-form-item :label="t('mcp.activeLabel')" class="compact-form-item">
+                                <el-switch v-model="editingServer.isActive" />
+                            </el-form-item>
+                            <el-form-item class="compact-form-item">
+                                <template #label>
+                                    <span>{{ t('mcp.persistent.label') }}</span>
+                                    <el-tooltip :content="t('mcp.persistent.tooltip')" placement="top">
+                                        <el-icon style="margin-left: 4px; cursor: help; vertical-align: middle;">
+                                            <QuestionFilled />
+                                        </el-icon>
+                                    </el-tooltip>
+                                </template>
+                                <el-switch v-model="editingServer.isPersistent"
+                                    style="--el-switch-on-color: #67C23A;" />
+                            </el-form-item>
                         </el-col>
                     </el-row>
                     <el-form-item :label="t('mcp.descriptionLabel')">
-                        <el-input v-model="editingServer.description" type="textarea" :rows="2" />
+                        <el-scrollbar max-height="100px" class="item-scrollbar">
+                            <el-input v-model="editingServer.description" type="textarea" :autosize="{ minRows: 2 }"
+                                resize="none" />
+                        </el-scrollbar>
                     </el-form-item>
 
-                    <el-divider content-position="left">连接设置</el-divider>
+                    <el-divider content-position="left"></el-divider>
 
                     <template v-if="normalizedEditingServerType === 'http' || normalizedEditingServerType === 'sse'">
                         <el-form-item :label="t('mcp.http.url')"><el-input
                                 v-model="editingServer.baseUrl" /></el-form-item>
-                        <el-form-item :label="t('mcp.http.headers')"><el-input v-model="editingServer.headers"
-                                type="textarea" :rows="2" :placeholder="t('mcp.headersPlaceholder')" /></el-form-item>
+                        <el-form-item :label="t('mcp.http.headers')">
+                            <el-scrollbar max-height="80px" class="item-scrollbar">
+                                <el-input v-model="editingServer.headers" type="textarea" :autosize="{ minRows: 2 }"
+                                    resize="none" :placeholder="t('mcp.headersPlaceholder')" />
+                            </el-scrollbar>
+                        </el-form-item>
                     </template>
 
                     <template v-if="editingServer.type === 'stdio'">
-                        <el-form-item :label="t('mcp.stdio.command')"><el-input
-                                v-model="editingServer.command" /></el-form-item>
-                        <el-form-item :label="t('mcp.stdio.args')"><el-input v-model="editingServer.args"
-                                type="textarea" :rows="2" :placeholder="t('mcp.argsPlaceholder')" /></el-form-item>
-                        <el-form-item :label="t('mcp.stdio.env')"><el-input v-model="editingServer.env" type="textarea"
-                                :rows="2" :placeholder="t('mcp.envPlaceholder')" /></el-form-item>
+                        <el-form-item :label="t('mcp.stdio.command')">
+                            <el-scrollbar class="item-scrollbar">
+                                <el-input v-model="editingServer.command" />
+                            </el-scrollbar>
+                        </el-form-item>
+                        <el-form-item :label="t('mcp.stdio.args')">
+                            <el-scrollbar max-height="80px" class="item-scrollbar">
+                                <el-input v-model="editingServer.args" type="textarea" :autosize="{ minRows: 1 }"
+                                    resize="none" :placeholder="t('mcp.argsPlaceholder')" />
+                            </el-scrollbar>
+                        </el-form-item>
+                        <el-form-item :label="t('mcp.stdio.env')">
+                            <el-scrollbar max-height="80px" class="item-scrollbar">
+                                <el-input v-model="editingServer.env" type="textarea" :autosize="{ minRows: 2 }"
+                                    resize="none" :placeholder="t('mcp.envPlaceholder')" />
+                            </el-scrollbar>
+                        </el-form-item>
                     </template>
 
                     <el-collapse v-model="advancedCollapse" class="advanced-collapse">
@@ -442,14 +453,8 @@ async function refreshMcpConfig() {
             </template>
         </el-dialog>
         <!-- 悬浮刷新按钮 -->
-        <el-button 
-            class="refresh-fab-button" 
-            :icon="Refresh" 
-            type="primary" 
-            circle 
-            @click="refreshMcpConfig" 
-            title="刷新 MCP 服务配置"
-        />
+        <el-button class="refresh-fab-button" :icon="Refresh" type="primary" circle @click="refreshMcpConfig"
+            title="刷新 MCP 服务配置" />
     </div>
 </template>
 
@@ -716,14 +721,76 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
     resize: none;
 }
 
+.item-scrollbar :deep(.el-textarea__inner:focus) {
+    box-shadow: none !important;
+}
+
+.item-scrollbar :deep(.el-input__wrapper) {
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+
+.item-scrollbar :deep(.el-input__wrapper.is-focus) {
+    box-shadow: none !important;
+}
+
 .refresh-fab-button {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 21;
-  width: 24px;
-  height: 24px;
-  font-size: 16px;
-  box-shadow: var(--el-box-shadow-light);
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 21;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    box-shadow: var(--el-box-shadow-light);
+}
+
+.item-scrollbar {
+    width: 100%;
+    border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
+    border: 1px solid var(--el-border-color);
+    background-color: var(--el-fill-color-blank);
+    transition: border-color .2s;
+}
+
+.item-scrollbar:has(:focus-within) {
+    border-color: var(--el-color-primary);
+}
+
+.item-scrollbar :deep(.el-textarea__inner) {
+    overflow: hidden;
+    box-shadow: none !important;
+    background-color: transparent !important;
+    padding: 5px 11px;
+}
+
+.item-scrollbar :deep(.el-scrollbar__view) {
+    padding-right: 2px;
+}
+
+.switches-container {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-start;
+    padding-top: 6px;
+}
+
+.compact-form-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 0;
+}
+
+.compact-form-item :deep(.el-form-item__label) {
+    margin-bottom: 8px;
+    line-height: 1;
+    padding: 0 !important;
+    display: flex;
+    align-items: center;
+}
+
+.compact-form-item :deep(.el-form-item__content) {
+    line-height: 1;
 }
 </style>
