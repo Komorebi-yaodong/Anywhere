@@ -168,7 +168,7 @@ const sessionMcpServerIds = ref([]); // Store IDs of servers active for this ses
 const openaiFormattedTools = ref([]);
 const mcpSearchQuery = ref('');
 const isMcpLoading = ref(false);
-const mcpFilter = ref('all'); // 新增：MCP过滤器状态, 'all', 'selected', 'unselected'
+const mcpFilter = ref('all'); // MCP过滤器状态, 'all', 'selected', 'unselected'
 
 const isMcpActive = computed(() => sessionMcpServerIds.value.length > 0);
 
@@ -176,12 +176,14 @@ const isMcpActive = computed(() => sessionMcpServerIds.value.length > 0);
 const mcpConnectionCount = computed(() => {
   if (!currentConfig.value || !currentConfig.value.mcpServers) return 0;
 
-  const persistentCount = sessionMcpServerIds.value.filter(id => {
+  // 将依赖从 sessionMcpServerIds.value 改为 tempSessionMcpServerIds.value
+  const persistentCount = tempSessionMcpServerIds.value.filter(id => {
     const server = currentConfig.value.mcpServers[id];
     return server && server.isPersistent;
   }).length;
 
-  const hasOnDemand = sessionMcpServerIds.value.some(id => {
+  // 将依赖从 sessionMcpServerIds.value 改为 tempSessionMcpServerIds.value
+  const hasOnDemand = tempSessionMcpServerIds.value.some(id => {
     const server = currentConfig.value.mcpServers[id];
     return server && !server.isPersistent;
   });
@@ -579,7 +581,7 @@ const handleEditStart = async (index) => {
   // 这是比 setTimeout(0) 更可靠的方式，确保在获取元素位置时，它已经是最终渲染的尺寸
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      // 核心修复: 在下一帧绘制前，执行立即滚动
+      // 在下一帧绘制前，执行立即滚动
       element.scrollIntoView({ behavior: 'auto', block: 'nearest' });
     });
   });
@@ -2336,7 +2338,7 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   border-color: var(--el-border-color);
 }
 
-/* [MODIFIED] 新增并修正图片预览工具栏样式 */
+/* 图片预览工具栏样式 */
 .custom-viewer-actions {
   position: fixed;
   bottom: 100px;
