@@ -953,10 +953,10 @@ const saveSessionToCloud = async () => {
       title: '保存到云端',
       message: () => h('div', null, [
         h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入要保存到云端的会话名称。'),
-        h(ElInput, { 
-          modelValue: inputValue.value, 
-          'onUpdate:modelValue': (val) => { inputValue.value = val; }, 
-          placeholder: '文件名', 
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '文件名',
           autofocus: true,
           onKeydown: (event) => {
             if (event.key === 'Enter') {
@@ -1044,17 +1044,17 @@ const saveSessionAsMarkdown = async () => {
       title: '保存为 Markdown',
       message: () => h('div', null, [
         h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
-        h(ElInput, { 
-            modelValue: inputValue.value, 
-            'onUpdate:modelValue': (val) => { inputValue.value = val; }, 
-            placeholder: '文件名', 
-            autofocus: true,
-            onKeydown: (event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
-              }
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '文件名',
+          autofocus: true,
+          onKeydown: (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
             }
+          }
         },
           { append: () => h('div', { class: 'input-suffix-display' }, '.md') })]),
       showCancelButton: true, confirmButtonText: '保存', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
@@ -1091,17 +1091,17 @@ const saveSessionAsJson = async () => {
       title: '保存为 JSON',
       message: () => h('div', null, [
         h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
-        h(ElInput, { 
-            modelValue: inputValue.value, 
-            'onUpdate:modelValue': (val) => { inputValue.value = val; }, 
-            placeholder: '文件名', 
-            autofocus: true,
-            onKeydown: (event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
-              }
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '文件名',
+          autofocus: true,
+          onKeydown: (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
             }
+          }
         },
           { append: () => h('div', { class: 'input-suffix-display' }, '.json') })]),
       showCancelButton: true, confirmButtonText: '保存', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
@@ -1316,7 +1316,7 @@ function getRandomItem(list) {
   }
 }
 
-async function applyMcpTools(show_none=true) {
+async function applyMcpTools(show_none = true) {
   // 1. 立即关闭弹窗并显示加载状态
   isMcpDialogVisible.value = false;
   isMcpLoading.value = true;
@@ -1400,19 +1400,13 @@ function toggleMcpDialog() {
 async function toggleMcpPersistence(serverId, isPersistent) {
   if (!currentConfig.value.mcpServers[serverId]) return;
 
-  // 构造正确的扁平化键路径
   const keyPath = `mcpServers.${serverId}.isPersistent`;
-
   try {
-    // 调用 preload API 保存单个设置
     const result = await window.api.saveSetting(keyPath, isPersistent);
-
     if (result && result.success) {
-      // 只有在后端保存成功后才更新前端UI状态
       currentConfig.value.mcpServers[serverId].isPersistent = isPersistent;
       showDismissibleMessage.success(`'${currentConfig.value.mcpServers[serverId].name}' 的持久化设置已更新`);
     } else {
-      // 如果后端保存失败，抛出错误
       throw new Error(result?.message || '保存设置到数据库失败');
     }
   } catch (error) {
@@ -1973,7 +1967,7 @@ const handleGlobalImageError = (event) => {
 
   // Avoid replacing if it's already been replaced
   if (img.parentNode && img.parentNode.classList.contains('image-error-container')) {
-      return;
+    return;
   }
 
   const container = document.createElement('div');
@@ -1983,15 +1977,15 @@ const handleGlobalImageError = (event) => {
   const svgIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svgIcon.setAttribute('viewBox', '0 0 24 24');
   svgIcon.innerHTML = `<path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="currentColor"></path>`;
-  
+
   const textLabel = document.createElement('span');
   textLabel.textContent = 'Image';
 
   container.appendChild(svgIcon);
   container.appendChild(textLabel);
-  
+
   if (img.parentNode) {
-      img.parentNode.replaceChild(container, img);
+    img.parentNode.replaceChild(container, img);
   }
 
   container.onclick = (e) => {
@@ -2001,7 +1995,7 @@ const handleGlobalImageError = (event) => {
     newImg.src = `${originalSrc}?t=${new Date().getTime()}`;
     // The global listener will automatically catch an error if this new image fails again.
     if (container.parentNode) {
-        container.parentNode.replaceChild(newImg, container);
+      container.parentNode.replaceChild(newImg, container);
     }
   };
 };
@@ -2011,7 +2005,7 @@ const handleGlobalKeyDown = (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
     // 阻止浏览器的默认保存页面行为
     event.preventDefault();
-    
+
     // 如果当前已经有其他弹窗，则不执行任何操作，避免弹窗重叠
     if (document.querySelector('.el-dialog, .el-message-box')) {
       return;
@@ -2119,18 +2113,24 @@ const handleGlobalKeyDown = (event) => {
           <div class="mcp-server-content">
             <div class="mcp-server-header-row">
               <span class="mcp-server-name">{{ server.name }}</span>
-              <el-tooltip :content="server.isPersistent ? '关闭持久连接(所有工具共用一个连接数)' : '开启持久连接(使用工具后将单独占用一个连接数)'"
-                placement="top">
-                <el-switch :model-value="server.isPersistent" @click.stop
-                  @change="(value) => toggleMcpPersistence(server.id, value)" size="small"
-                  style="--el-switch-on-color: #67C23A; margin-left: auto; margin-right: 8px;" />
+              <el-tooltip :content="server.isPersistent ? '持久连接已开启' : '持久连接已关闭'" placement="top">
+                <el-button text circle :class="{ 'is-persistent-active': server.isPersistent }"
+                  @click.stop="toggleMcpPersistence(server.id, !server.isPersistent)" class="persistent-btn"
+                  style="margin-left: auto; margin-right: 8px;">
+                  <el-icon :size="16">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                  </el-icon>
+                </el-button>
               </el-tooltip>
               <div class="mcp-server-tags">
                 <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                }}</el-tag>
+                  }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
@@ -2724,28 +2724,51 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 }
 
 :deep(.image-error-container) {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 15px;
-    border: 1px dashed var(--el-border-color);
-    border-radius: 8px;
-    background-color: var(--el-fill-color-light);
-    color: var(--el-text-color-secondary);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 15px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 8px;
+  background-color: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
 }
 
 :deep(.image-error-container:hover) {
-    border-color: var(--el-color-primary);
-    color: var(--el-color-primary);
-    background-color: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
 }
 
 :deep(.image-error-container svg) {
-    width: 24px;
-    height: 24px;
-    flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.persistent-btn {
+  color: var(--el-text-color-secondary);
+  width: 28px;
+  height: 28px;
+}
+
+.persistent-btn:hover {
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+html.dark .persistent-btn:hover {
+    background-color: var(--el-fill-color-darker);
+}
+
+.persistent-btn.is-persistent-active {
+  color: #67C23A; /* Green highlight for active state */
+}
+
+.persistent-btn.is-persistent-active:hover {
+    background-color: rgba(103, 194, 58, 0.1);
 }
 </style>

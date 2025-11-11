@@ -305,14 +305,21 @@ async function refreshMcpConfig() {
                                         getDisplayTypeName(server.type) }}</el-tag>
                                     <el-tag v-for="tag in server.tags" :key="tag" size="small">{{ tag }}</el-tag>
                                 </div>
-                                <!-- 新增持久连接开关 -->
+                                <!-- 持久连接开关 -->
                                 <div class="mcp-persistent-toggle">
-                                    <el-tooltip :content="t('mcp.persistent.tooltip')" placement="top">
-                                        <el-switch :model-value="server.isPersistent"
-                                            @change="(value) => handleSwitchChange(server.id, 'isPersistent', value)"
-                                            size="small" style="--el-switch-on-color: #67C23A;" />
-                                    </el-tooltip>
-                                </div>
+    <el-tooltip :content="t('mcp.persistent.tooltip')" placement="top">
+        <el-button 
+            text 
+            circle
+            :class="{ 'is-persistent-active': server.isPersistent }"
+            @click.stop="handleSwitchChange(server.id, 'isPersistent', !server.isPersistent)"
+            class="persistent-btn">
+            <el-icon :size="16">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            </el-icon>
+        </el-button>
+    </el-tooltip>
+</div>
                                 <div class="mcp-actions">
                                     <el-button :icon="Edit" text circle @click="prepareEditServer(server)" />
                                     <el-button :icon="Delete" text circle type="danger"
@@ -599,10 +606,21 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     padding-top: 0px;
 }
 
-.mcp-persistent-toggle {
-    display: flex;
-    align-items: center;
-    margin: 0px 8px 5px 0px;
+.persistent-btn {
+  color: var(--text-tertiary);
+}
+
+.persistent-btn:hover {
+  color: var(--text-accent);
+  background-color: var(--bg-tertiary);
+}
+
+.persistent-btn.is-persistent-active {
+  color: #67C23A; /* 启用状态的绿色高亮 */
+}
+
+.persistent-btn.is-persistent-active:hover {
+    background-color: rgba(103, 194, 58, 0.1);
 }
 
 .mcp-actions {
