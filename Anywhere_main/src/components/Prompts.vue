@@ -1160,7 +1160,7 @@ async function refreshPromptsConfig() {
 .content-wrapper {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 24px 90px 24px;
+  padding: 0px 24px 80px 24px;
 }
 
 .search-input-container {
@@ -1168,7 +1168,7 @@ async function refreshPromptsConfig() {
   top: 0;
   z-index: 10;
   background-color: var(--bg-primary);
-  padding: 5px 0px 5px 0px;
+  padding: 8px 0px 8px 0px;
   margin: 0px 0px 5px 0px;
 }
 

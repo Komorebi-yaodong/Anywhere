@@ -489,7 +489,7 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
 .content-wrapper {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 24px 24px 90px 24px;
+    padding: 0px 24px 80px 24px;
 }
 
 .search-bar-container {
@@ -497,7 +497,7 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     top: 0;
     z-index: 10;
     background-color: var(--bg-primary);
-    padding: 5px 0px 5px 0px;
+    padding: 8px 0px 8px 0px;
     margin: 0px 0px 5px 0px;
 }
 

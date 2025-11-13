@@ -522,7 +522,7 @@ async function forceSyncFile(basename, direction, signal) {
     width: 100%;
     display: flex;
     flex-direction: column;
-    padding: 20px;
+    padding: 21px;
     box-sizing: border-box;
     overflow: hidden;
     background-color: var(--bg-primary);

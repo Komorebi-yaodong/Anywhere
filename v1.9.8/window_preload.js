@@ -178,11 +178,13 @@ var require_data = __commonJS({
         configDoc = await utools.db.promises.get("config");
       }
       const fullConfigData = configDoc.data;
-      const promptsDoc = await utools.db.promises.get("prompts");
+      const [promptsDoc, providersDoc, mcpServersDoc] = await Promise.all([
+        utools.db.promises.get("prompts"),
+        utools.db.promises.get("providers"),
+        utools.db.promises.get("mcpServers")
+      ]);
       fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig2.config.prompts;
-      const providersDoc = await utools.db.promises.get("providers");
       fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig2.config.providers;
-      const mcpServersDoc = await utools.db.promises.get("mcpServers");
       fullConfigData.config.mcpServers = mcpServersDoc ? mcpServersDoc.data : defaultConfig2.config.mcpServers || {};
       return fullConfigData;
     }
@@ -774,6 +776,8 @@ var require_data = __commonJS({
       utools.redirectHotKeySetting(prompt_name, auto_copy);
     }
     async function openWindow(config, msg) {
+      const startTime = performance.now();
+      console.log(`[Timer Start] Opening window for code: ${msg.code}`);
       msg.config = config;
       const promptCode = msg.originalCode || msg.code;
       const { x, y, width, height } = getPosition(config, promptCode);
@@ -801,6 +805,8 @@ var require_data = __commonJS({
         () => {
           ubWindow.webContents.send(channel2, msg);
           ubWindow.show();
+          const windowShownTime = performance.now();
+          console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
         }
       );
       ubWindow.webContents.openDevTools({ mode: "detach" });

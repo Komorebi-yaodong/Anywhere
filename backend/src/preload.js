@@ -75,14 +75,14 @@ window.api = {
 
 const commandHandlers = {
   'Anywhere Settings': async () => {
-    // [MODIFIED] 使用 await
+    // 使用 await
     const configResult = await getConfig();
     checkConfig(configResult.config);
   },
 
   'Resume Conversation': async ({ type, payload }) => {
     utools.hideMainWindow();
-    // [MODIFIED] 使用 await
+    // 使用 await
     const configResult = await getConfig();
     const config = configResult.config;
     checkConfig(config);
@@ -135,7 +135,7 @@ const commandHandlers = {
       filename: filename,
       originalCode: originalCode
     };
-    // [MODIFIED] 传递 config
+    // 传递 config
     await openWindow(config, msg);
 
     utools.outPlugin();
@@ -143,7 +143,7 @@ const commandHandlers = {
 
   handleAssistant: async ({ code, type, payload }) => {
     utools.hideMainWindow();
-    // [MODIFIED] 使用 await
+    // 使用 await
     const configResult = await getConfig();
     const config = configResult.config;
     checkConfig(config);
@@ -156,7 +156,7 @@ const commandHandlers = {
           type: "img",
           payload: image,
         };
-        // [MODIFIED] 传递 config
+        // 传递 config
         openWindow(config, msg);
       });
     } else {
@@ -166,7 +166,7 @@ const commandHandlers = {
         type: "over",
         payload: assistantName,
       };
-      // [MODIFIED] 传递 config
+      // 传递 config
       await openWindow(config, msg);
     }
     utools.outPlugin();
@@ -174,7 +174,7 @@ const commandHandlers = {
 
   handlePrompt: async ({ code, type, payload }) => {
     utools.hideMainWindow();
-    // [MODIFIED] 使用 await
+    // 使用 await
     const configResult = await getConfig();
     const config = configResult.config;
     checkConfig(config);
@@ -193,7 +193,7 @@ const commandHandlers = {
         type,
         payload,
       };
-      // [MODIFIED] 传递 config
+      // 传递 config
       await openWindow(config, msg);
     } else {
       let content = null;

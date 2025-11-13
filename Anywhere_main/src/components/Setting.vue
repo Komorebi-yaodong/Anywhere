@@ -770,7 +770,7 @@ async function selectLocalChatPath() {
 }
 
 .settings-content {
-  padding: 24px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;

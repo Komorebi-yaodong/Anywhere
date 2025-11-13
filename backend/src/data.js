@@ -165,14 +165,14 @@ async function getConfig() {
 
   // --- 3. 异步读取新版分块数据并合并 ---
   const fullConfigData = configDoc.data;
+  const [promptsDoc, providersDoc, mcpServersDoc] = await Promise.all([
+    utools.db.promises.get("prompts"),
+    utools.db.promises.get("providers"),
+    utools.db.promises.get("mcpServers")
+  ]);
 
-  const promptsDoc = await utools.db.promises.get("prompts");
   fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig.config.prompts;
-
-  const providersDoc = await utools.db.promises.get("providers");
   fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig.config.providers;
-  
-  const mcpServersDoc = await utools.db.promises.get("mcpServers");
   fullConfigData.config.mcpServers = mcpServersDoc ? mcpServersDoc.data : defaultConfig.config.mcpServers || {};
   
   return fullConfigData;
@@ -899,6 +899,10 @@ async function sethotkey(prompt_name,auto_copy){
 }
 
 async function openWindow(config, msg) {
+  // 计时开始
+  const startTime = performance.now();
+  console.log(`[Timer Start] Opening window for code: ${msg.code}`);
+
   msg.config = config;
 
   const promptCode = msg.originalCode || msg.code;
@@ -930,6 +934,10 @@ async function openWindow(config, msg) {
     () => {
       ubWindow.webContents.send(channel, msg);
       ubWindow.show();
+      
+      // 计时结束
+      const windowShownTime = performance.now();
+      console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
     }
   );
   ubWindow.webContents.openDevTools({ mode: "detach" });
