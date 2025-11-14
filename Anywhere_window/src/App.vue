@@ -11,6 +11,8 @@ import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
 import { DocumentCopy, Download, Search } from '@element-plus/icons-vue';
 
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import OpenAI from 'openai';
 
 const showDismissibleMessage = (options) => {
@@ -996,6 +998,7 @@ const saveSessionToCloud = async () => {
     });
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error("MessageBox error:", error); }
 };
+
 const saveSessionAsMarkdown = async () => {
   let markdownContent = '';
   const now = new Date();
@@ -1079,6 +1082,168 @@ const saveSessionAsMarkdown = async () => {
     });
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
 };
+
+const saveSessionAsHtml = async () => {
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+  const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
+  const inputValue = ref(defaultBasename);
+
+  const generateHtmlContent = () => {
+    let bodyContent = '';
+
+    // 这个内部函数现在将首先构建一个完整的 Markdown 字符串，然后一次性解析
+    const processContentToHtml = (content) => {
+      if (!content) return "";
+
+      let markdownString = "";
+
+      if (typeof content === 'string') {
+        markdownString = content;
+      } else if (Array.isArray(content)) {
+        markdownString = content.map(part => {
+          if (part.type === 'text') {
+            return part.text || '';
+          // *** 关键修复点 1: 将图片、音频等也先组装成 Markdown 格式 ***
+          } else if (part.type === 'image_url' && part.image_url?.url) {
+            return `![Image](${part.image_url.url})`;
+          } else if (part.type === 'input_audio' && part.input_audio?.data) {
+            return `<audio controls src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}"></audio>`;
+          } else if (part.type === 'file' && part.file?.filename) {
+            return `*📎 附件: ${part.file.filename}*`;
+          }
+          return '';
+        }).join(' ');
+      } else {
+        markdownString = String(content);
+      }
+      
+      // *** 关键修复点 2: 使用 marked 将完整的 Markdown 字符串解析为 HTML ***
+      // marked() 会将 ![]() 转换为 <img>, *...* 转换为 <em>...</em> 等
+      return marked.parse(markdownString);
+    };
+    
+    chat_show.value.forEach(message => {
+      if (message.role === 'system') return;
+
+      const avatar = message.role === 'user' ? UserAvart.value : AIAvart.value;
+      const author = message.role === 'user' ? '用户' : (message.aiName || 'AI');
+      const time = message.timestamp || message.completedTimestamp;
+
+      // 解析并净化内容
+      const processedHtml = processContentToHtml(message.content);
+      const sanitizedContent = DOMPurify.sanitize(processedHtml, {
+        ADD_TAGS: ['video', 'audio', 'source'],
+        USE_PROFILES: { html: true, svg: true },
+        ADD_ATTR: ['style']
+      });
+
+      bodyContent += `
+        <div class="message ${message.role}-message">
+          <img src="${avatar}" class="avatar" alt="avatar">
+          <div class="message-content">
+            <div class="message-header">
+              <strong>${author}</strong>
+              <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
+            </div>
+            <div class="message-body">${sanitizedContent}</div>
+          </div>
+        </div>
+      `;
+    });
+
+    const cssStyles = `
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; background-color: #f7f7f7; color: #333; line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 30px; }
+        h1, h3 { color: #111; }
+        .message { display: flex; gap: 15px; margin-bottom: 25px; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; }
+        .message-content { display: flex; flex-direction: column; max-width: calc(100% - 55px); }
+        .message-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+        .timestamp { font-size: 0.75em; color: #888; }
+        .message-body { background-color: #f1f1f1; padding: 10px 15px; border-radius: 18px; word-break: break-word; }
+        .message-body img { max-width: 100%; height: auto; border-radius: 8px; } /* 新增：确保图片自适应 */
+        .user-message { flex-direction: row-reverse; }
+        .user-message .message-content { align-items: flex-end; }
+        .user-message .message-body { background-color: #e1f5fe; border-top-right-radius: 4px; }
+        .ai-message .message-body { border-top-left-radius: 4px; }
+        .file-attachment { font-style: italic; color: #555; }
+        pre { background-color: #2d2d2d; color: #f8f8f2; padding: 1em; border-radius: 8px; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; }
+        code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; }
+        blockquote { border-left: 4px solid #ccc; padding-left: 1em; margin-left: 0; color: #666; }
+        @media (prefers-color-scheme: dark) {
+          body { background-color: #1a1a1a; color: #e0e0e0; }
+          .container { background-color: #2a2a2a; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+          h1, h3 { color: #fff; }
+          .message-body { background-color: #3a3a3a; }
+          .user-message .message-body { background-color: #0d47a1; color: #e3f2fd; }
+          .timestamp, blockquote { color: #aaa; }
+          blockquote { border-left-color: #555; }
+          .file-attachment { color: #bbb; }
+        }
+      </style>
+    `;
+    
+    return `
+      <!DOCTYPE html>
+      <html lang="zh-CN">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>聊天记录: ${CODE.value} (${timestamp})</title>
+        ${cssStyles}
+      </head>
+      <body>
+        <div class="container">
+          <h1>聊天记录: ${CODE.value}</h1>
+          <h3>模型: ${modelMap.value[model.value] || 'N/A'}</h3>
+          <hr>
+          ${bodyContent}
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  try {
+    await ElMessageBox({
+      title: '保存为 HTML',
+      message: () => h('div', null, [
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '文件名',
+          autofocus: true,
+          onKeydown: (event) => { if (event.key === 'Enter') { event.preventDefault(); document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click(); } }
+        },
+          { append: () => h('div', { class: 'input-suffix-display' }, '.html') })]),
+      showCancelButton: true, confirmButtonText: '保存', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
+      beforeClose: async (action, instance, done) => {
+        if (action === 'confirm') {
+          let finalBasename = inputValue.value.trim();
+          if (!finalBasename) { showDismissibleMessage.error('文件名不能为空'); return; }
+          if (finalBasename.toLowerCase().endsWith('.html')) finalBasename = finalBasename.slice(0, -5);
+          const finalFilename = finalBasename + '.html';
+          instance.confirmButtonLoading = true;
+          try {
+            const htmlContent = generateHtmlContent();
+            await window.api.saveFile({ title: '保存为 HTML', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'HTML 文件', extensions: ['html'] }, { name: '所有文件', extensions: ['*'] }], fileContent: htmlContent });
+            defaultConversationName.value = finalBasename;
+            showDismissibleMessage.success('会话已成功保存为 HTML！');
+            done();
+          } catch (error) {
+            if (!error.message.includes('User cancelled') && !error.message.includes('用户取消')) { console.error('保存 HTML 失败:', error); showDismissibleMessage.error(`保存失败: ${error.message}`); }
+            done();
+          } finally { instance.confirmButtonLoading = false; }
+        } else { done(); }
+      }
+    });
+  } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
+};
+
 const saveSessionAsJson = async () => {
   const sessionData = getSessionDataAsObject();
   const jsonString = JSON.stringify(sessionData, null, 2);
@@ -1148,9 +1313,16 @@ const handleSaveAction = async () => {
   if (autoCloseOnBlur.value) handleTogglePin();
   const isCloudEnabled = currentConfig.value.webdav?.url && currentConfig.value.webdav?.data_path;
   const saveOptions = [];
-  if (isCloudEnabled) saveOptions.push({ title: '保存到云端', description: '同步到 WebDAV 服务器，支持跨设备访问。', buttonType: 'success', action: saveSessionToCloud });
-  saveOptions.push({ title: '保存为 JSON', description: '保存为可恢复的会话文件，便于下次继续。', buttonType: 'primary', action: saveSessionAsJson });
+
+  if (isCloudEnabled) {
+    saveOptions.push({ title: '保存到云端', description: '同步到 WebDAV 服务器，支持跨设备访问。', buttonType: 'success', action: saveSessionToCloud });
+  }
+
+  saveOptions.push({ title: '保存为 JSON', description: '保存为可恢复的会話文件，便于下次继续。', buttonType: 'primary', action: saveSessionAsJson });
   saveOptions.push({ title: '保存为 Markdown', description: '导出为可读性更强的 .md 文件，适合分享。', buttonType: '', action: saveSessionAsMarkdown });
+
+  saveOptions.push({ title: '保存为 HTML', description: '导出为带样式的网页文件，保留格式和图片。', buttonType: '', action: saveSessionAsHtml });
+
   const messageVNode = h('div', { class: 'save-options-list' }, saveOptions.map(opt => {
     return h('div', { class: 'save-option-item', onClick: () => { ElMessageBox.close(); opt.action(); } }, [
       h('div', { class: 'save-option-text' }, [
@@ -2130,7 +2302,7 @@ const handleGlobalKeyDown = (event) => {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                  }}</el-tag>
+                }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
@@ -2761,14 +2933,15 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 }
 
 html.dark .persistent-btn:hover {
-    background-color: var(--el-fill-color-darker);
+  background-color: var(--el-fill-color-darker);
 }
 
 .persistent-btn.is-persistent-active {
-  color: #67C23A; /* Green highlight for active state */
+  color: #67C23A;
+  /* Green highlight for active state */
 }
 
 .persistent-btn.is-persistent-active:hover {
-    background-color: rgba(103, 194, 58, 0.1);
+  background-color: rgba(103, 194, 58, 0.1);
 }
 </style>

@@ -21,6 +21,7 @@
     "mammoth": "^1.9.0",
     "markdown-it": "^14.1.0",
     "markdown-it-katex": "^2.0.3",
+    "marked": "^17.0.0",
     "mermaid": "^11.7.0",
     "officeparser": "^5.1.1",
     "openai": "^6.3.0",
