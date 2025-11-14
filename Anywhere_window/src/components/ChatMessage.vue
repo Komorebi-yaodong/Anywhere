@@ -4,6 +4,7 @@ import { Bubble, Thinking, XMarkdown } from 'vue-element-plus-x';
 import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon } from 'element-plus';
 import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close } from '@element-plus/icons-vue';
 import 'katex/dist/katex.min.css';
+import DOMPurify from 'dompurify';
 
 const props = defineProps({
   message: Object,
@@ -167,8 +168,15 @@ const renderedMarkdownContent = computed(() => {
     const role = props.message.role ? props.message.role : 'user';
     let formattedContent = formatMessageContent(content,role);
     formattedContent = preprocessKatex(formattedContent);
-    if (!formattedContent && props.message.role === 'assistant') return ' ';
-    return formattedContent || ' ';
+
+    const sanitizedContent = DOMPurify.sanitize(formattedContent, {
+        ADD_TAGS: ['video', 'audio', 'source'],
+        USE_PROFILES: { html: true, svg: true, svgFilters: true },
+        ADD_ATTR: ['style']
+    });
+
+    if (!sanitizedContent && props.message.role === 'assistant') return ' ';
+    return sanitizedContent || ' ';
 });
 
 const shouldShowCollapseButton = computed(() => {
