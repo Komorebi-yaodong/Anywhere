@@ -166,15 +166,32 @@ const handleEditKeyDown = (event) => {
 const renderedMarkdownContent = computed(() => {
     const content = props.message.role ? props.message.content : props.message;
     const role = props.message.role ? props.message.role : 'user';
-    let formattedContent = formatMessageContent(content,role);
+    let formattedContent = formatMessageContent(content, role);
     formattedContent = preprocessKatex(formattedContent);
 
-    const sanitizedContent = DOMPurify.sanitize(formattedContent, {
+    const codeBlocks = new Map();
+    let blockIndex = 0;
+
+    const placeholderContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, content) => {
+        const placeholder = `__CODE_BLOCK_PLACEHOLDER_${blockIndex}__`;
+        const fullCodeBlock = delimiter + content + delimiter;
+        codeBlocks.set(placeholder, fullCodeBlock);
+        blockIndex++;
+        return prefix + placeholder;
+    });
+
+    const sanitizedPart = DOMPurify.sanitize(placeholderContent, {
         ADD_TAGS: ['video', 'audio', 'source'],
         USE_PROFILES: { html: true, svg: true, svgFilters: true },
         ADD_ATTR: ['style']
     });
 
+    const finalContent = sanitizedPart.replace(/__CODE_BLOCK_PLACEHOLDER_\d+__/g, (placeholder) => {
+        return codeBlocks.get(placeholder) || placeholder;
+    });
+    
+    const sanitizedContent = finalContent;
+    
     if (!sanitizedContent && props.message.role === 'assistant') return ' ';
     return sanitizedContent || ' ';
 });
