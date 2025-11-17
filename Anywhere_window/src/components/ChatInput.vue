@@ -31,14 +31,22 @@ const isDragging = ref(false);
 const dragCounter = ref(0);
 const isRecording = ref(false);
 
-// [修改] 同时管理两种录音器状态
+// --- 新增Refs用于点击外部区域关闭弹窗 ---
+const reasoningSelectorRef = ref(null);
+const voiceSelectorRef = ref(null);
+const audioSourceSelectorRef = ref(null);
+const reasoningButtonRef = ref(null);
+const voiceButtonRef = ref(null);
+const audioButtonRef = ref(null);
+// ------------------------------------
+
 let recorder = null; // for recorder-core (microphone with waveform)
 let wave = null;
 let mediaRecorder = null; // for MediaRecorder (system audio)
 let audioChunks = [];
 let audioStream = null;
 const currentRecordingSource = ref(null); // 'microphone' or 'system'
-const isCancelledByButton = ref(false); // [新增] 修复取消Bug的关键
+const isCancelledByButton = ref(false); 
 
 const isAudioSourceSelectorVisible = ref(false);
 const isReasoningSelectorVisible = ref(false);
@@ -169,14 +177,12 @@ const startRecordingFromSource = async (sourceType) => {
     isAudioSourceSelectorVisible.value = false;
     if (isRecording.value) return;
 
-    // [修改] 1. 立即更新UI
     isRecording.value = true;
     currentRecordingSource.value = sourceType;
     isCancelledByButton.value = false;
 
     try {
         if (sourceType === 'microphone') {
-            // [修改] 2. 异步准备录音
             await new Promise((resolve, reject) => {
                 Recorder.TrafficFree = true;
                 recorder = Recorder({
@@ -203,7 +209,6 @@ const startRecordingFromSource = async (sourceType) => {
                 });
             });
         } else if (sourceType === 'system') {
-            // [修改] 2. 异步准备录音
             const sources = await window.api.desktopCaptureSources({ types: ['screen', 'window'] });
             if (!sources || sources.length === 0) {
                 throw new Error('未找到可用的系统音频源');
@@ -233,10 +238,9 @@ const startRecordingFromSource = async (sourceType) => {
             mediaRecorder.start();
         }
     } catch (err) {
-        // [修改] 3. 如果准备失败，恢复UI状态
         console.error("录音启动失败:", err);
         ElMessage.error(err.message || '无法开始录音');
-        stopRecordingAndCleanup(); // This will set isRecording to false
+        stopRecordingAndCleanup();
     }
 };
 
@@ -273,7 +277,6 @@ const handleCancelRecording = () => {
             stopRecordingAndCleanup();
         });
     } else if (currentRecordingSource.value === 'system' && mediaRecorder) {
-        // onstop will handle cleanup because of the flag
         mediaRecorder.stop();
     }
 };
@@ -297,11 +300,28 @@ const handleConfirmAndSendRecording = () => {
             stopRecordingAndCleanup();
         });
     } else if (currentRecordingSource.value === 'system' && mediaRecorder) {
-        // onstop will handle sending because flag is false
         mediaRecorder.stop();
     }
 };
 
+// --- 点击外部区域关闭弹窗的逻辑 ---
+const handleClickOutside = (event) => {
+    const target = event.target;
+    if (!target) return;
+
+    // 检查思考预算选择器
+    if (isReasoningSelectorVisible.value && reasoningSelectorRef.value && !reasoningSelectorRef.value.contains(target) && reasoningButtonRef.value && !reasoningButtonRef.value.$el.contains(target)) {
+        isReasoningSelectorVisible.value = false;
+    }
+    // 检查语音选择器
+    if (isVoiceSelectorVisible.value && voiceSelectorRef.value && !voiceSelectorRef.value.contains(target) && voiceButtonRef.value && !voiceButtonRef.value.$el.contains(target)) {
+        isVoiceSelectorVisible.value = false;
+    }
+    // 检查音源选择器
+    if (isAudioSourceSelectorVisible.value && audioSourceSelectorRef.value && !audioSourceSelectorRef.value.contains(target) && audioButtonRef.value && !audioButtonRef.value.$el.contains(target)) {
+        isAudioSourceSelectorVisible.value = false;
+    }
+};
 
 // --- Lifecycle & Focus ---
 onMounted(() => {
@@ -310,6 +330,7 @@ onMounted(() => {
     window.addEventListener('dragover', preventDefaults);
     window.addEventListener('drop', handleDrop);
     window.addEventListener('paste', handlePasteEvent);
+    document.addEventListener('click', handleClickOutside); // 新增：添加全局点击监听
 });
 
 onBeforeUnmount(() => {
@@ -318,6 +339,7 @@ onBeforeUnmount(() => {
     window.removeEventListener('dragover', preventDefaults);
     window.removeEventListener('drop', handleDrop);
     window.removeEventListener('paste', handlePasteEvent);
+    document.removeEventListener('click', handleClickOutside); // 新增：移除全局点击监听
     stopRecordingAndCleanup();
 });
 
@@ -379,7 +401,7 @@ defineExpose({ focus, senderRef });
         <el-row v-if="isAudioSourceSelectorVisible" class="option-selector-row">
             <el-col :span="1" />
             <el-col :span="22">
-                <div class="option-selector-wrapper">
+                <div class="option-selector-wrapper" ref="audioSourceSelectorRef">
                     <div class="option-selector-content">
                         <el-text tag="b" class="selector-label">选择音源</el-text>
                         <el-divider direction="vertical" />
@@ -395,7 +417,7 @@ defineExpose({ focus, senderRef });
         <el-row v-if="isReasoningSelectorVisible" class="option-selector-row">
             <el-col :span="1" />
             <el-col :span="22">
-                <div class="option-selector-wrapper">
+                <div class="option-selector-wrapper" ref="reasoningSelectorRef">
                     <div class="option-selector-content">
                         <el-text tag="b" class="selector-label">思考预算</el-text>
                         <el-divider direction="vertical" />
@@ -416,7 +438,7 @@ defineExpose({ focus, senderRef });
         <el-row v-if="isVoiceSelectorVisible" class="option-selector-row">
             <el-col :span="1" />
             <el-col :span="22">
-                <el-scrollbar class="option-selector-wrapper">
+                <el-scrollbar class="option-selector-wrapper" ref="voiceSelectorRef">
                     <div class="option-selector-content">
                         <el-text tag="b" class="selector-label">选择音色</el-text>
                         <el-divider direction="vertical" />
@@ -452,7 +474,7 @@ defineExpose({ focus, senderRef });
                                     circle :disabled="isRecording" /></el-tooltip>
 
                             <el-tooltip :content="reasoningTooltipContent">
-                                <el-button
+                                <el-button ref="reasoningButtonRef"
                                     :class="{ 'is-active-special': tempReasoningEffort && tempReasoningEffort !== 'default' }"
                                     size="default" circle :disabled="isRecording" @click="toggleReasoningSelector">
                                     <el-icon :size="18">
@@ -466,7 +488,7 @@ defineExpose({ focus, senderRef });
                             </el-tooltip>
 
                             <el-tooltip content="语音回复设置">
-                                <el-button size="default" circle :disabled="isRecording"
+                                <el-button ref="voiceButtonRef" size="default" circle :disabled="isRecording"
                                     :class="{ 'is-active-special': selectedVoice }"
                                     @click="toggleVoiceSelector"><el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
@@ -504,7 +526,7 @@ defineExpose({ focus, senderRef });
                                         @click="handleConfirmAndSendRecording" circle /></el-tooltip>
                             </template>
                             <template v-else>
-                                <el-tooltip content="发送语音"><el-button :icon="Microphone" size="default"
+                                <el-tooltip content="发送语音"><el-button ref="audioButtonRef" :icon="Microphone" size="default"
                                         @click="toggleAudioSourceSelector" circle /></el-tooltip>
                                 <el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle
                                     :disabled="loading" />

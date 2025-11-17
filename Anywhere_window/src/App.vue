@@ -463,6 +463,11 @@ const handleWindowBlur = () => {
 
 const handleWindowFocus = () => {
   setTimeout(() => {
+    // 检查当前焦点是否在某个消息的编辑输入框内
+    if (document.activeElement && document.activeElement.tagName.toLowerCase() === 'textarea' && document.activeElement.closest('.editing-wrapper')) {
+      // 如果是，则不执行任何操作，保持焦点在编辑框内
+      return;
+    }
     const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
     if (!textarea) return;
     if (document.activeElement !== textarea) {
