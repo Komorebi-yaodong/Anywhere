@@ -966,7 +966,11 @@ const saveSessionToCloud = async () => {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
           placeholder: '文件名',
-          autofocus: true,
+          ref: (elInputInstance) => {
+            if (elInputInstance) {
+              setTimeout(() => elInputInstance.focus(), 100);
+            }
+          },
           onKeydown: (event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
@@ -1058,7 +1062,11 @@ const saveSessionAsMarkdown = async () => {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
           placeholder: '文件名',
-          autofocus: true,
+          ref: (elInputInstance) => {
+            if (elInputInstance) {
+              setTimeout(() => elInputInstance.focus(), 100);
+            }
+          },
           onKeydown: (event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
@@ -1112,7 +1120,7 @@ const saveSessionAsHtml = async () => {
         markdownString = content.map(part => {
           if (part.type === 'text') {
             return part.text || '';
-          // *** 关键修复点 1: 将图片、音频等也先组装成 Markdown 格式 ***
+            // *** 关键修复点 1: 将图片、音频等也先组装成 Markdown 格式 ***
           } else if (part.type === 'image_url' && part.image_url?.url) {
             return `![Image](${part.image_url.url})`;
           } else if (part.type === 'input_audio' && part.input_audio?.data) {
@@ -1125,12 +1133,12 @@ const saveSessionAsHtml = async () => {
       } else {
         markdownString = String(content);
       }
-      
+
       // *** 关键修复点 2: 使用 marked 将完整的 Markdown 字符串解析为 HTML ***
       // marked() 会将 ![]() 转换为 <img>, *...* 转换为 <em>...</em> 等
       return marked.parse(markdownString);
     };
-    
+
     chat_show.value.forEach(message => {
       if (message.role === 'system') return;
 
@@ -1192,7 +1200,7 @@ const saveSessionAsHtml = async () => {
         }
       </style>
     `;
-    
+
     return `
       <!DOCTYPE html>
       <html lang="zh-CN">
@@ -1223,7 +1231,11 @@ const saveSessionAsHtml = async () => {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
           placeholder: '文件名',
-          autofocus: true,
+          ref: (elInputInstance) => {
+            if (elInputInstance) {
+              setTimeout(() => elInputInstance.focus(), 100);
+            }
+          },
           onKeydown: (event) => { if (event.key === 'Enter') { event.preventDefault(); document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click(); } }
         },
           { append: () => h('div', { class: 'input-suffix-display' }, '.html') })]),
@@ -1267,7 +1279,11 @@ const saveSessionAsJson = async () => {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
           placeholder: '文件名',
-          autofocus: true,
+          ref: (elInputInstance) => {
+            if (elInputInstance) {
+              setTimeout(() => elInputInstance.focus(), 100);
+            }
+          },
           onKeydown: (event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
@@ -2194,8 +2210,8 @@ const handleGlobalKeyDown = (event) => {
     <el-container>
       <ChatHeader :favicon="favicon" :modelMap="modelMap" :model="model" :autoCloseOnBlur="autoCloseOnBlur"
         :is-always-on-top="isAlwaysOnTop" :is-mcp-loading="isMcpLoading" @save-window-size="handleSaveWindowSize"
-        @open-model-dialog="handleOpenModelDialog" @toggle-pin="handleTogglePin" @toggle-always-on-top="handleToggleAlwaysOnTop"
-        @save-session="handleSaveSession" />
+        @open-model-dialog="handleOpenModelDialog" @toggle-pin="handleTogglePin"
+        @toggle-always-on-top="handleToggleAlwaysOnTop" @save-session="handleSaveSession" />
 
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
@@ -2303,7 +2319,7 @@ const handleGlobalKeyDown = (event) => {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                }}</el-tag>
+                  }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
