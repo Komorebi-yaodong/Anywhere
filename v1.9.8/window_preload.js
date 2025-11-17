@@ -36,6 +36,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var require_data = __commonJS({
   "src/data.js"(exports2, module2) {
     var webFrame = require("electron").webFrame;
+    var crypto5 = require("crypto");
+    var windowMap = /* @__PURE__ */ new Map();
     var feature_suffix = "anywhere\u52A9\u624B^_^";
     var defaultConfig2 = {
       config: {
@@ -785,6 +787,9 @@ var require_data = __commonJS({
       const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
       let channel2 = "window";
       const backgroundColor = config.isDarkMode ? "#181818" : "#ffffff";
+      const senderId2 = crypto5.randomUUID();
+      msg.senderId = senderId2;
+      msg.isAlwaysOnTop = isAlwaysOnTop;
       const windowOptions = {
         show: false,
         backgroundColor,
@@ -803,13 +808,16 @@ var require_data = __commonJS({
         "./window/index.html",
         windowOptions,
         () => {
+          windowMap.set(senderId2, ubWindow);
           ubWindow.webContents.send(channel2, msg);
           ubWindow.show();
           const windowShownTime = performance.now();
           console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
         }
       );
-      ubWindow.webContents.openDevTools({ mode: "detach" });
+      if (utools.isDev()) {
+        ubWindow.webContents.openDevTools({ mode: "detach" });
+      }
     }
     async function coderedirect(label, payload) {
       utools.redirect(label, payload);
@@ -866,7 +874,8 @@ var require_data = __commonJS({
       coderedirect,
       setZoomFactor: setZoomFactor2,
       feature_suffix,
-      defaultConfig: defaultConfig2
+      defaultConfig: defaultConfig2,
+      windowMap
     };
   }
 });
@@ -89103,10 +89112,14 @@ var {
   closeMcpClient
 } = require_mcp();
 var channel = "window";
+var senderId = null;
 window.preload = {
   receiveMsg: (callback) => {
     ipcRenderer.on(channel, (event, data) => {
       if (data) {
+        if (data.senderId) {
+          senderId = data.senderId;
+        }
         callback(data);
       }
     });
@@ -89141,10 +89154,23 @@ window.api = {
   savePromptWindowSettings,
   desktopCaptureSources: utools.desktopCaptureSources,
   copyImage: utools.copyImage,
-  // [MODIFIED] 暴露重构后的 MCP 函数
   initializeMcpClient,
   invokeMcpTool,
-  closeMcpClient
+  closeMcpClient,
+  // 向父进程(preload.js)发送切换置顶状态的请求
+  toggleAlwaysOnTop: () => {
+    if (senderId) {
+      utools.sendToParent("window-event", { senderId, event: "toggle-always-on-top" });
+    } else {
+      console.error("senderId is not available, cannot toggle always-on-top.");
+    }
+  },
+  // 监听父进程发回的状态变更消息
+  onAlwaysOnTopChanged: (callback) => {
+    ipcRenderer.on("always-on-top-changed", (event, newState) => {
+      callback(newState);
+    });
+  }
 };
 /*! Bundled license information:
 

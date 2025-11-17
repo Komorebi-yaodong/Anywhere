@@ -131,14 +131,13 @@ const autoCloseOnBlur = ref(false);
 const modelList = ref([]);
 const modelMap = ref({});
 const model = ref("");
-const temporary = ref(false);
+const isAlwaysOnTop = ref(true);
 
 const currentProviderID = ref(defaultConfig.config.providerOrder[0]);
 const base_url = ref("");
 const api_key = ref("");
 const history = ref([]);
 const chat_show = ref([]);
-const thinking = ref(false);
 const loading = ref(false);
 const prompt = ref("");
 const signalController = ref(null);
@@ -382,7 +381,9 @@ const handleTogglePin = () => {
   if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
   else window.removeEventListener('blur', closePage);
 };
-const handleToggleMemory = () => { temporary.value = !temporary.value; };
+const handleToggleAlwaysOnTop = () => {
+  window.api.toggleAlwaysOnTop();
+};
 const handleSaveSession = () => handleSaveAction();
 const handleDeleteMessage = (index) => deleteMessage(index);
 const handleCopyText = (content, index) => copyText(content, index);
@@ -677,6 +678,12 @@ onMounted(async () => {
   if (isInit.value) return;
   isInit.value = true;
 
+  if (window.api && window.api.onAlwaysOnTopChanged) {
+    window.api.onAlwaysOnTopChanged((newState) => {
+      isAlwaysOnTop.value = newState;
+    });
+  }
+
   // 初始化通用事件监听器
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
@@ -721,7 +728,7 @@ onMounted(async () => {
     // 步骤 4: 根据传入数据或默认值设置窗口状态
     const code = data?.code || "AI"; // 如果没有传入code，则默认为 "AI"
     const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
-
+    isAlwaysOnTop.value = data?.isAlwaysOnTop ?? currentPromptConfig.isAlwaysOnTop ?? true;
     zoomLevel.value = currentPromptConfig.zoom || currentConfig.value.zoom || 1;
     if (window.api && typeof window.api.setZoomFactor === 'function') {
       window.api.setZoomFactor(zoomLevel.value);
@@ -843,7 +850,7 @@ onMounted(async () => {
   } else {
     const data = {
       os: "win",
-      code: "助理",
+      code: "Moss",
       config: await window.api.getConfig().config,
     };
     // ElMessage.warning({
@@ -937,7 +944,7 @@ const getSessionDataAsObject = () => {
   const currentPromptConfig = currentConfig.value.prompts[CODE.value] || {};
   return {
     anywhere_history: true, CODE: CODE.value, basic_msg: basic_msg.value, isInit: isInit.value,
-    autoCloseOnBlur: autoCloseOnBlur.value, temporary: temporary.value, model: model.value,
+    autoCloseOnBlur: autoCloseOnBlur.value, model: model.value,
     currentPromptConfig: currentPromptConfig, history: history.value, chat_show: chat_show.value, selectedVoice: selectedVoice.value,
   };
 }
@@ -1341,7 +1348,7 @@ const loadSession = async (jsonData) => {
   try {
     CODE.value = jsonData.CODE; document.title = CODE.value;
     basic_msg.value = jsonData.basic_msg; isInit.value = jsonData.isInit;
-    autoCloseOnBlur.value = jsonData.autoCloseOnBlur; temporary.value = jsonData.temporary;
+    autoCloseOnBlur.value = jsonData.autoCloseOnBlur;
     const mcpServersToLoad = jsonData.currentPromptConfig?.defaultMcpServers || [];
     if (Array.isArray(mcpServersToLoad) && mcpServersToLoad.length > 0) {
       sessionMcpServerIds.value = [...mcpServersToLoad];
@@ -1612,12 +1619,6 @@ const askAI = async (forceSend = false) => {
       } else return;
     } else return;
     prompt.value = "";
-  }
-
-  if (temporary.value) {
-    const systemMessage = history.value.find(m => m.role === 'system');
-    const lastUserMessage = history.value.findLast(m => m.role === 'user');
-    history.value = [systemMessage, lastUserMessage].filter(Boolean);
   }
 
   // --- 2. 初始化 AI 回合 ---
@@ -2192,8 +2193,8 @@ const handleGlobalKeyDown = (event) => {
   <main>
     <el-container>
       <ChatHeader :favicon="favicon" :modelMap="modelMap" :model="model" :autoCloseOnBlur="autoCloseOnBlur"
-        :temporary="temporary" :is-mcp-loading="isMcpLoading" @save-window-size="handleSaveWindowSize"
-        @open-model-dialog="handleOpenModelDialog" @toggle-pin="handleTogglePin" @toggle-memory="handleToggleMemory"
+        :is-always-on-top="isAlwaysOnTop" :is-mcp-loading="isMcpLoading" @save-window-size="handleSaveWindowSize"
+        @open-model-dialog="handleOpenModelDialog" @toggle-pin="handleTogglePin" @toggle-always-on-top="handleToggleAlwaysOnTop"
         @save-session="handleSaveSession" />
 
       <div class="main-area-wrapper">

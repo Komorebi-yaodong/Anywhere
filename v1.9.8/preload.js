@@ -36,6 +36,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var require_data = __commonJS({
   "src/data.js"(exports2, module2) {
     var webFrame = require("electron").webFrame;
+    var crypto5 = require("crypto");
+    var windowMap2 = /* @__PURE__ */ new Map();
     var feature_suffix2 = "anywhere\u52A9\u624B^_^";
     var defaultConfig2 = {
       config: {
@@ -785,6 +787,9 @@ var require_data = __commonJS({
       const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
       let channel = "window";
       const backgroundColor = config.isDarkMode ? "#181818" : "#ffffff";
+      const senderId = crypto5.randomUUID();
+      msg.senderId = senderId;
+      msg.isAlwaysOnTop = isAlwaysOnTop;
       const windowOptions = {
         show: false,
         backgroundColor,
@@ -803,13 +808,16 @@ var require_data = __commonJS({
         "./window/index.html",
         windowOptions,
         () => {
+          windowMap2.set(senderId, ubWindow);
           ubWindow.webContents.send(channel, msg);
           ubWindow.show();
           const windowShownTime = performance.now();
           console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
         }
       );
-      ubWindow.webContents.openDevTools({ mode: "detach" });
+      if (utools.isDev()) {
+        ubWindow.webContents.openDevTools({ mode: "detach" });
+      }
     }
     async function coderedirect2(label, payload) {
       utools.redirect(label, payload);
@@ -866,7 +874,8 @@ var require_data = __commonJS({
       coderedirect: coderedirect2,
       setZoomFactor: setZoomFactor2,
       feature_suffix: feature_suffix2,
-      defaultConfig: defaultConfig2
+      defaultConfig: defaultConfig2,
+      windowMap: windowMap2
     };
   }
 });
@@ -89432,6 +89441,34 @@ utools.onPluginEnter(async (action) => {
     await commandHandlers.handleAssistant(action);
   } else {
     await commandHandlers.handlePrompt(action);
+  }
+});
+var { ipcRenderer } = require("electron");
+var { windowMap } = require_data();
+ipcRenderer.on("window-event", (e, { senderId, event }) => {
+  const bw = windowMap.get(senderId);
+  if (!bw) {
+    console.warn(`[IPC Hub] Window with senderId ${senderId} not found.`);
+    return;
+  }
+  try {
+    switch (event) {
+      case "toggle-always-on-top": {
+        const currentState = bw.isAlwaysOnTop();
+        const newState = !currentState;
+        bw.setAlwaysOnTop(newState);
+        bw.webContents.send("always-on-top-changed", newState);
+        break;
+      }
+      // 可以根据需要在此处添加更多事件，例如 'close-window'
+      case "close-window": {
+        bw.close();
+        windowMap.delete(senderId);
+        break;
+      }
+    }
+  } catch (err) {
+    console.error(`[IPC Hub] Error handling event '${event}' for window ${senderId}:`, err);
   }
 });
 /*! Bundled license information:

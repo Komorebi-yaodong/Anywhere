@@ -1,5 +1,6 @@
 const webFrame = require('electron').webFrame;
-
+const crypto = require('crypto');
+const windowMap = new Map();
 const feature_suffix = "anywhere助手^_^"
 
 // 默认配置 (保持不变)
@@ -41,7 +42,7 @@ const defaultConfig = {
       },
     },
     mcpServers: {},
-    language:"zh",
+    language: "zh",
     tags: {},
     skipLineBreak: false,
     CtrlEnterToSend: false,
@@ -50,7 +51,7 @@ const defaultConfig = {
     fix_position: false,
     isAlwaysOnTop_global: true,
     autoCloseOnBlur_global: true,
-    zoom:1,
+    zoom: 1,
     webdav: {
       url: "",
       username: "",
@@ -59,49 +60,49 @@ const defaultConfig = {
       data_path: "/anywhere_data",
       localChatPath: ""
     },
-    voiceList:[
-    "alloy-👩",
-    "echo-👨‍🦰清晰",
-    "nova-👩清晰",
-    "sage-👧年轻",
-    "shimmer-👧明亮",
-    "fable-😐中性",
-    "coral-👩客服",
-    "ash-🧔‍♂️商业",
-    "ballad-👨故事",
-    "verse-👨诗歌",
-    "onyx-👨‍🦰新闻",
-    "Zephyr-👧明亮",
-    "Puck-👦欢快",
-    "Charon-👦信息丰富",
-    "Kore-👩坚定",
-    "Fenrir-👨‍🦰易激动",
-    "Leda-👧年轻",
-    "Orus-👨‍🦰鉴定",
-    "Aoede-👩轻松",
-    "Callirrhoe-👩随和",
-    "Autonoe-👩明亮",
-    "Enceladus-🧔‍♂️呼吸感",
-    "Iapetus-👦清晰",
-    "Umbriel-👦随和",
-    "Algieba-👦平滑",
-    "Despina-👩平滑",
-    "Erinome-👩清晰",
-    "Algenib-👨‍🦰沙哑",
-    "Rasalgethi-👨‍🦰信息丰富",
-    "Laomedeia-👩欢快",
-    "Achernar-👩轻柔",
-    "Alnilam-👦坚定",
-    "Schedar-👦平稳",
-    "Gacrux-👩成熟",
-    "Pulcherrima-👩向前",
-    "Achird-👦友好",
-    "Zubenelgenubi-👦休闲",
-    "Vindemiatrix-👩温柔",
-    "Sadachbia-👨‍🦰活泼",
-    "Sadaltager-👨‍🦰博学",
-    "Sulafat-👩温暖"
-  ],
+    voiceList: [
+      "alloy-👩",
+      "echo-👨‍🦰清晰",
+      "nova-👩清晰",
+      "sage-👧年轻",
+      "shimmer-👧明亮",
+      "fable-😐中性",
+      "coral-👩客服",
+      "ash-🧔‍♂️商业",
+      "ballad-👨故事",
+      "verse-👨诗歌",
+      "onyx-👨‍🦰新闻",
+      "Zephyr-👧明亮",
+      "Puck-👦欢快",
+      "Charon-👦信息丰富",
+      "Kore-👩坚定",
+      "Fenrir-👨‍🦰易激动",
+      "Leda-👧年轻",
+      "Orus-👨‍🦰鉴定",
+      "Aoede-👩轻松",
+      "Callirrhoe-👩随和",
+      "Autonoe-👩明亮",
+      "Enceladus-🧔‍♂️呼吸感",
+      "Iapetus-👦清晰",
+      "Umbriel-👦随和",
+      "Algieba-👦平滑",
+      "Despina-👩平滑",
+      "Erinome-👩清晰",
+      "Algenib-👨‍🦰沙哑",
+      "Rasalgethi-👨‍🦰信息丰富",
+      "Laomedeia-👩欢快",
+      "Achernar-👩轻柔",
+      "Alnilam-👦坚定",
+      "Schedar-👦平稳",
+      "Gacrux-👩成熟",
+      "Pulcherrima-👩向前",
+      "Achird-👦友好",
+      "Zubenelgenubi-👦休闲",
+      "Vindemiatrix-👩温柔",
+      "Sadachbia-👨‍🦰活泼",
+      "Sadaltager-👨‍🦰博学",
+      "Sulafat-👩温暖"
+    ],
   }
 };
 
@@ -148,7 +149,7 @@ async function getConfig() {
     await utools.db.promises.put({ _id: "prompts", data: promptsPart });
     await utools.db.promises.put({ _id: "providers", data: providersPart });
     await utools.db.promises.put({ _id: "mcpServers", data: mcpServersPart });
-    
+
     const updateResult = await utools.db.promises.put({
       _id: "config",
       data: baseConfigPart,
@@ -156,9 +157,9 @@ async function getConfig() {
     });
 
     if (updateResult.ok) {
-        console.log("Anywhere: Migration successful. Old config cleaned.");
+      console.log("Anywhere: Migration successful. Old config cleaned.");
     } else {
-        console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
+      console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
     }
     configDoc = await utools.db.promises.get("config");
   }
@@ -174,7 +175,7 @@ async function getConfig() {
   fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig.config.prompts;
   fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig.config.providers;
   fullConfigData.config.mcpServers = mcpServersDoc ? mcpServersDoc.data : defaultConfig.config.mcpServers || {};
-  
+
   return fullConfigData;
 }
 
@@ -240,7 +241,7 @@ function checkConfig(config) {
     delete config.inputLayout;
     flag = true;
   }
-  
+
   if (config.mcpServers === undefined) {
     config.mcpServers = {};
     flag = true;
@@ -248,48 +249,48 @@ function checkConfig(config) {
 
   if (config.voiceList === undefined) {
     config.voiceList = [
-    "alloy-👩",
-    "echo-👨‍🦰清晰",
-    "nova-👩清晰",
-    "sage-👧年轻",
-    "shimmer-👧明亮",
-    "fable-😐中性",
-    "coral-👩客服",
-    "ash-🧔‍♂️商业",
-    "ballad-👨故事",
-    "verse-👨诗歌",
-    "onyx-👨‍🦰新闻",
-    "Zephyr-👧明亮",
-    "Puck-👦欢快",
-    "Charon-👦信息丰富",
-    "Kore-👩坚定",
-    "Fenrir-👨‍🦰易激动",
-    "Leda-👧年轻",
-    "Orus-👨‍🦰鉴定",
-    "Aoede-👩轻松",
-    "Callirrhoe-👩随和",
-    "Autonoe-👩明亮",
-    "Enceladus-🧔‍♂️呼吸感",
-    "Iapetus-👦清晰",
-    "Umbriel-👦随和",
-    "Algieba-👦平滑",
-    "Despina-👩平滑",
-    "Erinome-👩清晰",
-    "Algenib-👨‍🦰沙哑",
-    "Rasalgethi-👨‍🦰信息丰富",
-    "Laomedeia-👩欢快",
-    "Achernar-👩轻柔",
-    "Alnilam-👦坚定",
-    "Schedar-👦平稳",
-    "Gacrux-👩成熟",
-    "Pulcherrima-👩向前",
-    "Achird-👦友好",
-    "Zubenelgenubi-👦休闲",
-    "Vindemiatrix-👩温柔",
-    "Sadachbia-👨‍🦰活泼",
-    "Sadaltager-👨‍🦰博学",
-    "Sulafat-👩温暖"
-  ];
+      "alloy-👩",
+      "echo-👨‍🦰清晰",
+      "nova-👩清晰",
+      "sage-👧年轻",
+      "shimmer-👧明亮",
+      "fable-😐中性",
+      "coral-👩客服",
+      "ash-🧔‍♂️商业",
+      "ballad-👨故事",
+      "verse-👨诗歌",
+      "onyx-👨‍🦰新闻",
+      "Zephyr-👧明亮",
+      "Puck-👦欢快",
+      "Charon-👦信息丰富",
+      "Kore-👩坚定",
+      "Fenrir-👨‍🦰易激动",
+      "Leda-👧年轻",
+      "Orus-👨‍🦰鉴定",
+      "Aoede-👩轻松",
+      "Callirrhoe-👩随和",
+      "Autonoe-👩明亮",
+      "Enceladus-🧔‍♂️呼吸感",
+      "Iapetus-👦清晰",
+      "Umbriel-👦随和",
+      "Algieba-👦平滑",
+      "Despina-👩平滑",
+      "Erinome-👩清晰",
+      "Algenib-👨‍🦰沙哑",
+      "Rasalgethi-👨‍🦰信息丰富",
+      "Laomedeia-👩欢快",
+      "Achernar-👩轻柔",
+      "Alnilam-👦坚定",
+      "Schedar-👦平稳",
+      "Gacrux-👩成熟",
+      "Pulcherrima-👩向前",
+      "Achird-👦友好",
+      "Zubenelgenubi-👦休闲",
+      "Vindemiatrix-👩温柔",
+      "Sadachbia-👨‍🦰活泼",
+      "Sadaltager-👨‍🦰博学",
+      "Sulafat-👩温暖"
+    ];
     flag = true;
   }
 
@@ -308,8 +309,8 @@ function checkConfig(config) {
     config.webdav.data_path = config.webdav.dataPath;
     delete config.webdav.dataPath;
     flag = true;
-    
-  }else if (config.webdav.dataPath) {
+
+  } else if (config.webdav.dataPath) {
     delete config.webdav.dataPath;
   }
   if (config.webdav.data_path == undefined) {
@@ -320,7 +321,7 @@ function checkConfig(config) {
     config.webdav.localChatPath = "";
     flag = true;
   }
-  
+
   if (config.apiUrl) {
     config.providers["0"] = {
       name: "default",
@@ -397,9 +398,9 @@ function checkConfig(config) {
       flag = true;
     }
     if (config.prompts[key].isDirectSend_file === undefined) {
-      if (config.prompts[key].isDirectSend === undefined){
+      if (config.prompts[key].isDirectSend === undefined) {
         config.prompts[key].isDirectSend_file = false;
-      }else{
+      } else {
         config.prompts[key].isDirectSend_file = config.prompts[key].isDirectSend;
         delete config.prompts[key].isDirectSend;
       }
@@ -649,25 +650,25 @@ function updateConfig(newConfig) {
         icon: prompt.icon || ""
       };
       if (prompt.type === "general") {
-          expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
-          expectedMatchFeature.cmds.push({ type: "img", label: key });
-          expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+        expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
+        expectedMatchFeature.cmds.push({ type: "img", label: key });
+        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
       } else if (prompt.type === "files") {
-          expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: prompt.showMode === "window" ? "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" : "/\\.(png|jpeg|jpg|webp|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|csv|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
       } else if (prompt.type === "img") {
-          expectedMatchFeature.cmds.push({ type: "img", label: key });
+        expectedMatchFeature.cmds.push({ type: "img", label: key });
       } else if (prompt.type === "over") {
-          // 根据 matchRegex 决定生成 regex 还是 over 类型的 cmd
-          if (prompt.matchRegex && prompt.matchRegex.trim() !== '') {
-              expectedMatchFeature.cmds.push({
-                  type: "regex",
-                  label: key,
-                  match: prompt.matchRegex,
-                  minLength: 1
-              });
-          } else {
-              expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
-          }
+        // 根据 matchRegex 决定生成 regex 还是 over 类型的 cmd
+        if (prompt.matchRegex && prompt.matchRegex.trim() !== '') {
+          expectedMatchFeature.cmds.push({
+            type: "regex",
+            label: key,
+            match: prompt.matchRegex,
+            minLength: 1
+          });
+        } else {
+          expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
+        }
       }
       utools.setFeature(expectedMatchFeature);
 
@@ -692,10 +693,10 @@ function updateConfig(newConfig) {
   for (const [code, feature] of featuresMap) {
     if (code === "Anywhere Settings" || code === "Resume Conversation") continue;
     const promptKey = feature.explain;
-    if (!enabledPromptKeys.has(promptKey) || 
-        (currentPrompts[promptKey] && currentPrompts[promptKey].showMode !== "window" && code.endsWith(feature_suffix))
-       ) {
-        utools.removeFeature(code);
+    if (!enabledPromptKeys.has(promptKey) ||
+      (currentPrompts[promptKey] && currentPrompts[promptKey].showMode !== "window" && code.endsWith(feature_suffix))
+    ) {
+      utools.removeFeature(code);
     }
   }
 
@@ -708,68 +709,68 @@ function getUser() {
 }
 
 function getPosition(config, promptCode) {
-    const promptConfig = config.prompts[promptCode];
-    const OVERFLOW_ALLOWANCE = 10; // 允许窗口超出屏幕边界的最大像素值
+  const promptConfig = config.prompts[promptCode];
+  const OVERFLOW_ALLOWANCE = 10; // 允许窗口超出屏幕边界的最大像素值
 
-    let width = promptConfig?.window_width || 540;
-    let height = promptConfig?.window_height || 700;
-    let windowX = 0, windowY = 0;
-    
-    const primaryDisplay = utools.getPrimaryDisplay();
-    let currentDisplay;
+  let width = promptConfig?.window_width || 540;
+  let height = promptConfig?.window_height || 700;
+  let windowX = 0, windowY = 0;
 
-    // 检查坐标是否存在使用 '!= null'，这可以正确处理 0
-    const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
+  const primaryDisplay = utools.getPrimaryDisplay();
+  let currentDisplay;
 
-    // 1. 根据设置（固定位置或鼠标位置）确定目标显示器和初始位置
-    if (hasFixedPosition) {
-        let set_position = { x: promptConfig.position_x, y: promptConfig.position_y };
-        currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
-        windowX = Math.floor(promptConfig.position_x);
-        windowY = Math.floor(promptConfig.position_y);
+  // 检查坐标是否存在使用 '!= null'，这可以正确处理 0
+  const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
+
+  // 1. 根据设置（固定位置或鼠标位置）确定目标显示器和初始位置
+  if (hasFixedPosition) {
+    let set_position = { x: promptConfig.position_x, y: promptConfig.position_y };
+    currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
+    windowX = Math.floor(promptConfig.position_x);
+    windowY = Math.floor(promptConfig.position_y);
+  } else {
+    const mouse_position = utools.getCursorScreenPoint();
+    currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
+    windowX = Math.floor(mouse_position.x - (width / 2));
+    windowY = Math.floor(mouse_position.y);
+  }
+
+  // 2. 确保窗口在目标显示器边界内
+  if (currentDisplay) {
+    const display = currentDisplay.bounds;
+
+    // 检查并修正窗口大小，确保不超过显示器尺寸
+    if (width > display.width) {
+      width = display.width;
+    }
+    if (height > display.height) {
+      height = display.height;
+    }
+
+    // 定义显示器的有效边界（考虑允许的溢出）
+    const minX = display.x - OVERFLOW_ALLOWANCE;
+    const maxX = display.x + display.width - width + OVERFLOW_ALLOWANCE;
+    const minY = display.y - OVERFLOW_ALLOWANCE;
+    const maxY = display.y + display.height - height + OVERFLOW_ALLOWANCE;
+
+    // 检查窗口是否完全在显示器之外，如果是，则将其居中
+    if (
+      (windowX + width < display.x) || (windowX > display.x + display.width) ||
+      (windowY + height < display.y) || (windowY > display.y + display.height)
+    ) {
+      windowX = display.x + (display.width - width) / 2;
+      windowY = display.y + (display.height - height) / 2;
     } else {
-        const mouse_position = utools.getCursorScreenPoint();
-        currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
-        windowX = Math.floor(mouse_position.x - (width / 2));
-        windowY = Math.floor(mouse_position.y);
+      // 如果窗口部分在显示器外，则将其拉回边界内
+      if (windowX < minX) windowX = minX;
+      if (windowX > maxX) windowX = maxX;
+      if (windowY < minY) windowY = minY;
+      if (windowY > maxY) windowY = maxY;
     }
+  }
 
-    // 2. 确保窗口在目标显示器边界内
-    if (currentDisplay) {
-        const display = currentDisplay.bounds;
-
-        // 检查并修正窗口大小，确保不超过显示器尺寸
-        if (width > display.width) {
-            width = display.width;
-        }
-        if (height > display.height) {
-            height = display.height;
-        }
-
-        // 定义显示器的有效边界（考虑允许的溢出）
-        const minX = display.x - OVERFLOW_ALLOWANCE;
-        const maxX = display.x + display.width - width + OVERFLOW_ALLOWANCE;
-        const minY = display.y - OVERFLOW_ALLOWANCE;
-        const maxY = display.y + display.height - height + OVERFLOW_ALLOWANCE;
-
-        // 检查窗口是否完全在显示器之外，如果是，则将其居中
-        if (
-            (windowX + width < display.x) || (windowX > display.x + display.width) ||
-            (windowY + height < display.y) || (windowY > display.y + display.height)
-           ) {
-             windowX = display.x + (display.width - width) / 2;
-             windowY = display.y + (display.height - height) / 2;
-        } else {
-            // 如果窗口部分在显示器外，则将其拉回边界内
-            if (windowX < minX) windowX = minX;
-            if (windowX > maxX) windowX = maxX;
-            if (windowY < minY) windowY = minY;
-            if (windowY > maxY) windowY = maxY;
-        }
-    }
-
-    // 3. 返回最终计算的位置和尺寸
-    return { x: Math.round(windowX), y: Math.round(windowY), width, height };
+  // 3. 返回最终计算的位置和尺寸
+  return { x: Math.round(windowX), y: Math.round(windowY), width, height };
 }
 
 function getRandomItem(list) {
@@ -844,7 +845,7 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
       }
     }
   }
-  
+
   let payload = {
     model: model,
     messages: history,
@@ -862,7 +863,7 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
     if (config.prompts[CODE] && typeof config.prompts[CODE].stream === 'boolean') {
       payload.stream = config.prompts[CODE].stream;
     } else {
-        payload.stream = true; // 默认开启流式
+      payload.stream = true; // 默认开启流式
     }
   }
 
@@ -870,13 +871,13 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
   if (config.prompts[CODE] && config.prompts[CODE].isTemperature) {
     payload.temperature = config.prompts[CODE].temperature;
   }
-  
+
   // 思考预算逻辑：优先使用覆盖值，否则使用配置值
   const reasoningEffort = overrideReasoningEffort;
   if (reasoningEffort && reasoningEffort !== 'default') {
     payload.reasoning_effort = reasoningEffort;
   }
-  
+
   const response = await fetch(apiUrl + '/chat/completions', {
     method: 'POST',
     headers: {
@@ -894,8 +895,8 @@ function copyText(content) {
   utools.copyText(content);
 }
 
-async function sethotkey(prompt_name,auto_copy){
-  utools.redirectHotKeySetting(prompt_name,auto_copy);
+async function sethotkey(prompt_name, auto_copy) {
+  utools.redirectHotKeySetting(prompt_name, auto_copy);
 }
 
 async function openWindow(config, msg) {
@@ -912,6 +913,11 @@ async function openWindow(config, msg) {
   let channel = "window";
   
   const backgroundColor = config.isDarkMode ? '#181818' : '#ffffff';
+
+  // 为窗口生成唯一ID并添加到消息中
+  const senderId = crypto.randomUUID();
+  msg.senderId = senderId;
+  msg.isAlwaysOnTop = isAlwaysOnTop;
 
   const windowOptions = {
     show: false,
@@ -932,6 +938,9 @@ async function openWindow(config, msg) {
     "./window/index.html",
     windowOptions,
     () => {
+      // 将窗口实例存入Map
+      windowMap.set(senderId, ubWindow);
+      
       ubWindow.webContents.send(channel, msg);
       ubWindow.show();
       
@@ -940,15 +949,17 @@ async function openWindow(config, msg) {
       console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
     }
   );
-  ubWindow.webContents.openDevTools({ mode: "detach" });
+  if (utools.isDev()) {
+    ubWindow.webContents.openDevTools({ mode: "detach" });
+  }
 }
 
 async function coderedirect(label, payload) {
   utools.redirect(label, payload);
 }
 
-function setZoomFactor(factor){
-    webFrame.setZoomFactor(factor);
+function setZoomFactor(factor) {
+  webFrame.setZoomFactor(factor);
 }
 
 /**
@@ -958,51 +969,51 @@ function setZoomFactor(factor){
  * @returns {Promise<{success: boolean, message?: string}>}
  */
 async function savePromptWindowSettings(promptKey, settings) {
-    const MAX_RETRIES = 5;
-    let attempt = 0;
+  const MAX_RETRIES = 5;
+  let attempt = 0;
 
-    while (attempt < MAX_RETRIES) {
-        const promptsDoc = utools.db.get("prompts");
-        if (!promptsDoc || !promptsDoc.data) {
-            return { success: false, message: "Prompts document not found" };
-        }
-
-        const promptsData = promptsDoc.data;
-        if (!promptsData[promptKey]) {
-            // 如果快捷助手不存在，则无法更新。这是一个错误情况。
-            return { success: false, message: `Prompt with key '${promptKey}' not found in document` };
-        }
-
-        // 将新的设置合并到现有的快捷助手配置中
-        promptsData[promptKey] = {
-            ...promptsData[promptKey],
-            ...settings
-        };
-
-        // 尝试保存更新后的文档
-        const result = utools.db.put({
-            _id: "prompts",
-            data: promptsData,
-            _rev: promptsDoc._rev
-        });
-
-        if (result.ok) {
-            return { success: true, rev: result.rev }; // 成功！
-        }
-
-        if (result.error && result.name === 'conflict') {
-            // 检测到冲突。增加尝试次数，循环将自动重试。
-            attempt++;
-            // (可选) 为调试记录冲突，但不打扰用户。
-            console.log(`Anywhere: DB conflict on saving window settings (attempt ${attempt}/${MAX_RETRIES}). Retrying...`);
-        } else {
-            // 发生了其他错误（例如验证失败），因此立即失败。
-            return { success: false, message: result.message || 'An unknown database error occurred.' };
-        }
+  while (attempt < MAX_RETRIES) {
+    const promptsDoc = utools.db.get("prompts");
+    if (!promptsDoc || !promptsDoc.data) {
+      return { success: false, message: "Prompts document not found" };
     }
 
-    // 如果退出循环，意味着已超出重试次数。
-    return { success: false, message: `Failed to save settings after ${MAX_RETRIES} attempts due to persistent database conflicts.` };
+    const promptsData = promptsDoc.data;
+    if (!promptsData[promptKey]) {
+      // 如果快捷助手不存在，则无法更新。这是一个错误情况。
+      return { success: false, message: `Prompt with key '${promptKey}' not found in document` };
+    }
+
+    // 将新的设置合并到现有的快捷助手配置中
+    promptsData[promptKey] = {
+      ...promptsData[promptKey],
+      ...settings
+    };
+
+    // 尝试保存更新后的文档
+    const result = utools.db.put({
+      _id: "prompts",
+      data: promptsData,
+      _rev: promptsDoc._rev
+    });
+
+    if (result.ok) {
+      return { success: true, rev: result.rev }; // 成功！
+    }
+
+    if (result.error && result.name === 'conflict') {
+      // 检测到冲突。增加尝试次数，循环将自动重试。
+      attempt++;
+      // (可选) 为调试记录冲突，但不打扰用户。
+      console.log(`Anywhere: DB conflict on saving window settings (attempt ${attempt}/${MAX_RETRIES}). Retrying...`);
+    } else {
+      // 发生了其他错误（例如验证失败），因此立即失败。
+      return { success: false, message: result.message || 'An unknown database error occurred.' };
+    }
+  }
+
+  // 如果退出循环，意味着已超出重试次数。
+  return { success: false, message: `Failed to save settings after ${MAX_RETRIES} attempts due to persistent database conflicts.` };
 }
 
 
@@ -1023,4 +1034,5 @@ module.exports = {
   setZoomFactor,
   feature_suffix,
   defaultConfig,
+  windowMap,
 };

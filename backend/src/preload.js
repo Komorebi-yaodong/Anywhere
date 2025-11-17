@@ -241,3 +241,35 @@ utools.onPluginEnter(async (action) => {
     await commandHandlers.handlePrompt(action);
   }
 });
+
+const { ipcRenderer } = require('electron');
+const { windowMap } = require('./data.js');
+
+ipcRenderer.on('window-event', (e, { senderId, event }) => {
+  const bw = windowMap.get(senderId);
+  if (!bw) {
+    console.warn(`[IPC Hub] Window with senderId ${senderId} not found.`);
+    return;
+  }
+
+  try {
+    switch (event) {
+      case 'toggle-always-on-top': {
+        const currentState = bw.isAlwaysOnTop();
+        const newState = !currentState;
+        bw.setAlwaysOnTop(newState);
+        // 将新状态发回给子窗口以更新UI
+        bw.webContents.send('always-on-top-changed', newState);
+        break;
+      }
+      // 可以根据需要在此处添加更多事件，例如 'close-window'
+      case 'close-window': {
+        bw.close();
+        windowMap.delete(senderId);
+        break;
+      }
+    }
+  } catch (err) {
+    console.error(`[IPC Hub] Error handling event '${event}' for window ${senderId}:`, err);
+  }
+});
