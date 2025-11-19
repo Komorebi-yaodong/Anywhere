@@ -169,31 +169,45 @@ const renderedMarkdownContent = computed(() => {
     let formattedContent = formatMessageContent(content, role);
     formattedContent = preprocessKatex(formattedContent);
 
-    const codeBlocks = new Map();
-    let blockIndex = 0;
+    // 使用 Map 存储所有需要保护的内容（代码块 + 公式），防止后续处理（加空格优化、DOMPurify）破坏它们
+    const protectedMap = new Map();
+    let placeholderIndex = 0;
 
-    const placeholderContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, content) => {
-        const placeholder = `__CODE_BLOCK_PLACEHOLDER_${blockIndex}__`;
-        const fullCodeBlock = delimiter + content + delimiter;
-        codeBlocks.set(placeholder, fullCodeBlock);
-        blockIndex++;
-        return prefix + placeholder;
+    const addPlaceholder = (text) => {
+        const placeholder = `__PROTECTED_CONTENT_${placeholderIndex++}__`;
+        protectedMap.set(placeholder, text);
+        return placeholder;
+    };
+
+    // 1. 优先保护代码块 (```...``` 和 `...`)
+    let processedContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
+        return prefix + addPlaceholder(delimiter + inner + delimiter);
     });
 
-    const sanitizedPart = DOMPurify.sanitize(placeholderContent, {
+    // 2. 保护块级公式 ($$...$$)
+    processedContent = processedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => {
+        return addPlaceholder(match);
+    });
+
+    // 3. 保护行内公式 ($...$)
+    processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => {
+        return addPlaceholder(match);
+    });
+
+    // 4. 执行 DOMPurify 净化 HTML
+    const sanitizedPart = DOMPurify.sanitize(processedContent, {
         ADD_TAGS: ['video', 'audio', 'source'],
         USE_PROFILES: { html: true, svg: true, svgFilters: true },
         ADD_ATTR: ['style']
     });
 
-    const finalContent = sanitizedPart.replace(/__CODE_BLOCK_PLACEHOLDER_\d+__/g, (placeholder) => {
-        return codeBlocks.get(placeholder) || placeholder;
+    // 5. 还原受保护的内容
+    const finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
+        return protectedMap.get(placeholder) || placeholder;
     });
     
-    const sanitizedContent = finalContent;
-    
-    if (!sanitizedContent && props.message.role === 'assistant') return ' ';
-    return sanitizedContent || ' ';
+    if (!finalContent && props.message.role === 'assistant') return ' ';
+    return finalContent || ' ';
 });
 
 const shouldShowCollapseButton = computed(() => {
