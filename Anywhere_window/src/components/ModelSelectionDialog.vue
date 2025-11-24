@@ -12,6 +12,13 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'select', 'save-model']);
 
 const searchQuery = ref('');
+const searchInputRef = ref(null);
+
+const handleOpened = () => {
+    if (searchInputRef.value) {
+        searchInputRef.value.focus();
+    }
+};
 
 const filteredModelList = computed(() => {
     if (!searchQuery.value) {
@@ -60,9 +67,9 @@ const handleSelect = (modelValue) => emit('select', modelValue);
 
 <template>
     <el-dialog title="选择模型" :model-value="modelValue" @update:model-value="handleClose" width="70%"
-        custom-class="model-dialog" top="8vh">
+        custom-class="model-dialog" top="8vh" @opened="handleOpened">
         <div class="model-search-container">
-            <el-input v-model="searchQuery" placeholder="搜索服务商或模型名称..." clearable :prefix-icon="Search" />
+            <el-input ref="searchInputRef" v-model="searchQuery" placeholder="搜索服务商或模型名称..." clearable :prefix-icon="Search" />
         </div>
         <el-table :data="filteredModelList" stripe style="width: 100%; height: 400px;" :max-height="400" :border="true"
             :span-method="tableSpanMethod" width="100%">
