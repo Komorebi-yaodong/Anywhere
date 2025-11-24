@@ -15,6 +15,8 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import OpenAI from 'openai';
 
+import TextSearchUI from './utils/TextSearchUI.js';
+
 const showDismissibleMessage = (options) => {
   const opts = typeof options === 'string' ? { message: options } : options;
   let messageInstance = null;
@@ -46,6 +48,8 @@ const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
 
 let autoSaveInterval = null;
+
+let textSearchInstance = null;
 
 const setMessageRef = (el, index) => {
   if (el) messageRefs.set(index, el);
@@ -468,6 +472,10 @@ const handleWindowFocus = () => {
       // 如果是，则不执行任何操作，保持焦点在编辑框内
       return;
     }
+    // 检查焦点是否在查找框内
+    if (document.activeElement && document.activeElement.closest('.text-search-container')) {
+        return;
+    }
     const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
     if (!textarea) return;
     if (document.activeElement !== textarea) {
@@ -689,6 +697,11 @@ onMounted(async () => {
     });
   }
 
+  textSearchInstance = new TextSearchUI({
+    scope: '.chat-main',
+    theme: currentConfig.value?.isDarkMode ? 'dark' : 'light' // 初始主题
+  });
+
   // 初始化通用事件监听器
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
@@ -870,6 +883,12 @@ onMounted(async () => {
   autoSaveInterval = setInterval(autoSaveSession, 15000);
   window.addEventListener('error', handleGlobalImageError, true);
   window.addEventListener('keydown', handleGlobalKeyDown);
+
+  watch(() => currentConfig.value.isDarkMode, (isDark) => {
+      if (textSearchInstance) {
+          textSearchInstance.setTheme(isDark ? 'dark' : 'light');
+      }
+  });
 });
 
 const autoSaveSession = async () => {
@@ -899,6 +918,7 @@ onBeforeUnmount(async () => {
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('blur', handleWindowBlur);
+  if (textSearchInstance) textSearchInstance.destroy();
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
