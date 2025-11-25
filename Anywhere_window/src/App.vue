@@ -371,7 +371,43 @@ const handleWheel = (event) => {
 };
 
 const handleSaveWindowSize = () => saveWindowSize();
-const handleOpenModelDialog = () => { changeModel_page.value = true; };
+const handleOpenModelDialog = async () => { 
+  try {
+    const result = await window.api.getConfig();
+    if (result && result.config) {
+      // 1. 更新本地配置中的服务商信息
+      currentConfig.value.providers = result.config.providers;
+      currentConfig.value.providerOrder = result.config.providerOrder;
+
+      // 2. 重新生成模型列表和映射
+      const newModelList = []; 
+      const newModelMap = {};
+      currentConfig.value.providerOrder.forEach(id => {
+        const provider = currentConfig.value.providers[id];
+        if (provider?.enable) {
+          provider.modelList.forEach(m => {
+            const key = `${id}|${m}`;
+            newModelList.push({ key, value: key, label: `${provider.name}|${m}` });
+            newModelMap[key] = `${provider.name}|${m}`;
+          });
+        }
+      });
+      modelList.value = newModelList;
+      modelMap.value = newModelMap;
+
+      // 3. [新增关键修复] 立即同步当前正在使用的服务商凭证
+      // 确保即使用户不切换模型，只在设置里改了Key，这里也能立即生效
+      if (currentProviderID.value && currentConfig.value.providers[currentProviderID.value]) {
+        const activeProvider = currentConfig.value.providers[currentProviderID.value];
+        base_url.value = activeProvider.url;
+        api_key.value = activeProvider.api_key;
+      }
+    }
+  } catch (e) {
+    console.warn("自动刷新模型列表失败，将使用缓存数据", e);
+  }
+  changeModel_page.value = true; 
+};
 const handleChangeModel = (chosenModel) => {
   model.value = chosenModel;
   currentProviderID.value = chosenModel.split("|")[0];

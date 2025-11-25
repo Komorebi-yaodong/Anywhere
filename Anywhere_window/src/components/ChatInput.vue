@@ -46,12 +46,15 @@ let mediaRecorder = null; // for MediaRecorder (system audio)
 let audioChunks = [];
 let audioStream = null;
 const currentRecordingSource = ref(null); // 'microphone' or 'system'
-const isCancelledByButton = ref(false); 
+const isCancelledByButton = ref(false);
 
 const isAudioSourceSelectorVisible = ref(false);
 const isReasoningSelectorVisible = ref(false);
 const isVoiceSelectorVisible = ref(false);
-
+const internalVoiceList = ref(props.voiceList || []);
+watch(() => props.voiceList, (newVal) => {
+    internalVoiceList.value = newVal || [];
+}, { immediate: true });
 
 // --- Computed Properties ---
 const reasoningButtonType = computed(() => {
@@ -139,13 +142,26 @@ const handleReasoningSelection = (effort) => {
     isReasoningSelectorVisible.value = false;
 };
 
-const toggleVoiceSelector = () => {
+const toggleVoiceSelector = async () => {
     if (isRecording.value) return;
-    isVoiceSelectorVisible.value = !isVoiceSelectorVisible.value;
-    if (isVoiceSelectorVisible.value) {
+
+    // 仅在打开弹窗时请求更新
+    if (!isVoiceSelectorVisible.value) {
+        try {
+            const res = await window.api.getConfig();
+            if (res?.config?.voiceList) {
+                internalVoiceList.value = res.config.voiceList;
+            }
+        } catch (e) {
+            console.error("刷新语音列表失败", e);
+        }
+
+        // 关闭互斥的弹窗
         isReasoningSelectorVisible.value = false;
         isAudioSourceSelectorVisible.value = false;
     }
+
+    isVoiceSelectorVisible.value = !isVoiceSelectorVisible.value;
 };
 
 const handleVoiceSelection = (value) => {
@@ -446,7 +462,7 @@ defineExpose({ focus, senderRef });
                             round>
                             关闭语音
                         </el-button>
-                        <el-button v-for="voice in props.voiceList" :key="voice" @click="handleVoiceSelection(voice)"
+                        <el-button v-for="voice in internalVoiceList" :key="voice" @click="handleVoiceSelection(voice)"
                             :type="selectedVoice === voice ? 'primary' : 'default'" round>
                             {{ voice }}
                         </el-button>
@@ -526,8 +542,8 @@ defineExpose({ focus, senderRef });
                                         @click="handleConfirmAndSendRecording" circle /></el-tooltip>
                             </template>
                             <template v-else>
-                                <el-tooltip content="发送语音"><el-button ref="audioButtonRef" :icon="Microphone" size="default"
-                                        @click="toggleAudioSourceSelector" circle /></el-tooltip>
+                                <el-tooltip content="发送语音"><el-button ref="audioButtonRef" :icon="Microphone"
+                                        size="default" @click="toggleAudioSourceSelector" circle /></el-tooltip>
                                 <el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle
                                     :disabled="loading" />
                                 <el-button v-else @click="onCancel" circle class="cancel-button-animated">
@@ -911,38 +927,39 @@ html.dark .el-button--success.is-plain:focus {
 }
 
 .cancel-button-animated {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .cancel-spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--el-text-color-regular);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--el-text-color-regular);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
 }
 
 .cancel-spinner::before {
-  content: '✕';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 12px;
-  line-height: 1;
-  color: var(--el-text-color-regular);
+    content: '✕';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    line-height: 1;
+    color: var(--el-text-color-regular);
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 </style>
