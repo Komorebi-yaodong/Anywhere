@@ -57,9 +57,6 @@ watch(() => props.voiceList, (newVal) => {
 }, { immediate: true });
 
 // --- Computed Properties ---
-const reasoningButtonType = computed(() => {
-    return tempReasoningEffort.value && tempReasoningEffort.value !== 'default' ? 'primary' : '';
-});
 
 const reasoningTooltipContent = computed(() => {
     const map = { default: '默认', low: '低', medium: '中', high: '高' };
