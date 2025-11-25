@@ -194,7 +194,10 @@ const renderedMarkdownContent = computed(() => {
         return addPlaceholder(match);
     });
 
-    // 4. 执行 DOMPurify 净化 HTML
+    // 4. 优化Markdown加粗渲染
+    processedContent = processedContent.replace(/(^|[^\\])\*\*([^\n]+?)\*\*/g, '$1<strong>$2</strong>');
+
+    // 5. 执行 DOMPurify 净化 HTML
     const sanitizedPart = DOMPurify.sanitize(processedContent, {
         ADD_TAGS: ['video', 'audio', 'source'],
         USE_PROFILES: { html: true, svg: true, svgFilters: true },
