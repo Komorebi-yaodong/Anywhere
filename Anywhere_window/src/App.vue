@@ -1846,12 +1846,25 @@ const askAI = async (forceSend = false) => {
         let aggregatedReasoningContent = "";
         let aggregatedContent = "";
         let aggregatedToolCalls = [];
+        let aggregatedExtraContent = null; // [新增] 用于聚合所有额外内容
         let lastUpdateTime = Date.now();
 
         for await (const part of stream) {
           const delta = part.choices[0]?.delta;
 
           if (!delta) continue;
+
+          // [新增] 捕获并合并根级别的 extra_content (包含 thought_signature 等)
+          if (delta.extra_content) {
+            aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
+          }
+          // 兼容性：如果 thought_signature 直接出现在根级
+          if (delta.thought_signature) {
+             aggregatedExtraContent = aggregatedExtraContent || {};
+             aggregatedExtraContent.google = aggregatedExtraContent.google || {};
+             aggregatedExtraContent.google.thought_signature = delta.thought_signature;
+          }
+
           if (delta.reasoning_content) {
             aggregatedReasoningContent += delta.reasoning_content;
             if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
@@ -1887,11 +1900,23 @@ const askAI = async (forceSend = false) => {
               if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
               if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
               if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
+              
+              // [新增] 捕获工具调用级别的 extra_content
+              if (toolCallChunk.extra_content) {
+                // 通常工具调用的 extra_content 是一次性发送的，直接赋值或合并
+                currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
+              }
             }
           }
         }
 
-        responseMessage = { role: 'assistant', content: aggregatedContent || null, reasoning_content: aggregatedReasoningContent || null };
+        responseMessage = { 
+            role: 'assistant', 
+            content: aggregatedContent || null, 
+            reasoning_content: aggregatedReasoningContent || null,
+            extra_content: aggregatedExtraContent // [新增] 将捕获到的 extra_content 附加到最终消息对象
+        };
+        
         if (aggregatedToolCalls.length > 0) {
           responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
         }
@@ -1900,7 +1925,7 @@ const askAI = async (forceSend = false) => {
         responseMessage = response.choices[0].message;
       }
 
-      // 将AI的回复同步到主 history 数组
+      // 将AI的回复同步到主 history 数组 (现在包含 extra_content/thought_signature)
       history.value.push(responseMessage);
 
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
