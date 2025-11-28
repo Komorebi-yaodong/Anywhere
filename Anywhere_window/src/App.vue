@@ -249,6 +249,13 @@ const scrollToBottom = async () => {
   }
 };
 
+const scrollToTop = () => {
+  const el = chatContainerRef.value?.$el;
+  if (el) {
+    el.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+};
+
 const forceScrollToBottom = () => {
   isForcingScroll.value = true;
   isAtBottom.value = true;
@@ -371,7 +378,7 @@ const handleWheel = (event) => {
 };
 
 const handleSaveWindowSize = () => saveWindowSize();
-const handleOpenModelDialog = async () => { 
+const handleOpenModelDialog = async () => {
   try {
     const result = await window.api.getConfig();
     if (result && result.config) {
@@ -380,7 +387,7 @@ const handleOpenModelDialog = async () => {
       currentConfig.value.providerOrder = result.config.providerOrder;
 
       // 2. 重新生成模型列表和映射
-      const newModelList = []; 
+      const newModelList = [];
       const newModelMap = {};
       currentConfig.value.providerOrder.forEach(id => {
         const provider = currentConfig.value.providers[id];
@@ -406,7 +413,7 @@ const handleOpenModelDialog = async () => {
   } catch (e) {
     console.warn("自动刷新模型列表失败，将使用缓存数据", e);
   }
-  changeModel_page.value = true; 
+  changeModel_page.value = true;
 };
 const handleChangeModel = (chosenModel) => {
   model.value = chosenModel;
@@ -504,6 +511,11 @@ const handleWindowBlur = () => {
 
 const handleWindowFocus = () => {
   setTimeout(() => {
+    // 如果正在编辑系统提示词，不抢占焦点
+    if (systemPromptDialogVisible.value) {
+      return;
+    }
+
     // 检查当前焦点是否在某个消息的编辑输入框内
     if (document.activeElement && document.activeElement.tagName.toLowerCase() === 'textarea' && document.activeElement.closest('.editing-wrapper')) {
       // 如果是，则不执行任何操作，保持焦点在编辑框内
@@ -511,7 +523,7 @@ const handleWindowFocus = () => {
     }
     // 检查焦点是否在查找框内
     if (document.activeElement && document.activeElement.closest('.text-search-container')) {
-        return;
+      return;
     }
     const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
     if (!textarea) return;
@@ -649,6 +661,11 @@ const handleEditEnd = async ({ index, action, content }) => {
       showDismissibleMessage.success('消息已更新');
     }
     childComponent.switchToShowMode();
+    // 注意：这里检查的是 chat_show，确保它是视觉上的最后一条
+    if (index === chat_show.value.length - 1 && chat_show.value[index].role === 'user') {
+      await nextTick();
+      await reaskAI(); // 调用 reaskAI 会复用现有逻辑，重新发送请求
+    }
   }
 };
 
@@ -922,9 +939,9 @@ onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeyDown);
 
   watch(() => currentConfig.value.isDarkMode, (isDark) => {
-      if (textSearchInstance) {
-          textSearchInstance.setTheme(isDark ? 'dark' : 'light');
-      }
+    if (textSearchInstance) {
+      textSearchInstance.setTheme(isDark ? 'dark' : 'light');
+    }
   });
 });
 
@@ -1652,7 +1669,7 @@ async function toggleMcpDialog() {
     try {
       // 1. 获取数据库中的最新配置
       const result = await window.api.getConfig();
-      
+
       if (result && result.config && result.config.mcpServers) {
         const newMcpServers = result.config.mcpServers;
         const currentLocalMcpServers = currentConfig.value.mcpServers || {};
@@ -1663,7 +1680,7 @@ async function toggleMcpDialog() {
         sessionMcpServerIds.value.forEach(activeId => {
           if (!newMcpServers[activeId] && currentLocalMcpServers[activeId]) {
             // 将旧配置回填到新配置对象中，仅在当前窗口内存中生效
-            newMcpServers[activeId] = currentLocalMcpServers[activeId]; 
+            newMcpServers[activeId] = currentLocalMcpServers[activeId];
             // 可选：可以在这里给 name 加个标记，例如 newMcpServers[activeId].name += " (已删除)"; 
             // 但为了保持 UI 稳定，暂不修改名称
           }
@@ -1860,9 +1877,9 @@ const askAI = async (forceSend = false) => {
           }
           // 兼容性：如果 thought_signature 直接出现在根级
           if (delta.thought_signature) {
-             aggregatedExtraContent = aggregatedExtraContent || {};
-             aggregatedExtraContent.google = aggregatedExtraContent.google || {};
-             aggregatedExtraContent.google.thought_signature = delta.thought_signature;
+            aggregatedExtraContent = aggregatedExtraContent || {};
+            aggregatedExtraContent.google = aggregatedExtraContent.google || {};
+            aggregatedExtraContent.google.thought_signature = delta.thought_signature;
           }
 
           if (delta.reasoning_content) {
@@ -1900,7 +1917,7 @@ const askAI = async (forceSend = false) => {
               if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
               if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
               if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
-              
+
               // [新增] 捕获工具调用级别的 extra_content
               if (toolCallChunk.extra_content) {
                 // 通常工具调用的 extra_content 是一次性发送的，直接赋值或合并
@@ -1910,13 +1927,13 @@ const askAI = async (forceSend = false) => {
           }
         }
 
-        responseMessage = { 
-            role: 'assistant', 
-            content: aggregatedContent || null, 
-            reasoning_content: aggregatedReasoningContent || null,
-            extra_content: aggregatedExtraContent // [新增] 将捕获到的 extra_content 附加到最终消息对象
+        responseMessage = {
+          role: 'assistant',
+          content: aggregatedContent || null,
+          reasoning_content: aggregatedReasoningContent || null,
+          extra_content: aggregatedExtraContent // [新增] 将捕获到的 extra_content 附加到最终消息对象
         };
-        
+
         if (aggregatedToolCalls.length > 0) {
           responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
         }
@@ -2343,31 +2360,60 @@ const handleGlobalKeyDown = (event) => {
         </el-main>
 
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
-          <el-button class="scroll-nav-btn" @click="navigateToPreviousMessage">
-            <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20"
-              height="20">
-              <path fill="currentColor"
-                d="m488.832 344.32-339.84 335.872a32 32 0 0 0 0 45.248l.064.064a32 32 0 0 0 45.248 0L512 412.928l317.696 312.576a32 32 0 0 0 45.248 0l.064-.064a32 32 0 0 0 0-45.248L533.824 344.32a32 32 0 0 0-44.992 0z">
-              </path>
-            </svg>
-          </el-button>
-          <el-button class="scroll-nav-btn" @click="navigateToNextMessage">
-            <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="20"
-              height="20">
-              <path fill="currentColor"
-                d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z">
-              </path>
-            </svg>
-          </el-button>
-        </div>
-      </div>
+          <!-- [新增] 回到顶部按钮 -->
+          <el-tooltip content="回到顶部" placement="left" :show-after="500">
+            <el-button class="scroll-nav-btn" @click="scrollToTop">
+              <svg class="scroll-nav-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="20"
+                height="20">
+                <path fill="currentColor"
+                  d="M6 17.59L7.41 19 12 14.42 16.59 19 18 17.59 12 11.59z M6 11.59L7.41 13 12 8.42 16.59 13 18 11.59 12 5.59z" />
+              </svg>
+            </el-button>
+          </el-tooltip>
 
-      <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
-        v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
-        :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
-        :is-mcp-active="isMcpActive" @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
-        @remove-file="handleRemoveFile" @upload="handleUpload" @send-audio="handleSendAudio"
-        @open-mcp-dialog="handleOpenMcpDialog" />
+          <!-- 原有：上一条消息 -->
+          <el-tooltip content="上一条消息" placement="left" :show-after="500">
+            <el-button class="scroll-nav-btn" @click="navigateToPreviousMessage">
+              <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="16"
+                height="20">
+                <path fill="currentColor"
+                  d="m488.832 344.32-339.84 335.872a32 32 0 0 0 0 45.248l.064.064a32 32 0 0 0 45.248 0L512 412.928l317.696 312.576a32 32 0 0 0 45.248 0l.064-.064a32 32 0 0 0 0-45.248L533.824 344.32a32 32 0 0 0-44.992 0z">
+                </path>
+              </svg>
+            </el-button>
+          </el-tooltip>
+
+          <!-- 原有：下一条消息 -->
+          <el-tooltip :content="nextButtonTooltip" placement="left" :show-after="500">
+            <el-button class="scroll-nav-btn" @click="navigateToNextMessage">
+              <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="16"
+                height="20">
+                <path fill="currentColor"
+                  d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z">
+                </path>
+              </svg>
+            </el-button>
+          </el-tooltip>
+
+          <!-- [新增] 跳到底部按钮 -->
+          <el-tooltip content="跳到底部" placement="left" :show-after="500">
+            <el-button class="scroll-nav-btn" @click="forceScrollToBottom">
+              <svg class="scroll-nav-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="20"
+                height="20">
+                <path fill="currentColor"
+                  d="M18 6.41L16.59 5 12 9.58 7.41 5 6 6.41 12 12.41z M18 12.41L16.59 11 12 15.58 7.41 11 6 12.41 12 18.41z" />
+              </svg>
+            </el-button>
+          </el-tooltip>
+        </div>
+
+        <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
+          v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
+          :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
+          :is-mcp-active="isMcpActive" @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
+          @remove-file="handleRemoveFile" @upload="handleUpload" @send-audio="handleSendAudio"
+          @open-mcp-dialog="handleOpenMcpDialog" />
+      </div>
     </el-container>
   </main>
 
@@ -2924,13 +2970,13 @@ html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::a
 
 .scroll-to-bottom-wrapper {
   position: absolute;
-  bottom: 15px;
-  right: 15px;
+  bottom: 100px;
+  right: 20px;
   z-index: 20;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 0px;
   padding: 0px;
 }
 
