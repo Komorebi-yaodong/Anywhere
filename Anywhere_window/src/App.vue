@@ -1092,30 +1092,50 @@ const saveSessionToCloud = async () => {
 const saveSessionAsMarkdown = async () => {
   let markdownContent = '';
   const now = new Date();
-  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
   const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
 
   const formatContent = (content) => !Array.isArray(content) ? String(content).trim() : content.map(p => p.type === 'text' ? p.text.trim() : '').join(' ');
   const formatFiles = (content) => Array.isArray(content) ? content.filter(p => p.type !== 'text').map(p => p.type === 'file' ? p.file.filename : 'Image') : [];
+  
+  // 辅助函数：为内容添加引用符号
+  const addBlockquote = (text) => {
+    if (!text) return '';
+    return text.split('\n').map(line => `> ${line}`).join('\n');
+  };
+
+  // 辅助函数：截断文本
+  const truncate = (str, len = 50) => {
+    if (!str) return '';
+    const s = String(str);
+    return s.length > len ? s.substring(0, len) + '...' : s;
+  };
 
   markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n### 当前模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
+  
   const systemPromptMessage = chat_show.value.find(m => m.role === 'system');
-  if (systemPromptMessage && systemPromptMessage.content) markdownContent += `### 系统提示词\n\n${String(systemPromptMessage.content).trim()}\n\n`;
+  if (systemPromptMessage && systemPromptMessage.content) {
+    markdownContent += `### 系统提示词\n\n${addBlockquote(String(systemPromptMessage.content).trim())}\n\n`;
+  }
   markdownContent += '---\n\n';
 
   for (const message of chat_show.value) {
     if (message.role === 'system') continue;
+    
     if (message.role === 'user') {
       let userHeader = '### 👤 用户';
       if (message.timestamp) userHeader += ` - *${formatTimestamp(message.timestamp)}*`;
       markdownContent += `${userHeader}\n\n`;
+      
       const mainContent = formatContent(message.content);
       const files = formatFiles(message.content);
-      if (mainContent) markdownContent += `${mainContent}\n\n`;
+      
+      if (mainContent) markdownContent += `${addBlockquote(mainContent)}\n\n`;
+      
       if (files.length > 0) {
-        markdownContent += `**附件列表:**\n`;
-        files.forEach(f => { markdownContent += `- \`${f}\`\n`; });
+        markdownContent += `> **附件列表:**\n`;
+        files.forEach(f => { markdownContent += `> - \`${f}\`\n`; });
         markdownContent += `\n`;
       }
     } else if (message.role === 'assistant') {
@@ -1123,10 +1143,24 @@ const saveSessionAsMarkdown = async () => {
       if (message.voiceName) assistantHeader += ` (${message.voiceName})`;
       if (message.completedTimestamp) assistantHeader += ` - *${formatTimestamp(message.completedTimestamp)}*`;
       markdownContent += `${assistantHeader}\n\n`;
-      if (message.reasoning_content) markdownContent += `> ${message.reasoning_content.replace(/\n/g, '\n> ')}\n\n`;
+      
+      if (message.reasoning_content) {
+        // 思考过程本来就是引用格式，这里保持原样或再加深一层
+        markdownContent += `> *思考过程:*\n${addBlockquote(message.reasoning_content)}\n\n`;
+      }
+
+      // 处理工具调用
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        markdownContent += `> **工具调用:**\n`;
+        message.tool_calls.forEach(tool => {
+           markdownContent += `> - 🛠️ \`${tool.name}\`: ${truncate(tool.result)}\n`;
+        });
+        markdownContent += `\n`;
+      }
+
       const mainContent = formatContent(message.content);
-      if (mainContent) markdownContent += `${mainContent}\n\n`;
-      else if (message.status) markdownContent += `*(AI正在思考...)*\n\n`;
+      if (mainContent) markdownContent += `${addBlockquote(mainContent)}\n\n`;
+      else if (message.status) markdownContent += `> *(AI正在思考...)*\n\n`;
     }
     markdownContent += '---\n\n';
   }
@@ -1187,19 +1221,21 @@ const saveSessionAsHtml = async () => {
   const generateHtmlContent = () => {
     let bodyContent = '';
 
-    // 这个内部函数现在将首先构建一个完整的 Markdown 字符串，然后一次性解析
+    const truncate = (str, len = 50) => {
+        if (!str) return '';
+        const s = String(str);
+        return s.length > len ? s.substring(0, len) + '...' : s;
+    };
+
     const processContentToHtml = (content) => {
       if (!content) return "";
-
       let markdownString = "";
-
       if (typeof content === 'string') {
         markdownString = content;
       } else if (Array.isArray(content)) {
         markdownString = content.map(part => {
           if (part.type === 'text') {
             return part.text || '';
-            // *** 关键修复点 1: 将图片、音频等也先组装成 Markdown 格式 ***
           } else if (part.type === 'image_url' && part.image_url?.url) {
             return `![Image](${part.image_url.url})`;
           } else if (part.type === 'input_audio' && part.input_audio?.data) {
@@ -1212,39 +1248,77 @@ const saveSessionAsHtml = async () => {
       } else {
         markdownString = String(content);
       }
-
-      // *** 关键修复点 2: 使用 marked 将完整的 Markdown 字符串解析为 HTML ***
-      // marked() 会将 ![]() 转换为 <img>, *...* 转换为 <em>...</em> 等
       return marked.parse(markdownString);
     };
 
     chat_show.value.forEach(message => {
-      if (message.role === 'system') return;
+      // 移除对 system role 的跳过逻辑，允许显示系统提示词
+      
+      const isSystem = message.role === 'system';
+      const isUser = message.role === 'user';
+      
+      let avatar = isUser ? UserAvart.value : AIAvart.value;
+      let author = isUser ? '用户' : (message.aiName || 'AI');
+      let messageClass = isUser ? 'user-message' : 'ai-message';
+      let time = message.timestamp || message.completedTimestamp;
 
-      const avatar = message.role === 'user' ? UserAvart.value : AIAvart.value;
-      const author = message.role === 'user' ? '用户' : (message.aiName || 'AI');
-      const time = message.timestamp || message.completedTimestamp;
+      if (isSystem) {
+          avatar = ''; // 系统消息可以不显示头像或使用默认
+          author = '系统提示词';
+          messageClass = 'system-message';
+          time = '';
+      }
 
-      // 解析并净化内容
+      // 处理主要内容
       const processedHtml = processContentToHtml(message.content);
-      const sanitizedContent = DOMPurify.sanitize(processedHtml, {
+      let contentHtml = DOMPurify.sanitize(processedHtml, {
         ADD_TAGS: ['video', 'audio', 'source'],
         USE_PROFILES: { html: true, svg: true },
         ADD_ATTR: ['style']
       });
 
-      bodyContent += `
-        <div class="message ${message.role}-message">
-          <img src="${avatar}" class="avatar" alt="avatar">
-          <div class="message-content">
-            <div class="message-header">
-              <strong>${author}</strong>
-              <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
+      // 处理工具调用显示
+      let toolsHtml = '';
+      if (message.tool_calls && message.tool_calls.length > 0) {
+          toolsHtml = '<div class="tool-calls-wrapper">';
+          message.tool_calls.forEach(tool => {
+              const truncatedResult = truncate(tool.result);
+              // 对工具输出进行简单的转义防止HTML破坏
+              const safeResult = truncatedResult.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+              toolsHtml += `
+                <div class="tool-call-box">
+                    <span class="tool-icon">🛠️</span>
+                    <span class="tool-name">${tool.name}</span>
+                    <span class="tool-result">${safeResult}</span>
+                </div>`;
+          });
+          toolsHtml += '</div>';
+      }
+
+      // 如果是系统消息，结构稍有不同，这里统一处理结构
+      if (isSystem) {
+          bodyContent += `
+            <div class="message system-message-container">
+              <div class="message-content system-content">
+                 <div class="message-header"><strong>${author}</strong></div>
+                 <div class="message-body">${contentHtml}</div>
+              </div>
+            </div>`;
+      } else {
+          bodyContent += `
+            <div class="message ${messageClass}">
+              <img src="${avatar}" class="avatar" alt="avatar">
+              <div class="message-content">
+                <div class="message-header">
+                  <strong>${author}</strong>
+                  <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
+                </div>
+                ${toolsHtml}
+                <div class="message-body">${contentHtml}</div>
+              </div>
             </div>
-            <div class="message-body">${sanitizedContent}</div>
-          </div>
-        </div>
-      `;
+          `;
+      }
     });
 
     const cssStyles = `
@@ -1253,29 +1327,49 @@ const saveSessionAsHtml = async () => {
         .container { max-width: 900px; margin: 0 auto; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 30px; }
         h1, h3 { color: #111; }
         .message { display: flex; gap: 15px; margin-bottom: 25px; }
-        .avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; }
-        .message-content { display: flex; flex-direction: column; max-width: calc(100% - 55px); }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background-color: #eee; }
+        .message-content { display: flex; flex-direction: column; max-width: calc(100% - 55px); width: 100%; }
         .message-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
         .timestamp { font-size: 0.75em; color: #888; }
-        .message-body { background-color: #f1f1f1; padding: 10px 15px; border-radius: 18px; word-break: break-word; }
-        .message-body img { max-width: 100%; height: auto; border-radius: 8px; } /* 新增：确保图片自适应 */
+        
+        .message-body { background-color: #f1f1f1; padding: 10px 15px; border-radius: 18px; word-break: break-word; overflow-wrap: break-word; }
+        .message-body img { max-width: 100%; height: auto; border-radius: 8px; }
+        
         .user-message { flex-direction: row-reverse; }
         .user-message .message-content { align-items: flex-end; }
         .user-message .message-body { background-color: #e1f5fe; border-top-right-radius: 4px; }
         .ai-message .message-body { border-top-left-radius: 4px; }
+        
+        /* 系统提示词样式 */
+        .system-message-container { justify-content: center; margin-bottom: 30px; }
+        .system-content { align-items: center; max-width: 90%; }
+        .system-content .message-body { background-color: #fff3e0; color: #5d4037; border: 1px dashed #d7ccc8; border-radius: 8px; font-size: 0.9em; width: 100%; box-sizing: border-box; }
+        
+        /* 工具调用样式 */
+        .tool-calls-wrapper { margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+        .tool-call-box { background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 4px 8px; font-size: 0.85em; color: #666; display: flex; align-items: center; gap: 6px; }
+        .tool-name { font-weight: 600; color: #333; }
+        .tool-result { opacity: 0.8; font-family: monospace; }
+
         .file-attachment { font-style: italic; color: #555; }
-        pre { background-color: #2d2d2d; color: #f8f8f2; padding: 1em; border-radius: 8px; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; }
+        
+        /* 代码块修复 */
+        pre { background-color: #2d2d2d; color: #f8f8f2; padding: 1em; border-radius: 8px; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; max-width: 100%; white-space: pre-wrap; box-sizing: border-box; }
         code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; }
         blockquote { border-left: 4px solid #ccc; padding-left: 1em; margin-left: 0; color: #666; }
+        
         @media (prefers-color-scheme: dark) {
           body { background-color: #1a1a1a; color: #e0e0e0; }
           .container { background-color: #2a2a2a; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
           h1, h3 { color: #fff; }
           .message-body { background-color: #3a3a3a; }
           .user-message .message-body { background-color: #0d47a1; color: #e3f2fd; }
+          .system-content .message-body { background-color: #3e2723; color: #ffccbc; border-color: #5d4037; }
           .timestamp, blockquote { color: #aaa; }
           blockquote { border-left-color: #555; }
           .file-attachment { color: #bbb; }
+          .tool-call-box { background-color: #333; border-color: #444; color: #bbb; }
+          .tool-name { color: #ddd; }
         }
       </style>
     `;
