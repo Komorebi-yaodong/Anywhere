@@ -1218,6 +1218,9 @@ const saveSessionAsHtml = async () => {
   const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
   const inputValue = ref(defaultBasename);
 
+  // 默认 AI 头像 SVG 代码
+  const defaultAiSvg = `<svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#FDA5A5" /><g stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="25" y="32" width="50" height="42" rx="8" /><line x1="40" y1="63" x2="60" y2="63" /><line x1="35" y1="32" x2="32" y2="22" /><line x1="65" y1="32" x2="68" y2="22" /></g><g fill="white" stroke="none"><circle cx="40" cy="48" r="3.5" /><circle cx="60" cy="48" r="3.5" /><circle cx="32" cy="20" r="3" /><circle cx="68" cy="20" r="3" /></g></svg>`;
+
   const generateHtmlContent = () => {
     let bodyContent = '';
 
@@ -1252,18 +1255,24 @@ const saveSessionAsHtml = async () => {
     };
 
     chat_show.value.forEach(message => {
-      // 移除对 system role 的跳过逻辑，允许显示系统提示词
-      
       const isSystem = message.role === 'system';
       const isUser = message.role === 'user';
       
       let avatar = isUser ? UserAvart.value : AIAvart.value;
+      
+      // [修复] 如果是AI且使用默认头像(ai.svg)或本地路径，替换为内嵌SVG
+      if (!isUser) {
+        if (avatar === 'ai.svg' || (!avatar.startsWith('http') && !avatar.startsWith('data:'))) {
+           avatar = `data:image/svg+xml;base64,${btoa(defaultAiSvg)}`;
+        }
+      }
+
       let author = isUser ? '用户' : (message.aiName || 'AI');
       let messageClass = isUser ? 'user-message' : 'ai-message';
       let time = message.timestamp || message.completedTimestamp;
 
       if (isSystem) {
-          avatar = ''; // 系统消息可以不显示头像或使用默认
+          avatar = ''; 
           author = '系统提示词';
           messageClass = 'system-message';
           time = '';
@@ -1283,7 +1292,6 @@ const saveSessionAsHtml = async () => {
           toolsHtml = '<div class="tool-calls-wrapper">';
           message.tool_calls.forEach(tool => {
               const truncatedResult = truncate(tool.result);
-              // 对工具输出进行简单的转义防止HTML破坏
               const safeResult = truncatedResult.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
               toolsHtml += `
                 <div class="tool-call-box">
@@ -1295,7 +1303,6 @@ const saveSessionAsHtml = async () => {
           toolsHtml += '</div>';
       }
 
-      // 如果是系统消息，结构稍有不同，这里统一处理结构
       if (isSystem) {
           bodyContent += `
             <div class="message system-message-container">
@@ -1327,7 +1334,7 @@ const saveSessionAsHtml = async () => {
         .container { max-width: 900px; margin: 0 auto; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 30px; }
         h1, h3 { color: #111; }
         .message { display: flex; gap: 15px; margin-bottom: 25px; }
-        .avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background-color: #eee; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background-color: #eee; object-fit: cover; }
         .message-content { display: flex; flex-direction: column; max-width: calc(100% - 55px); width: 100%; }
         .message-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
         .timestamp { font-size: 0.75em; color: #888; }
