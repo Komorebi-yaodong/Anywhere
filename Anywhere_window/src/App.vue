@@ -1875,6 +1875,15 @@ const askAI = async (forceSend = false) => {
       // --- 为本次请求创建临时消息列表 ---
       const messagesForThisRequest = JSON.parse(JSON.stringify(history.value));
 
+      // 删除 null 字段
+      messagesForThisRequest.forEach(msg => {
+          ['content', 'reasoning_content', 'extra_content'].forEach(key => {
+            if (msg[key] === null) {
+              delete msg[key];
+            }
+          });
+        });
+
       // --- 仅在临时列表中注入MCP提示词 ---
       if (openaiFormattedTools.value.length > 0) {
         const mcpSystemPrompt = `
