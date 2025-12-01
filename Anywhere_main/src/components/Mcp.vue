@@ -501,6 +501,13 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     margin: 0px 0px 5px 0px;
 }
 
+.search-bar-container :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--border-primary) inset !important;
+}
+.search-bar-container :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--text-accent) inset !important;
+}
+
 .empty-state {
     display: flex;
     justify-content: center;
@@ -519,7 +526,7 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-lg);
-    padding: 16px;
+    padding: 8px 16px 10px 16px;
     display: flex;
     flex-direction: column;
     transition: all 0.2s ease-in-out;

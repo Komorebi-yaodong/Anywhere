@@ -153,8 +153,8 @@ watch(locale, () => {
 }
 
 .el-header {
-  padding: 0 20px;
-  height: 60px;
+  padding: 0px 20px 0px 0px;
+  height: 50px;
   display: flex;
   align-items: center;
   background-color: var(--bg-secondary);

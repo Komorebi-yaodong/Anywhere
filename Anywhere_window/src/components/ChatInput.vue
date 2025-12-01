@@ -591,7 +591,7 @@ html.dark .drag-overlay {
 }
 
 .input-footer {
-    padding: 10px 15px 15px 15px;
+    padding: 10px 15px 25px 15px;
     height: auto;
     width: 100%;
     flex-shrink: 0;
@@ -752,10 +752,12 @@ html.dark .el-divider--vertical {
     background-color: #F3F4F6;
     border-radius: 12px;
     padding: 10px 12px;
+    border: 1px solid #E4E7ED;
 }
 
 html.dark .chat-input-area-vertical {
     background-color: #1F1F1F;
+    border: 1px solid #414243;
 }
 
 .chat-textarea-vertical {

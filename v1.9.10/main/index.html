@@ -5,8 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Anywhere</title>
-  <script type="module" crossorigin src="./assets/index-BUz2U8X0.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-BEuV91LR.css">
+  <script type="module" crossorigin src="./assets/index-DtoZ-pPf.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-Ba2NXNQk.css">
 </head>
 
 <body>
@@ -14,9 +14,9 @@
   <style>
     :root {
       /* THEME VARS */
-      --bg-primary: #F9F9F9;
+      --bg-primary: #F5F7FA; /*稍微调整背景色，使其与纯白卡片对比度更高*/
       --bg-secondary: #FFFFFF;
-      --bg-tertiary: #F0F0F0;
+      --bg-tertiary: #F0F2F5;
       --bg-accent: #1F2937;
       --bg-accent-light: #F0F0F0;
       --text-primary: #1F2937;
@@ -24,9 +24,11 @@
       --text-tertiary: #9CA3AF;
       --text-accent: #1F2937;
       --text-on-accent: #FFFFFF;
-      --border-primary: #E5E7EB;
-      --border-secondary: #F3F4F6;
-      --border-accent: #9CA3AF;
+      
+      --border-primary: #DCDFE6;
+      --border-secondary: #E4E7ED;
+      --border-accent: #909399;
+
       --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
       --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
       --radius-sm: 4px;
@@ -56,21 +58,21 @@
 
     html.dark {
       /* THEME VARS */
-      --bg-primary: #191919;
-      --bg-secondary: #212121;
-      --bg-tertiary: #2c2e33;
+      --bg-primary: #141414; /* 加深背景，突出卡片 */
+      --bg-secondary: #1D1E1F;
+      --bg-tertiary: #262727;
       --bg-accent: #F9F9F9;
       --bg-accent-light: #373A40;
-      --text-primary: #F9FAFB;
-      --text-secondary: #A0A5B1;
-      --text-tertiary: #656A76;
+      --text-primary: #E5EAF3;
+      --text-secondary: #A3A6AD;
+      --text-tertiary: #6C6E72;
       --text-accent: #F9FAFB;
       --text-on-accent: #191919;
-      --border-primary: #373A40;
-      --border-secondary: #2c2e33;
-      --border-accent: #656A76;
+      
+      --border-primary: #414243; /* 提亮边框 (原: #373A40)，在深色背景下画出轮廓 */
+      --border-secondary: #303030;
+      --border-accent: #6C6E72;
 
-      /* ELEMENT PLUS OVERRIDES - DARK MODE */
       color-scheme: dark;
       --el-color-primary: var(--bg-accent);
       --el-color-primary-light-3: #E5E7EB;
@@ -80,9 +82,35 @@
       --el-color-primary-light-9: #373A40;
       --el-color-primary-dark-2: #D1D5DB;
 
-      /* SWITCH VARS */
       --el-switch-on-color: var(--bg-accent);
       --el-switch-off-color: var(--border-primary);
+
+      --el-bg-color: #1D1E1F;
+      --el-bg-color-page: #141414;
+      --el-bg-color-overlay: #1D1E1F;
+      --el-fill-color: #262727;
+      --el-fill-color-light: #262727;
+      --el-fill-color-lighter: #1D1E1F;
+      --el-fill-color-lightest: #1D1E1F;
+      --el-fill-color-dark: #262727;
+      --el-fill-color-darker: #141414;
+      --el-fill-color-blank: #141414;
+      
+      --el-border-color: #414243; /* 同步修改 */
+      --el-border-color-light: #414243;
+      --el-border-color-lighter: #414243;
+      --el-border-color-dark: #6C6E72;
+      --el-border-color-darker: #A3A6AD;
+      
+      --el-text-color-primary: #E5EAF3;
+      --el-text-color-regular: #CFD3DC;
+      --el-text-color-secondary: #A3A6AD;
+      --el-text-color-placeholder: #6C6E72;
+      --el-text-color-disabled: #4C4D4F;
+      
+      --el-box-shadow-light: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+      --el-table-border-color: var(--border-primary);
+      --el-collapse-border-color: var(--border-primary);
     }
 
     html,

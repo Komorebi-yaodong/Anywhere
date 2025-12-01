@@ -441,17 +441,17 @@ async function forceSyncFile(basename, direction, signal) {
                     @selection-change="handleSelectionChange" style="width: 100%" height="100%" border stripe>
                     <el-table-column type="selection" width="50" align="center" />
                     <el-table-column prop="basename" :label="t('chats.table.filename')" sortable show-overflow-tooltip
-                        min-width="160">
+                        min-width="120">
                         <template #default="scope">
                             <span class="filename-text">{{ scope.row.basename.endsWith('.json') ?
                                 scope.row.basename.slice(0, -5) : scope.row.basename }}</span>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="170" sortable
+                    <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="160" sortable
                         align="center">
                         <template #default="scope">{{ formatDate(scope.row.lastmod) }}</template>
                     </el-table-column>
-                    <el-table-column prop="size" :label="t('chats.table.size')" width="100" sortable align="center">
+                    <el-table-column prop="size" :label="t('chats.table.size')" width="90" sortable align="center">
                         <template #default="scope">{{ formatBytes(scope.row.size) }}</template>
                     </el-table-column>
                     <el-table-column :label="t('chats.table.actions')" width="300" align="center">

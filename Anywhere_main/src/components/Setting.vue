@@ -854,8 +854,6 @@ async function selectLocalChatPath() {
   flex-shrink: 0;
 }
 
-/* [REMOVED] Dimensions group styles are no longer needed here */
-
 :deep(.el-form-item__label) {
   line-height: 1.5;
   color: var(--text-secondary);

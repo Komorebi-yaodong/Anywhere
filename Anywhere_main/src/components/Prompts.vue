@@ -1011,7 +1011,7 @@ async function refreshPromptsConfig() {
 .prompts-header {
   display: flex;
   align-items: center;
-  height: 60px;
+  height: 45px;
   padding: 0 12px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
@@ -1024,7 +1024,7 @@ async function refreshPromptsConfig() {
 .custom-all-tab {
   display: flex;
   align-items: center;
-  height: 60px;
+  height: 45px;
   padding: 0 12px;
   cursor: pointer;
   color: var(--text-secondary);
@@ -1143,6 +1143,10 @@ async function refreshPromptsConfig() {
   flex-shrink: 0;
 }
 
+.tab-actions .el-button {
+  margin-left: 0 !important;
+}
+
 .main-content-scrollbar {
   flex-grow: 1;
   height: 0;
@@ -1172,6 +1176,13 @@ async function refreshPromptsConfig() {
   margin: 0px 0px 5px 0px;
 }
 
+.search-input-container :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--border-primary) inset !important;
+}
+.search-input-container :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--text-accent) inset !important;
+}
+
 .prompts-grid-container {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -1183,11 +1194,11 @@ async function refreshPromptsConfig() {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 10px 16px 10px 16px;
   transition: all 0.25s ease;
   display: flex;
   flex-direction: column;
-  height: 112px;
+  height: 104px;
 }
 
 .prompt-card:hover {
