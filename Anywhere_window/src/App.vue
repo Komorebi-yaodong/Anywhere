@@ -2541,7 +2541,7 @@ const handleGlobalKeyDown = (event) => {
       title="下载图片" />
   </div>
 
-  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP" width="540px" top="10vh" custom-class="mcp-dialog"
+  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP" width="80%" top="10vh" custom-class="mcp-dialog"
     @close="focusOnInput">
     <div class="mcp-dialog-content">
       <div class="mcp-dialog-toolbar">
@@ -2955,9 +2955,8 @@ html.dark .mcp-dialog-footer-search {
 .mcp-server-item {
   display: flex;
   align-items: flex-start;
-  /* 顶部对齐 */
   gap: 12px;
-  padding: 12px;
+  padding: 4px 10px 4px 10px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
   cursor: pointer;

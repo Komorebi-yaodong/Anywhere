@@ -785,7 +785,7 @@ async function refreshPromptsConfig() {
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item :label="t('prompts.promptContentLabel')" label-position="top">
-                <el-scrollbar height="150px" class="prompt-textarea-scrollbar">
+                <el-scrollbar max-height="150px" class="prompt-textarea-scrollbar">
                   <el-input v-model="editingPrompt.prompt" type="textarea" :autosize="{ minRows: 6 }" resize="none"
                     placeholder="请输入提示词内容..." />
                 </el-scrollbar>
@@ -1511,12 +1511,25 @@ html.dark .bottom-actions-container {
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
   background-color: var(--bg-tertiary);
+  transition: all 0.2s;
+}
+
+.prompt-textarea-scrollbar:focus-within {
+  border-color: var(--text-accent);
+  box-shadow: 0 0 0 1px var(--text-accent) inset;
 }
 
 .prompt-textarea-scrollbar :deep(.el-textarea__inner) {
   box-shadow: none !important;
   background-color: transparent !important;
-  padding: 8px 12px;
+  padding: 4px;
+  border: none !important;
+}
+
+.prompt-textarea-scrollbar :deep(.el-textarea__inner),
+.prompt-textarea-scrollbar :deep(.el-textarea__inner:focus),
+.prompt-textarea-scrollbar :deep(.el-textarea__inner:hover) {
+  box-shadow: none !important;
 }
 
 .prompt-textarea-scrollbar :deep(.el-textarea__inner::-webkit-scrollbar) {
