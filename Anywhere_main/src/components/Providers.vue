@@ -684,10 +684,39 @@ const apiKeyCount = computed(() => {
 }
 
 .model-tag {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  border-color: transparent;
+  background-color: var(--bg-accent) !important;
+  color: var(--text-on-accent) !important;
+  border: none !important;
   font-weight: 500;
+
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 25px !important;
+  line-height: 1 !important;
+}
+
+.model-tag :deep(.el-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding-bottom: 2px;
+}
+
+.model-tag :deep(.el-tag__close) {
+  color: inherit !important;
+  position: relative;
+  top: 0; 
+  margin-left: 6px;
+}
+
+.model-tag :deep(.el-tag__close:hover) {
+  background-color: rgba(255, 255, 255, 0.3) !important;
+  color: #FFFFFF !important;
+}
+
+html.dark .model-tag :deep(.el-tag__close:hover) {
+  background-color: rgba(0, 0, 0, 0.2) !important;
+  color: #000000 !important;
 }
 
 .draggable-models-list .model-tag {
