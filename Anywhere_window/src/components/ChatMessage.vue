@@ -604,6 +604,10 @@ html.dark .system-prompt-container:hover {
     word-break: break-word;
   }
 
+  :deep(pre) {
+    max-width: 80vw;
+  }
+
   :deep(.katex) {
     font-size: 1.2em !important;
   }
@@ -611,11 +615,9 @@ html.dark .system-prompt-container:hover {
   :deep(.katex-display > .katex > .katex-html) {
     padding-bottom: 8px !important;
 
-    /* For Firefox */
     scrollbar-width: thin;
     scrollbar-color: var(--el-text-color-disabled) transparent;
 
-    /* For Webkit Browsers (Chrome, Edge, Safari) */
     &::-webkit-scrollbar {
       height: 6px;
     }
