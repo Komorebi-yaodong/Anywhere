@@ -986,6 +986,7 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) { background-color: var(--
 
 .tool-collapse {
   min-width:50vw;
+  max-width: 85vw;
   border: none;
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-light);
