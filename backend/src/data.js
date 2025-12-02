@@ -33,8 +33,8 @@ const defaultConfig = {
         voice: null,
         reasoning_effort: "default",
         defaultMcpServers: [],
-        window_width: 540,
-        window_height: 700,
+        window_width: 580,
+        window_height: 740,
         position_x: 0,
         position_y: 0,
         autoCloseOnBlur: true,
@@ -360,11 +360,11 @@ function checkConfig(config) {
       flag = true;
     }
     if (config.prompts[key].window_width === undefined) {
-      config.prompts[key].window_width = 540;
+      config.prompts[key].window_width = 580;
       flag = true;
     }
     if (config.prompts[key].window_height === undefined) {
-      config.prompts[key].window_height = 700;
+      config.prompts[key].window_height = 740;
       flag = true;
     }
     if (config.prompts[key].position_x === undefined) {
@@ -712,8 +712,8 @@ function getPosition(config, promptCode) {
   const promptConfig = config.prompts[promptCode];
   const OVERFLOW_ALLOWANCE = 10; // 允许窗口超出屏幕边界的最大像素值
 
-  let width = promptConfig?.window_width || 540;
-  let height = promptConfig?.window_height || 700;
+  let width = promptConfig?.window_width || 580;
+  let height = promptConfig?.window_height || 740;
   let windowX = 0, windowY = 0;
 
   const primaryDisplay = utools.getPrimaryDisplay();

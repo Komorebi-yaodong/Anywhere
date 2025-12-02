@@ -68,8 +68,8 @@ var require_data = __commonJS({
             voice: null,
             reasoning_effort: "default",
             defaultMcpServers: [],
-            window_width: 540,
-            window_height: 700,
+            window_width: 580,
+            window_height: 740,
             position_x: 0,
             position_y: 0,
             autoCloseOnBlur: true,
@@ -356,11 +356,11 @@ var require_data = __commonJS({
           flag = true;
         }
         if (config.prompts[key].window_width === void 0) {
-          config.prompts[key].window_width = 540;
+          config.prompts[key].window_width = 580;
           flag = true;
         }
         if (config.prompts[key].window_height === void 0) {
-          config.prompts[key].window_height = 700;
+          config.prompts[key].window_height = 740;
           flag = true;
         }
         if (config.prompts[key].position_x === void 0) {
@@ -640,8 +640,8 @@ var require_data = __commonJS({
     function getPosition(config, promptCode) {
       const promptConfig = config.prompts[promptCode];
       const OVERFLOW_ALLOWANCE = 10;
-      let width = promptConfig?.window_width || 540;
-      let height = promptConfig?.window_height || 700;
+      let width = promptConfig?.window_width || 580;
+      let height = promptConfig?.window_height || 740;
       let windowX = 0, windowY = 0;
       const primaryDisplay = utools.getPrimaryDisplay();
       let currentDisplay;
