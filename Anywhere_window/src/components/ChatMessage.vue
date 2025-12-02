@@ -452,6 +452,7 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 .user-meta-header {
   flex-direction: row; /* 时间在左，头像在右 */
+  margin-bottom: 8px;
 }
 
 .ai-meta-header {
@@ -971,7 +972,7 @@ html.dark .ai-name { color: var(--el-text-color-regular); }
 }
 .user-bubble .footer-actions { margin-left: auto; }
 .ai-bubble .footer-actions { margin-right: auto; }
-.timestamp { font-size: 0.75rem; opacity: 0.8; white-space: nowrap; flex-shrink: 0;}
+.timestamp { margin-top: 12px; font-size: 0.75rem; opacity: 0.8; white-space: nowrap; flex-shrink: 0;}
 
 html.dark .ai-bubble :deep(.el-thinking .trigger) { background-color: var(--el-fill-color-darker, #2c2e33); color: var(--el-text-color-primary, #F9FAFB); border-color: var(--el-border-color-dark, #373A40); }
 html.dark .ai-bubble :deep(.el-thinking .el-icon) { color: var(--el-text-color-secondary, #A0A5B1); }
