@@ -322,15 +322,18 @@ const handleClickOutside = (event) => {
     const target = event.target;
     if (!target) return;
 
-    // 检查思考预算选择器
+    // 检查思考预算选择器 (Reasoning Selector 是普通 div，直接使用 .contains)
     if (isReasoningSelectorVisible.value && reasoningSelectorRef.value && !reasoningSelectorRef.value.contains(target) && reasoningButtonRef.value && !reasoningButtonRef.value.$el.contains(target)) {
         isReasoningSelectorVisible.value = false;
     }
-    // 检查语音选择器
-    if (isVoiceSelectorVisible.value && voiceSelectorRef.value && !voiceSelectorRef.value.contains(target) && voiceButtonRef.value && !voiceButtonRef.value.$el.contains(target)) {
+    
+    // 检查语音选择器 
+    // [修复点] voiceSelectorRef 是 <el-scrollbar> 组件，必须使用 .$el 获取 DOM 元素才能调用 .contains
+    if (isVoiceSelectorVisible.value && voiceSelectorRef.value && !voiceSelectorRef.value.$el.contains(target) && voiceButtonRef.value && !voiceButtonRef.value.$el.contains(target)) {
         isVoiceSelectorVisible.value = false;
     }
-    // 检查音源选择器
+    
+    // 检查音源选择器 (Audio Source Selector 是普通 div)
     if (isAudioSourceSelectorVisible.value && audioSourceSelectorRef.value && !audioSourceSelectorRef.value.contains(target) && audioButtonRef.value && !audioButtonRef.value.$el.contains(target)) {
         isAudioSourceSelectorVisible.value = false;
     }
@@ -544,6 +547,9 @@ defineExpose({ focus, senderRef });
                                 <el-button v-if="!loading" :icon="Promotion" @click="onSubmit" circle
                                     :disabled="loading" />
                                 <el-button v-else @click="onCancel" circle class="cancel-button-animated">
+                                    <el-icon class="static-icon">
+                                        <Close />
+                                    </el-icon>
                                     <div class="cancel-spinner"></div>
                                 </el-button>
                             </template>
@@ -927,36 +933,48 @@ html.dark .el-button--success.is-plain:focus {
 
 .cancel-button-animated {
     position: relative;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.cancel-spinner {
-    width: 18px;
-    height: 18px;
-    border: 2px solid var(--el-text-color-regular);
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+.static-icon {
+    font-size: 16px;
+    z-index: 1;
+    color: var(--el-text-color-regular);
 }
 
-.cancel-spinner::before {
-    content: '✕';
+.cancel-spinner {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 12px;
-    line-height: 1;
-    color: var(--el-text-color-regular);
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
+    margin-top: -10px;
+    
+    border: 2px solid transparent;
+    border-top-color: var(--el-text-color-secondary);
+    border-right-color: var(--el-text-color-secondary);
+    border-radius: 50%;
+    
+    animation: spin 1s linear infinite;
+    pointer-events: none; /* 确保点击事件穿透到按钮 */
+    box-sizing: border-box;
+}
+
+html.dark .static-icon {
+    color: var(--el-text-color-primary);
+}
+html.dark .cancel-spinner {
+    border-top-color: var(--el-text-color-primary);
+    border-right-color: var(--el-text-color-primary);
 }
 
 @keyframes spin {
     from {
         transform: rotate(0deg);
     }
-
     to {
         transform: rotate(360deg);
     }

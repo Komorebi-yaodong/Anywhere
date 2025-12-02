@@ -243,6 +243,7 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 <template>
   <div class="chat-message">
+    <!-- 系统提示词保持不变 -->
     <div v-if="message.role === 'system'" class="system-prompt-container">
       <p class="system-prompt-preview" @click="onShowSystemPrompt">
         <span v-if="String(message.content).trim()">{{ String(message.content) }}</span>
@@ -251,171 +252,261 @@ const truncateFilename = (filename, maxLength = 30) => {
       <el-button :icon="Edit" @click="onShowSystemPrompt" size="small" circle text class="system-prompt-edit-btn" />
     </div>
 
-    <Bubble v-if="message.role === 'user'" class="user-bubble" placement="end" shape="corner"
-      maxWidth="90%" avatar-size="40px">
-      <template #avatar>
-        <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)" class="chat-avatar">
-      </template>
-      <template #header>
-        <div class="user-info-header">
-          <span class="timestamp" v-if="message.timestamp">{{ formatTimestamp(message.timestamp) }}</span>
-        </div>
-      </template>
-      <template #content>
-        <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
-            <XMarkdown
-                :markdown="renderedMarkdownContent"
-                :is-dark="isDarkMode"
-                :enable-latex="true"
-                :mermaid-config="mermaidConfig"
-                :default-theme-mode="isDarkMode ? 'dark' : 'light'"
-                :themes="{light:'github-light', dark:'github-dark-default'}"
-                :allow-html="true" />
-        </div>
-        <div v-else class="editing-wrapper">
-            <el-input ref="editInputRef" v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" @keydown="handleEditKeyDown" />
+    <!-- 用户消息 -->
+    <div v-if="message.role === 'user'" class="message-wrapper user-wrapper">
+      <!-- 顶部信息栏：时间 + 头像 -->
+      <div class="message-meta-header user-meta-header">
+        <span class="timestamp" v-if="message.timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+        <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)" class="chat-avatar-top">
+      </div>
+      
+      <!-- 气泡本体（无头像插槽） -->
+      <Bubble class="user-bubble" placement="end" shape="corner" maxWidth="100%">
+        <template #content>
+          <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
+            <XMarkdown :markdown="renderedMarkdownContent" :is-dark="isDarkMode" :enable-latex="true"
+              :mermaid-config="mermaidConfig" :default-theme-mode="isDarkMode ? 'dark' : 'light'"
+              :themes="{ light: 'github-light', dark: 'github-dark-default' }" :allow-html="true" />
+          </div>
+          <div v-else class="editing-wrapper">
+            <el-input ref="editInputRef" v-model="editedContent" type="textarea"
+              :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleEditKeyDown" />
             <div class="editing-actions">
-                <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
-                <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle type="primary" />
-                <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
+              <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
+              <el-button :icon="Check"
+                @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle
+                type="primary" />
+              <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small"
+                circle />
             </div>
-        </div>
+          </div>
+        </template>
+        <template #footer>
+          <div class="message-footer">
+            <div class="footer-wrapper">
+              <div class="footer-actions">
+                <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
+                <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small"
+                  circle />
+                <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
+                  @click="onToggleCollapse($event)" size="small" circle />
+                <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
+                <el-button :icon="Delete" size="small" @click="onDelete" circle />
+              </div>
+              <div class="message-files-vertical-list" v-if="formatMessageFile(message.content).length > 0">
+                <el-tooltip v-for="(file_name, idx) in formatMessageFile(message.content)" :key="idx"
+                  :content="file_name" placement="top" :disabled="file_name.length < 30"
+                  :popper-style="{ maxWidth: '30vw', wordBreak: 'break-all' }">
+                  <el-button class="file-button" type="info" plain size="small" :icon="Document">{{
+                    truncateFilename(file_name, 20) }}</el-button>
+                </el-tooltip>
+              </div>
+            </div>
+          </div>
+        </template>
+      </Bubble>
+    </div>
 
-      </template>
-      <template #footer>
-        <div class="message-footer">
-          <div class="footer-wrapper">
+
+    <!-- AI 消息 -->
+    <div v-if="message.role === 'assistant'" class="message-wrapper ai-wrapper">
+      <!-- 顶部信息栏：修改为 (头像) + (垂直排列的信息列) -->
+      <div class="message-meta-header ai-meta-header">
+        <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar-top">
+        
+        <!-- 新增：信息列容器 -->
+        <div class="meta-info-column">
+          <!-- 第一行：名称 + 语音 -->
+          <div class="meta-name-row">
+            <span class="ai-name">{{ message.aiName }}</span>
+            <span v-if="message.voiceName" class="voice-name">({{ message.voiceName }})</span>
+          </div>
+          <!-- 第二行：时间 -->
+          <span class="timestamp-row" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp) }}</span>
+        </div>
+      </div>
+
+      <!-- 气泡本体（保持不变） -->
+      <Bubble class="ai-bubble" placement="start" shape="corner" maxWidth="100%"
+        :loading="isLastMessage && isLoading && renderedMarkdownContent === ' ' && (!message.tool_calls || message.tool_calls.length === 0)">
+        <!-- ... (Bubble 内部内容保持不变) ... -->
+        <template #header>
+          <Thinking v-if="message.reasoning_content && message.reasoning_content.trim().length > 0" maxWidth="90%"
+            :content="(message.reasoning_content || '').trim()" :modelValue="false" :status="message.status">
+          </Thinking>
+        </template>
+        <template #content>
+          <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
+            <XMarkdown :markdown="renderedMarkdownContent" :is-dark="isDarkMode" :enable-latex="true"
+              :mermaid-config="mermaidConfig" :default-theme-mode="isDarkMode ? 'dark' : 'light'"
+              :themes="{ light: 'one-light', dark: 'vesper' }" :allow-html="true" />
+          </div>
+          <div v-else class="editing-wrapper">
+            <el-input ref="editInputRef" v-model="editedContent" type="textarea"
+              :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleEditKeyDown" />
+            <div class="editing-actions">
+              <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
+              <el-button :icon="Check"
+                @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle
+                type="primary" />
+              <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small"
+                circle />
+            </div>
+          </div>
+          <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-container">
+            <el-collapse class="tool-collapse" accordion>
+              <el-collapse-item v-for="toolCall in message.tool_calls" :key="toolCall.id" :name="toolCall.id">
+                <template #title>
+                  <div class="tool-call-title">
+                    <el-icon class="tool-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path>
+                        <path d="m18 15 4-4"></path>
+                        <path
+                          d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5">
+                        </path>
+                      </svg>
+                    </el-icon>
+                    <span class="tool-name">{{ toolCall.name }}</span>
+                    <el-button v-if="toolCall.result === '执行中...'" @click.stop="$emit('cancel-tool-call', toolCall.id)"
+                      circle class="cancel-tool-button-header" title="取消此工具调用">
+                      <el-icon>
+                        <Close />
+                      </el-icon>
+                    </el-button>
+                  </div>
+                </template>
+                <div class="tool-call-details">
+                  <div class="tool-detail-section">
+                    <strong>参数:</strong>
+                    <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
+                  </div>
+                  <div class="tool-detail-section">
+                    <strong>结果:</strong>
+                    <div class="tool-result-wrapper">
+                      <pre><code>{{ toolCall.result }}</code></pre>
+                    </div>
+                  </div>
+                </div>
+              </el-collapse-item>
+            </el-collapse>
+          </div>
+        </template>
+        <template #footer>
+          <div class="message-footer">
             <div class="footer-actions">
               <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
-              <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small" circle />
+              <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small"
+                circle />
               <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
                 @click="onToggleCollapse($event)" size="small" circle />
               <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
               <el-button :icon="Delete" size="small" @click="onDelete" circle />
             </div>
-            <div class="message-files-vertical-list" v-if="formatMessageFile(message.content).length > 0">
-              <el-tooltip v-for="(file_name, idx) in formatMessageFile(message.content)" :key="idx" :content="file_name"
-                placement="top" :disabled="file_name.length < 30" :popper-style="{ maxWidth: '30vw', wordBreak: 'break-all' }">
-                <el-button class="file-button" type="info" plain size="small" :icon="Document">{{truncateFilename(file_name, 20)}}</el-button>
-              </el-tooltip>
-            </div>
           </div>
-        </div>
-      </template>
-    </Bubble>
-
-    <Bubble v-if="message.role === 'assistant'" class="ai-bubble" placement="start" shape="corner"
-      maxWidth="90%" avatar-size="40px" :loading="isLastMessage && isLoading && renderedMarkdownContent === ' ' && (!message.tool_calls || message.tool_calls.length === 0)">
-      <template #avatar>
-        <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar">
-      </template>
-      <template #header>
-        <div class="ai-info-header">
-          <div class="ai-details">
-            <span class="ai-name">{{ message.aiName }}</span>
-            <span v-if="message.voiceName" class="voice-name">({{ message.voiceName }})</span>
-          </div>
-          <span class="timestamp" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp)}}</span>
-        </div>
-        <Thinking v-if="message.reasoning_content && message.reasoning_content.trim().length > 0" maxWidth="90%" :content="(message.reasoning_content || '').trim()"
-          :modelValue="false" :status="message.status">
-        </Thinking>
-      </template>
-      <template #content>
-        
-        <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
-            <XMarkdown
-                :markdown="renderedMarkdownContent"
-                :is-dark="isDarkMode"
-                :enable-latex="true"
-                :mermaid-config="mermaidConfig"
-                :default-theme-mode="isDarkMode ? 'dark' : 'light'"
-                :themes="{light:'one-light', dark:'vesper'}"
-                :allow-html="true" />
-        </div>
-        <div v-else class="editing-wrapper">
-            <el-input ref="editInputRef" v-model="editedContent" type="textarea" :autosize="{minRows: 1, maxRows: 15}" resize="none" @keydown="handleEditKeyDown" />
-            <div class="editing-actions">
-                <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
-                <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle type="primary" />
-                <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small" circle />
-            </div>
-        </div>
-        <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-container">
-            <el-collapse class="tool-collapse" accordion>
-                <el-collapse-item v-for="toolCall in message.tool_calls" :key="toolCall.id" :name="toolCall.id">
-                  <template #title>
-                      <div class="tool-call-title">
-                          <el-icon class="tool-icon">
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path><path d="m18 15 4-4"></path><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"></path></svg>
-                          </el-icon>
-                          <span class="tool-name">{{ toolCall.name }}</span>
-                          <el-button
-                              v-if="toolCall.result === '执行中...'"
-                              @click.stop="$emit('cancel-tool-call', toolCall.id)"
-                              circle
-                              class="cancel-tool-button-header"
-                              title="取消此工具调用">
-                              <el-icon><Close /></el-icon>
-                          </el-button>
-                      </div>
-                  </template>
-                  <div class="tool-call-details">
-                      <div class="tool-detail-section">
-                          <strong>参数:</strong>
-                          <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
-                      </div>
-                      <div class="tool-detail-section">
-                          <strong>结果:</strong>
-                          <div class="tool-result-wrapper">
-                              <pre><code>{{ toolCall.result }}</code></pre>
-                          </div>
-                      </div>
-                  </div>
-              </el-collapse-item>
-            </el-collapse>
-        </div>
-      </template>
-      <template #footer>
-        <div class="message-footer">
-          <div class="footer-actions">
-            <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
-            <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small" circle />
-            <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
-              @click="onToggleCollapse($event)" size="small" circle />
-            <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
-            <el-button :icon="Delete" size="small" @click="onDelete" circle />
-          </div>
-        </div>
-      </template>
-    </Bubble>
+        </template>
+      </Bubble>
+    </div>
   </div>
 </template>
 
 <style scoped lang="less">
 .chat-message {
-  margin: 10px 0 0 0;
+  margin: 15px 0 0 0;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
+  padding: 0 40px;
 }
 
-.chat-message .user-bubble{
-  width: 90% !important;
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
 }
-.chat-message .ai-bubble {
-  width:100% !important;
+
+/* 用户消息靠右 */
+.user-wrapper {
+  align-self: flex-end;
+  align-items: flex-end;
+  max-width: 90%;
+  margin-right: -4px;
+}
+
+/* AI 消息靠左 */
+.ai-wrapper {
+  align-self: flex-start;
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+/* 顶部信息栏通用样式 */
+.message-meta-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.user-meta-header {
+  flex-direction: row; /* 时间在左，头像在右 */
+}
+
+.ai-meta-header {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.meta-info-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.3;
+}
+
+.meta-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timestamp-row {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder); /* 使用更浅的颜色 */
+  margin-top: 1px;
+}
+
+
+/* 顶部小头像 */
+.chat-avatar-top {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  object-fit: cover;
+  transition: transform 0.2s;
+  &:hover {
+    transform: scale(1.1);
+  }
+}
+
+.ai-name { 
+  font-weight: 700; /* 加粗名称 */
+  font-size: 13px;
+  color: var(--el-text-color-primary); 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
 }
 
 .chat-message .user-bubble {
-  align-self: flex-end;
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
     border-radius: 18px;
     background-color: #f4f4f4;
     padding-top: 10px;
     padding-bottom: 10px;
-    margin-left: 10px;
-    max-width: 100%;
   }
 }
 
@@ -427,11 +518,10 @@ html.dark .chat-message .user-bubble {
 }
 
 .chat-message .ai-bubble {
-  align-self: flex-start;
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
     background-color: #ffffff;
-    // border: 1px solid #e6e6e6;
     padding-left: 4px;
+    padding-right: 0px;
   }
 
   :deep(.el-bubble-content-wrapper .el-bubble-footer) {
@@ -442,21 +532,6 @@ html.dark .chat-message .user-bubble {
 html.dark .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
     background: #181818;
-    // border: 1px solid var(--border-primary);
-  }
-}
-
-.chat-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: block;
-  transition: transform 0.2s, box-shadow 0.2s;
-
-  &:hover {
-    transform: scale(1.1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   }
 }
 
@@ -522,8 +597,8 @@ html.dark .system-prompt-container:hover {
     background: transparent !important;
     padding: 0;
     color: var(--text-primary);
-    font-size: 15px;
-    line-height: 1.7;
+    font-size: 14px;
+    line-height: 1.5;
     tab-size: 4;
     font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
     word-break: break-word;
@@ -534,7 +609,7 @@ html.dark .system-prompt-container:hover {
   }
 
   :deep(.katex-display > .katex > .katex-html) {
-    padding-bottom: 8px !important; /* 为滚动条留出空间，避免遮挡公式 */
+    padding-bottom: 8px !important;
 
     /* For Firefox */
     scrollbar-width: thin;
@@ -561,11 +636,11 @@ html.dark .system-prompt-container:hover {
     max-height: min(50vh, 300px);
     width: auto;
     height: auto;
-    display: inline-block; /* Allow side-by-side display */
-    vertical-align: middle; /* Align images nicely on the same line */
-    margin: 4px; /* Add space between images */
+    display: inline-block;
+    vertical-align: middle;
+    margin: 4px;
     border-radius: 8px;
-    object-fit: cover; /* Ensure images are nicely cropped */
+    object-fit: cover;
   }
 
   :deep(.chat-audio-player) {
@@ -574,21 +649,18 @@ html.dark .system-prompt-container:hover {
     height: 48px;
     accent-color: var(--text-primary);
 
-    // 移除浏览器默认的边框和背景
     &::-webkit-media-controls-enclosure {
       background: none;
       border-radius: 24px;
     }
 
-    // 设置我们自己的胶囊背景和内边距
     &::-webkit-media-controls-panel {
       background-color: var(--bg-tertiary, #F0F0F0);
       border-radius: 24px;
       padding: 0px;
-      justify-content: center; // 让控件居中
+      justify-content: center;
     }
 
-    // 设置播放按钮颜色
     &::-webkit-media-controls-play-button {
       color: var(--text-primary);
       border-radius: 50%;
@@ -597,7 +669,6 @@ html.dark .system-prompt-container:hover {
       }
     }
 
-    // 设置时间文本样式
     &::-webkit-media-controls-current-time-display,
     &::-webkit-media-controls-time-remaining-display {
       color: var(--text-secondary);
@@ -605,7 +676,6 @@ html.dark .system-prompt-container:hover {
       text-shadow: none;
     }
 
-    // 设置进度条轨道样式
     &::-webkit-media-controls-timeline {
       background-color: var(--border-primary, #E5E7EB);
       border-radius: 3px;
@@ -613,7 +683,6 @@ html.dark .system-prompt-container:hover {
       margin: 0 10px;
     }
 
-    // 设置音量按钮等其他控件的颜色
     &::-webkit-media-controls-mute-button,
     &::-webkit-media-controls-overflow-button {
       color: var(--text-secondary);
@@ -624,7 +693,6 @@ html.dark .system-prompt-container:hover {
     }
   }
 
-  // [样式优化] 暗色模式下的音频播放器样式
   html.dark & :deep(.chat-audio-player) {
     accent-color: var(--text-primary);
 
@@ -632,7 +700,6 @@ html.dark .system-prompt-container:hover {
       background-color: var(--bg-tertiary, #2c2e33);
     }
 
-    // 关键技巧：使用 filter: invert(1) 将黑色的图标和文字变为白色
     &::-webkit-media-controls-play-button,
     &::-webkit-media-controls-mute-button,
     &::-webkit-media-controls-overflow-button,
@@ -662,7 +729,7 @@ html.dark .system-prompt-container:hover {
   :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
     font-weight: 600;
     line-height: 1.25;
-    margin-top: 1.5em;
+    margin-top: 0.5em;
     margin-bottom: 0.8em;
     padding-bottom: 0.3em;
     border-bottom: 1px solid #d0d7de;
@@ -718,7 +785,6 @@ html.dark .system-prompt-container:hover {
     :deep(tr:nth-child(2n)) { background-color: #25272b; }
     :deep(td) { border-color: #373A40; }
     :deep(.pre-md) { border: 0px solid #373A40;}
-    // :deep(pre.shiki) { background-color: #171717 !important; }
     :deep(.inline-code-tag) { background-color: rgba(110, 118, 129, 0.4); color: #c9d1d9; }
   }
 
@@ -808,8 +874,8 @@ html.dark .system-prompt-container:hover {
   .edit-shortcut-hint {
     font-size: 12px;
     color: var(--el-text-color-placeholder);
-    margin-right: auto; /* 关键：这行代码会将提示推到最左边 */
-    align-self: center; /* 垂直居中 */
+    margin-right: auto;
+    align-self: center;
   }
 }
 
@@ -889,10 +955,6 @@ html.dark .message-files-vertical-list {
   }
 }
 
-.user-info-header, .ai-info-header { font-size: 0.8rem; color: var(--el-text-color-secondary); display: flex; align-items: center; margin-bottom: 4px; padding: 0 2px; }
-.user-info-header { justify-content: flex-end; }
-.ai-info-header { justify-content: space-between; }
-.ai-details { display: flex; align-items: center; gap: 6px; flex-shrink: 1; overflow: hidden; }
 .ai-name { font-weight: 600; color: var(--el-text-color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.dark .ai-name { color: var(--el-text-color-regular); }
 .voice-name { opacity: 0.8; white-space: nowrap; flex-shrink: 0; margin-right: 8px; }
@@ -907,7 +969,7 @@ html.dark .ai-name { color: var(--el-text-color-regular); }
 }
 .user-bubble .footer-actions { margin-left: auto; }
 .ai-bubble .footer-actions { margin-right: auto; }
-.timestamp { font-size: 0.75rem; color: var(--el-text-color-placeholder); opacity: 0.8; white-space: nowrap; flex-shrink: 0; padding-left: 4px;}
+.timestamp { font-size: 0.75rem; opacity: 0.8; white-space: nowrap; flex-shrink: 0;}
 
 html.dark .ai-bubble :deep(.el-thinking .trigger) { background-color: var(--el-fill-color-darker, #2c2e33); color: var(--el-text-color-primary, #F9FAFB); border-color: var(--el-border-color-dark, #373A40); }
 html.dark .ai-bubble :deep(.el-thinking .el-icon) { color: var(--el-text-color-secondary, #A0A5B1); }
@@ -916,11 +978,9 @@ html.dark .ai-bubble :deep(.el-thinking-popper .el-popper__arrow::before) { back
 .ai-bubble :deep(.el-thinking .content pre) { max-width: 100%; margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; box-sizing: border-box; }
 html.dark .ai-bubble :deep(.el-thinking .content pre) { background-color: var(--el-fill-color-darker); color: var(--el-text-color-regular, #E5E7EB); border: 1px solid var(--border-primary, #373A40); }
 
-/* MODIFICATION START */
 .tool-calls-container {
   margin-top: 10px;
 }
-/* MODIFICATION END */
 
 .tool-collapse {
   min-width:50vw;
@@ -1033,18 +1093,16 @@ html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:h
   background: #999;
 }
 .tool-result-wrapper {
-  /* position: relative;  <-- 移除 */
   display: flex;
   align-items: flex-start;
 }
 
 .tool-result-wrapper pre {
   flex-grow: 1;
-  /* margin-right: 28px; <-- 移除 */
 }
 
 .cancel-tool-button-header {
-  margin-left: auto; /* Push to the right */
+  margin-left: auto;
   flex-shrink: 0;
   width: 22px;
   height: 22px;

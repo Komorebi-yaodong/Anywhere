@@ -1098,7 +1098,7 @@ const saveSessionAsMarkdown = async () => {
 
   const formatContent = (content) => !Array.isArray(content) ? String(content).trim() : content.map(p => p.type === 'text' ? p.text.trim() : '').join(' ');
   const formatFiles = (content) => Array.isArray(content) ? content.filter(p => p.type !== 'text').map(p => p.type === 'file' ? p.file.filename : 'Image') : [];
-  
+
   // 辅助函数：为内容添加引用符号
   const addBlockquote = (text) => {
     if (!text) return '';
@@ -1113,7 +1113,7 @@ const saveSessionAsMarkdown = async () => {
   };
 
   markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n### 当前模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
-  
+
   const systemPromptMessage = chat_show.value.find(m => m.role === 'system');
   if (systemPromptMessage && systemPromptMessage.content) {
     markdownContent += `### 系统提示词\n\n${addBlockquote(String(systemPromptMessage.content).trim())}\n\n`;
@@ -1122,17 +1122,17 @@ const saveSessionAsMarkdown = async () => {
 
   for (const message of chat_show.value) {
     if (message.role === 'system') continue;
-    
+
     if (message.role === 'user') {
       let userHeader = '### 👤 用户';
       if (message.timestamp) userHeader += ` - *${formatTimestamp(message.timestamp)}*`;
       markdownContent += `${userHeader}\n\n`;
-      
+
       const mainContent = formatContent(message.content);
       const files = formatFiles(message.content);
-      
+
       if (mainContent) markdownContent += `${addBlockquote(mainContent)}\n\n`;
-      
+
       if (files.length > 0) {
         markdownContent += `> **附件列表:**\n`;
         files.forEach(f => { markdownContent += `> - \`${f}\`\n`; });
@@ -1143,7 +1143,7 @@ const saveSessionAsMarkdown = async () => {
       if (message.voiceName) assistantHeader += ` (${message.voiceName})`;
       if (message.completedTimestamp) assistantHeader += ` - *${formatTimestamp(message.completedTimestamp)}*`;
       markdownContent += `${assistantHeader}\n\n`;
-      
+
       if (message.reasoning_content) {
         // 思考过程本来就是引用格式，这里保持原样或再加深一层
         markdownContent += `> *思考过程:*\n${addBlockquote(message.reasoning_content)}\n\n`;
@@ -1153,7 +1153,7 @@ const saveSessionAsMarkdown = async () => {
       if (message.tool_calls && message.tool_calls.length > 0) {
         markdownContent += `> **工具调用:**\n`;
         message.tool_calls.forEach(tool => {
-           markdownContent += `> - 🛠️ \`${tool.name}\`: ${truncate(tool.result)}\n`;
+          markdownContent += `> - 🛠️ \`${tool.name}\`: ${truncate(tool.result)}\n`;
         });
         markdownContent += `\n`;
       }
@@ -1218,16 +1218,31 @@ const saveSessionAsHtml = async () => {
   const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
   const inputValue = ref(defaultBasename);
 
-  // 默认 AI 头像 SVG 代码
   const defaultAiSvg = `<svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#FDA5A5" /><g stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="25" y="32" width="50" height="42" rx="8" /><line x1="40" y1="63" x2="60" y2="63" /><line x1="35" y1="32" x2="32" y2="22" /><line x1="65" y1="32" x2="68" y2="22" /></g><g fill="white" stroke="none"><circle cx="40" cy="48" r="3.5" /><circle cx="60" cy="48" r="3.5" /><circle cx="32" cy="20" r="3" /><circle cx="68" cy="20" r="3" /></g></svg>`;
 
   const generateHtmlContent = () => {
     let bodyContent = '';
+    let tocContent = ''; 
 
     const truncate = (str, len = 50) => {
-        if (!str) return '';
-        const s = String(str);
-        return s.length > len ? s.substring(0, len) + '...' : s;
+      if (!str) return '';
+      const s = String(str);
+      return s.length > len ? s.substring(0, len) + '...' : s;
+    };
+
+    // 辅助函数：提取纯文本用于大纲显示
+    const formatMessageText = (content) => {
+        if (!content) return "";
+        if (typeof content === 'string') return content;
+        if (!Array.isArray(content)) return String(content);
+
+        let textString = "";
+        content.forEach(part => {
+            if (part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
+                textString += part.text;
+            }
+        });
+        return textString.trim();
     };
 
     const processContentToHtml = (content) => {
@@ -1254,13 +1269,30 @@ const saveSessionAsHtml = async () => {
       return marked.parse(markdownString);
     };
 
-    chat_show.value.forEach(message => {
+    chat_show.value.forEach((message, index) => {
       const isSystem = message.role === 'system';
       const isUser = message.role === 'user';
+      const msgId = `msg-${index}`;
       
+      // --- 生成时间轴大纲节点 ---
+      let tocText = '';
+      if (isSystem) tocText = '系统提示词';
+      else if (isUser) tocText = truncate(formatMessageText(message.content), 30) || '用户发送图片/文件';
+      else tocText = truncate(formatMessageText(message.content), 30) || 'AI 回复';
+      
+      // 根据角色设置点的样式类
+      let dotClass = isUser ? 'user-dot' : 'ai-dot';
+      if (isSystem) dotClass = 'system-dot';
+
+      // 只有有实质内容的消息才显示在时间轴上
+      tocContent += `
+        <li class="timeline-item">
+            <a href="#${msgId}" class="timeline-dot ${dotClass}" aria-label="${tocText}">
+                <span class="timeline-tooltip">${tocText}</span>
+            </a>
+        </li>`;
+
       let avatar = isUser ? UserAvart.value : AIAvart.value;
-      
-      // [修复] 如果是AI且使用默认头像(ai.svg)或本地路径，替换为内嵌SVG
       if (!isUser) {
         if (avatar === 'ai.svg' || (!avatar.startsWith('http') && !avatar.startsWith('data:'))) {
            avatar = `data:image/svg+xml;base64,${btoa(defaultAiSvg)}`;
@@ -1268,30 +1300,24 @@ const saveSessionAsHtml = async () => {
       }
 
       let author = isUser ? '用户' : (message.aiName || 'AI');
-      let messageClass = isUser ? 'user-message' : 'ai-message';
       let time = message.timestamp || message.completedTimestamp;
+      let alignClass = isUser ? 'align-right' : 'align-left';
 
-      if (isSystem) {
-          avatar = ''; 
-          author = '系统提示词';
-          messageClass = 'system-message';
-          time = '';
+      const processedHtml = processContentToHtml(message.content);
+      let contentHtml = '';
+      if (processedHtml && processedHtml.trim() !== '') {
+          contentHtml = DOMPurify.sanitize(processedHtml, {
+            ADD_TAGS: ['video', 'audio', 'source', 'blockquote'],
+            USE_PROFILES: { html: true, svg: true },
+            ADD_ATTR: ['style']
+          });
       }
 
-      // 处理主要内容
-      const processedHtml = processContentToHtml(message.content);
-      let contentHtml = DOMPurify.sanitize(processedHtml, {
-        ADD_TAGS: ['video', 'audio', 'source'],
-        USE_PROFILES: { html: true, svg: true },
-        ADD_ATTR: ['style']
-      });
-
-      // 处理工具调用显示
       let toolsHtml = '';
       if (message.tool_calls && message.tool_calls.length > 0) {
           toolsHtml = '<div class="tool-calls-wrapper">';
           message.tool_calls.forEach(tool => {
-              const truncatedResult = truncate(tool.result);
+              const truncatedResult = truncate(tool.result, 100);
               const safeResult = truncatedResult.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
               toolsHtml += `
                 <div class="tool-call-box">
@@ -1303,26 +1329,37 @@ const saveSessionAsHtml = async () => {
           toolsHtml += '</div>';
       }
 
-      if (isSystem) {
+      if (contentHtml || toolsHtml || isSystem) {
+          let headerHtml = '';
+          if (isSystem) {
+             headerHtml = `<div class="header system-header"><strong>系统提示词</strong></div>`;
+          } else if (isUser) {
+             headerHtml = `
+               <div class="header user-header">
+                 <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
+                 <img src="${avatar}" class="avatar" alt="avatar">
+               </div>`;
+          } else {
+             headerHtml = `
+               <div class="header ai-header">
+                 <img src="${avatar}" class="avatar" alt="avatar">
+                 <div class="ai-meta">
+                    <div class="ai-name-row">
+                        <strong>${author}</strong>
+                        ${message.voiceName ? `<span class="voice-tag">(${message.voiceName})</span>` : ''}
+                    </div>
+                    <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
+                 </div>
+               </div>`;
+          }
+
+          const bodyHtml = contentHtml ? `<div class="message-body ${isUser ? 'user-body' : 'ai-body'} ${isSystem ? 'system-body' : ''}">${contentHtml}</div>` : '';
+
           bodyContent += `
-            <div class="message system-message-container">
-              <div class="message-content system-content">
-                 <div class="message-header"><strong>${author}</strong></div>
-                 <div class="message-body">${contentHtml}</div>
-              </div>
-            </div>`;
-      } else {
-          bodyContent += `
-            <div class="message ${messageClass}">
-              <img src="${avatar}" class="avatar" alt="avatar">
-              <div class="message-content">
-                <div class="message-header">
-                  <strong>${author}</strong>
-                  <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
-                </div>
-                ${toolsHtml}
-                <div class="message-body">${contentHtml}</div>
-              </div>
+            <div id="${msgId}" class="message-wrapper ${alignClass}">
+              ${headerHtml}
+              ${toolsHtml}
+              ${bodyHtml}
             </div>
           `;
       }
@@ -1330,53 +1367,182 @@ const saveSessionAsHtml = async () => {
 
     const cssStyles = `
       <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; background-color: #f7f7f7; color: #333; line-height: 1.6; }
-        .container { max-width: 900px; margin: 0 auto; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 30px; }
-        h1, h3 { color: #111; }
-        .message { display: flex; gap: 15px; margin-bottom: 25px; }
-        .avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background-color: #eee; object-fit: cover; }
-        .message-content { display: flex; flex-direction: column; max-width: calc(100% - 55px); width: 100%; }
-        .message-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
-        .timestamp { font-size: 0.75em; color: #888; }
-        
-        .message-body { background-color: #f1f1f1; padding: 10px 15px; border-radius: 18px; word-break: break-word; overflow-wrap: break-word; }
-        .message-body img { max-width: 100%; height: auto; border-radius: 8px; }
-        
-        .user-message { flex-direction: row-reverse; }
-        .user-message .message-content { align-items: flex-end; }
-        .user-message .message-body { background-color: #e1f5fe; border-top-right-radius: 4px; }
-        .ai-message .message-body { border-top-left-radius: 4px; }
-        
-        /* 系统提示词样式 */
-        .system-message-container { justify-content: center; margin-bottom: 30px; }
-        .system-content { align-items: center; max-width: 90%; }
-        .system-content .message-body { background-color: #fff3e0; color: #5d4037; border: 1px dashed #d7ccc8; border-radius: 8px; font-size: 0.9em; width: 100%; box-sizing: border-box; }
-        
-        /* 工具调用样式 */
-        .tool-calls-wrapper { margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; width: 100%; }
-        .tool-call-box { background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 4px 8px; font-size: 0.85em; color: #666; display: flex; align-items: center; gap: 6px; }
-        .tool-name { font-weight: 600; color: #333; }
-        .tool-result { opacity: 0.8; font-family: monospace; }
-
-        .file-attachment { font-style: italic; color: #555; }
-        
-        /* 代码块修复 */
-        pre { background-color: #2d2d2d; color: #f8f8f2; padding: 1em; border-radius: 8px; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; max-width: 100%; white-space: pre-wrap; box-sizing: border-box; }
-        code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; }
-        blockquote { border-left: 4px solid #ccc; padding-left: 1em; margin-left: 0; color: #666; }
-        
+        :root { 
+            --bg-color: #f7f7f7; 
+            --text-color: #333; 
+            --card-bg: #fff; 
+            --user-bg: #e1f5fe; 
+            --ai-bg: #fff; 
+            --border-color: #eee; 
+            --accent-color: #1F2937; 
+            --timeline-line: #e0e0e0;
+            --timeline-dot-default: #bdbdbd;
+            --timeline-dot-active: #1F2937;
+        }
         @media (prefers-color-scheme: dark) {
-          body { background-color: #1a1a1a; color: #e0e0e0; }
-          .container { background-color: #2a2a2a; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
-          h1, h3 { color: #fff; }
-          .message-body { background-color: #3a3a3a; }
-          .user-message .message-body { background-color: #0d47a1; color: #e3f2fd; }
-          .system-content .message-body { background-color: #3e2723; color: #ffccbc; border-color: #5d4037; }
-          .timestamp, blockquote { color: #aaa; }
-          blockquote { border-left-color: #555; }
-          .file-attachment { color: #bbb; }
-          .tool-call-box { background-color: #333; border-color: #444; color: #bbb; }
-          .tool-name { color: #ddd; }
+          :root { 
+              --bg-color: #1a1a1a; 
+              --text-color: #e0e0e0; 
+              --card-bg: #2a2a2a; 
+              --user-bg: #0d47a1; 
+              --ai-bg: #3a3a3a; 
+              --border-color: #444; 
+              --accent-color: #64b5f6; 
+              --timeline-line: #444;
+              --timeline-dot-default: #666;
+              --timeline-dot-active: #64b5f6;
+          }
+        }
+        
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; background-color: var(--bg-color); color: var(--text-color); line-height: 1.6; }
+        
+        .main-container { max-width: 900px; margin: 0 auto; background-color: var(--card-bg); border-radius: 12px; padding: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); position: relative; }
+        
+        /* 标题区 */
+        .page-header { margin-bottom: 40px; border-bottom: 1px solid var(--border-color); padding-bottom: 20px; }
+        .page-header h1 { margin: 0 0 10px 0; font-size: 24px; }
+        .page-header p { margin: 0; color: #888; font-size: 13px; }
+
+        /* 时间轴大纲 (右侧悬浮) */
+        .timeline-toc {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 100;
+            max-height: 80vh;
+            overflow-y: auto;
+            /* 隐藏滚动条但保留功能 */
+            scrollbar-width: none; 
+            padding: 10px;
+        }
+        .timeline-toc::-webkit-scrollbar { display: none; }
+
+        /* 时间轴的线 */
+        .timeline-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px; /* 点之间的间距 */
+        }
+        
+        /* 贯穿线 */
+        .timeline-list::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            background-color: var(--timeline-line);
+            transform: translateX(-50%);
+            z-index: -1;
+            border-radius: 2px;
+        }
+
+        .timeline-item { position: relative; }
+
+        /* 圆点样式 */
+        .timeline-dot {
+            display: block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--card-bg); /* 中间镂空效果 */
+            border: 2px solid var(--timeline-dot-default);
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        /* 用户消息点：实心或高亮 */
+        .timeline-dot.user-dot {
+            background-color: var(--timeline-dot-active);
+            border-color: var(--timeline-dot-active);
+            width: 12px; 
+            height: 12px;
+        }
+        
+        /* AI消息点：保持默认 */
+        .timeline-dot.ai-dot {
+            border-color: var(--timeline-dot-default);
+        }
+
+        .timeline-dot:hover {
+            transform: scale(1.4);
+            border-color: var(--accent-color);
+            background-color: var(--accent-color);
+        }
+
+        /* Tooltip (悬浮显示的文字) */
+        .timeline-tooltip {
+            position: absolute;
+            right: 25px; /* 点的左侧 */
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: var(--accent-color);
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s, transform 0.2s;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .timeline-dot:hover .timeline-tooltip {
+            opacity: 1;
+            transform: translateY(-50%) translateX(-5px);
+        }
+
+        /* 消息块 */
+        .message-wrapper { display: flex; flex-direction: column; margin-bottom: 30px; scroll-margin-top: 60px; max-width: 100%; }
+        .align-right { align-items: flex-end; }
+        .align-left { align-items: flex-start; }
+        
+        /* 头部信息 */
+        .header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 12px; color: #888; }
+        .user-header { flex-direction: row; }
+        .ai-header { flex-direction: row; align-items: flex-start; }
+        .avatar { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; background-color: #eee; flex-shrink: 0; }
+        .ai-meta { display: flex; flex-direction: column; line-height: 1.3; }
+        .ai-name-row { display: flex; align-items: center; gap: 5px; }
+        .voice-tag { opacity: 0.8; font-size: 11px; }
+        
+        /* 气泡本体 */
+        .message-body { padding: 12px 16px; border-radius: 12px; word-break: break-word; overflow-wrap: break-word; max-width: 100%; }
+        .user-body { background-color: var(--user-bg); border-bottom-right-radius: 2px; color: var(--text-color); max-width: 90%; }
+        .ai-body { background-color: var(--ai-bg); border: 1px solid var(--border-color); border-top-left-radius: 2px; width: 100%; box-sizing: border-box; }
+        .system-body { background-color: #fff3e0; color: #5d4037; border: 1px dashed #d7ccc8; width: 100%; text-align: center; }
+        
+        /* 工具调用 */
+        .tool-calls-wrapper { width: 100%; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+        .tool-call-box { background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #666; display: flex; align-items: center; gap: 8px; }
+        .tool-name { font-weight: bold; }
+        .tool-result { opacity: 0.7; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        img { max-width: 100%; border-radius: 8px; margin: 5px 0; }
+        pre { background-color: #2d2d2d; color: #f8f8f2; padding: 1em; border-radius: 8px; overflow-x: auto; font-family: monospace; }
+        blockquote { border-left: 4px solid #ccc; padding-left: 1em; margin: 1em 0; color: #666; background: rgba(0,0,0,0.03); }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+          .timeline-toc { display: none; } /* 移动端隐藏右侧时间轴 */
+          .main-container { padding: 20px; width: 100%; box-sizing: border-box; border-radius: 0; box-shadow: none; background-color: transparent; }
+          .message-body { max-width: 100%; }
+          .user-body { max-width: 95%; }
+          body { padding: 0; }
         }
       </style>
     `;
@@ -1391,11 +1557,23 @@ const saveSessionAsHtml = async () => {
         ${cssStyles}
       </head>
       <body>
-        <div class="container">
-          <h1>聊天记录: ${CODE.value}</h1>
-          <h3>模型: ${modelMap.value[model.value] || 'N/A'}</h3>
-          <hr>
-          ${bodyContent}
+        <!-- 悬浮时间轴导航 -->
+        <nav class="timeline-toc">
+            <ul class="timeline-list">
+                ${tocContent}
+            </ul>
+        </nav>
+
+        <!-- 主内容区 -->
+        <div class="main-container">
+            <header class="page-header">
+                <h1>${CODE.value}</h1>
+                <p>模型: ${modelMap.value[model.value] || 'N/A'} &bull; 导出时间: ${timestamp}</p>
+            </header>
+            
+            <div class="chat-container">
+                ${bodyContent}
+            </div>
         </div>
       </body>
       </html>
@@ -1877,12 +2055,20 @@ const askAI = async (forceSend = false) => {
 
       // 删除 null 字段
       messagesForThisRequest.forEach(msg => {
-          ['content', 'reasoning_content', 'extra_content'].forEach(key => {
-            if (msg[key] === null) {
-              delete msg[key];
-            }
-          });
+        // 1. 过滤掉标记为 isTranscript 的内容 (防止转录文本被发回给AI)
+        if (Array.isArray(msg.content)) {
+          msg.content = msg.content.filter(part => !part.isTranscript);
+          // 如果过滤后数组为空，重置为 null (也就是该消息没有实质内容)
+          if (msg.content.length === 0) msg.content = null;
+        }
+
+        // 2. 清理 null 字段 (防止 API 报错)
+        ['content', 'reasoning_content', 'extra_content'].forEach(key => {
+          if (msg[key] === null) {
+            delete msg[key];
+          }
         });
+      });
 
       // --- 仅在临时列表中注入MCP提示词 ---
       if (openaiFormattedTools.value.length > 0) {
@@ -1973,7 +2159,7 @@ const askAI = async (forceSend = false) => {
         let aggregatedReasoningContent = "";
         let aggregatedContent = "";
         let aggregatedToolCalls = [];
-        let aggregatedExtraContent = null; // [新增] 用于聚合所有额外内容
+        let aggregatedExtraContent = null; // 用于聚合所有额外内容
         let lastUpdateTime = Date.now();
 
         for await (const part of stream) {
@@ -1981,7 +2167,7 @@ const askAI = async (forceSend = false) => {
 
           if (!delta) continue;
 
-          // [新增] 捕获并合并根级别的 extra_content (包含 thought_signature 等)
+          // 捕获并合并根级别的 extra_content (包含 thought_signature 等)
           if (delta.extra_content) {
             aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
           }
@@ -2028,7 +2214,7 @@ const askAI = async (forceSend = false) => {
               if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
               if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
 
-              // [新增] 捕获工具调用级别的 extra_content
+              // 捕获工具调用级别的 extra_content
               if (toolCallChunk.extra_content) {
                 // 通常工具调用的 extra_content 是一次性发送的，直接赋值或合并
                 currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
@@ -2041,7 +2227,7 @@ const askAI = async (forceSend = false) => {
           role: 'assistant',
           content: aggregatedContent || null,
           reasoning_content: aggregatedReasoningContent || null,
-          extra_content: aggregatedExtraContent // [新增] 将捕获到的 extra_content 附加到最终消息对象
+          extra_content: aggregatedExtraContent // 将捕获到的 extra_content 附加到最终消息对象
         };
 
         if (aggregatedToolCalls.length > 0) {
@@ -2105,9 +2291,27 @@ const askAI = async (forceSend = false) => {
       } else {
         if (isVoiceReply && responseMessage.audio) {
           currentBubble.content = currentBubble.content || [];
-          currentBubble.content.push({ type: "input_audio", input_audio: { data: responseMessage.audio.data, format: 'wav' } });
+
+          // 1. 添加转录文本 (Transcript)
+          if (responseMessage.audio.transcript) {
+            const rawTranscript = responseMessage.audio.transcript;
+            currentBubble.content.push({
+              type: "text",
+              text: `\n\n${rawTranscript}`,
+              isTranscript: true
+            });
+          }
+
+          // 2. 添加音频数据
+          currentBubble.content.push({
+            type: "input_audio",
+            input_audio: {
+              data: responseMessage.audio.data,
+              format: 'wav'
+            }
+          });
         }
-        break; // 如果没有工具调用，则退出循环
+        break; // 退出循环
       }
     } // 循环结束
   } catch (error) {
@@ -2470,7 +2674,7 @@ const handleGlobalKeyDown = (event) => {
         </el-main>
 
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
-          <!-- [新增] 回到顶部按钮 -->
+          <!-- 回到顶部按钮 -->
           <el-tooltip content="回到顶部" placement="left" :show-after="500">
             <el-button class="scroll-nav-btn" @click="scrollToTop">
               <svg class="scroll-nav-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="20"
@@ -2505,7 +2709,7 @@ const handleGlobalKeyDown = (event) => {
             </el-button>
           </el-tooltip>
 
-          <!-- [新增] 跳到底部按钮 -->
+          <!-- 跳到底部按钮 -->
           <el-tooltip content="跳到底部" placement="left" :show-after="500">
             <el-button class="scroll-nav-btn" @click="forceScrollToBottom">
               <svg class="scroll-nav-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="20"
@@ -3075,12 +3279,13 @@ html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::a
   overflow-y: auto;
   scroll-behavior: smooth;
   background-color: var(--el-bg-color);
+  scrollbar-gutter: stable;
 }
 
 .scroll-to-bottom-wrapper {
   position: absolute;
-  bottom: 100px;
-  right: 20px;
+  bottom: 110px;
+  right: 8px;
   z-index: 20;
   display: flex;
   flex-direction: column;
