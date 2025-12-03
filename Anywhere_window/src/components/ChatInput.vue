@@ -390,19 +390,19 @@ defineExpose({ focus, senderRef });
 
     <el-footer class="input-footer">
         <el-row v-if="fileList.length > 0 && !isRecording">
-            <el-col :span="1" />
-            <el-col :span="22">
+            <el-col :span="0" />
+            <el-col :span="24">
                 <div class="file-card-container">
                     <Attachments.FileCard v-for="(file, index) in fileList" :key="index" :item="file"
                         v-on:remove="() => onRemoveFile(index)" :style="{ 'display': 'flex', 'float': 'left' }" />
                 </div>
             </el-col>
-            <el-col :span="1" />
+            <el-col :span="0" />
         </el-row>
 
         <el-row v-show="isRecording" class="waveform-row">
-            <el-col :span="1" />
-            <el-col :span="22">
+            <el-col :span="0" />
+            <el-col :span="24">
                 <div class="waveform-display-area">
                     <!-- [MODIFIED] Conditionally render waveform or text -->
                     <div v-if="currentRecordingSource === 'microphone'" ref="waveformCanvasContainer"
@@ -410,13 +410,13 @@ defineExpose({ focus, senderRef });
                     <span v-else class="recording-status-text">正在录制系统音频...</span>
                 </div>
             </el-col>
-            <el-col :span="1" />
+            <el-col :span="0" />
         </el-row>
 
         <!-- [MODIFIED] Redesigned Audio Source Selector -->
         <el-row v-if="isAudioSourceSelectorVisible" class="option-selector-row">
-            <el-col :span="1" />
-            <el-col :span="22">
+            <el-col :span="0" />
+            <el-col :span="24">
                 <div class="option-selector-wrapper" ref="audioSourceSelectorRef">
                     <div class="option-selector-content">
                         <el-text tag="b" class="selector-label">选择音源</el-text>
@@ -426,13 +426,13 @@ defineExpose({ focus, senderRef });
                     </div>
                 </div>
             </el-col>
-            <el-col :span="1" />
+            <el-col :span="0" />
         </el-row>
 
 
         <el-row v-if="isReasoningSelectorVisible" class="option-selector-row">
-            <el-col :span="1" />
-            <el-col :span="22">
+            <el-col :span="0" />
+            <el-col :span="24">
                 <div class="option-selector-wrapper" ref="reasoningSelectorRef">
                     <div class="option-selector-content">
                         <el-text tag="b" class="selector-label">思考预算</el-text>
@@ -448,12 +448,12 @@ defineExpose({ focus, senderRef });
                     </div>
                 </div>
             </el-col>
-            <el-col :span="1" />
+            <el-col :span="0" />
         </el-row>
 
         <el-row v-if="isVoiceSelectorVisible" class="option-selector-row">
-            <el-col :span="1" />
-            <el-col :span="22">
+            <el-col :span="0" />
+            <el-col :span="24">
                 <el-scrollbar class="option-selector-wrapper" ref="voiceSelectorRef">
                     <div class="option-selector-content">
                         <el-text tag="b" class="selector-label">选择音色</el-text>
@@ -469,12 +469,12 @@ defineExpose({ focus, senderRef });
                     </div>
                 </el-scrollbar>
             </el-col>
-            <el-col :span="1" />
+            <el-col :span="0" />
         </el-row>
 
         <el-row>
-            <el-col :span="1" />
-            <el-col :span="22">
+            <el-col :span="0" />
+            <el-col :span="24">
                 <div class="chat-input-area-vertical">
                     <div class="input-wrapper">
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
@@ -559,7 +559,7 @@ defineExpose({ focus, senderRef });
 
                 <input ref="fileInputRef" type="file" multiple @change="handleFileChange" style="display: none;" />
             </el-col>
-            <el-col :span="1" />
+            <el-col :span="0" />
         </el-row>
     </el-footer>
 </template>
@@ -597,7 +597,7 @@ html.dark .drag-overlay {
 }
 
 .input-footer {
-    padding: 10px 15px 25px 15px;
+    padding: 10px 55px 25px 45px;
     height: auto;
     width: 100%;
     flex-shrink: 0;

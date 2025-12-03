@@ -417,7 +417,7 @@ const truncateFilename = (filename, maxLength = 30) => {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  padding: 0 40px;
+  padding: 0px;
 }
 
 .message-wrapper {
@@ -430,13 +430,16 @@ const truncateFilename = (filename, maxLength = 30) => {
   align-self: flex-end;
   align-items: flex-end;
   max-width: 90%;
-  margin-right: -4px;
+  margin-right: 40px;
+  margin-right: 40px;
 }
 
 /* AI 消息靠左 */
 .ai-wrapper {
   align-self: flex-start;
   align-items: flex-start;
+  margin-left: 40px;
+  margin-right: 40px;
   max-width: 100%;
 }
 
@@ -594,6 +597,9 @@ html.dark .system-prompt-container:hover {
 }
 
 .markdown-wrapper {
+  width: 100%;
+  max-width: calc(100vw - 130px); 
+  min-width: 0;
   :deep(.elx-xmarkdown-container) {
     background: transparent !important;
     padding: 0;
@@ -605,9 +611,6 @@ html.dark .system-prompt-container:hover {
     word-break: break-word;
   }
 
-  :deep(pre) {
-    max-width: 80vw;
-  }
 
   :deep(.katex) {
     font-size: 1.2em !important;
@@ -986,8 +989,9 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) { background-color: var(--
 }
 
 .tool-collapse {
-  min-width:50vw;
-  max-width: 85vw;
+  width: 100%;
+  max-width: calc(100vw - 130px);
+  min-width: 250px;
   border: none;
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-light);
