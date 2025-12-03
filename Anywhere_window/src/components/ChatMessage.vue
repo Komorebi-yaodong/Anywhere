@@ -49,47 +49,47 @@ const formatTimestamp = (dateString) => {
   }
 };
 
-const formatMessageContent = (content,role) => {
-    if (!content) return "";
-    if (!Array.isArray(content)) {
-        if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) {
-            return "";
-        } else {
-            return String(content);
-        }
+const formatMessageContent = (content, role) => {
+  if (!content) return "";
+  if (!Array.isArray(content)) {
+    if (String(content).toLowerCase().startsWith('file name:') && String(content).toLowerCase().endsWith('file end')) {
+      return "";
+    } else {
+      return String(content);
     }
+  }
 
-    let markdownString = "";
-    let i = 0;
-    while (i < content.length) {
-        const part = content[i];
+  let markdownString = "";
+  let i = 0;
+  while (i < content.length) {
+    const part = content[i];
 
-        if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) {
-            i++;
-            continue;
-        } else if (part.type === 'image_url' && part.image_url?.url) {
-            let imageGroupMarkdown = "";
-            while (i < content.length && content[i].type === 'image_url' && content[i].image_url?.url) {
-                imageGroupMarkdown += `![Image](${content[i].image_url.url}) `;
-                i++;
-            }
-            markdownString += `\n\n${imageGroupMarkdown.trim()}\n\n`;
-        } else if (part.type === 'input_audio' && part.input_audio?.data) {
-            if (role === 'user') {
-              markdownString += `\n\n<audio class="chat-audio-player" controls preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
-            }else {
-              markdownString += `\n\n<audio class="chat-audio-player" controls autoplay preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
-            }
-            i++;
-        } else if (part.type === 'text' && part.text) {
-            markdownString += part.text;
-            i++;
-        } else {
-            i++;
-        }
+    if (part.type === 'text' && part.text && part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end')) {
+      i++;
+      continue;
+    } else if (part.type === 'image_url' && part.image_url?.url) {
+      let imageGroupMarkdown = "";
+      while (i < content.length && content[i].type === 'image_url' && content[i].image_url?.url) {
+        imageGroupMarkdown += `![Image](${content[i].image_url.url}) `;
+        i++;
+      }
+      markdownString += `\n\n${imageGroupMarkdown.trim()}\n\n`;
+    } else if (part.type === 'input_audio' && part.input_audio?.data) {
+      if (role === 'user') {
+        markdownString += `\n\n<audio class="chat-audio-player" controls preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
+      } else {
+        markdownString += `\n\n<audio class="chat-audio-player" controls autoplay preload="none">\n<source id="${part.input_audio.format}" src="data:audio/${part.input_audio.format};base64,${part.input_audio.data}">\n</audio>\n`;
+      }
+      i++;
+    } else if (part.type === 'text' && part.text) {
+      markdownString += part.text;
+      i++;
+    } else {
+      i++;
     }
+  }
 
-    return markdownString;
+  return markdownString;
 };
 
 const formatMessageFile = (content) => {
@@ -108,109 +108,109 @@ const formatMessageFile = (content) => {
 };
 
 const formatMessageText = (content) => {
-    if (!content) return "";
-    if (!Array.isArray(content)) return String(content);
+  if (!content) return "";
+  if (!Array.isArray(content)) return String(content);
 
-    let textString = "";
-    content.forEach(part => {
-        if (part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
-            textString += part.text;
-        }
-    });
-    return textString.trim();
+  let textString = "";
+  content.forEach(part => {
+    if (part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
+      textString += part.text;
+    }
+  });
+  return textString.trim();
 };
 
 const isEditable = computed(() => {
-    // 用户消息总是可编辑的，以便添加或修改文本。
-    if (props.message.role === 'user') {
-        return true;
-    }
+  // 用户消息总是可编辑的，以便添加或修改文本。
+  if (props.message.role === 'user') {
+    return true;
+  }
 
-    // 对于其他角色（如助手），检查是否存在可编辑的文本内容。
-    const content = props.message.content;
-    if (typeof content === 'string') return true;
-    if (Array.isArray(content)) {
-        // 只要内容数组中有一个是文本部分，就认为它是可编辑的
-        return content.some(part => part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:')));
-    }
-    return false;
+  // 对于其他角色（如助手），检查是否存在可编辑的文本内容。
+  const content = props.message.content;
+  if (typeof content === 'string') return true;
+  if (Array.isArray(content)) {
+    // 只要内容数组中有一个是文本部分，就认为它是可编辑的
+    return content.some(part => part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:')));
+  }
+  return false;
 });
 
 const switchToEditMode = () => {
-    editedContent.value = formatMessageText(props.message.content);
-    isEditing.value = true;
-    nextTick(() => {
-        editInputRef.value?.focus();
-    });
+  editedContent.value = formatMessageText(props.message.content);
+  isEditing.value = true;
+  nextTick(() => {
+    editInputRef.value?.focus();
+  });
 };
 
 const switchToShowMode = () => {
-    isEditing.value = false;
+  isEditing.value = false;
 };
 
 defineExpose({
-    switchToEditMode,
-    switchToShowMode
+  switchToEditMode,
+  switchToShowMode
 });
 
 const handleEditKeyDown = (event) => {
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        emit('edit-finished', { index: props.index, action: 'cancel' });
-    } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        emit('edit-finished', { index: props.index, action: 'save', content: editedContent.value });
-    }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    emit('edit-finished', { index: props.index, action: 'cancel' });
+  } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    emit('edit-finished', { index: props.index, action: 'save', content: editedContent.value });
+  }
 };
 
 const renderedMarkdownContent = computed(() => {
-    const content = props.message.role ? props.message.content : props.message;
-    const role = props.message.role ? props.message.role : 'user';
-    let formattedContent = formatMessageContent(content, role);
-    formattedContent = preprocessKatex(formattedContent);
+  const content = props.message.role ? props.message.content : props.message;
+  const role = props.message.role ? props.message.role : 'user';
+  let formattedContent = formatMessageContent(content, role);
+  formattedContent = preprocessKatex(formattedContent);
 
-    // 使用 Map 存储所有需要保护的内容（代码块 + 公式），防止后续处理（加空格优化、DOMPurify）破坏它们
-    const protectedMap = new Map();
-    let placeholderIndex = 0;
+  // 使用 Map 存储所有需要保护的内容（代码块 + 公式），防止后续处理（加空格优化、DOMPurify）破坏它们
+  const protectedMap = new Map();
+  let placeholderIndex = 0;
 
-    const addPlaceholder = (text) => {
-        const placeholder = `__PROTECTED_CONTENT_${placeholderIndex++}__`;
-        protectedMap.set(placeholder, text);
-        return placeholder;
-    };
+  const addPlaceholder = (text) => {
+    const placeholder = `__PROTECTED_CONTENT_${placeholderIndex++}__`;
+    protectedMap.set(placeholder, text);
+    return placeholder;
+  };
 
-    // 1. 优先保护代码块 (```...``` 和 `...`)
-    let processedContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
-        return prefix + addPlaceholder(delimiter + inner + delimiter);
-    });
+  // 1. 优先保护代码块 (```...``` 和 `...`)
+  let processedContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
+    return prefix + addPlaceholder(delimiter + inner + delimiter);
+  });
 
-    // 2. 保护块级公式 ($$...$$)
-    processedContent = processedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => {
-        return addPlaceholder(match);
-    });
+  // 2. 保护块级公式 ($$...$$)
+  processedContent = processedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => {
+    return addPlaceholder(match);
+  });
 
-    // 3. 保护行内公式 ($...$)
-    processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => {
-        return addPlaceholder(match);
-    });
+  // 3. 保护行内公式 ($...$)
+  processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => {
+    return addPlaceholder(match);
+  });
 
-    // 4. 优化Markdown加粗渲染
-    processedContent = processedContent.replace(/(^|[^\\])\*\*([^\n]+?)\*\*/g, '$1<strong>$2</strong>');
+  // 4. 优化Markdown加粗渲染
+  processedContent = processedContent.replace(/(^|[^\\])\*\*([^\n]+?)\*\*/g, '$1<strong>$2</strong>');
 
-    // 5. 执行 DOMPurify 净化 HTML
-    const sanitizedPart = DOMPurify.sanitize(processedContent, {
-        ADD_TAGS: ['video', 'audio', 'source'],
-        USE_PROFILES: { html: true, svg: true, svgFilters: true },
-        ADD_ATTR: ['style']
-    });
+  // 5. 执行 DOMPurify 净化 HTML
+  const sanitizedPart = DOMPurify.sanitize(processedContent, {
+    ADD_TAGS: ['video', 'audio', 'source'],
+    USE_PROFILES: { html: true, svg: true, svgFilters: true },
+    ADD_ATTR: ['style']
+  });
 
-    // 5. 还原受保护的内容
-    const finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
-        return protectedMap.get(placeholder) || placeholder;
-    });
-    
-    if (!finalContent && props.message.role === 'assistant') return ' ';
-    return finalContent || ' ';
+  // 5. 还原受保护的内容
+  const finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
+    return protectedMap.get(placeholder) || placeholder;
+  });
+
+  if (!finalContent && props.message.role === 'assistant') return ' ';
+  return finalContent || ' ';
 });
 
 const shouldShowCollapseButton = computed(() => {
@@ -259,7 +259,7 @@ const truncateFilename = (filename, maxLength = 30) => {
         <span class="timestamp" v-if="message.timestamp">{{ formatTimestamp(message.timestamp) }}</span>
         <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)" class="chat-avatar-top">
       </div>
-      
+
       <!-- 气泡本体（无头像插槽） -->
       <Bubble class="user-bubble" placement="end" shape="corner" maxWidth="100%">
         <template #content>
@@ -269,13 +269,12 @@ const truncateFilename = (filename, maxLength = 30) => {
               :themes="{ light: 'github-light', dark: 'github-dark-default' }" :allow-html="true" />
           </div>
           <div v-else class="editing-wrapper">
-            <el-input ref="editInputRef" v-model="editedContent" type="textarea"
-              :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleEditKeyDown" />
+            <el-input ref="editInputRef" v-model="editedContent" type="textarea" :autosize="{ minRows: 1, maxRows: 15 }"
+              resize="none" @keydown="handleEditKeyDown" />
             <div class="editing-actions">
               <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
-              <el-button :icon="Check"
-                @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle
-                type="primary" />
+              <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })"
+                size="small" circle type="primary" />
               <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small"
                 circle />
             </div>
@@ -313,7 +312,7 @@ const truncateFilename = (filename, maxLength = 30) => {
       <!-- 顶部信息栏：修改为 (头像) + (垂直排列的信息列) -->
       <div class="message-meta-header ai-meta-header">
         <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar-top">
-        
+
         <!-- 新增：信息列容器 -->
         <div class="meta-info-column">
           <!-- 第一行：名称 + 语音 -->
@@ -322,7 +321,8 @@ const truncateFilename = (filename, maxLength = 30) => {
             <span v-if="message.voiceName" class="voice-name">({{ message.voiceName }})</span>
           </div>
           <!-- 第二行：时间 -->
-          <span class="timestamp-row" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp) }}</span>
+          <span class="timestamp-row" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp)
+            }}</span>
         </div>
       </div>
 
@@ -342,13 +342,12 @@ const truncateFilename = (filename, maxLength = 30) => {
               :themes="{ light: 'one-light', dark: 'vesper' }" :allow-html="true" />
           </div>
           <div v-else class="editing-wrapper">
-            <el-input ref="editInputRef" v-model="editedContent" type="textarea"
-              :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleEditKeyDown" />
+            <el-input ref="editInputRef" v-model="editedContent" type="textarea" :autosize="{ minRows: 1, maxRows: 15 }"
+              resize="none" @keydown="handleEditKeyDown" />
             <div class="editing-actions">
               <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
-              <el-button :icon="Check"
-                @click="emit('edit-finished', { index, action: 'save', content: editedContent })" size="small" circle
-                type="primary" />
+              <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })"
+                size="small" circle type="primary" />
               <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small"
                 circle />
             </div>
@@ -430,16 +429,16 @@ const truncateFilename = (filename, maxLength = 30) => {
   align-self: flex-end;
   align-items: flex-end;
   max-width: 90%;
-  margin-right: 40px;
-  margin-right: 40px;
+  margin-right: 5%;
+  margin-left: 5%;
 }
 
 /* AI 消息靠左 */
 .ai-wrapper {
   align-self: flex-start;
   align-items: flex-start;
-  margin-left: 40px;
-  margin-right: 40px;
+  margin-left: 5%;
+  margin-right: 5%;
   max-width: 100%;
 }
 
@@ -454,7 +453,8 @@ const truncateFilename = (filename, maxLength = 30) => {
 }
 
 .user-meta-header {
-  flex-direction: row; /* 时间在左，头像在右 */
+  flex-direction: row;
+  /* 时间在左，头像在右 */
   margin-bottom: 8px;
 }
 
@@ -478,7 +478,8 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 .timestamp-row {
   font-size: 11px;
-  color: var(--el-text-color-placeholder); /* 使用更浅的颜色 */
+  color: var(--el-text-color-placeholder);
+  /* 使用更浅的颜色 */
   margin-top: 1px;
 }
 
@@ -491,18 +492,19 @@ const truncateFilename = (filename, maxLength = 30) => {
   cursor: pointer;
   object-fit: cover;
   transition: transform 0.2s;
+
   &:hover {
     transform: scale(1.1);
   }
 }
 
-.ai-name { 
-  font-weight: 700; /* 加粗名称 */
+.ai-name {
+  font-weight: 700;
   font-size: 13px;
-  color: var(--el-text-color-primary); 
-  white-space: nowrap; 
-  overflow: hidden; 
-  text-overflow: ellipsis; 
+  color: var(--el-text-color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-message .user-bubble {
@@ -598,8 +600,10 @@ html.dark .system-prompt-container:hover {
 
 .markdown-wrapper {
   width: 100%;
-  max-width: calc(100vw - 130px); 
   min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); 
+
   :deep(.elx-xmarkdown-container) {
     background: transparent !important;
     padding: 0;
@@ -611,6 +615,13 @@ html.dark .system-prompt-container:hover {
     word-break: break-word;
   }
 
+  :deep(pre) {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre;
+    box-sizing: border-box;
+    border-radius: 6px;
+  }
 
   :deep(.katex) {
     font-size: 1.2em !important;
@@ -625,13 +636,16 @@ html.dark .system-prompt-container:hover {
     &::-webkit-scrollbar {
       height: 6px;
     }
+
     &::-webkit-scrollbar-track {
       background: transparent;
     }
+
     &::-webkit-scrollbar-thumb {
       background-color: var(--el-text-color-disabled);
       border-radius: 3px;
     }
+
     &::-webkit-scrollbar-thumb:hover {
       background-color: var(--el-text-color-secondary);
     }
@@ -663,13 +677,14 @@ html.dark .system-prompt-container:hover {
     &::-webkit-media-controls-panel {
       background-color: var(--bg-tertiary, #F0F0F0);
       border-radius: 24px;
-      padding: 0px;
+      padding: 0 10px 0 10px; 
       justify-content: center;
     }
 
     &::-webkit-media-controls-play-button {
       color: var(--text-primary);
       border-radius: 50%;
+
       &:hover {
         background-color: rgba(0, 0, 0, 0.05);
       }
@@ -692,7 +707,8 @@ html.dark .system-prompt-container:hover {
     &::-webkit-media-controls-mute-button,
     &::-webkit-media-controls-overflow-button {
       color: var(--text-secondary);
-       border-radius: 50%;
+      border-radius: 50%;
+
       &:hover {
         background-color: rgba(0, 0, 0, 0.05);
       }
@@ -728,11 +744,27 @@ html.dark .system-prompt-container:hover {
   :deep(p:last-of-type) {
     margin-bottom: 0;
   }
-  :deep(p) { margin-bottom: 1em; }
-  :deep(ul), :deep(ol) { margin-bottom: 1em; }
-  :deep(strong), :deep(b) { font-weight: 600 !important; }
 
-  :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
+  :deep(p) {
+    margin-bottom: 1em;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin-bottom: 1em;
+  }
+
+  :deep(strong),
+  :deep(b) {
+    font-weight: 600 !important;
+  }
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
     font-weight: 600;
     line-height: 1.25;
     margin-top: 0.5em;
@@ -740,12 +772,31 @@ html.dark .system-prompt-container:hover {
     padding-bottom: 0.3em;
     border-bottom: 1px solid #d0d7de;
   }
-  :deep(h1) { font-size: 1.8em; }
-  :deep(h2) { font-size: 1.5em; }
-  :deep(h3) { font-size: 1.3em; }
-  :deep(h4) { font-size: 1.15em; }
-  :deep(h5) { font-size: 1em; }
-  :deep(h6) { font-size: 0.9em; color: #656d76; }
+
+  :deep(h1) {
+    font-size: 1.8em;
+  }
+
+  :deep(h2) {
+    font-size: 1.5em;
+  }
+
+  :deep(h3) {
+    font-size: 1.3em;
+  }
+
+  :deep(h4) {
+    font-size: 1.15em;
+  }
+
+  :deep(h5) {
+    font-size: 1em;
+  }
+
+  :deep(h6) {
+    font-size: 0.9em;
+    color: #656d76;
+  }
 
   :deep(blockquote) {
     margin: 1em 0;
@@ -754,22 +805,27 @@ html.dark .system-prompt-container:hover {
     background-color: rgba(0, 0, 0, 0.035) !important;
     color: var(--text-secondary);
     border-radius: 0 8px 8px 0;
+
     html.dark & {
       border-left-color: #656565;
       background-color: rgba(255, 255, 255, 0.05) !important;
     }
   }
+
   :deep(blockquote p) {
     margin-bottom: 0.5em;
   }
+
   :deep(blockquote p:last-child) {
     margin-bottom: 0;
   }
 
-  :deep(pre code), :deep(.inline-code-tag) {
+  :deep(pre code),
+  :deep(.inline-code-tag) {
     font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
     font-size: 1em;
   }
+
   :deep(.inline-code-tag) {
     padding: 0.2em 0.4em;
     margin: 0;
@@ -782,16 +838,54 @@ html.dark .system-prompt-container:hover {
   }
 
   html.dark & {
-    :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5) { border-bottom-color: #373A40; }
-    :deep(h6) { color: #8b949e; }
-    :deep(hr) { background-color: #373A40 !important; margin-top: 8px; margin-bottom:8px; }
-    :deep(table) { border-color: #373A40; }
-    :deep(th) { background-color: #2c2e33; }
-    :deep(tr) { background-color: #212327; border-top: 1px solid #373A40; }
-    :deep(tr:nth-child(2n)) { background-color: #25272b; }
-    :deep(td) { border-color: #373A40; }
-    :deep(.pre-md) { border: 0px solid #373A40;}
-    :deep(.inline-code-tag) { background-color: rgba(110, 118, 129, 0.4); color: #c9d1d9; }
+
+    :deep(h1),
+    :deep(h2),
+    :deep(h3),
+    :deep(h4),
+    :deep(h5) {
+      border-bottom-color: #373A40;
+    }
+
+    :deep(h6) {
+      color: #8b949e;
+    }
+
+    :deep(hr) {
+      background-color: #373A40 !important;
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
+
+    :deep(table) {
+      border-color: #373A40;
+    }
+
+    :deep(th) {
+      background-color: #2c2e33;
+    }
+
+    :deep(tr) {
+      background-color: #212327;
+      border-top: 1px solid #373A40;
+    }
+
+    :deep(tr:nth-child(2n)) {
+      background-color: #25272b;
+    }
+
+    :deep(td) {
+      border-color: #373A40;
+    }
+
+    :deep(.pre-md) {
+      border: 0px solid #373A40;
+    }
+
+    :deep(.inline-code-tag) {
+      background-color: rgba(110, 118, 129, 0.4);
+      color: #c9d1d9;
+    }
   }
 
   :deep(.markdown-mermaid) {
@@ -800,20 +894,31 @@ html.dark .system-prompt-container:hover {
     padding: 5px;
     border-radius: 8px;
     box-sizing: border-box;
+
     html.dark & {
       background-color: #272727;
       color: var(--el-text-color-primary) !important;
     }
+
     .mermaid-toolbar {
       border-radius: 0px;
+
       html.dark & {
         background-color: #272727;
-        .el-tabs__nav { background-color: #2c2e33; }
+
+        .el-tabs__nav {
+          background-color: #2c2e33;
+        }
       }
     }
+
     .mermaid-source-code {
       border: hidden;
-      html.dark & { background-color: #171717; color: var(--el-text-color-primary); }
+
+      html.dark & {
+        background-color: #171717;
+        color: var(--el-text-color-primary);
+      }
     }
   }
 
@@ -829,54 +934,65 @@ html.dark .system-prompt-container:hover {
 .editing-wrapper {
   width: 100%;
   min-width: 70vw;
+
   .el-textarea {
     margin-bottom: 8px;
+
     :deep(.el-textarea__inner) {
       background-color: #ECECEC;
       box-shadow: none !important;
       border: 1px solid var(--el-border-color-light);
       color: var(--el-text-color-primary);
     }
+
     :deep(.el-textarea__inner::-webkit-scrollbar) {
       width: 8px;
       height: 8px;
     }
+
     :deep(.el-textarea__inner::-webkit-scrollbar-track) {
       background: transparent;
       border-radius: 4px;
     }
+
     :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
       background: var(--el-text-color-disabled, #c0c4cc);
       border-radius: 4px;
       border: 2px solid transparent;
       background-clip: content-box;
     }
+
     :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
       background: var(--el-text-color-secondary, #909399);
       background-clip: content-box;
     }
+
     html.dark & :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
-        background: #6b6b6b;
+      background: #6b6b6b;
     }
+
     html.dark & :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
-        background: #999;
+      background: #999;
     }
   }
+
   .editing-actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
 
     .el-button--primary {
-        --el-button-bg-color: var(--bg-accent);
-        --el-button-border-color: var(--bg-accent);
-        --el-button-text-color: var(--text-on-accent);
+      --el-button-bg-color: var(--bg-accent);
+      --el-button-border-color: var(--bg-accent);
+      --el-button-text-color: var(--text-on-accent);
     }
+
     .el-button--primary:hover {
-        --el-button-hover-bg-color: var(--bg-accent-light);
-        --el-button-hover-border-color: var(--bg-accent-light);
+      --el-button-hover-bg-color: var(--bg-accent-light);
+      --el-button-hover-border-color: var(--bg-accent-light);
     }
   }
+
   .edit-shortcut-hint {
     font-size: 12px;
     color: var(--el-text-color-placeholder);
@@ -886,15 +1002,16 @@ html.dark .system-prompt-container:hover {
 }
 
 html.dark .editing-wrapper {
-    .el-textarea :deep(.el-textarea__inner) {
-        background-color: #424242;
-        border-color: var(--border-primary);
-        color: var(--text-primary);
-    }
-    .editing-actions .el-button--primary {
-        --el-button-hover-bg-color: #e0e0e0;
-        --el-button-hover-border-color: #e0e0e0;
-    }
+  .el-textarea :deep(.el-textarea__inner) {
+    background-color: #424242;
+    border-color: var(--border-primary);
+    color: var(--text-primary);
+  }
+
+  .editing-actions .el-button--primary {
+    --el-button-hover-bg-color: #e0e0e0;
+    --el-button-hover-border-color: #e0e0e0;
+  }
 }
 
 .message-files-vertical-list {
@@ -910,20 +1027,24 @@ html.dark .editing-wrapper {
     width: 8px !important;
     height: 8px !important;
   }
+
   &::-webkit-scrollbar-track {
     background: transparent;
     border-radius: 4px;
   }
+
   &::-webkit-scrollbar-thumb {
     background: var(--el-text-color-disabled, #c0c4cc);
     border-radius: 4px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
+
   &::-webkit-scrollbar-thumb:hover {
     background: var(--el-text-color-secondary, #909399);
     background-clip: content-box;
   }
+
   .file-button {
     width: auto;
     justify-content: flex-start;
@@ -931,58 +1052,132 @@ html.dark .editing-wrapper {
     background-color: var(--el-fill-color-light);
     color: var(--el-color-info);
   }
+
   .file-button:hover {
     border: none;
     background-color: var(--el-fill-color-lighter);
     color: var(--el-color-info);
   }
 }
+
 html.dark .message-files-vertical-list {
   &::-webkit-scrollbar {
     width: 8px !important;
     height: 8px !important;
   }
+
   &::-webkit-scrollbar-thumb {
     background: #6b6b6b;
     border-radius: 4px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
+
   &::-webkit-scrollbar-thumb:hover {
     background: #999;
   }
+
   .file-button {
     background-color: var(--el-fill-color-dark);
     color: var(--el-text-color-regular);
   }
+
   .file-button:hover {
     background-color: var(--el-fill-color-darker);
     color: var(--el-text-color-regular);
   }
 }
 
-.ai-name { font-weight: 600; color: var(--el-text-color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-html.dark .ai-name { color: var(--el-text-color-regular); }
-.voice-name { opacity: 0.8; white-space: nowrap; flex-shrink: 0; margin-right: 8px; }
+.ai-name {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-.message-footer { display: flex; justify-content: flex-end; align-items: center; width: 100%; margin-top: 8px; }
-.footer-actions { display: flex; align-items: center; gap: 4px; }
+html.dark .ai-name {
+  color: var(--el-text-color-regular);
+}
+
+.voice-name {
+  opacity: 0.8;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.message-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .footer-wrapper {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
 }
-.user-bubble .footer-actions { margin-left: auto; }
-.ai-bubble .footer-actions { margin-right: auto; }
-.timestamp { margin-top: 12px; font-size: 0.75rem; opacity: 0.8; white-space: nowrap; flex-shrink: 0;}
 
-html.dark .ai-bubble :deep(.el-thinking .trigger) { background-color: var(--el-fill-color-darker, #2c2e33); color: var(--el-text-color-primary, #F9FAFB); border-color: var(--el-border-color-dark, #373A40); }
-html.dark .ai-bubble :deep(.el-thinking .el-icon) { color: var(--el-text-color-secondary, #A0A5B1); }
-html.dark .ai-bubble :deep(.el-thinking-popper) { max-width: 85vw; background-color: var(--bg-tertiary, #2c2e33) !important; border-color: var(--border-primary, #373A40) !important; }
-html.dark .ai-bubble :deep(.el-thinking-popper .el-popper__arrow::before) { background: var(--bg-tertiary, #2c2e33) !important; border-color: var(--border-primary, #373A40) !important; }
-.ai-bubble :deep(.el-thinking .content pre) { max-width: 100%; margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; box-sizing: border-box; }
-html.dark .ai-bubble :deep(.el-thinking .content pre) { background-color: var(--el-fill-color-darker); color: var(--el-text-color-regular, #E5E7EB); border: 1px solid var(--border-primary, #373A40); }
+.user-bubble .footer-actions {
+  margin-left: auto;
+}
+
+.ai-bubble .footer-actions {
+  margin-right: auto;
+}
+
+.timestamp {
+  margin-top: 12px;
+  font-size: 0.75rem;
+  opacity: 0.8;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+html.dark .ai-bubble :deep(.el-thinking .trigger) {
+  background-color: var(--el-fill-color-darker, #2c2e33);
+  color: var(--el-text-color-primary, #F9FAFB);
+  border-color: var(--el-border-color-dark, #373A40);
+}
+
+html.dark .ai-bubble :deep(.el-thinking .el-icon) {
+  color: var(--el-text-color-secondary, #A0A5B1);
+}
+
+html.dark .ai-bubble :deep(.el-thinking-popper) {
+  max-width: 85vw;
+  background-color: var(--bg-tertiary, #2c2e33) !important;
+  border-color: var(--border-primary, #373A40) !important;
+}
+
+html.dark .ai-bubble :deep(.el-thinking-popper .el-popper__arrow::before) {
+  background: var(--bg-tertiary, #2c2e33) !important;
+  border-color: var(--border-primary, #373A40) !important;
+}
+
+.ai-bubble :deep(.el-thinking .content pre) {
+  max-width: 100%;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+
+html.dark .ai-bubble :deep(.el-thinking .content pre) {
+  background-color: var(--el-fill-color-darker);
+  color: var(--el-text-color-regular, #E5E7EB);
+  border: 1px solid var(--border-primary, #373A40);
+}
 
 .tool-calls-container {
   margin-top: 10px;
@@ -993,17 +1188,20 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) { background-color: var(--
   max-width: calc(100vw - 130px);
   min-width: 250px;
   border: none;
+
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-light);
     border: 1px solid var(--el-border-color-lighter);
     border-radius: 8px;
     padding: 0 12px;
     height: 36px;
+
     &.is-active {
       border-bottom-left-radius: 0;
       border-bottom-right-radius: 0;
     }
   }
+
   :deep(.el-collapse-item__wrap) {
     background-color: transparent;
     border: 1px solid var(--el-border-color-lighter);
@@ -1011,15 +1209,18 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) { background-color: var(--
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
   }
+
   :deep(.el-collapse-item__content) {
     padding: 12px;
   }
 }
+
 html.dark .tool-collapse {
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-darker);
     border-color: var(--el-border-color-dark);
   }
+
   :deep(.el-collapse-item__wrap) {
     border-color: var(--el-border-color-dark);
   }
@@ -1037,6 +1238,7 @@ html.dark .tool-collapse {
   font-weight: 500;
   color: var(--el-text-color-primary);
 }
+
 .tool-icon {
   color: var(--el-text-color-secondary);
 }
@@ -1045,15 +1247,18 @@ html.dark .tool-collapse {
 .tool-call-details {
   .tool-detail-section {
     margin-bottom: 10px;
+
     &:last-child {
       margin-bottom: 0;
     }
+
     strong {
       display: block;
       margin-bottom: 5px;
       font-size: 13px;
       color: var(--el-text-color-secondary);
     }
+
     pre {
       margin: 0;
       padding: 8px;
@@ -1062,6 +1267,7 @@ html.dark .tool-collapse {
       max-height: 150px;
       overflow: auto;
       font-size: 12px;
+
       code {
         font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
         color: var(--el-text-color-primary);
@@ -1069,6 +1275,7 @@ html.dark .tool-collapse {
     }
   }
 }
+
 html.dark .tool-call-details {
   .tool-detail-section pre {
     background-color: var(--el-fill-color-darker);
@@ -1079,27 +1286,33 @@ html.dark .tool-call-details {
   width: 8px;
   height: 8px;
 }
+
 .tool-call-details .tool-detail-section pre::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 4px;
 }
+
 .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb {
   background: var(--el-text-color-disabled, #c0c4cc);
   border-radius: 4px;
   border: 2px solid var(--el-fill-color-light);
   background-clip: content-box;
 }
+
 .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:hover {
   background: var(--el-text-color-secondary, #909399);
   background-clip: content-box;
 }
+
 html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb {
   background: #6b6b6b;
   border-color: var(--el-fill-color-darker);
 }
+
 html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:hover {
   background: #999;
 }
+
 .tool-result-wrapper {
   display: flex;
   align-items: flex-start;
@@ -1114,7 +1327,7 @@ html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:h
   flex-shrink: 0;
   width: 22px;
   height: 22px;
-  
+
   background-color: transparent;
   border: none;
   color: var(--el-text-color-placeholder);

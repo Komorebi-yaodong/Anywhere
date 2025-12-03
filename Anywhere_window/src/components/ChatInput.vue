@@ -597,7 +597,7 @@ html.dark .drag-overlay {
 }
 
 .input-footer {
-    padding: 10px 55px 25px 45px;
+    padding: 10px 5% 25px 5%;
     height: auto;
     width: 100%;
     flex-shrink: 0;

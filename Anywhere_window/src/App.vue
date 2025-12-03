@@ -3285,7 +3285,7 @@ html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::a
 .scroll-to-bottom-wrapper {
   position: absolute;
   bottom: 110px;
-  right: 8px;
+  right: 1%;
   z-index: 20;
   display: flex;
   flex-direction: column;
