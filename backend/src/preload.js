@@ -28,6 +28,8 @@ const {
   deleteLocalFile,
   writeLocalFile,
   setFileMtime,
+  isFileTypeSupported,
+  parseFileObject,
 } = require('./file.js');
 
 const {
@@ -71,6 +73,8 @@ window.api = {
   initializeMcpClient,
   invokeMcpTool,
   closeMcpClient,
+  isFileTypeSupported,
+  parseFileObject,
 };
 
 const commandHandlers = {

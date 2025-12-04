@@ -3,72 +3,91 @@ const fs_node = require('node:fs');
 const path = require('path');
 
 
+const parseWord = async (base64Data) => {
+  const mammoth = (await import('mammoth')).default;
+  const s = base64Data.split(',')[1]; 
+  if (!s) throw new Error("Invalid base64 data for Word file");
+  
+  const buffer = Buffer.from(s, 'base64');
+  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  const r = await mammoth.convertToHtml({ buffer: buffer, arrayBuffer: arrayBuffer }); 
+  const d = document.createElement('div'); 
+  d.innerHTML = r.value;
+  return (d.textContent || d.innerText || "").replace(/\s+/g, ' ').trim();
+};
+
 const parseTextFile = async (base64Data) => {
-    const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for text file");
-    const bs = atob(s); const ia = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i);
-    return new TextDecoder().decode(ia);
+  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for text file");
+  return Buffer.from(s, 'base64').toString('utf-8');
+};
+
+const parseExcel = async (base64Data) => {
+  const XLSX = await import('xlsx');
+  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for Excel file");
+  const buffer = Buffer.from(s, 'base64');
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  
+  let fullTextContent = '';
+  workbook.SheetNames.forEach(sheetName => {
+    const worksheet = workbook.Sheets[sheetName];
+    const csvData = XLSX.utils.sheet_to_csv(worksheet);
+    fullTextContent += `--- Sheet: ${sheetName} ---\n${csvData}\n\n`;
+  });
+  return fullTextContent.trim();
 };
 
 // Centralized file handling configuration
 const fileHandlers = {
-    text: {
-        extensions: [
-            // Common text files
-            '.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css', '.csv', '.srt',
-            // Common code files
-            '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go',
-            '.php', '.rb', '.rs', '.sh', '.sql', '.vue'
-        ],
-        handler: async (file) => {
-            const textContent = await parseTextFile(file.url);
-            return { type: "text", text: `file name:${file.name}\nfile content:${textContent}\nfile end` };
-        }
-    },
-    // docx: {
-    //     extensions: ['.docx'],
-    //     handler: async (file) => {
-    //         const textContent = await parseWord(file.url);
-    //         return { type: "text", text: `file name:${file.name}\nfile content:${textContent}\nfile end` };
-    //     }
-    // },
-    image: {
-        extensions: ['.png', '.jpg', '.jpeg', '.webp'], // Strictly adhere to original types
-        handler: async (file) => {
-            return { type: "image_url", image_url: { url: file.url } };
-        }
-    },
-    audio: {
-        extensions: ['.mp3', '.wav'], // Strictly adhere to original types
-        handler: async (file) => {
-            const commaIndex = file.url.indexOf(',');
-            if (commaIndex > -1) {
-                return {
-                    type: "input_audio",
-                    input_audio: {
-                        data: file.url.substring(commaIndex + 1),
-                        format: file.name.split('.').pop().toLowerCase()
-                    }
-                };
-            }
-            console.log(`音频文件 ${file.name} 格式不正确`);
-            return null;
-        }
-    },
-    pdf: {
-        extensions: ['.pdf'],
-        handler: async (file) => {
-            return {
-                type: "file",
-                file: {
-                    filename: file.name,
-                    file_data: file.url
-                }
-            };
-        }
+  text: {
+    extensions: ['.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.php', '.rb', '.rs', '.sh', '.sql', '.vue'],
+    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseTextFile(file.url)}\nfile end` })
+  },
+  docx: {
+    extensions: ['.docx'],
+    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseWord(file.url)}\nfile end` })
+  },
+  excel: {
+    extensions: ['.xlsx', '.xls', '.csv'],
+    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseExcel(file.url)}\nfile end` })
+  },
+  image: {
+    extensions: ['.png', '.jpg', '.jpeg', '.webp'],
+    handler: async (file) => ({ type: "image_url", image_url: { url: file.url } })
+  },
+  audio: {
+    extensions: ['.mp3', '.wav'],
+    handler: async (file) => {
+      const commaIndex = file.url.indexOf(',');
+      if (commaIndex > -1) return { type: "input_audio", input_audio: { data: file.url.substring(commaIndex + 1), format: file.name.split('.').pop().toLowerCase() } };
+      showDismissibleMessage.error(`音频文件 ${file.name} 格式不正确`); return null;
     }
+  },
+  pdf: {
+    extensions: ['.pdf'],
+    handler: async (file) => ({ type: "file", file: { filename: file.name, file_data: file.url } })
+  }
 };
 
-// [NEW & IMPROVED] Helper function to get the correct handler for a file
+const isFileTypeSupported = (fileName) => {
+    if (!fileName) return false;
+    const extension = ('.' + fileName.split('.').pop()).toLowerCase();
+    for (const category in fileHandlers) {
+        if (fileHandlers[category].extensions.includes(extension)) {
+            return true;
+        }
+    }
+    return false;
+};
+
+const parseFileObject = async (fileObj) => {
+    const handler = getFileHandler(fileObj.name);
+    if (!handler) {
+        throw new Error(`不支持的文件类型: ${fileObj.name}`);
+    }
+    return await handler(fileObj);
+};
+
+// Helper function to get the correct handler for a file
 const getFileHandler = (fileName) => {
     if (!fileName) return null;
     const extension = ('.' + fileName.split('.').pop()).toLowerCase();
@@ -356,4 +375,6 @@ module.exports = {
     deleteLocalFile,
     writeLocalFile,
     setFileMtime,
+    isFileTypeSupported,
+    parseFileObject,
 };

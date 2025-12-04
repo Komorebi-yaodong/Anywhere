@@ -56,72 +56,6 @@ const setMessageRef = (el, index) => {
   else messageRefs.delete(index, el);
 };
 
-
-const base64ToBuffer = (base64) => { const bs = atob(base64); const b = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) b[i] = bs.charCodeAt(i); return b.buffer; };
-const parseWord = async (base64Data) => {
-  const mammoth = (await import('mammoth')).default;
-  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for Word file");
-  const r = await mammoth.convertToHtml({ arrayBuffer: base64ToBuffer(s) }); const d = document.createElement('div'); d.innerHTML = r.value;
-  return (d.textContent || d.innerText || "").replace(/\s+/g, ' ').trim();
-};
-const parseTextFile = async (base64Data) => {
-  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for text file");
-  const bs = atob(s); const ia = new Uint8Array(bs.length); for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i);
-  return new TextDecoder().decode(ia);
-};
-const parseExcel = async (base64Data) => {
-  const XLSX = await import('xlsx');
-  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for Excel file");
-  const workbook = XLSX.read(base64ToBuffer(s), { type: 'buffer' });
-  let fullTextContent = '';
-  workbook.SheetNames.forEach(sheetName => {
-    const worksheet = workbook.Sheets[sheetName];
-    const csvData = XLSX.utils.sheet_to_csv(worksheet);
-    fullTextContent += `--- Sheet: ${sheetName} ---\n${csvData}\n\n`;
-  });
-  return fullTextContent.trim();
-};
-
-const fileHandlers = {
-  text: {
-    extensions: ['.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.php', '.rb', '.rs', '.sh', '.sql', '.vue'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseTextFile(file.url)}\nfile end` })
-  },
-  docx: {
-    extensions: ['.docx'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseWord(file.url)}\nfile end` })
-  },
-  excel: {
-    extensions: ['.xlsx', '.xls', '.csv'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseExcel(file.url)}\nfile end` })
-  },
-  image: {
-    extensions: ['.png', '.jpg', '.jpeg', '.webp'],
-    handler: async (file) => ({ type: "image_url", image_url: { url: file.url } })
-  },
-  audio: {
-    extensions: ['.mp3', '.wav'],
-    handler: async (file) => {
-      const commaIndex = file.url.indexOf(',');
-      if (commaIndex > -1) return { type: "input_audio", input_audio: { data: file.url.substring(commaIndex + 1), format: file.name.split('.').pop().toLowerCase() } };
-      showDismissibleMessage.error(`音频文件 ${file.name} 格式不正确`); return null;
-    }
-  },
-  pdf: {
-    extensions: ['.pdf'],
-    handler: async (file) => ({ type: "file", file: { filename: file.name, file_data: file.url } })
-  }
-};
-
-const getFileHandler = (fileName) => {
-  if (!fileName) return null;
-  const extension = ('.' + fileName.split('.').pop()).toLowerCase();
-  for (const category in fileHandlers) {
-    if (fileHandlers[category].extensions.includes(extension)) return fileHandlers[category].handler;
-  }
-  return null;
-};
-
 const defaultConfig = window.api.defaultConfig;
 const UserAvart = ref("user.png");
 const AIAvart = ref("ai.svg");
@@ -166,6 +100,37 @@ const imageViewerInitialIndex = ref(0);
 
 const toolCallControllers = ref(new Map());
 const tempSessionMcpServerIds = ref([]);
+
+const isAutoApproveTools = ref(true); // 默认不自动批准
+const pendingToolApprovals = ref(new Map()); // 存储等待审批的 resolve 函数
+
+const handleToolApproval = (toolCallId, isApproved) => {
+  const resolver = pendingToolApprovals.value.get(toolCallId);
+  if (resolver) {
+    resolver(isApproved);
+    pendingToolApprovals.value.delete(toolCallId);
+  }
+};
+const handleToggleAutoApprove = (val) => {
+  isAutoApproveTools.value = val;
+  
+  if (val) {
+    pendingToolApprovals.value.forEach((resolve, id) => {
+      resolve(true);
+    });
+    pendingToolApprovals.value.clear();
+    
+    chat_show.value.forEach(msg => {
+      if (msg.tool_calls) {
+        msg.tool_calls.forEach(tc => {
+          if (tc.approvalStatus === 'waiting') {
+            tc.approvalStatus = 'approved';
+          }
+        });
+      }
+    });
+  }
+};
 
 // --- MCP State ---
 const isMcpDialogVisible = ref(false);
@@ -536,30 +501,40 @@ const handleWindowFocus = () => {
 
 const handleCopyImageFromViewer = (url) => {
   if (!url) return;
-  const loadingMessage = showDismissibleMessage({ message: '准备复制图片...', type: 'info', duration: 0 });
   (async () => {
     try {
+      // 1. 如果已经是 Base64 格式，直接复制
       if (url.startsWith('data:image')) {
         await new Promise(resolve => setTimeout(resolve, 20));
         await window.api.copyImage(url);
         showDismissibleMessage.success('图片已复制到剪贴板');
         return;
       }
+
+      // 2. 如果是远程 URL，先下载
       const response = await fetch(url);
       if (!response.ok) throw new Error(`网络错误: ${response.statusText}`);
-      loadingMessage.message = '正在下载和处理图片...';
+      
       const blob = await response.blob();
-      const buffer = await blob.arrayBuffer();
-      const uint8Array = new Uint8Array(buffer);
-      loadingMessage.message = '正在写入剪贴板...';
+
+      // Base64 是 uTools copyImage API 支持最稳定的格式
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
       await new Promise(resolve => setTimeout(resolve, 50));
-      await window.api.copyImage(uint8Array);
+      
+      // 传递 Base64 字符串给 uTools
+      await window.api.copyImage(base64Data);
+      
       showDismissibleMessage.success('图片已复制到剪贴板');
     } catch (error) {
       console.error('复制图片失败:', error);
       showDismissibleMessage.error(`复制失败: ${error.message}`);
     } finally {
-      loadingMessage.close();
     }
   })();
 };
@@ -1025,6 +1000,7 @@ const getSessionDataAsObject = () => {
     anywhere_history: true, CODE: CODE.value, basic_msg: basic_msg.value, isInit: isInit.value,
     autoCloseOnBlur: autoCloseOnBlur.value, model: model.value,
     currentPromptConfig: currentPromptConfig, history: history.value, chat_show: chat_show.value, selectedVoice: selectedVoice.value,
+    activeMcpServerIds: sessionMcpServerIds.value || [], isAutoApproveTools: isAutoApproveTools.value
   };
 }
 const saveSessionToCloud = async () => {
@@ -1717,29 +1693,36 @@ const handleSaveAction = async () => {
 
 
 const loadSession = async (jsonData) => {
+  // 1. 开始加载，重置状态
   loading.value = true;
-  collapsedMessages.value.clear(); messageRefs.clear(); focusedMessageIndex.value = null;
+  collapsedMessages.value.clear(); 
+  messageRefs.clear(); 
+  focusedMessageIndex.value = null;
+
   try {
-    CODE.value = jsonData.CODE; document.title = CODE.value;
-    basic_msg.value = jsonData.basic_msg; isInit.value = jsonData.isInit;
+    // 2. 优先恢复基础数据和UI相关的状态，让界面尽快渲染
+    CODE.value = jsonData.CODE; 
+    document.title = CODE.value;
+    basic_msg.value = jsonData.basic_msg; 
+    isInit.value = jsonData.isInit;
     autoCloseOnBlur.value = jsonData.autoCloseOnBlur;
-    const mcpServersToLoad = jsonData.currentPromptConfig?.defaultMcpServers || [];
-    if (Array.isArray(mcpServersToLoad) && mcpServersToLoad.length > 0) {
-      sessionMcpServerIds.value = [...mcpServersToLoad];
-      await applyMcpTools(false);
-    } else {
-      sessionMcpServerIds.value = [];
-      await applyMcpTools(false);
-    }
-    history.value = jsonData.history; chat_show.value = jsonData.chat_show;
+
+    history.value = jsonData.history; 
+    chat_show.value = jsonData.chat_show;
     selectedVoice.value = jsonData.selectedVoice || '';
     tempReasoningEffort.value = jsonData.currentPromptConfig?.reasoning_effort || 'default';
+    isAutoApproveTools.value = jsonData.isAutoApproveTools || true; 
 
+    // 3. 恢复配置和模型映射
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
+    
     zoomLevel.value = currentConfig.value.zoom || 1;
     if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(zoomLevel.value);
-    if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); }
+    
+    if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); } 
+    else { document.documentElement.classList.remove('dark'); }
+    
     const currentPromptConfigFromLoad = jsonData.currentPromptConfig || currentConfig.value.prompts[CODE.value];
     if (currentPromptConfigFromLoad && currentPromptConfigFromLoad.icon) {
       AIAvart.value = currentPromptConfigFromLoad.icon;
@@ -1748,7 +1731,9 @@ const loadSession = async (jsonData) => {
       AIAvart.value = "ai.svg";
       favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
     }
-    modelList.value = []; modelMap.value = {};
+    
+    modelList.value = []; 
+    modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
       if (provider?.enable) {
@@ -1759,6 +1744,8 @@ const loadSession = async (jsonData) => {
         });
       }
     });
+    
+    // 4. 恢复模型选择
     let restoredModel = '';
     if (jsonData.model && modelMap.value[jsonData.model]) restoredModel = jsonData.model;
     else if (jsonData.currentPromptConfig?.model && modelMap.value[jsonData.currentPromptConfig.model]) restoredModel = jsonData.currentPromptConfig.model;
@@ -1767,11 +1754,15 @@ const loadSession = async (jsonData) => {
       restoredModel = (currentPromptConfig?.model && modelMap.value[currentPromptConfig.model]) ? currentPromptConfig.model : (modelList.value[0]?.value || '');
     }
     model.value = restoredModel;
+    
+    // 5. 恢复消息ID计数器
     if (chat_show.value && chat_show.value.length > 0) {
       chat_show.value.forEach(msg => { if (msg.id === undefined) msg.id = messageIdCounter.value++; });
       const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
       messageIdCounter.value = maxId + 1;
     }
+    
+    // 6. 更新系统提示词（如果有变化）
     if (currentConfig.value.prompts[CODE.value]?.prompt) {
       if (history.value.length > 0 && history.value[0].role === "system") {
         history.value[0].content = currentConfig.value.prompts[CODE.value].prompt;
@@ -1781,16 +1772,56 @@ const loadSession = async (jsonData) => {
         chat_show.value.unshift({ id: messageIdCounter.value++, role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
       }
     }
+    
     if (model.value) {
       currentProviderID.value = model.value.split("|")[0];
       const provider = currentConfig.value.providers[currentProviderID.value];
       base_url.value = provider?.url;
       api_key.value = provider?.api_key;
-    } else { showDismissibleMessage.error("没有可用的模型。请检查您的服务商配置。"); loading.value = false; return; }
-    await nextTick(); scrollToBottom();
-  } catch (error) { console.error("加载会话失败:", error); showDismissibleMessage.error(`加载会话失败: ${error.message}`); }
-  finally { loading.value = false; }
+    } else { 
+      showDismissibleMessage.error("没有可用的模型。请检查您的服务商配置。"); 
+      loading.value = false; 
+      return; 
+    }
+    
+    // 7. 立即完成 UI 渲染状态，让用户看到聊天记录
+    loading.value = false; 
+    await nextTick(); 
+    scrollToBottom();
+
+    // 8. 在 UI 渲染完成后，再异步处理 MCP 加载
+    // 准备 MCP ID
+    let mcpServersToLoad = [];
+    if (jsonData.activeMcpServerIds && Array.isArray(jsonData.activeMcpServerIds)) {
+      mcpServersToLoad = jsonData.activeMcpServerIds;
+    } else {
+      mcpServersToLoad = jsonData.currentPromptConfig?.defaultMcpServers || [];
+    }
+
+    // 验证 MCP ID
+    const validMcpServerIds = mcpServersToLoad.filter(id => 
+      currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
+    );
+
+    // 异步执行工具加载，不阻塞 UI
+    if (validMcpServerIds.length > 0) {
+      sessionMcpServerIds.value = [...validMcpServerIds];
+      tempSessionMcpServerIds.value = [...validMcpServerIds];
+      // 注意：这里不 await，让它在后台加载。ChatInput 会根据 isMcpLoading 状态显示加载动画
+      applyMcpTools(false); 
+    } else {
+      sessionMcpServerIds.value = [];
+      tempSessionMcpServerIds.value = [];
+      applyMcpTools(false);
+    }
+
+  } catch (error) { 
+    console.error("加载会话失败:", error); 
+    showDismissibleMessage.error(`加载会话失败: ${error.message}`); 
+    loading.value = false; // 确保出错时也解除 loading
+  }
 };
+
 
 const checkAndLoadSessionFromFile = async (file) => {
   if (file && file.name.toLowerCase().endsWith('.json')) {
@@ -1810,12 +1841,33 @@ const checkAndLoadSessionFromFile = async (file) => {
 const file2fileList = async (file, idx) => {
   const isSessionFile = await checkAndLoadSessionFromFile(file);
   if (isSessionFile) { chatInputRef.value?.focus({ cursor: 'end' }); return; }
+  
   return new Promise((resolve, reject) => {
-    const handler = getFileHandler(file.name);
-    if (!handler) { const errorMsg = `不支持的文件类型: ${file.name}`; showDismissibleMessage.warning(errorMsg); reject(new Error(errorMsg)); return; }
+    // 使用后端 API 检查文件类型
+    if (!window.api.isFileTypeSupported(file.name)) { 
+        const errorMsg = `不支持的文件类型: ${file.name}`; 
+        showDismissibleMessage.warning(errorMsg); 
+        reject(new Error(errorMsg)); 
+        return; 
+    }
+    
     const reader = new FileReader();
-    reader.onload = (e) => { fileList.value.push({ uid: idx, name: file.name, size: file.size, type: file.type, url: e.target.result }); resolve(); };
-    reader.onerror = () => { const errorMsg = `读取文件 ${file.name} 失败`; showDismissibleMessage.error(errorMsg); reject(new Error(errorMsg)); }
+    reader.onload = (e) => { 
+        // 保持原逻辑：前端只负责读取 Base64 用于预览和后续发送
+        fileList.value.push({ 
+            uid: idx, 
+            name: file.name, 
+            size: file.size, 
+            type: file.type, 
+            url: e.target.result 
+        }); 
+        resolve(); 
+    };
+    reader.onerror = () => { 
+        const errorMsg = `读取文件 ${file.name} 失败`; 
+        showDismissibleMessage.error(errorMsg); 
+        reject(new Error(errorMsg)); 
+    }
     reader.readAsDataURL(file);
   });
 };
@@ -1830,15 +1882,33 @@ const processFilePath = async (filePath) => {
 };
 
 const sendFile = async () => {
-  let contentList = []; if (fileList.value.length === 0) return contentList;
+  let contentList = []; 
+  if (fileList.value.length === 0) return contentList;
+  
   for (const currentFile of fileList.value) {
-    const handler = getFileHandler(currentFile.name);
-    if (handler) {
-      try { const processedContent = await handler(currentFile); if (processedContent) contentList.push(processedContent); }
-      catch (error) { showDismissibleMessage.error(`处理文件 ${currentFile.name} 失败:${error.message}`); }
-    } else showDismissibleMessage.warning(`文件类型不支持: ${currentFile.name}`);
+    try {
+        // 调用后端复用的解析逻辑
+        // currentFile 结构为 { name, url(Base64) }，正好符合 file.js 中 handler 的入参
+        const processedContent = await window.api.parseFileObject({
+            name: currentFile.name,
+            url: currentFile.url
+        });
+        
+        if (processedContent) {
+            contentList.push(processedContent);
+        }
+    } catch (error) {
+        // 如果后端抛出不支持类型或其他解析错误
+        if (error.message.includes('不支持的文件类型')) {
+            showDismissibleMessage.warning(error.message);
+        } else {
+            showDismissibleMessage.error(`处理文件 ${currentFile.name} 失败: ${error.message}`);
+        }
+    }
   }
-  fileList.value = []; return contentList;
+  
+  fileList.value = []; 
+  return contentList;
 };
 
 function getRandomItem(list) {
@@ -2073,9 +2143,9 @@ const askAI = async (forceSend = false) => {
       // --- 仅在临时列表中注入MCP提示词 ---
       if (openaiFormattedTools.value.length > 0) {
         const mcpSystemPrompt = `
-##工具调用声明
- 
-在此环境中可以使用工具来回答用户的问题，请需要循序渐进地使用工具来完成给定任务，每次工具的使用都以前一次工具使用的结果为依据。
+## 工具调用声明
+
+在此环境中，可以使用工具来回答用户的问题，且需要循序渐进地使用工具来完成给定任务，每次工具的使用都以前一次工具使用的结果为依据。
 
 ### Skills:
 - **工具调用逻辑规划**: 能够根据任务需求，判断工具使用的必要性、顺序和参数的准确性。
@@ -2087,7 +2157,7 @@ const askAI = async (forceSend = false) => {
 ### Rules:
 以下是解决任务时应始终遵循的规则：
 1. **参数值优先原则**: 在任何情况下，对参数值的精确度应给予最高优先级，确保零错误率。
-2. **调用约束**：仅在必要时调用工具，避免不必要的冗余操作。
+2. **调用约束**：仅在必要时调用工具，避免冗余操作。
 3. **迭代效率优化**: 积极利用“绝不要重复调用”的约束，提高任务执行的效率和精确度。
 4. **隐私约束**: 用户无法查看工具交互内容和原始返回结果；必须将结果合成后告知用户。
 5. **用户视角驱动**: 始终站在用户的角度审视工具输出，思考如何将技术性的工具结果转化为具有价值的、易懂的信息。
@@ -2105,6 +2175,7 @@ const askAI = async (forceSend = false) => {
   </audio>
   \`\`\`
   - **格式要求**: 所有多媒体展示格式（图片、视频、音频）**绝不能**包含在代码块（\`\`\`)中。
+8. **工具调用说明**：每次调用工具都要使用一句话说明调用理由。要求简洁准确，格式示例如下：需要调用 **[工具名称]** 来 [目的概括]。
 `;
         const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
         if (systemMessageIndex !== -1) {
@@ -2248,8 +2319,13 @@ const askAI = async (forceSend = false) => {
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
         tool_calls_count++;
+        // 初始化时增加 approvalStatus 状态
         currentBubble.tool_calls = responseMessage.tool_calls.map(tc => ({
-          id: tc.id, name: tc.function.name, args: tc.function.arguments, result: '执行中...',
+          id: tc.id, 
+          name: tc.function.name, 
+          args: tc.function.arguments, 
+          result: '等待批准...', // 初始状态显示
+          approvalStatus: isAutoApproveTools.value ? 'approved' : 'waiting' // 状态: waiting, approved, rejected, executing, finished
         }));
 
         await nextTick();
@@ -2260,6 +2336,36 @@ const askAI = async (forceSend = false) => {
             const uiToolCall = currentBubble.tool_calls.find(t => t.id === toolCall.id);
             let toolContent;
 
+            // --- 审批拦截逻辑 ---
+            if (!isAutoApproveTools.value) {
+                try {
+                    // 挂起 Promise，等待用户点击按钮
+                    const isApproved = await new Promise((resolve) => {
+                        pendingToolApprovals.value.set(toolCall.id, resolve);
+                    });
+
+                    if (!isApproved) {
+                        if (uiToolCall) {
+                            uiToolCall.approvalStatus = 'rejected';
+                            uiToolCall.result = '用户已取消执行';
+                        }
+                        return { 
+                            tool_call_id: toolCall.id, 
+                            role: "tool", 
+                            name: toolCall.function.name, 
+                            content: "User denied this tool execution." 
+                        };
+                    }
+                } catch (e) {
+                    // 防止意外中断
+                }
+            }
+            
+            // 批准后，更新状态为执行中
+            if (uiToolCall) {
+                uiToolCall.approvalStatus = 'executing';
+                uiToolCall.result = '执行中...';
+            }
             const controller = new AbortController();
             toolCallControllers.value.set(toolCall.id, controller);
 
@@ -2267,12 +2373,18 @@ const askAI = async (forceSend = false) => {
               const toolArgs = JSON.parse(toolCall.function.arguments);
               const result = await window.api.invokeMcpTool(toolCall.function.name, toolArgs, controller.signal);
               toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
-              if (uiToolCall) uiToolCall.result = toolContent;
+              
+              if (uiToolCall) {
+                  uiToolCall.result = toolContent;
+                  uiToolCall.approvalStatus = 'finished'; // 标记完成
+              }
             } catch (e) {
               if (e.name === 'AbortError') {
                 toolContent = "Error: Tool call was canceled by the user.";
+                if (uiToolCall) uiToolCall.approvalStatus = 'rejected';
               } else {
                 toolContent = `工具执行或参数解析错误: ${e.message}`;
+                if (uiToolCall) uiToolCall.approvalStatus = 'finished'; // 错误也算执行完成
               }
               if (uiToolCall) uiToolCall.result = toolContent;
             } finally {
@@ -2660,13 +2772,32 @@ const handleGlobalKeyDown = (event) => {
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
           @scroll="handleScroll">
-          <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :ref="el => setMessageRef(el, index)"
-            :message="message" :index="index" :is-last-message="index === chat_show.length - 1" :is-loading="loading"
-            :user-avatar="UserAvart" :ai-avatar="AIAvart" :is-collapsed="isCollapsed(index)"
-            :is-dark-mode="currentConfig.isDarkMode" @delete-message="handleDeleteMessage" @copy-text="handleCopyText"
-            @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
-            @avatar-click="onAvatarClick" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"
-            @edit-message="handleEditMessage" @cancel-tool-call="handleCancelToolCall" />
+          <ChatMessage 
+            v-for="(message, index) in chat_show" 
+            :key="message.id" 
+            :is-auto-approve="isAutoApproveTools" 
+            @update-auto-approve="handleToggleAutoApprove"
+            @confirm-tool="handleToolApproval"
+            @reject-tool="handleToolApproval"
+            :ref="el => setMessageRef(el, index)"
+            :message="message" 
+            :index="index" 
+            :is-last-message="index === chat_show.length - 1" 
+            :is-loading="loading"
+            :user-avatar="UserAvart" 
+            :ai-avatar="AIAvart" 
+            :is-collapsed="isCollapsed(index)"
+            :is-dark-mode="currentConfig.isDarkMode" 
+            @delete-message="handleDeleteMessage" 
+            @copy-text="handleCopyText"
+            @re-ask="handleReAsk" 
+            @toggle-collapse="handleToggleCollapse" 
+            @show-system-prompt="handleShowSystemPrompt"
+            @avatar-click="onAvatarClick" 
+            @edit-message-requested="handleEditStart" 
+            @edit-finished="handleEditEnd"
+            @edit-message="handleEditMessage" 
+            @cancel-tool-call="handleCancelToolCall" />
         </el-main>
 
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
@@ -2805,18 +2936,21 @@ const handleGlobalKeyDown = (event) => {
     </div>
     <template #footer>
       <div class="mcp-dialog-footer">
-        <span class="mcp-limit-hint" :class="{ 'warning': mcpConnectionCount > 5 }">
-          【Utools限制】剩余连接数：{{ 5 - mcpConnectionCount }}/5
-          <el-tooltip placement="top">
-            <template #content>
-              持久连接各占1个名额<br>
-              所有临时连接共占1个名额
-            </template>
-            <el-icon style="vertical-align: middle; margin-left: 4px; cursor: help;">
-              <QuestionFilled />
-            </el-icon>
-          </el-tooltip>
-        </span>
+        <div class="footer-left-controls"> <!-- 使用新容器包裹左侧内容 -->
+            <span class="mcp-limit-hint" :class="{ 'warning': mcpConnectionCount > 5 }">
+              连接数：{{ 5 - mcpConnectionCount }}/5
+              <el-tooltip placement="top">
+                <template #content>
+                  持久连接各占1个名额<br>
+                  所有临时连接共占1个名额
+                </template>
+                <el-icon style="vertical-align: middle; margin-left: 4px; cursor: help;">
+                  <QuestionFilled />
+                </el-icon>
+              </el-tooltip>
+            </span>
+            <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" style="margin-left: 40px; margin-right: 0;" />
+        </div>
         <div>
           <el-button type="primary"
             @click="sessionMcpServerIds = [...tempSessionMcpServerIds]; applyMcpTools();">应用</el-button>
@@ -3433,5 +3567,10 @@ html.dark .persistent-btn:hover {
 
 .persistent-btn.is-persistent-active:hover {
   background-color: rgba(103, 194, 58, 0.1);
+}
+
+.footer-left-controls {
+  display: flex;
+  align-items: center;
 }
 </style>

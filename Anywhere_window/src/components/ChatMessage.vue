@@ -1,8 +1,8 @@
 <script setup>
 import { computed, ref, nextTick } from 'vue';
 import { Bubble, Thinking, XMarkdown } from 'vue-element-plus-x';
-import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon } from 'element-plus';
-import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close } from '@element-plus/icons-vue';
+import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon, ElCheckbox, ElTag } from 'element-plus';
+import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close, CloseBold } from '@element-plus/icons-vue';
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
 
@@ -14,10 +14,11 @@ const props = defineProps({
   userAvatar: String,
   aiAvatar: String,
   isCollapsed: Boolean,
-  isDarkMode: Boolean
+  isDarkMode: Boolean,
+  isAutoApprove: Boolean,
 });
 
-const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished', 'cancel-tool-call']);
+const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished', 'cancel-tool-call', 'confirm-tool', 'reject-tool', 'update-auto-approve']);
 const editInputRef = ref(null);
 const isEditing = ref(false);
 const editedContent = ref('');
@@ -322,7 +323,7 @@ const truncateFilename = (filename, maxLength = 30) => {
           </div>
           <!-- 第二行：时间 -->
           <span class="timestamp-row" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp)
-            }}</span>
+          }}</span>
         </div>
       </div>
 
@@ -353,43 +354,78 @@ const truncateFilename = (filename, maxLength = 30) => {
             </div>
           </div>
           <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-container">
-            <el-collapse class="tool-collapse" accordion>
-              <el-collapse-item v-for="toolCall in message.tool_calls" :key="toolCall.id" :name="toolCall.id">
-                <template #title>
-                  <div class="tool-call-title">
-                    <el-icon class="tool-icon">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path>
-                        <path d="m18 15 4-4"></path>
-                        <path
-                          d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5">
-                        </path>
-                      </svg>
-                    </el-icon>
-                    <span class="tool-name">{{ toolCall.name }}</span>
-                    <el-button v-if="toolCall.result === '执行中...'" @click.stop="$emit('cancel-tool-call', toolCall.id)"
-                      circle class="cancel-tool-button-header" title="取消此工具调用">
-                      <el-icon>
-                        <Close />
+            <!-- 单个工具块 -->
+            <div v-for="toolCall in message.tool_calls" :key="toolCall.id" class="single-tool-wrapper">
+              
+              <!-- 1. 工具详情折叠面板 -->
+              <el-collapse 
+                class="tool-collapse" 
+                :model-value="(toolCall.approvalStatus === 'waiting' || toolCall.approvalStatus === 'executing') ? [toolCall.id] : []"
+              >
+                <el-collapse-item :name="toolCall.id">
+                  <!-- 标题栏 -->
+                  <template #title>
+                    <div class="tool-call-title">
+                      <el-icon class="tool-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path><path d="m18 15 4-4"></path><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"></path></svg>
                       </el-icon>
-                    </el-button>
-                  </div>
-                </template>
-                <div class="tool-call-details">
-                  <div class="tool-detail-section">
-                    <strong>参数:</strong>
-                    <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
-                  </div>
-                  <div class="tool-detail-section">
-                    <strong>结果:</strong>
-                    <div class="tool-result-wrapper">
-                      <pre><code>{{ toolCall.result }}</code></pre>
+                      <span class="tool-name">{{ toolCall.name }}</span>
+                      
+                      <!-- 状态显示区域 -->
+                      <div class="tool-header-right">
+                        <el-tag v-if="toolCall.approvalStatus === 'waiting'" type="warning" size="small" effect="light" round>等待批准</el-tag>
+                        <el-tag v-else-if="toolCall.approvalStatus === 'executing'" type="primary" size="small" effect="light" round>执行中</el-tag>
+                        <el-tag v-else-if="toolCall.approvalStatus === 'rejected'" type="danger" size="small" effect="plain" round>已拒绝</el-tag>
+                        <el-tag v-else-if="toolCall.approvalStatus === 'finished'" type="success" size="small" effect="plain" round>完成</el-tag>
+
+                        <!-- 停止执行按钮：仅在执行中显示 -->
+                        <el-tooltip content="停止执行" placement="top" v-if="toolCall.approvalStatus === 'executing'">
+                          <div class="stop-btn-wrapper" @click.stop="$emit('cancel-tool-call', toolCall.id)">
+                            <el-icon><CloseBold /></el-icon>
+                          </div>
+                        </el-tooltip>
+                      </div>
+                    </div>
+                  </template>
+                  
+                  <!-- 内容详情 -->
+                  <div class="tool-call-details">
+                    <div class="tool-detail-section">
+                      <strong>参数:</strong>
+                      <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
+                    </div>
+                    <div class="tool-detail-section" v-if="toolCall.result && toolCall.result !== '等待批准...' && toolCall.result !== '执行中...'">
+                      <strong>结果:</strong>
+                      <div class="tool-result-wrapper">
+                        <pre><code>{{ toolCall.result }}</code></pre>
+                      </div>
                     </div>
                   </div>
+                </el-collapse-item>
+              </el-collapse>
+
+              <!-- [重点] 审批操作栏：位于折叠框下方 -->
+              <div v-if="toolCall.approvalStatus === 'waiting'" class="tool-approval-actions">
+                <div class="actions-left">
+                    <el-button type="primary" size="small" :icon="Check" @click="$emit('confirm-tool', toolCall.id, true)">
+                        确认
+                    </el-button>
+                    <el-button size="small" :icon="Close" @click="$emit('reject-tool', toolCall.id, false)">
+                        取消
+                    </el-button>
                 </div>
-              </el-collapse-item>
-            </el-collapse>
+                <!-- 自动批准开关 -->
+                <div class="actions-right">
+                    <el-checkbox 
+                        :model-value="isAutoApprove" 
+                        @change="(val) => $emit('update-auto-approve', val)"
+                        label="自动批准后续调用" 
+                        size="small"
+                    />
+                </div>
+              </div>
+
+            </div>
           </div>
         </template>
         <template #footer>
@@ -479,10 +515,8 @@ const truncateFilename = (filename, maxLength = 30) => {
 .timestamp-row {
   font-size: 11px;
   color: var(--el-text-color-placeholder);
-  /* 使用更浅的颜色 */
   margin-top: 1px;
 }
-
 
 /* 顶部小头像 */
 .chat-avatar-top {
@@ -572,7 +606,6 @@ html.dark .chat-message .ai-bubble {
   opacity: 1;
 }
 
-
 html.dark .system-prompt-container {
   border-color: var(--el-border-color-dark);
 }
@@ -602,7 +635,7 @@ html.dark .system-prompt-container:hover {
   width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr); 
+  grid-template-columns: minmax(0, 1fr);
 
   :deep(.elx-xmarkdown-container) {
     background: transparent !important;
@@ -1179,26 +1212,44 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
   border: 1px solid var(--border-primary, #373A40);
 }
 
+/* =================================================================
+   MCP 工具调用相关样式 - 新版优化
+   ================================================================= */
+
+/* 工具调用容器 */
 .tool-calls-container {
-  margin-top: 10px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.tool-collapse {
+.single-tool-wrapper {
   width: 100%;
   max-width: calc(100vw - 130px);
   min-width: 250px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 折叠面板样式优化 */
+.tool-collapse {
+  width: 100%;
   border: none;
+  --el-collapse-header-height: 38px; /* 稍微增加高度 */
 
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-light);
     border: 1px solid var(--el-border-color-lighter);
     border-radius: 8px;
     padding: 0 12px;
-    height: 36px;
+    font-size: 13px;
+    transition: border-radius 0.2s;
 
     &.is-active {
       border-bottom-left-radius: 0;
       border-bottom-right-radius: 0;
+      border-bottom-color: transparent;
     }
   }
 
@@ -1214,18 +1265,6 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
     padding: 12px;
   }
 }
-
-html.dark .tool-collapse {
-  :deep(.el-collapse-item__header) {
-    background-color: var(--el-fill-color-darker);
-    border-color: var(--el-border-color-dark);
-  }
-
-  :deep(.el-collapse-item__wrap) {
-    border-color: var(--el-border-color-dark);
-  }
-}
-
 
 .tool-call-title {
   display: flex;
@@ -1243,7 +1282,89 @@ html.dark .tool-collapse {
   color: var(--el-text-color-secondary);
 }
 
+.tool-header-right {
+  margin-left: auto;
+  margin-right: 12px; /* 避免与折叠箭头重叠 */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
+.stop-btn-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; /* 尺寸适中 */
+  height: 24px;
+  border-radius: 50%; /* 圆形背景 */
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  background-color: var(--el-text-color-primary); 
+  color: var(--el-bg-color);
+  
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+
+  &:hover {
+    opacity: 0.85; /* 悬浮时轻微变淡 */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+html.dark .stop-btn-wrapper {
+  background-color: #E5EAF3; /* 亮白色 */
+  color: #141414; /* 深黑色 */
+  
+  &:hover {
+    background-color: #ffffff; /* 悬浮更亮 */
+  }
+}
+
+/* 审批操作栏样式 */
+.tool-approval-actions {
+  /* 视觉上连接上方的折叠框 */
+  margin-top: -2px; 
+  margin-left: 1px;
+  margin-right: 1px;
+  padding: 8px 12px;
+  
+  background-color: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+  border-top: 1px dashed var(--el-border-color-lighter); /* 虚线分割，既连接又区分 */
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  
+  /* 出现动画 */
+  animation: slide-in 0.2s ease-out;
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.actions-left {
+  display: flex;
+  gap: 10px;
+}
+
+.actions-right {
+  margin-left: auto;
+  :deep(.el-checkbox__label) {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+}
+
+/* 工具详情内容样式 */
 .tool-call-details {
   .tool-detail-section {
     margin-bottom: 10px;
@@ -1276,12 +1397,6 @@ html.dark .tool-collapse {
   }
 }
 
-html.dark .tool-call-details {
-  .tool-detail-section pre {
-    background-color: var(--el-fill-color-darker);
-  }
-}
-
 .tool-call-details .tool-detail-section pre::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1304,15 +1419,6 @@ html.dark .tool-call-details {
   background-clip: content-box;
 }
 
-html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb {
-  background: #6b6b6b;
-  border-color: var(--el-fill-color-darker);
-}
-
-html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:hover {
-  background: #999;
-}
-
 .tool-result-wrapper {
   display: flex;
   align-items: flex-start;
@@ -1322,21 +1428,40 @@ html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:h
   flex-grow: 1;
 }
 
-.cancel-tool-button-header {
-  margin-left: auto;
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-
-  background-color: transparent;
-  border: none;
-  color: var(--el-text-color-placeholder);
-  transition: all 0.2s ease-in-out;
-
-  &:hover {
-    background-color: var(--el-color-danger);
-    color: white;
-    transform: scale(1.1);
+/* 深色模式适配 */
+html.dark .tool-collapse {
+  :deep(.el-collapse-item__header) {
+    background-color: var(--el-fill-color-darker);
+    border-color: var(--el-border-color-dark);
   }
+  :deep(.el-collapse-item__wrap) {
+    border-color: var(--el-border-color-dark);
+  }
+}
+
+html.dark .stop-btn-wrapper:hover {
+  background-color: rgba(245, 108, 108, 0.2); /* 深色模式下的红色背景 */
+  color: #F56C6C;
+}
+
+html.dark .tool-approval-actions {
+  background-color: var(--el-fill-color-dark);
+  border-color: var(--el-border-color-dark);
+  border-top-color: var(--el-border-color-dark);
+}
+
+html.dark .tool-call-details {
+  .tool-detail-section pre {
+    background-color: var(--el-fill-color-darker);
+  }
+}
+
+html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb {
+  background: #6b6b6b;
+  border-color: var(--el-fill-color-darker);
+}
+
+html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:hover {
+  background: #999;
 }
 </style>

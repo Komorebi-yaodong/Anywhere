@@ -18,6 +18,8 @@ const {
     handleFilePath,
     saveFile,
     writeLocalFile,
+    isFileTypeSupported,
+    parseFileObject,
 } = require('./file.js');
 
 const { 
@@ -77,6 +79,8 @@ window.api = {
     initializeMcpClient,
     invokeMcpTool,
     closeMcpClient,
+    isFileTypeSupported,
+    parseFileObject,
 
     // 向父进程(preload.js)发送切换置顶状态的请求
     toggleAlwaysOnTop: () => {
