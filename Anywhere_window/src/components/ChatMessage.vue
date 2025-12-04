@@ -360,7 +360,7 @@ const truncateFilename = (filename, maxLength = 30) => {
               <!-- 1. 工具详情折叠面板 -->
               <el-collapse 
                 class="tool-collapse" 
-                :model-value="(toolCall.approvalStatus === 'waiting' || toolCall.approvalStatus === 'executing') ? [toolCall.id] : []"
+                :model-value="(!isAutoApprove && (toolCall.approvalStatus === 'waiting' || toolCall.approvalStatus === 'executing')) ? [toolCall.id] : []"
               >
                 <el-collapse-item :name="toolCall.id">
                   <!-- 标题栏 -->
