@@ -169,7 +169,7 @@ const startRecordingFromSource = async (sourceType) => {
 
     try {
         if (sourceType === 'microphone') {
-            // [优化] 动态导入 Recorder 及其插件
+            // 动态导入 Recorder 及其插件
             const RecorderLib = await import('recorder-core');
             const Recorder = RecorderLib.default;
             await import('recorder-core/src/extensions/waveview.js');
@@ -585,14 +585,15 @@ html.dark .drag-overlay {
     box-sizing: border-box;
     height: auto;
     width: auto;
-    margin-right: 8px; /* 替代 float，使用 flex 间距 */
+    margin-right: 8px;
+    /* 替代 float，使用 flex 间距 */
 }
 
 .file-card-container :deep(.ant-attachment-list-card-type-overview) {
-    width:auto;
+    width: auto;
     height: auto;
     padding-right: 18px;
-    padding-top:4px;
+    padding-top: 4px;
     padding-bottom: 8px;
     padding-left: 10px;
     justify-content: center;
@@ -620,6 +621,7 @@ html.dark .file-card-container :deep(.ant-typography-secondary) {
 html.dark .file-card-container :deep(.anticon-close) {
     color: #a0a0a0 !important;
 }
+
 html.dark .file-card-container :deep(.anticon-close:hover) {
     color: #ffffff !important;
 }

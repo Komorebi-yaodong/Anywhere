@@ -650,7 +650,7 @@ function updateConfig(newConfig) {
         icon: prompt.icon || ""
       };
       if (prompt.type === "general") {
-        expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
+        expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
         expectedMatchFeature.cmds.push({ type: "img", label: key });
         expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i"});
       } else if (prompt.type === "files") {
@@ -667,7 +667,7 @@ function updateConfig(newConfig) {
             minLength: 1
           });
         } else {
-          expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999999999999999999999999999999 });
+          expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
         }
       }
       utools.setFeature(expectedMatchFeature);
@@ -900,7 +900,7 @@ async function sethotkey(prompt_name, auto_copy) {
 }
 
 async function openWindow(config, msg) {
-  // 计时开始
+  // // 计时开始
   // const startTime = performance.now();
   // console.log(`[Timer Start] Opening window for code: ${msg.code}`);
 
@@ -912,7 +912,7 @@ async function openWindow(config, msg) {
   const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
   let channel = "window";
   
-  const backgroundColor = config.isDarkMode ? '#181818' : '#ffffff';
+  const backgroundColor = config.isDarkMode ? `rgba(24, 24, 24, 1)` : 'rgba(255, 255, 255, 1)';
 
   // 为窗口生成唯一ID并添加到消息中
   const senderId = crypto.randomUUID();
@@ -930,23 +930,27 @@ async function openWindow(config, msg) {
     y: y,
     webPreferences: {
       preload: "./window_preload.js",
-      devTools: true
+      devTools: utools.isDev()
     },
   };
 
+  const entryPath = config.isDarkMode ? "./window/index.html?dark=1" : "./window/index.html";
   const ubWindow = utools.createBrowserWindow(
-    "./window/index.html",
+    entryPath,
     windowOptions,
     () => {
       // 将窗口实例存入Map
       windowMap.set(senderId, ubWindow);
+      ubWindow.show();
+
+      // // 计时结束
+      // const windowShownTime = performance.now();
+      // console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
       
       ubWindow.webContents.send(channel, msg);
-      ubWindow.show();
+
+
       
-      // 计时结束
-      const windowShownTime = performance.now();
-      // console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
     }
   );
   if (utools.isDev()) {

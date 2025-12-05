@@ -29,14 +29,11 @@
 				{
 					"type": "over",
 					"label": "恢复聊天",
-					"maxLength": 99999999999999999999999999999999999999
+					"maxLength": 99999999999
 				}
 			],
 			"mainHide": true,
 			"icon":"history.png"
 		}
-	],
-	"development":{
-		"main":"http://localhost:5173/index.html"
-	}
+	]
 }
