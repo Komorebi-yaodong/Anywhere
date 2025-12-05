@@ -34,7 +34,7 @@ const stringToColor = (str) => {
 // 2. 计算当前 Logo 颜色
 const logoColor = computed(() => {
   // 使用 model ID 或显示名称作为 Hash 种子
-  const seed = props.model || 'default';
+  const seed = props.model.split("|")[1] || 'default';
   return stringToColor(seed);
 });
 </script>
