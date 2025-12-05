@@ -131,7 +131,7 @@ async function getConfig() {
 
   // --- 1. 新用户初始化 ---
   if (!configDoc) {
-    console.log("Anywhere: Initializing configuration for a new user.");
+    // console.log("Anywhere: Initializing configuration for a new user.");
     const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(defaultConfig.config);
     await utools.db.promises.put({ _id: "config", data: baseConfigPart });
     await utools.db.promises.put({ _id: "prompts", data: promptsPart });
@@ -901,8 +901,8 @@ async function sethotkey(prompt_name, auto_copy) {
 
 async function openWindow(config, msg) {
   // 计时开始
-  const startTime = performance.now();
-  console.log(`[Timer Start] Opening window for code: ${msg.code}`);
+  // const startTime = performance.now();
+  // console.log(`[Timer Start] Opening window for code: ${msg.code}`);
 
   msg.config = config;
 
@@ -946,7 +946,7 @@ async function openWindow(config, msg) {
       
       // 计时结束
       const windowShownTime = performance.now();
-      console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+      // console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
     }
   );
   if (utools.isDev()) {
@@ -1004,8 +1004,8 @@ async function savePromptWindowSettings(promptKey, settings) {
     if (result.error && result.name === 'conflict') {
       // 检测到冲突。增加尝试次数，循环将自动重试。
       attempt++;
-      // (可选) 为调试记录冲突，但不打扰用户。
-      console.log(`Anywhere: DB conflict on saving window settings (attempt ${attempt}/${MAX_RETRIES}). Retrying...`);
+      // 为调试记录冲突，但不打扰用户。
+      // console.log(`Anywhere: DB conflict on saving window settings (attempt ${attempt}/${MAX_RETRIES}). Retrying...`);
     } else {
       // 发生了其他错误（例如验证失败），因此立即失败。
       return { success: false, message: result.message || 'An unknown database error occurred.' };

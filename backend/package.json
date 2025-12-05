@@ -12,7 +12,6 @@
   "license": "ISC",
   "dependencies": {
     "@langchain/mcp-adapters": "^1.0.0",
-    "find-process": "^2.0.0",
     "mammoth": "^1.11.0",
     "xlsx": "^0.18.5"
   },

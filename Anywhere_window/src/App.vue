@@ -1,11 +1,11 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
 import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElSwitch, ElTooltip, ElIcon } from 'element-plus';
 import { createClient } from "webdav/web";
 import { QuestionFilled } from '@element-plus/icons-vue';
 
 import ChatHeader from './components/ChatHeader.vue';
-import ChatMessage from './components/ChatMessage.vue';
+const ChatMessage = defineAsyncComponent(() => import('./components/ChatMessage.vue'));
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
@@ -13,7 +13,6 @@ import { DocumentCopy, Download, Search } from '@element-plus/icons-vue';
 
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
-import OpenAI from 'openai';
 
 import TextSearchUI from './utils/TextSearchUI.js';
 
@@ -2109,6 +2108,8 @@ const askAI = async (forceSend = false) => {
   let currentAssistantChatShowIndex = -1;
 
   try {
+    const { OpenAI } = await import('openai');
+
     const openai = new OpenAI({
       apiKey: () => getRandomItem(api_key.value),
       baseURL: base_url.value,

@@ -1,12 +1,11 @@
 <script setup>
-import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
-import { Attachments } from 'ant-design-x-vue';
+import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed, defineAsyncComponent } from 'vue';
+const AttachmentsFileCard = defineAsyncComponent(() =>
+    import('ant-design-x-vue').then(m => m.Attachments.FileCard)
+);
+
 import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
 import { Link, Delete, Promotion, Close, Microphone, Check } from '@element-plus/icons-vue';
-// [恢复] 重新引入 recorder-core 以实现声波
-import Recorder from 'recorder-core';
-import 'recorder-core/src/extensions/waveview.js';
-import 'recorder-core/src/engine/wav';
 
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
@@ -19,7 +18,7 @@ const props = defineProps({
     ctrlEnterToSend: Boolean,
     voiceList: { type: Array, default: () => [] },
     layout: { type: String, default: 'horizontal' },
-    isMcpActive: Boolean, // 新增 Prop
+    isMcpActive: Boolean,
 });
 const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog']);
 
@@ -31,21 +30,20 @@ const isDragging = ref(false);
 const dragCounter = ref(0);
 const isRecording = ref(false);
 
-// --- 新增Refs用于点击外部区域关闭弹窗 ---
+// --- Refs for closing popups ---
 const reasoningSelectorRef = ref(null);
 const voiceSelectorRef = ref(null);
 const audioSourceSelectorRef = ref(null);
 const reasoningButtonRef = ref(null);
 const voiceButtonRef = ref(null);
 const audioButtonRef = ref(null);
-// ------------------------------------
 
-let recorder = null; // for recorder-core (microphone with waveform)
+let recorder = null;
 let wave = null;
-let mediaRecorder = null; // for MediaRecorder (system audio)
+let mediaRecorder = null;
 let audioChunks = [];
 let audioStream = null;
-const currentRecordingSource = ref(null); // 'microphone' or 'system'
+const currentRecordingSource = ref(null);
 const isCancelledByButton = ref(false);
 
 const isAudioSourceSelectorVisible = ref(false);
@@ -57,66 +55,48 @@ watch(() => props.voiceList, (newVal) => {
 }, { immediate: true });
 
 // --- Computed Properties ---
-
 const reasoningTooltipContent = computed(() => {
     const map = { default: '默认', low: '低', medium: '中', high: '高' };
     return `思考预算: ${map[tempReasoningEffort.value] || '默认'}`;
 });
 
-// --- Helper function to manually insert a newline ---
+// --- Helper function ---
 const insertNewline = () => {
     const textarea = senderRef.value?.$refs.textarea;
     if (!textarea) return;
-
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const value = prompt.value;
-
     prompt.value = value.substring(0, start) + '\n' + value.substring(end);
-
     nextTick(() => {
         textarea.selectionStart = textarea.selectionEnd = start + 1;
         textarea.focus();
     });
 };
 
-
 // --- Event Handlers ---
 const handleKeyDown = (event) => {
-    if (event.isComposing) {
-        return;
-    }
-
+    if (event.isComposing) return;
     if (isRecording.value) {
         if (!((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c')) {
             event.preventDefault();
         }
         return;
     }
-
-    if (event.key !== 'Enter') {
-        return;
-    }
-
+    if (event.key !== 'Enter') return;
     const isCtrlOrMetaPressed = event.ctrlKey || event.metaKey;
-
     if (!props.ctrlEnterToSend) {
         if (isCtrlOrMetaPressed) {
             event.preventDefault();
             insertNewline();
         } else if (!event.shiftKey) {
             event.preventDefault();
-            if (!props.loading) {
-                emit('submit');
-            }
+            if (!props.loading) emit('submit');
         }
-    }
-    else {
+    } else {
         if (isCtrlOrMetaPressed) {
             event.preventDefault();
-            if (!props.loading) {
-                emit('submit');
-            }
+            if (!props.loading) emit('submit');
         }
     }
 };
@@ -141,8 +121,6 @@ const handleReasoningSelection = (effort) => {
 
 const toggleVoiceSelector = async () => {
     if (isRecording.value) return;
-
-    // 仅在打开弹窗时请求更新
     if (!isVoiceSelectorVisible.value) {
         try {
             const res = await window.api.getConfig();
@@ -152,12 +130,9 @@ const toggleVoiceSelector = async () => {
         } catch (e) {
             console.error("刷新语音列表失败", e);
         }
-
-        // 关闭互斥的弹窗
         isReasoningSelectorVisible.value = false;
         isAudioSourceSelectorVisible.value = false;
     }
-
     isVoiceSelectorVisible.value = !isVoiceSelectorVisible.value;
 };
 
@@ -174,8 +149,6 @@ const handleDragEnter = (event) => { preventDefaults(event); dragCounter.value++
 const handleDragLeave = (event) => { preventDefaults(event); dragCounter.value--; if (dragCounter.value <= 0) { isDragging.value = false; dragCounter.value = 0; } };
 const handleDrop = (event) => { preventDefaults(event); isDragging.value = false; dragCounter.value = 0; const files = event.dataTransfer.files; if (files && files.length > 0) { emit('upload', { file: files[0], fileList: Array.from(files) }); focus(); } };
 const handlePasteEvent = (event) => { const clipboardData = event.clipboardData || window.clipboardData; if (!clipboardData) return; const items = Array.from(clipboardData.items).filter(item => item.kind === 'file'); if (items.length > 0) { preventDefaults(event); const files = items.map(item => item.getAsFile()); emit('upload', { file: files[0], fileList: files }); focus(); } };
-
-// --- [重构] Audio Recording Logic ---
 
 const toggleAudioSourceSelector = () => {
     if (isRecording.value) return;
@@ -196,6 +169,12 @@ const startRecordingFromSource = async (sourceType) => {
 
     try {
         if (sourceType === 'microphone') {
+            // [优化] 动态导入 Recorder 及其插件
+            const RecorderLib = await import('recorder-core');
+            const Recorder = RecorderLib.default;
+            await import('recorder-core/src/extensions/waveview.js');
+            await import('recorder-core/src/engine/wav');
+
             await new Promise((resolve, reject) => {
                 Recorder.TrafficFree = true;
                 recorder = Recorder({
@@ -223,9 +202,8 @@ const startRecordingFromSource = async (sourceType) => {
             });
         } else if (sourceType === 'system') {
             const sources = await window.api.desktopCaptureSources({ types: ['screen', 'window'] });
-            if (!sources || sources.length === 0) {
-                throw new Error('未找到可用的系统音频源');
-            }
+            if (!sources || sources.length === 0) throw new Error('未找到可用的系统音频源');
+
             audioStream = await navigator.mediaDevices.getUserMedia({
                 audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } },
                 video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } },
@@ -282,13 +260,8 @@ const stopRecordingAndCleanup = () => {
 const handleCancelRecording = () => {
     isCancelledByButton.value = true;
     ElMessage.info('录音已取消');
-
     if (currentRecordingSource.value === 'microphone' && recorder) {
-        recorder.stop(() => {
-            stopRecordingAndCleanup();
-        }, () => {
-            stopRecordingAndCleanup();
-        });
+        recorder.stop(() => stopRecordingAndCleanup(), () => stopRecordingAndCleanup());
     } else if (currentRecordingSource.value === 'system' && mediaRecorder) {
         mediaRecorder.stop();
     }
@@ -296,7 +269,6 @@ const handleCancelRecording = () => {
 
 const handleConfirmAndSendRecording = () => {
     isCancelledByButton.value = false;
-
     if (currentRecordingSource.value === 'microphone' && recorder) {
         recorder.stop((blob) => {
             if (isCancelledByButton.value) {
@@ -317,36 +289,27 @@ const handleConfirmAndSendRecording = () => {
     }
 };
 
-// --- 点击外部区域关闭弹窗的逻辑 ---
 const handleClickOutside = (event) => {
     const target = event.target;
     if (!target) return;
-
-    // 检查思考预算选择器 (Reasoning Selector 是普通 div，直接使用 .contains)
     if (isReasoningSelectorVisible.value && reasoningSelectorRef.value && !reasoningSelectorRef.value.contains(target) && reasoningButtonRef.value && !reasoningButtonRef.value.$el.contains(target)) {
         isReasoningSelectorVisible.value = false;
     }
-    
-    // 检查语音选择器 
-    // [修复点] voiceSelectorRef 是 <el-scrollbar> 组件，必须使用 .$el 获取 DOM 元素才能调用 .contains
     if (isVoiceSelectorVisible.value && voiceSelectorRef.value && !voiceSelectorRef.value.$el.contains(target) && voiceButtonRef.value && !voiceButtonRef.value.$el.contains(target)) {
         isVoiceSelectorVisible.value = false;
     }
-    
-    // 检查音源选择器 (Audio Source Selector 是普通 div)
     if (isAudioSourceSelectorVisible.value && audioSourceSelectorRef.value && !audioSourceSelectorRef.value.contains(target) && audioButtonRef.value && !audioButtonRef.value.$el.contains(target)) {
         isAudioSourceSelectorVisible.value = false;
     }
 };
 
-// --- Lifecycle & Focus ---
 onMounted(() => {
     window.addEventListener('dragenter', handleDragEnter);
     window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('dragover', preventDefaults);
     window.addEventListener('drop', handleDrop);
     window.addEventListener('paste', handlePasteEvent);
-    document.addEventListener('click', handleClickOutside); // 新增：添加全局点击监听
+    document.addEventListener('click', handleClickOutside);
 });
 
 onBeforeUnmount(() => {
@@ -355,16 +318,14 @@ onBeforeUnmount(() => {
     window.removeEventListener('dragover', preventDefaults);
     window.removeEventListener('drop', handleDrop);
     window.removeEventListener('paste', handlePasteEvent);
-    document.removeEventListener('click', handleClickOutside); // 新增：移除全局点击监听
+    document.removeEventListener('click', handleClickOutside);
     stopRecordingAndCleanup();
 });
 
 const focus = (options = {}) => {
     const textarea = senderRef.value?.$refs.textarea;
     if (!textarea) return;
-
     textarea.focus();
-
     nextTick(() => {
         if (options.position && typeof options.position.start === 'number') {
             const textLength = prompt.value?.length || 0;
@@ -393,8 +354,8 @@ defineExpose({ focus, senderRef });
             <el-col :span="0" />
             <el-col :span="24">
                 <div class="file-card-container">
-                    <Attachments.FileCard v-for="(file, index) in fileList" :key="index" :item="file"
-                        v-on:remove="() => onRemoveFile(index)" :style="{ 'display': 'flex', 'float': 'left' }" />
+                    <AttachmentsFileCard v-for="(file, index) in fileList" :key="index" :item="file"
+                        v-on:remove="() => onRemoveFile(index)" />
                 </div>
             </el-col>
             <el-col :span="0" />
@@ -404,7 +365,6 @@ defineExpose({ focus, senderRef });
             <el-col :span="0" />
             <el-col :span="24">
                 <div class="waveform-display-area">
-                    <!-- [MODIFIED] Conditionally render waveform or text -->
                     <div v-if="currentRecordingSource === 'microphone'" ref="waveformCanvasContainer"
                         class="waveform-canvas"></div>
                     <span v-else class="recording-status-text">正在录制系统音频...</span>
@@ -413,7 +373,6 @@ defineExpose({ focus, senderRef });
             <el-col :span="0" />
         </el-row>
 
-        <!-- [MODIFIED] Redesigned Audio Source Selector -->
         <el-row v-if="isAudioSourceSelectorVisible" class="option-selector-row">
             <el-col :span="0" />
             <el-col :span="24">
@@ -428,7 +387,6 @@ defineExpose({ focus, senderRef });
             </el-col>
             <el-col :span="0" />
         </el-row>
-
 
         <el-row v-if="isReasoningSelectorVisible" class="option-selector-row">
             <el-col :span="0" />
@@ -612,12 +570,60 @@ html.dark .drag-overlay {
     gap: 8px;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-bottom: 8px;
+    padding-bottom: 4px;
     padding-top: 8px;
     max-height: 70px;
 }
 
-/* [ADDED] 美化文件预览容器的滚动条 */
+.file-card-container :deep(.ant-attachments-file-card-item) {
+    display: flex;
+    align-items: center;
+    background-color: var(--el-fill-color-light);
+    border: 1px solid var(--el-border-color-light);
+    border-radius: 6px;
+    padding: 6px 8px;
+    box-sizing: border-box;
+    height: auto;
+    width: auto;
+    margin-right: 8px; /* 替代 float，使用 flex 间距 */
+}
+
+.file-card-container :deep(.ant-attachment-list-card-type-overview) {
+    width:auto;
+    height: auto;
+    padding-right: 18px;
+    padding-top:4px;
+    padding-bottom: 8px;
+    padding-left: 10px;
+    justify-content: center;
+}
+
+/* 3. 深色模式适配 */
+html.dark .file-card-container :deep(.ant-attachments-file-card-item) {
+    background-color: #2c2c2c;
+    border-color: #4c4c4c;
+}
+
+/* 强制深色模式下所有文本变白 */
+html.dark .file-card-container :deep(.ant-typography),
+html.dark .file-card-container :deep(span),
+html.dark .file-card-container :deep(div) {
+    color: #e0e0e0 !important;
+}
+
+/* 辅助文本（大小等）稍微暗一点 */
+html.dark .file-card-container :deep(.ant-typography-secondary) {
+    color: #a0a0a0 !important;
+}
+
+/* 删除按钮颜色适配 */
+html.dark .file-card-container :deep(.anticon-close) {
+    color: #a0a0a0 !important;
+}
+html.dark .file-card-container :deep(.anticon-close:hover) {
+    color: #ffffff !important;
+}
+
 .file-card-container::-webkit-scrollbar {
     height: 6px;
 }
@@ -639,6 +645,7 @@ html.dark .drag-overlay {
 .file-card-container :deep(.ant-attachments-file-card-item-image) {
     width: 56px;
     height: 56px;
+    padding-bottom: 100px;
 }
 
 .file-card-container :deep(.ant-image-img) {
@@ -869,7 +876,6 @@ html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
     background-clip: content-box;
 }
 
-/* --- FINAL UI FIX for Buttons --- */
 .el-button.is-circle {
     color: var(--el-text-color-regular);
 }
@@ -952,20 +958,22 @@ html.dark .el-button--success.is-plain:focus {
     height: 20px;
     margin-left: -10px;
     margin-top: -10px;
-    
+
     border: 2px solid transparent;
     border-top-color: var(--el-text-color-secondary);
     border-right-color: var(--el-text-color-secondary);
     border-radius: 50%;
-    
+
     animation: spin 1s linear infinite;
-    pointer-events: none; /* 确保点击事件穿透到按钮 */
+    pointer-events: none;
+    /* 确保点击事件穿透到按钮 */
     box-sizing: border-box;
 }
 
 html.dark .static-icon {
     color: var(--el-text-color-primary);
 }
+
 html.dark .cancel-spinner {
     border-top-color: var(--el-text-color-primary);
     border-right-color: var(--el-text-color-primary);
@@ -975,6 +983,7 @@ html.dark .cancel-spinner {
     from {
         transform: rotate(0deg);
     }
+
     to {
         transform: rotate(360deg);
     }
