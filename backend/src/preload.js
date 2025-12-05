@@ -262,14 +262,26 @@ ipcRenderer.on('window-event', (e, { senderId, event }) => {
         const currentState = bw.isAlwaysOnTop();
         const newState = !currentState;
         bw.setAlwaysOnTop(newState);
-        // 将新状态发回给子窗口以更新UI
         bw.webContents.send('always-on-top-changed', newState);
         break;
       }
-      // 可以根据需要在此处添加更多事件，例如 'close-window'
       case 'close-window': {
         bw.close();
         windowMap.delete(senderId);
+        break;
+      }
+      // [新增] 最小化
+      case 'minimize-window': {
+        bw.minimize();
+        break;
+      }
+      // [新增] 最大化/还原
+      case 'maximize-window': {
+        if (bw.isMaximized()) {
+          bw.unmaximize();
+        } else {
+          bw.maximize();
+        }
         break;
       }
     }

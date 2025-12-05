@@ -4,6 +4,7 @@ import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, 
 import { createClient } from "webdav/web";
 import { QuestionFilled } from '@element-plus/icons-vue';
 
+import TitleBar from './components/TitleBar.vue';
 import ChatHeader from './components/ChatHeader.vue';
 const ChatMessage = defineAsyncComponent(() => import('./components/ChatMessage.vue'));
 import ChatInput from './components/ChatInput.vue';
@@ -30,11 +31,15 @@ const showDismissibleMessage = (options) => {
   };
   messageInstance = ElMessage(finalOpts);
 };
+
 showDismissibleMessage.success = (message) => showDismissibleMessage({ message, type: 'success' });
 showDismissibleMessage.error = (message) => showDismissibleMessage({ message, type: 'error' });
 showDismissibleMessage.info = (message) => showDismissibleMessage({ message, type: 'info' });
 showDismissibleMessage.warning = (message) => showDismissibleMessage({ message, type: 'warning' });
 
+const handleMinimize = () => window.api.windowControl('minimize-window');
+const handleMaximize = () => window.api.windowControl('maximize-window');
+const handleCloseWindow = () => window.api.windowControl('close-window');
 
 const chatInputRef = ref(null);
 const lastSelectionStart = ref(null);
@@ -69,6 +74,7 @@ const modelList = ref([]);
 const modelMap = ref({});
 const model = ref("");
 const isAlwaysOnTop = ref(true);
+const currentOS = ref('win');
 
 const currentProviderID = ref(defaultConfig.config.providerOrder[0]);
 const base_url = ref("");
@@ -112,13 +118,13 @@ const handleToolApproval = (toolCallId, isApproved) => {
 };
 const handleToggleAutoApprove = (val) => {
   isAutoApproveTools.value = val;
-  
+
   if (val) {
     pendingToolApprovals.value.forEach((resolve, id) => {
       resolve(true);
     });
     pendingToolApprovals.value.clear();
-    
+
     chat_show.value.forEach(msg => {
       if (msg.tool_calls) {
         msg.tool_calls.forEach(tc => {
@@ -513,7 +519,7 @@ const handleCopyImageFromViewer = (url) => {
       // 2. 如果是远程 URL，先下载
       const response = await fetch(url);
       if (!response.ok) throw new Error(`网络错误: ${response.statusText}`);
-      
+
       const blob = await response.blob();
 
       // Base64 是 uTools copyImage API 支持最稳定的格式
@@ -525,10 +531,10 @@ const handleCopyImageFromViewer = (url) => {
       });
 
       await new Promise(resolve => setTimeout(resolve, 50));
-      
+
       // 传递 Base64 字符串给 uTools
       await window.api.copyImage(base64Data);
-      
+
       showDismissibleMessage.success('图片已复制到剪贴板');
     } catch (error) {
       console.error('复制图片失败:', error);
@@ -756,6 +762,10 @@ onMounted(async () => {
       UserAvart.value = userInfo.avatar;
     } catch (err) {
       UserAvart.value = "user.png";
+    }
+
+    if (data?.os) {
+      currentOS.value = data.os; // 'macos', 'win', 'linux'
     }
 
     // 步骤 3: 设置模型列表
@@ -1197,7 +1207,7 @@ const saveSessionAsHtml = async () => {
 
   const generateHtmlContent = () => {
     let bodyContent = '';
-    let tocContent = ''; 
+    let tocContent = '';
 
     const truncate = (str, len = 50) => {
       if (!str) return '';
@@ -1207,17 +1217,17 @@ const saveSessionAsHtml = async () => {
 
     // 辅助函数：提取纯文本用于大纲显示
     const formatMessageText = (content) => {
-        if (!content) return "";
-        if (typeof content === 'string') return content;
-        if (!Array.isArray(content)) return String(content);
+      if (!content) return "";
+      if (typeof content === 'string') return content;
+      if (!Array.isArray(content)) return String(content);
 
-        let textString = "";
-        content.forEach(part => {
-            if (part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
-                textString += part.text;
-            }
-        });
-        return textString.trim();
+      let textString = "";
+      content.forEach(part => {
+        if (part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
+          textString += part.text;
+        }
+      });
+      return textString.trim();
     };
 
     const processContentToHtml = (content) => {
@@ -1248,13 +1258,13 @@ const saveSessionAsHtml = async () => {
       const isSystem = message.role === 'system';
       const isUser = message.role === 'user';
       const msgId = `msg-${index}`;
-      
+
       // --- 生成时间轴大纲节点 ---
       let tocText = '';
       if (isSystem) tocText = '系统提示词';
       else if (isUser) tocText = truncate(formatMessageText(message.content), 30) || '用户发送图片/文件';
       else tocText = truncate(formatMessageText(message.content), 30) || 'AI 回复';
-      
+
       // 根据角色设置点的样式类
       let dotClass = isUser ? 'user-dot' : 'ai-dot';
       if (isSystem) dotClass = 'system-dot';
@@ -1270,7 +1280,7 @@ const saveSessionAsHtml = async () => {
       let avatar = isUser ? UserAvart.value : AIAvart.value;
       if (!isUser) {
         if (avatar === 'ai.svg' || (!avatar.startsWith('http') && !avatar.startsWith('data:'))) {
-           avatar = `data:image/svg+xml;base64,${btoa(defaultAiSvg)}`;
+          avatar = `data:image/svg+xml;base64,${btoa(defaultAiSvg)}`;
         }
       }
 
@@ -1281,41 +1291,41 @@ const saveSessionAsHtml = async () => {
       const processedHtml = processContentToHtml(message.content);
       let contentHtml = '';
       if (processedHtml && processedHtml.trim() !== '') {
-          contentHtml = DOMPurify.sanitize(processedHtml, {
-            ADD_TAGS: ['video', 'audio', 'source', 'blockquote'],
-            USE_PROFILES: { html: true, svg: true },
-            ADD_ATTR: ['style']
-          });
+        contentHtml = DOMPurify.sanitize(processedHtml, {
+          ADD_TAGS: ['video', 'audio', 'source', 'blockquote'],
+          USE_PROFILES: { html: true, svg: true },
+          ADD_ATTR: ['style']
+        });
       }
 
       let toolsHtml = '';
       if (message.tool_calls && message.tool_calls.length > 0) {
-          toolsHtml = '<div class="tool-calls-wrapper">';
-          message.tool_calls.forEach(tool => {
-              const truncatedResult = truncate(tool.result, 100);
-              const safeResult = truncatedResult.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-              toolsHtml += `
+        toolsHtml = '<div class="tool-calls-wrapper">';
+        message.tool_calls.forEach(tool => {
+          const truncatedResult = truncate(tool.result, 100);
+          const safeResult = truncatedResult.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          toolsHtml += `
                 <div class="tool-call-box">
                     <span class="tool-icon">🛠️</span>
                     <span class="tool-name">${tool.name}</span>
                     <span class="tool-result">${safeResult}</span>
                 </div>`;
-          });
-          toolsHtml += '</div>';
+        });
+        toolsHtml += '</div>';
       }
 
       if (contentHtml || toolsHtml || isSystem) {
-          let headerHtml = '';
-          if (isSystem) {
-             headerHtml = `<div class="header system-header"><strong>系统提示词</strong></div>`;
-          } else if (isUser) {
-             headerHtml = `
+        let headerHtml = '';
+        if (isSystem) {
+          headerHtml = `<div class="header system-header"><strong>系统提示词</strong></div>`;
+        } else if (isUser) {
+          headerHtml = `
                <div class="header user-header">
                  <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
                  <img src="${avatar}" class="avatar" alt="avatar">
                </div>`;
-          } else {
-             headerHtml = `
+        } else {
+          headerHtml = `
                <div class="header ai-header">
                  <img src="${avatar}" class="avatar" alt="avatar">
                  <div class="ai-meta">
@@ -1326,11 +1336,11 @@ const saveSessionAsHtml = async () => {
                     <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
                  </div>
                </div>`;
-          }
+        }
 
-          const bodyHtml = contentHtml ? `<div class="message-body ${isUser ? 'user-body' : 'ai-body'} ${isSystem ? 'system-body' : ''}">${contentHtml}</div>` : '';
+        const bodyHtml = contentHtml ? `<div class="message-body ${isUser ? 'user-body' : 'ai-body'} ${isSystem ? 'system-body' : ''}">${contentHtml}</div>` : '';
 
-          bodyContent += `
+        bodyContent += `
             <div id="${msgId}" class="message-wrapper ${alignClass}">
               ${headerHtml}
               ${toolsHtml}
@@ -1687,41 +1697,49 @@ const handleSaveAction = async () => {
       h(ElButton, { type: opt.buttonType, plain: true }, { default: () => '选择' })
     ]);
   }));
-  ElMessageBox({ title: '选择保存方式', message: messageVNode, showConfirmButton: false, showCancelButton: false, customClass: 'save-options-dialog', width: '450px' }).catch(() => { });
+  ElMessageBox({
+    title: '',
+    message: messageVNode,
+    showConfirmButton: false,
+    showCancelButton: false,
+    customClass: 'save-options-dialog no-header-msgbox', // [新增] no-header-msgbox
+    width: '450px',
+    showClose: false
+  }).catch(() => { });
 };
 
 
 const loadSession = async (jsonData) => {
   // 1. 开始加载，重置状态
   loading.value = true;
-  collapsedMessages.value.clear(); 
-  messageRefs.clear(); 
+  collapsedMessages.value.clear();
+  messageRefs.clear();
   focusedMessageIndex.value = null;
 
   try {
     // 2. 优先恢复基础数据和UI相关的状态，让界面尽快渲染
-    CODE.value = jsonData.CODE; 
+    CODE.value = jsonData.CODE;
     document.title = CODE.value;
-    basic_msg.value = jsonData.basic_msg; 
+    basic_msg.value = jsonData.basic_msg;
     isInit.value = jsonData.isInit;
     autoCloseOnBlur.value = jsonData.autoCloseOnBlur;
 
-    history.value = jsonData.history; 
+    history.value = jsonData.history;
     chat_show.value = jsonData.chat_show;
     selectedVoice.value = jsonData.selectedVoice || '';
     tempReasoningEffort.value = jsonData.currentPromptConfig?.reasoning_effort || 'default';
-    isAutoApproveTools.value = jsonData.isAutoApproveTools || true; 
+    isAutoApproveTools.value = jsonData.isAutoApproveTools || true;
 
     // 3. 恢复配置和模型映射
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
-    
+
     zoomLevel.value = currentConfig.value.zoom || 1;
     if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(zoomLevel.value);
-    
-    if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); } 
+
+    if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); }
     else { document.documentElement.classList.remove('dark'); }
-    
+
     const currentPromptConfigFromLoad = jsonData.currentPromptConfig || currentConfig.value.prompts[CODE.value];
     if (currentPromptConfigFromLoad && currentPromptConfigFromLoad.icon) {
       AIAvart.value = currentPromptConfigFromLoad.icon;
@@ -1730,8 +1748,8 @@ const loadSession = async (jsonData) => {
       AIAvart.value = "ai.svg";
       favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
     }
-    
-    modelList.value = []; 
+
+    modelList.value = [];
     modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
@@ -1743,7 +1761,7 @@ const loadSession = async (jsonData) => {
         });
       }
     });
-    
+
     // 4. 恢复模型选择
     let restoredModel = '';
     if (jsonData.model && modelMap.value[jsonData.model]) restoredModel = jsonData.model;
@@ -1753,14 +1771,14 @@ const loadSession = async (jsonData) => {
       restoredModel = (currentPromptConfig?.model && modelMap.value[currentPromptConfig.model]) ? currentPromptConfig.model : (modelList.value[0]?.value || '');
     }
     model.value = restoredModel;
-    
+
     // 5. 恢复消息ID计数器
     if (chat_show.value && chat_show.value.length > 0) {
       chat_show.value.forEach(msg => { if (msg.id === undefined) msg.id = messageIdCounter.value++; });
       const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
       messageIdCounter.value = maxId + 1;
     }
-    
+
     // 6. 更新系统提示词（如果有变化）
     if (currentConfig.value.prompts[CODE.value]?.prompt) {
       if (history.value.length > 0 && history.value[0].role === "system") {
@@ -1771,21 +1789,21 @@ const loadSession = async (jsonData) => {
         chat_show.value.unshift({ id: messageIdCounter.value++, role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
       }
     }
-    
+
     if (model.value) {
       currentProviderID.value = model.value.split("|")[0];
       const provider = currentConfig.value.providers[currentProviderID.value];
       base_url.value = provider?.url;
       api_key.value = provider?.api_key;
-    } else { 
-      showDismissibleMessage.error("没有可用的模型。请检查您的服务商配置。"); 
-      loading.value = false; 
-      return; 
+    } else {
+      showDismissibleMessage.error("没有可用的模型。请检查您的服务商配置。");
+      loading.value = false;
+      return;
     }
-    
+
     // 7. 立即完成 UI 渲染状态，让用户看到聊天记录
-    loading.value = false; 
-    await nextTick(); 
+    loading.value = false;
+    await nextTick();
     scrollToBottom();
 
     // 8. 在 UI 渲染完成后，再异步处理 MCP 加载
@@ -1798,7 +1816,7 @@ const loadSession = async (jsonData) => {
     }
 
     // 验证 MCP ID
-    const validMcpServerIds = mcpServersToLoad.filter(id => 
+    const validMcpServerIds = mcpServersToLoad.filter(id =>
       currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
     );
 
@@ -1807,16 +1825,16 @@ const loadSession = async (jsonData) => {
       sessionMcpServerIds.value = [...validMcpServerIds];
       tempSessionMcpServerIds.value = [...validMcpServerIds];
       // 注意：这里不 await，让它在后台加载。ChatInput 会根据 isMcpLoading 状态显示加载动画
-      applyMcpTools(false); 
+      applyMcpTools(false);
     } else {
       sessionMcpServerIds.value = [];
       tempSessionMcpServerIds.value = [];
       applyMcpTools(false);
     }
 
-  } catch (error) { 
-    console.error("加载会话失败:", error); 
-    showDismissibleMessage.error(`加载会话失败: ${error.message}`); 
+  } catch (error) {
+    console.error("加载会话失败:", error);
+    showDismissibleMessage.error(`加载会话失败: ${error.message}`);
     loading.value = false; // 确保出错时也解除 loading
   }
 };
@@ -1840,32 +1858,32 @@ const checkAndLoadSessionFromFile = async (file) => {
 const file2fileList = async (file, idx) => {
   const isSessionFile = await checkAndLoadSessionFromFile(file);
   if (isSessionFile) { chatInputRef.value?.focus({ cursor: 'end' }); return; }
-  
+
   return new Promise((resolve, reject) => {
     // 使用后端 API 检查文件类型
-    if (!window.api.isFileTypeSupported(file.name)) { 
-        const errorMsg = `不支持的文件类型: ${file.name}`; 
-        showDismissibleMessage.warning(errorMsg); 
-        reject(new Error(errorMsg)); 
-        return; 
+    if (!window.api.isFileTypeSupported(file.name)) {
+      const errorMsg = `不支持的文件类型: ${file.name}`;
+      showDismissibleMessage.warning(errorMsg);
+      reject(new Error(errorMsg));
+      return;
     }
-    
+
     const reader = new FileReader();
-    reader.onload = (e) => { 
-        // 保持原逻辑：前端只负责读取 Base64 用于预览和后续发送
-        fileList.value.push({ 
-            uid: idx, 
-            name: file.name, 
-            size: file.size, 
-            type: file.type, 
-            url: e.target.result 
-        }); 
-        resolve(); 
+    reader.onload = (e) => {
+      // 保持原逻辑：前端只负责读取 Base64 用于预览和后续发送
+      fileList.value.push({
+        uid: idx,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: e.target.result
+      });
+      resolve();
     };
-    reader.onerror = () => { 
-        const errorMsg = `读取文件 ${file.name} 失败`; 
-        showDismissibleMessage.error(errorMsg); 
-        reject(new Error(errorMsg)); 
+    reader.onerror = () => {
+      const errorMsg = `读取文件 ${file.name} 失败`;
+      showDismissibleMessage.error(errorMsg);
+      reject(new Error(errorMsg));
     }
     reader.readAsDataURL(file);
   });
@@ -1881,32 +1899,32 @@ const processFilePath = async (filePath) => {
 };
 
 const sendFile = async () => {
-  let contentList = []; 
+  let contentList = [];
   if (fileList.value.length === 0) return contentList;
-  
+
   for (const currentFile of fileList.value) {
     try {
-        // 调用后端复用的解析逻辑
-        // currentFile 结构为 { name, url(Base64) }，正好符合 file.js 中 handler 的入参
-        const processedContent = await window.api.parseFileObject({
-            name: currentFile.name,
-            url: currentFile.url
-        });
-        
-        if (processedContent) {
-            contentList.push(processedContent);
-        }
+      // 调用后端复用的解析逻辑
+      // currentFile 结构为 { name, url(Base64) }，正好符合 file.js 中 handler 的入参
+      const processedContent = await window.api.parseFileObject({
+        name: currentFile.name,
+        url: currentFile.url
+      });
+
+      if (processedContent) {
+        contentList.push(processedContent);
+      }
     } catch (error) {
-        // 如果后端抛出不支持类型或其他解析错误
-        if (error.message.includes('不支持的文件类型')) {
-            showDismissibleMessage.warning(error.message);
-        } else {
-            showDismissibleMessage.error(`处理文件 ${currentFile.name} 失败: ${error.message}`);
-        }
+      // 如果后端抛出不支持类型或其他解析错误
+      if (error.message.includes('不支持的文件类型')) {
+        showDismissibleMessage.warning(error.message);
+      } else {
+        showDismissibleMessage.error(`处理文件 ${currentFile.name} 失败: ${error.message}`);
+      }
     }
   }
-  
-  fileList.value = []; 
+
+  fileList.value = [];
   return contentList;
 };
 
@@ -2339,9 +2357,9 @@ All outputs must strictly follow the structured process below until the task is 
         tool_calls_count++;
         // 初始化时增加 approvalStatus 状态
         currentBubble.tool_calls = responseMessage.tool_calls.map(tc => ({
-          id: tc.id, 
-          name: tc.function.name, 
-          args: tc.function.arguments, 
+          id: tc.id,
+          name: tc.function.name,
+          args: tc.function.arguments,
           result: '等待批准...', // 初始状态显示
           approvalStatus: isAutoApproveTools.value ? 'approved' : 'waiting' // 状态: waiting, approved, rejected, executing, finished
         }));
@@ -2356,33 +2374,33 @@ All outputs must strictly follow the structured process below until the task is 
 
             // --- 审批拦截逻辑 ---
             if (!isAutoApproveTools.value) {
-                try {
-                    // 挂起 Promise，等待用户点击按钮
-                    const isApproved = await new Promise((resolve) => {
-                        pendingToolApprovals.value.set(toolCall.id, resolve);
-                    });
+              try {
+                // 挂起 Promise，等待用户点击按钮
+                const isApproved = await new Promise((resolve) => {
+                  pendingToolApprovals.value.set(toolCall.id, resolve);
+                });
 
-                    if (!isApproved) {
-                        if (uiToolCall) {
-                            uiToolCall.approvalStatus = 'rejected';
-                            uiToolCall.result = '用户已取消执行';
-                        }
-                        return { 
-                            tool_call_id: toolCall.id, 
-                            role: "tool", 
-                            name: toolCall.function.name, 
-                            content: "User denied this tool execution." 
-                        };
-                    }
-                } catch (e) {
-                    // 防止意外中断
+                if (!isApproved) {
+                  if (uiToolCall) {
+                    uiToolCall.approvalStatus = 'rejected';
+                    uiToolCall.result = '用户已取消执行';
+                  }
+                  return {
+                    tool_call_id: toolCall.id,
+                    role: "tool",
+                    name: toolCall.function.name,
+                    content: "User denied this tool execution."
+                  };
                 }
+              } catch (e) {
+                // 防止意外中断
+              }
             }
-            
+
             // 批准后，更新状态为执行中
             if (uiToolCall) {
-                uiToolCall.approvalStatus = 'executing';
-                uiToolCall.result = '执行中...';
+              uiToolCall.approvalStatus = 'executing';
+              uiToolCall.result = '执行中...';
             }
             const controller = new AbortController();
             toolCallControllers.value.set(toolCall.id, controller);
@@ -2391,10 +2409,10 @@ All outputs must strictly follow the structured process below until the task is 
               const toolArgs = JSON.parse(toolCall.function.arguments);
               const result = await window.api.invokeMcpTool(toolCall.function.name, toolArgs, controller.signal);
               toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
-              
+
               if (uiToolCall) {
-                  uiToolCall.result = toolContent;
-                  uiToolCall.approvalStatus = 'finished'; // 标记完成
+                uiToolCall.result = toolContent;
+                uiToolCall.approvalStatus = 'finished'; // 标记完成
               }
             } catch (e) {
               if (e.name === 'AbortError') {
@@ -2781,41 +2799,27 @@ const handleGlobalKeyDown = (event) => {
 
 <template>
   <main>
-    <el-container>
-      <ChatHeader :favicon="favicon" :modelMap="modelMap" :model="model" :autoCloseOnBlur="autoCloseOnBlur"
-        :is-always-on-top="isAlwaysOnTop" :is-mcp-loading="isMcpLoading" @save-window-size="handleSaveWindowSize"
-        @open-model-dialog="handleOpenModelDialog" @toggle-pin="handleTogglePin"
-        @toggle-always-on-top="handleToggleAlwaysOnTop" @save-session="handleSaveSession" />
+    <el-container class="app-container">
+      <TitleBar :favicon="favicon" :promptName="CODE" :conversationName="defaultConversationName"
+        :isAlwaysOnTop="isAlwaysOnTop" :autoCloseOnBlur="autoCloseOnBlur" :isDarkMode="currentConfig.isDarkMode"
+        :os="currentOS" @save-window-size="handleSaveWindowSize" @save-session="handleSaveSession"
+        @toggle-pin="handleTogglePin" @toggle-always-on-top="handleToggleAlwaysOnTop" @minimize="handleMinimize"
+        @maximize="handleMaximize" @close="handleCloseWindow" />
+      <ChatHeader :modelMap="modelMap" :model="model" :is-mcp-loading="isMcpLoading"
+        @open-model-dialog="handleOpenModelDialog" />
 
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
           @scroll="handleScroll">
-          <ChatMessage 
-            v-for="(message, index) in chat_show" 
-            :key="message.id" 
-            :is-auto-approve="isAutoApproveTools" 
-            @update-auto-approve="handleToggleAutoApprove"
-            @confirm-tool="handleToolApproval"
-            @reject-tool="handleToolApproval"
-            :ref="el => setMessageRef(el, index)"
-            :message="message" 
-            :index="index" 
-            :is-last-message="index === chat_show.length - 1" 
-            :is-loading="loading"
-            :user-avatar="UserAvart" 
-            :ai-avatar="AIAvart" 
-            :is-collapsed="isCollapsed(index)"
-            :is-dark-mode="currentConfig.isDarkMode" 
-            @delete-message="handleDeleteMessage" 
-            @copy-text="handleCopyText"
-            @re-ask="handleReAsk" 
-            @toggle-collapse="handleToggleCollapse" 
-            @show-system-prompt="handleShowSystemPrompt"
-            @avatar-click="onAvatarClick" 
-            @edit-message-requested="handleEditStart" 
-            @edit-finished="handleEditEnd"
-            @edit-message="handleEditMessage" 
-            @cancel-tool-call="handleCancelToolCall" />
+          <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :is-auto-approve="isAutoApproveTools"
+            @update-auto-approve="handleToggleAutoApprove" @confirm-tool="handleToolApproval"
+            @reject-tool="handleToolApproval" :ref="el => setMessageRef(el, index)" :message="message" :index="index"
+            :is-last-message="index === chat_show.length - 1" :is-loading="loading" :user-avatar="UserAvart"
+            :ai-avatar="AIAvart" :is-collapsed="isCollapsed(index)" :is-dark-mode="currentConfig.isDarkMode"
+            @delete-message="handleDeleteMessage" @copy-text="handleCopyText" @re-ask="handleReAsk"
+            @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
+            @avatar-click="onAvatarClick" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"
+            @edit-message="handleEditMessage" @cancel-tool-call="handleCancelToolCall" />
         </el-main>
 
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
@@ -2879,9 +2883,12 @@ const handleGlobalKeyDown = (event) => {
   <ModelSelectionDialog v-model="changeModel_page" :modelList="modelList" :currentModel="model"
     @select="handleChangeModel" @save-model="handleSaveModel" />
 
-  <el-dialog v-model="systemPromptDialogVisible" title="编辑系统提示词" custom-class="system-prompt-dialog" width="60%"
-    :show-close="true" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"
+  <el-dialog v-model="systemPromptDialogVisible" title="" show-close="false" custom-class="system-prompt-dialog"
+    width="60%" :show-close="true" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"
     :close-on-press-escape="true">
+    <template #header="{ close, titleId, titleClass }">
+      <div style="display: none;"></div>
+    </template>
     <el-input v-model="systemPromptContent" type="textarea" :autosize="{ minRows: 4, maxRows: 15 }"
       class="system-prompt-full-content" resize="none" />
     <template #footer>
@@ -2899,8 +2906,11 @@ const handleGlobalKeyDown = (event) => {
       title="下载图片" />
   </div>
 
-  <el-dialog v-model="isMcpDialogVisible" title="启用 MCP" width="80%" top="10vh" custom-class="mcp-dialog"
-    @close="focusOnInput">
+  <el-dialog v-model="isMcpDialogVisible" width="80%" custom-class="mcp-dialog no-header-dialog"
+    @close="focusOnInput" :show-close="false">
+    <template #header>
+      <div style="display: none;"></div>
+    </template>
     <div class="mcp-dialog-content">
       <div class="mcp-dialog-toolbar">
         <el-button-group>
@@ -2955,19 +2965,19 @@ const handleGlobalKeyDown = (event) => {
     <template #footer>
       <div class="mcp-dialog-footer">
         <div class="footer-left-controls"> <!-- 使用新容器包裹左侧内容 -->
-            <span class="mcp-limit-hint" :class="{ 'warning': mcpConnectionCount > 5 }">
-              连接数：{{ 5 - mcpConnectionCount }}/5
-              <el-tooltip placement="top">
-                <template #content>
-                  持久连接各占1个名额<br>
-                  所有临时连接共占1个名额
-                </template>
-                <el-icon style="vertical-align: middle; margin-left: 4px; cursor: help;">
-                  <QuestionFilled />
-                </el-icon>
-              </el-tooltip>
-            </span>
-            <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" style="margin-left: 40px; margin-right: 0;" />
+          <span class="mcp-limit-hint" :class="{ 'warning': mcpConnectionCount > 5 }">
+            连接数：{{ 5 - mcpConnectionCount }}/5
+            <el-tooltip placement="top">
+              <template #content>
+                持久连接各占1个名额<br>
+                所有临时连接共占1个名额
+              </template>
+              <el-icon style="vertical-align: middle; margin-left: 4px; cursor: help;">
+                <QuestionFilled />
+              </el-icon>
+            </el-tooltip>
+          </span>
+          <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" style="margin-left: 40px; margin-right: 0;" />
         </div>
         <div>
           <el-button type="primary"
@@ -2983,6 +2993,43 @@ const handleGlobalKeyDown = (event) => {
 html:not(.dark) {
   --text-primary: #000000;
   --el-text-color-primary: var(--text-primary);
+}
+
+.el-dialog {
+  border-radius: 8px !important;
+  /* [修改] 设置较大的圆角 */
+  overflow: hidden;
+  /* 确保内容不溢出圆角 */
+}
+
+.el-message-box {
+  border-radius: 8px !important;
+  /* [修改] 设置较大的圆角 */
+  overflow: hidden;
+}
+
+.el-dialog__header {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  padding-bottom: 0 !important;
+}
+
+.el-dialog__footer {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.mcp-dialog {
+  border-radius: 8px !important;
+}
+
+.model-dialog {
+  border-radius: 8px !important;
+}
+
+.el-dialog__body {
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
 }
 
 .save-options-dialog.el-dialog {
@@ -3395,10 +3442,28 @@ html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::a
   border-color: #1d1d1d !important;
   /* 设置为深色 */
 }
+
+.no-header-dialog .el-dialog__header {
+  display: none !important;
+  padding: 0 !important;
+}
+
+.no-header-dialog .el-dialog__body {
+  padding-top: 10px !important;
+  /* 恢复一些顶部间距 */
+}
+
+.no-header-msgbox .el-message-box__header {
+  display: none !important;
+}
+
+.no-header-msgbox .el-message-box__content {
+  padding-top: 10px !important;
+}
 </style>
 
 <style scoped lang="less">
-.el-container {
+.app-container {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -3407,6 +3472,11 @@ html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::a
   background-color: var(--el-bg-color-page);
   color: var(--el-text-color-primary);
   font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+
+  border: 1px solid var(--el-border-color-dark);
+  box-sizing: border-box;
+  border-radius: 8px;
+  /* 如果你想要圆角可以加这个 */
 }
 
 .main-area-wrapper {

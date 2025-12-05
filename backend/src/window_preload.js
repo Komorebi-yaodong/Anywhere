@@ -90,6 +90,12 @@ window.api = {
         console.error("senderId is not available, cannot toggle always-on-top.");
       }
     },
+    windowControl: (action) => {
+      if (senderId) {
+        // action 对应 preload.js switch 中的 case，例如 'minimize-window'
+        utools.sendToParent('window-event', { senderId, event: action });
+      }
+    },
     // 监听父进程发回的状态变更消息
     onAlwaysOnTopChanged: (callback) => {
       ipcRenderer.on('always-on-top-changed', (event, newState) => {

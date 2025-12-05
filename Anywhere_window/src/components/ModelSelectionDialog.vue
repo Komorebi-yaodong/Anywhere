@@ -61,19 +61,36 @@ const handleClose = () => {
     searchQuery.value = ''; // 关闭时清空搜索词
     emit('update:modelValue', false);
 };
-
-const handleSelect = (modelValue) => emit('select', modelValue);
 </script>
 
 <template>
-    <el-dialog title="选择模型" :model-value="modelValue" @update:model-value="handleClose" width="70%"
-        custom-class="model-dialog" top="8vh" @opened="handleOpened">
+    <el-dialog 
+        :model-value="modelValue" 
+        @update:model-value="handleClose" 
+        width="80%"
+        custom-class="model-dialog no-header-dialog" 
+        @opened="handleOpened"
+        :show-close="false"
+    >
+        <!-- 移除默认标题栏 -->
+        <template #header>
+            <div style="display: none;"></div>
+        </template>
+
         <div class="model-search-container">
             <el-input ref="searchInputRef" v-model="searchQuery" placeholder="搜索服务商或模型名称..." clearable :prefix-icon="Search" />
         </div>
-        <el-table :data="filteredModelList" stripe style="width: 100%; height: 400px;" :max-height="400" :border="true"
-            :span-method="tableSpanMethod" width="100%">
-            <el-table-column label="服务商" align="center" prop="provider" width="100">
+        
+        <el-table 
+            :data="filteredModelList" 
+            stripe 
+            style="width: 100%;" 
+            max-height="50vh" 
+            :border="true"
+            :span-method="tableSpanMethod" 
+            width="100%"
+        >
+            <el-table-column label="服务商" align="center" prop="provider" width="120">
                 <template #default="scope">
                     <strong>{{ scope.row.label.split("|")[0] }}</strong>
                 </template>
@@ -107,5 +124,9 @@ const handleSelect = (modelValue) => emit('select', modelValue);
 
 .el-button.is-link.is-current-model:hover {
   color: #ebb563;
+}
+
+:deep(.el-dialog__header) {
+    padding-bottom:0 !important;
 }
 </style>

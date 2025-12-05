@@ -1,161 +1,166 @@
 <script setup>
-import { ElHeader, ElTooltip, ElButton, ElIcon } from 'element-plus';
-import { Download, Loading } from '@element-plus/icons-vue';
+import { computed } from 'vue';
+import { ElHeader, ElIcon } from 'element-plus';
+import { Loading } from '@element-plus/icons-vue';
 
-defineProps({
-  favicon: String,
+const props = defineProps({
   modelMap: Object,
   model: String,
-  autoCloseOnBlur: Boolean,
-  isAlwaysOnTop: Boolean,
   isMcpLoading: Boolean,
 });
 
 const emit = defineEmits([
-  'save-window-size',
   'open-model-dialog',
-  'toggle-pin',
-  'toggle-always-on-top',
-  'save-session'
 ]);
+
+// 1. 字符串转颜色函数 (HSL 模式，保证亮度和饱和度适中)
+const stringToColor = (str) => {
+  if (!str) return '#3b82f6'; // 默认蓝色
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // H: 0-360 (色相)
+  const h = Math.abs(hash) % 360;
+  // S: 60-80% (饱和度，保持鲜艳)
+  const s = 60 + (Math.abs(hash) % 20); 
+  // L: 50-60% (亮度，保持清晰可见)
+  const l = 50 + (Math.abs(hash) % 10);
+
+  return `hsl(${h}, ${s}%, ${l}%)`;
+};
+
+// 2. 计算当前 Logo 颜色
+const logoColor = computed(() => {
+  // 使用 model ID 或显示名称作为 Hash 种子
+  const seed = props.model || 'default';
+  return stringToColor(seed);
+});
 </script>
 
 <template>
-  <el-header class="header">
-    <div class="header-content-wrapper">
-      <div class="header-left">
-        <el-tooltip content="保存窗口位置、大小与缩放" placement="bottom">
-          <el-button @click="emit('save-window-size')">
-            <img :src="favicon" class="windows-logo" alt="App logo">
-          </el-button>
-        </el-tooltip>
-      </div>
-      <div class="header-center">
-        <el-button class="model-selector-btn" @click="emit('open-model-dialog')" :disabled="isMcpLoading">
-          <el-icon v-if="isMcpLoading" class="is-loading" style="margin-right: 6px;">
-            <Loading />
-          </el-icon>
-          {{ isMcpLoading ? '加载工具中...' : (modelMap[model] || '选择模型') }}
-        </el-button>
-      </div>
-      <div class="header-right">
-        <el-tooltip :content="autoCloseOnBlur ? '失焦时自动关闭窗口' : '保持窗口开启'" placement="bottom">
-          <el-button @click="emit('toggle-pin')">
-            <!-- 失焦关闭图标（空心圆） -->
-            <svg v-show="autoCloseOnBlur" viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor"
-                d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
-            </svg>
-            <!-- 取消失焦关闭，固定窗口图表（实心锁） -->
-            <svg v-show="!autoCloseOnBlur" viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor"
-                d="M12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-9h-1V7c0-2.76-2.24-5-5-5S7 4.24 7 7v1H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 7c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v1H8.9V7z" />
-            </svg>
-          </el-button>
-        </el-tooltip>
-
-        <!-- 窗口置顶功能 -->
-        <el-tooltip :content="isAlwaysOnTop ? '取消置顶' : '窗口置顶'" placement="bottom">
-          <el-button @click="emit('toggle-always-on-top')">
-            <!-- 已置顶 (新的描边风格Pin图标) -->
-            <svg v-if="isAlwaysOnTop" viewBox="0 0 24 24" width="16" height="16" fill="none"
-              xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M14.6358 3.90949C15.2888 3.47412 15.6153 3.25643 15.9711 3.29166C16.3269 3.32689 16.6044 3.60439 17.1594 4.15938L19.8406 6.84062C20.3956 7.39561 20.6731 7.67311 20.7083 8.02888C20.7436 8.38465 20.5259 8.71118 20.0905 9.36424L18.4419 11.8372C17.88 12.68 17.5991 13.1013 17.3749 13.5511C17.2086 13.8845 17.0659 14.2292 16.9476 14.5825C16.7882 15.0591 16.6889 15.5557 16.4902 16.5489L16.2992 17.5038C16.2986 17.5072 16.2982 17.5089 16.298 17.5101C16.1556 18.213 15.3414 18.5419 14.7508 18.1351C14.7497 18.1344 14.7483 18.1334 14.7455 18.1315V18.1315C14.7322 18.1223 14.7255 18.1177 14.7189 18.1131C11.2692 15.7225 8.27754 12.7308 5.88691 9.28108C5.88233 9.27448 5.87772 9.26782 5.86851 9.25451V9.25451C5.86655 9.25169 5.86558 9.25028 5.86486 9.24924C5.45815 8.65858 5.78704 7.84444 6.4899 7.70202C6.49113 7.70177 6.49282 7.70144 6.49618 7.70076L7.45114 7.50977C8.44433 7.31113 8.94092 7.21182 9.4175 7.05236C9.77083 6.93415 10.1155 6.79139 10.4489 6.62514C10.8987 6.40089 11.32 6.11998 12.1628 5.55815L14.6358 3.90949Z"
-                stroke="currentColor" stroke-width="2"></path>
-              <path d="M5 19L9.5 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
-            </svg>
-            <!-- 未置顶 (窗口图标) -->
-            <svg v-else viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor"
-                d="M20,8 L20,5.5 C20,4.67157288 19.3284271,4 18.5,4 L5.5,4 C4.67157288,4 4,4.67157288 4,5.5 L4,8 L20,8 Z M20,9 L4,9 L4,18.5 C4,19.3284271 4.67157288,20 5.5,20 L18.5,20 C19.3284271,20 20,19.3284271 20,18.5 L20,9 Z M3,5.5 C3,4.11928813 4.11928813,3 5.5,3 L18.5,3 C19.8807119,3 21,4.11928813 21,5.5 L21,18.5 C21,19.8807119 19.8807119,21 18.5,21 L5.5,21 C4.11928813,21 3,19.8807119 3,18.5 L3,5.5 Z" />
-            </svg>
-          </el-button>
-        </el-tooltip>
-
-        <el-tooltip content="保存会话" placement="bottom">
-          <el-button @click="emit('save-session')" :icon="Download" />
-        </el-tooltip>
+  <el-header class="model-header">
+    <div class="model-header-wrapper">
+      <div 
+        class="model-pill" 
+        :class="{ 'is-disabled': isMcpLoading }" 
+        @click="!isMcpLoading && emit('open-model-dialog')"
+      >
+        <!-- 3. 应用动态颜色 -->
+        <div class="model-logo-container" :style="{ color: logoColor }">
+          <svg class="model-logo" width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g clip-path="url(#clip0_11482_204655)">
+              <path d="M24.9439 24.7319C25.824 27.2847 25.4279 29.2944 23.7589 30.7231C22.2911 31.9822 19.8552 32.4878 18.3842 31.2946C16.8252 30.0291 15.9012 30.1076 14.3202 31.2914C12.7769 32.4438 10.8062 32.1141 9.19691 30.8926C7.59392 29.6743 7.04073 28.0069 7.33304 26.0413C7.39276 25.6425 7.7165 25.2908 7.5562 24.7633C6.48126 25.0396 5.45346 25.564 4.29051 25.3599C2.38579 25.0239 1.01225 24.0128 0.333338 22.1948C-0.370719 20.3076 0.0724596 18.6088 1.38942 17.1142C1.75717 16.6966 2.3795 16.4642 1.64087 15.6698C-0.226136 13.6602 -0.465012 11.5218 0.732513 9.54359C1.93004 7.56224 4.08621 6.84317 6.77043 7.53084C6.91815 7.62504 7.06588 7.71924 7.21046 7.8103C7.34562 7.55596 7.30161 7.34244 7.05645 7.17915C5.67662 3.03432 8.04024 -0.356908 12.0414 0.0324552C13.2515 0.148636 14.2196 0.732681 15.0462 1.57107C15.4266 1.95729 15.7126 2.19907 16.1683 1.65585C17.9442 -0.454249 20.9679 -0.259567 22.4577 0.713841C24.4316 2.00125 25.0162 3.81305 24.353 6.92167C24.3467 6.95307 24.4158 7.00017 24.5039 7.11007C25.3902 6.85259 26.286 6.41299 27.2824 6.49463C29.2782 6.65477 30.7649 7.58422 31.5664 9.43683C32.3899 11.3491 32.0159 13.0981 30.6958 14.6932C30.3815 15.0732 29.426 15.3401 30.3092 16.1157C32.4622 17.9965 32.2642 20.7849 31.2427 22.3769C29.9949 24.3206 28.1404 24.9674 25.3179 24.3928C25.1105 24.2107 24.8873 24.1541 24.639 24.3017C24.7427 24.4462 24.8465 24.5906 24.9502 24.7319H24.9439ZM2.46122 12.2315C2.45179 12.9694 2.87297 13.5974 3.44816 14.1657C4.96942 15.6666 6.46555 17.1896 7.98995 18.6873C8.91717 19.5948 9.87582 21.1554 10.8219 21.1585C11.7491 21.1585 12.6763 19.554 13.6067 18.6559C13.6821 18.5837 13.7513 18.5052 13.833 18.4393C14.295 18.0813 14.1504 17.783 13.7921 17.4282C11.3845 15.0481 9.01146 12.6334 6.58498 10.2721C5.80864 9.51533 4.8217 9.38031 3.83476 9.86702C2.91383 10.316 2.44236 11.0853 2.46122 12.2346V12.2315ZM12.1609 29.5267C12.9781 29.4671 13.5784 29.0997 14.1127 28.5596C15.6529 27.0053 17.2118 25.4667 18.7645 23.9249C20.6986 22.0011 20.6755 20.1213 18.6954 18.2854C18.62 18.2163 18.5477 18.1378 18.4817 18.0593C18.1925 17.7139 17.9316 17.7014 17.5984 18.0405C15.1468 20.5243 12.6606 22.9766 10.2341 25.4855C9.51436 26.2297 9.53322 27.2094 9.94811 28.1231C10.3787 29.0683 11.2022 29.4671 12.164 29.5299L12.1609 29.5267ZM21.0999 10.2156C20.1224 11.2926 19.2454 12.3257 18.2962 13.2865C17.8185 13.7701 17.8216 14.0715 18.3056 14.5457C20.6504 16.8442 22.9354 19.2023 25.2959 21.482C26.4589 22.6061 27.9204 22.5496 28.9168 21.4883C29.8377 20.5054 29.8283 19.0453 28.7879 17.9777C26.3174 15.4406 23.8092 12.9411 21.0999 10.2124V10.2156ZM22.3445 4.88066C22.3445 3.83189 21.8165 3.06258 20.927 2.62612C19.8866 2.11743 18.8934 2.35293 18.0668 3.1662C16.4355 4.77703 14.8105 6.39101 13.1949 8.01754C10.2907 10.9378 10.3127 10.9252 13.3741 13.6853C13.8927 14.1532 14.1284 14.1155 14.5905 13.6445C16.8504 11.3397 19.1511 9.07259 21.4393 6.79607C21.9737 6.26541 22.3382 5.65938 22.3445 4.88066ZM8.91717 4.83983C8.99575 5.81952 9.4075 6.66733 10.2058 7.07239C10.9979 7.47432 11.2399 6.46323 11.7083 6.08328C12.3494 5.56204 12.8932 4.92148 13.4904 4.34371C13.723 4.11763 13.9744 3.91667 13.6601 3.58382C12.8806 2.76114 12.0383 2.11429 10.7936 2.4754C9.58351 2.82708 9.05547 3.70001 8.91717 4.83983ZM27.1535 8.87791C26.0691 8.91873 25.2645 9.41799 24.859 10.1873C24.5039 10.8624 25.4374 11.1387 25.802 11.5752C26.33 12.2095 26.9523 12.7684 27.5558 13.3367C27.779 13.5471 27.9456 14.0181 28.4076 13.5754C29.2374 12.7778 29.8629 11.8986 29.4763 10.696C29.1054 9.54987 28.2693 8.92187 27.1535 8.88105V8.87791ZM4.46338 22.9766C5.9155 22.9986 6.72642 22.4962 7.13188 21.7332C7.53735 20.9701 6.51269 20.7127 6.13238 20.2354C5.62005 19.5885 4.97257 19.0516 4.40052 18.455C4.11136 18.1535 3.87248 18.0531 3.50788 18.3828C2.61209 19.1866 2.20034 20.1569 2.58066 21.3061C2.93898 22.3926 3.7719 22.9546 4.46338 22.9766ZM23.036 27.0649C23.0989 26.0036 22.5331 25.1778 21.7128 24.7633C21.1062 24.4556 20.7856 25.3725 20.3487 25.743C19.7169 26.2768 19.1731 26.9079 18.5822 27.492C18.3151 27.7557 18.0322 27.9881 18.4188 28.3869C19.1763 29.1656 20.0124 29.7528 21.1627 29.4325C22.3445 29.1028 22.9669 28.2895 23.0392 27.0681L23.036 27.0649Z" fill="currentColor"></path>
+            </g>
+            <defs>
+              <clipPath id="clip0_11482_204655">
+                <rect width="32" height="32" fill="white"></rect>
+              </clipPath>
+            </defs>
+          </svg>
+        </div>
+        
+        <el-icon v-if="isMcpLoading" class="is-loading loading-icon">
+          <Loading />
+        </el-icon>
+        
+        <span class="model-text">
+          {{ isMcpLoading ? '加载工具中...' : (modelMap[model] || model || '选择模型') }}
+        </span>
+        
+        <!-- 2. 右侧上下箭头 -->
+        <el-icon class="arrow-icon" :size="12">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M7 10L12 5L17 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M7 14L12 19L17 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </el-icon>
       </div>
     </div>
   </el-header>
 </template>
 
 <style scoped>
-.header {
-  height: 40px;
+.model-header {
+  height: 40px; 
   width: 100%;
-  padding: 0;
+  padding: 0 16px;
   flex-shrink: 0;
-  z-index: 10;
+  z-index: 9;
   background-color: var(--el-bg-color);
-  display: flex;
-  align-items: center;
 }
 
-.header-content-wrapper {
+.model-header-wrapper {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-}
-
-.header-left,
-.header-right {
-  flex-shrink: 0;
-}
-
-.header-center {
-  flex-grow: 1;
-  min-width: 0;
-  text-align: center;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.header .el-button {
-  height: 30px;
-  width: 30px;
-  padding: 0;
-  margin: 0;
-  border: none;
-  background-color: transparent;
-  color: var(--el-text-color-regular);
-  border-radius: var(--el-border-radius-base);
-  transition: background-color .2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.header .el-button:hover:not(:disabled) {
+.model-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 8px;
   background-color: var(--el-fill-color-light);
-}
-
-.header .windows-logo {
-  width: 18px;
-  height: 18px;
+  border-radius: 12px;
   cursor: pointer;
-  vertical-align: middle;
+  transition: background-color 0.2s ease;
+  user-select: none;
+  max-width: 100%;
 }
 
-.header .model-selector-btn {
-  max-width: 100%;
-  width: auto;
-  height: 32px;
-  padding: 0 10px;
-  margin: 0 auto;
+.model-pill:hover {
+  background-color: var(--el-fill-color);
+}
+
+.model-pill:active {
+  transform: scale(0.98);
+}
+
+.model-pill.is-disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.model-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-regular);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: 'Microsoft YaHei', sans-serif;
-  font-size: var(--el-font-size-normal);
-  color: var(--el-text-color-primary);
+  max-width: 300px;
+}
+
+.loading-icon {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+/* 右侧箭头图标样式 */
+.arrow-icon {
+  color: var(--el-text-color-secondary);
+  opacity: 0.7;
+}
+
+/* Logo 容器 */
+.model-logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Logo 样式 */
+.model-logo {
+  /* 颜色由 JS 动态绑定 */
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); /* 平滑的回弹效果 */
+}
+
+/* Hover 时旋转 Logo */
+.model-pill:hover .model-logo {
+  transform: rotate(360deg);
 }
 </style>

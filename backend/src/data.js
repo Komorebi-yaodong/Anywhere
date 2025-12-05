@@ -928,6 +928,11 @@ async function openWindow(config, msg) {
     alwaysOnTop: isAlwaysOnTop,
     x: x,
     y: y,
+    frame: false,
+    transparent: false,
+    minWidth: 480,
+    minHeight: 580,
+    // resizable: true,
     webPreferences: {
       preload: "./window_preload.js",
       devTools: utools.isDev()
