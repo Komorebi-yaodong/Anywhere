@@ -825,14 +825,14 @@ async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoic
     let content = history[history.length - 1].content;
     // 如果是字符串
     if (typeof content === "string") {
-      history[history.length - 1].content = timestamp + "\n\n" + content;
+      history[history.length - 1].content = content + "\n\n" + timestamp;
     }
     else if (Array.isArray(content)) {
       let flag = false;
       for (let i = 0; i < content.length; i++) {
         // 是文本类型，且不是文本文件
         if (content[i].type === "text" && content[i].text && !(content[i].text.toLowerCase().startsWith('file name:') && content[i].text.toLowerCase().endsWith('file end'))) {
-          content[i].text = timestamp + "\n\n" + content[i].text;
+          content[i].text = content[i].text + "\n\n" + timestamp;
           flag = true;
           break;
         }
@@ -935,7 +935,7 @@ async function openWindow(config, msg) {
     // resizable: true,
     webPreferences: {
       preload: "./window_preload.js",
-      devTools: utools.isDev()
+      devTools: true
     },
   };
 
@@ -953,14 +953,9 @@ async function openWindow(config, msg) {
       // console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
       
       ubWindow.webContents.send(channel, msg);
-
-
-      
     }
   );
-  if (utools.isDev()) {
-    ubWindow.webContents.openDevTools({ mode: "detach" });
-  }
+  ubWindow.webContents.openDevTools({ mode: "detach" });
 }
 
 async function coderedirect(label, payload) {

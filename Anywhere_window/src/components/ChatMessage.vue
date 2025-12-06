@@ -330,7 +330,6 @@ const truncateFilename = (filename, maxLength = 30) => {
       <!-- 气泡本体（保持不变） -->
       <Bubble class="ai-bubble" placement="start" shape="corner" maxWidth="100%"
         :loading="isLastMessage && isLoading && renderedMarkdownContent === ' ' && (!message.tool_calls || message.tool_calls.length === 0)">
-        <!-- ... (Bubble 内部内容保持不变) ... -->
         <template #header>
           <Thinking v-if="message.reasoning_content && message.reasoning_content.trim().length > 0" maxWidth="90%"
             :content="(message.reasoning_content || '').trim()" :modelValue="false" :status="message.status">
@@ -547,6 +546,10 @@ const truncateFilename = (filename, maxLength = 30) => {
     background-color: #f4f4f4;
     padding-top: 10px;
     padding-bottom: 10px;
+    margin-bottom: 0px;
+  }
+  :deep(.el-bubble-content-wrapper .el-bubble-footer) {
+    margin-top: 0;
   }
 }
 
@@ -562,6 +565,7 @@ html.dark .chat-message .user-bubble {
     background-color: #ffffff;
     padding-left: 4px;
     padding-right: 0px;
+    padding-bottom: 0px;
   }
 
   :deep(.el-bubble-content-wrapper .el-bubble-footer) {
@@ -1151,7 +1155,7 @@ html.dark .ai-name {
 .footer-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0px;
 }
 
 .footer-wrapper {
@@ -1212,11 +1216,6 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
   border: 1px solid var(--border-primary, #373A40);
 }
 
-/* =================================================================
-   MCP 工具调用相关样式 - 新版优化
-   ================================================================= */
-
-/* 工具调用容器 */
 .tool-calls-container {
   margin-top: 8px;
   display: flex;
@@ -1334,7 +1333,7 @@ html.dark .stop-btn-wrapper {
   
   background-color: var(--el-fill-color-lighter);
   border: 1px solid var(--el-border-color-lighter);
-  border-top: 1px dashed var(--el-border-color-lighter); /* 虚线分割，既连接又区分 */
+  border-top: 1px dashed var(--el-border-color-lighter);
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
   

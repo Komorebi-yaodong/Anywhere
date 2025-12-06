@@ -286,6 +286,7 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
 .win-btn:hover {
   background-color: var(--el-fill-color);
   color: var(--el-text-color-primary);
+  transform: scale(1.1);
 }
 
 .win-btn.close:hover {

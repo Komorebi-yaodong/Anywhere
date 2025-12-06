@@ -160,7 +160,7 @@
       "removeFromTag": "从此标签移除快捷助手",
       "sendDirect": "开启后，选中文字或截图后将直接发送给AI",
       "sendFile": "开启后，选中文件后将直接发送给AI并处理结果",
-      "ifTextNecessary": "开启后，将自动在文本前添加当前时间戳，以确保每次请求都包含文本，满足部分服务商要求（vertex）",
+      "ifTextNecessary": "开启后，用户如果发送空文本消息则添加时间戳，以确保每次请求都包含文本，满足部分服务商要求（vertex）",
       "reasoningEffort": "设置模型思考过程的计算预算。更高的值可能会产生更详尽的回答，但会增加延迟和成本。",
       "isAlwaysOnTopTooltip": "启用以使窗口始终保持在最上层。",
       "autoCloseOnBlurTooltip": "启用以在独立窗口失去焦点时将其关闭。",

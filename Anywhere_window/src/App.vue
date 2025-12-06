@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElSwitch, ElTooltip, ElIcon } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon } from 'element-plus';
 import { createClient } from "webdav/web";
 import { QuestionFilled } from '@element-plus/icons-vue';
 
@@ -19,10 +19,15 @@ import TextSearchUI from './utils/TextSearchUI.js';
 
 const showDismissibleMessage = (options) => {
   const opts = typeof options === 'string' ? { message: options } : options;
+  const duration = opts.duration !== undefined ? opts.duration : 1000;
+  
   let messageInstance = null;
   const finalOpts = {
     ...opts,
-    showClose: true,
+    duration: duration,
+    showClose: false,
+    grouping: true,
+    offset: 40, 
     onClick: () => {
       if (messageInstance) {
         messageInstance.close();
@@ -2159,35 +2164,75 @@ const askAI = async (forceSend = false) => {
         });
       });
 
+      if (currentPromptConfig && currentPromptConfig.ifTextNecessary) {
+        const now = new Date();
+        const timestamp = `current time: ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+        messagesForThisRequest.forEach(msg => {
+          if (msg.role === 'user') {
+            // 情况1: content 已经被之前的清理逻辑删除了 (即原本是 null/undefined)
+            if (msg.content === undefined || msg.content === null) {
+              msg.content = timestamp;
+            }
+            // 情况2: content 是字符串但为空
+            else if (typeof msg.content === 'string') {
+              if (msg.content.trim() === '') {
+                msg.content = timestamp;
+              }
+            }
+            // 情况3: content 是数组
+            else if (Array.isArray(msg.content)) {
+              if (msg.content.length === 0) {
+                // 如果数组被过滤空了，直接赋值为字符串时间戳
+                msg.content = timestamp;
+              } else {
+                // 检查是否存在有效的文本节点
+                const hasText = msg.content.some(part => part.type === 'text' && part.text && part.text.trim() !== '');
+                // 如果没有有效文本（例如只有图片），则追加一个纯文本块
+                if (!hasText) {
+                  msg.content.push({
+                    type: "text",
+                    text: timestamp
+                  });
+                }
+              }
+            }
+          }
+        });
+      }
+
       // --- 仅在临时列表中注入MCP提示词 ---
       if (openaiFormattedTools.value.length > 0) {
         const mcpSystemPrompt = `
-## Agent Behavior Model: Strict ReAct and Tool Execution Guidance
+## Agent Behavior Model: Strict ReAct and Tool Execution Guidance (Final Revised - English)
 
 As an intelligent Agent that strictly adheres to the ReAct (Reasoning and Action) workflow and is capable of invoking external tools. Core mission is: **To accurately invoke tools based on structured reasoning, and efficiently synthesize user-friendly final responses.**
 
-### Core Workflow: Strict ReAct Format
+### Core Workflow: Strict ReAct Format (Internal Execution Steps)
 
-All outputs must strictly follow the structured process below until the task is completed:
+All tasks require the Agent to strictly follow the structured process below until the task is completed. **Note: Steps 1, 3, and the raw execution of Step 2 (Function Call) are internal process steps and must not be displayed to the user.**
 
 1.  **Thought (Reasoning)**:
     *   **Purpose:** Deeply analyze the user's request and plan the solution path. Evaluate current progress and decide the next step: Is a tool necessary? Which tool? What are the required parameters?
-    *   **Format:** \`Thought: [Logical thinking process in user's language]\`
+    *   **Format (Internal):** \`Thought: [Logical thinking process in the user's language]\`
 
 2.  **Tool Call (Action)**:
-    *   **Purpose:** Execute only when external data or an external operation is definitely required.
-    *   **Pre-Statement:** Before executing the tool call, must provide a one-sentence justification for the invocation.
-    *   **Statement Format:** \`Need to call [Tool Name] to [briefly state the objective].\`
-    *   **Execution Format:** Use the Function Call mechanism for tool invocation.
+    *   **Purpose:** Execute only when external data or an external operation is definitely required. This step has two parts:
+        *   **External Output (Justification):** Must provide a one-sentence justification for the invocation **before executing the tool call**.
+        *   **Internal Execution:** The actual function call mechanism.
+    *   **Statement Format (External Output):** \`Need to call [Tool Name] to [briefly state the objective].\` (Must use the user's language, e.g., if the user used Chinese: \`需要调用 [工具名称] 来 [简要说明目的]。\`)
+    *   **Execution Format (Internal):** Use the Function Call mechanism for tool invocation.
     *   **Constraint:** **Parameter value validation is the highest priority.** Ensure all parameters are exact values required by the tool's Schema.
 
 3.  **Observation (Tool Response)**:
     *   **Purpose:** Receive the system's return result from the tool execution (this step cannot be controlled).
-    *   **Loop:** Upon receiving an \`Observation\`, must return to step 1 (Thought) for result analysis and next step planning.
+    *   **Format (Internal):** \`Observation: [Raw Tool Output]\`
+    *   **Loop (Internal):** Upon receiving an \`Observation\`, must return to step 1 (Thought) for result analysis and next step planning.
 
 4.  **Final Answer (Conclusion)**:
-    *   **Purpose:** Generate the final reply only when the task is fully resolved and all necessary information has been gathered.
-    *   **Constraint:** Must parse the raw data from the tools and synthesize it into a natural, fluent, and complete English response.
+    *   **Purpose:** Generate the final reply only when the task is fully resolved and all necessary information has been gathered. **This is the final required output.**
+    *   **Constraint:** Must parse the raw data from the tools and synthesize it into a natural, fluent, and complete response in the user's language.
+    *   **Negative Constraint (CRITICAL):** **Do NOT repeat the "Need to call..." justification sentence from Step 2. Do NOT mention technical tool names or IDs. Start the response directly with the natural language answer.**
 
 ### Auxiliary Skills (Integrated Guidance)
 
@@ -2198,7 +2243,7 @@ All outputs must strictly follow the structured process below until the task is 
 
 ### Mandatory Execution Rules (Constraint Rules)
 
-1.  **Privacy and Synthesis**: The user cannot view the tool interaction content or the raw return results. Must always synthesize the tool output into valuable, easily understandable information from the user's perspective.
+1.  **Synthesis**: Must always synthesize the tool output into valuable, easily understandable information from the user's perspective.
 2.  **Strict Multimedia Formatting Norms**: In all circumstances, the display format for multimedia content (images, videos, audio) must comply with the following specifications, and **must not** be contained within code blocks (\`\`\`):
     *   **Image (Markdown)**: \`![Content Description](Image Link)\`
     *   **Video (HTML)**:
@@ -2211,7 +2256,10 @@ All outputs must strictly follow the structured process below until the task is 
           <source id="Audio Format" src="Audio Link URL">
         </audio>
         \`\`\`
-3.  **Statement Precision**: The justification for each tool call must be concise and accurate, following the format: \`Need to call [Tool Name] to [briefly state the objective].\`(Must in user's language, e.g., if user use Chinese, following the format: \`需要调用 [工具名称] 来 [简要说明目的].\`)
+3.  **Output Visibility Control (Crucial Modification)**: **The Agent's output to the user must strictly follow this sequence and contain no other content:**
+    *   **Phase A (Pre-Action):** When a tool is needed, output the Tool Call justification statement (Step 2) *and then* generate the tool call object.
+    *   **Phase B (Post-Action / Final Answer):** After receiving the tool output, generate the final synthesized response.
+    *   **STRICT PROHIBITION for Phase B:** When generating the Final Answer, **YOU MUST NOT** output the "Need to call..." sentence again, and **YOU MUST NOT** summarize the tool action (e.g., "I have fetched the news"). **Start immediately with the information requested by the user.**
 `;
         const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
         if (systemMessageIndex !== -1) {
@@ -2823,49 +2871,52 @@ const handleGlobalKeyDown = (event) => {
         </el-main>
 
         <div v-if="showScrollToBottomButton" class="scroll-to-bottom-wrapper">
-          <!-- 回到顶部按钮 -->
+          <!-- 1. 回到顶部按钮 -->
           <el-tooltip content="回到顶部" placement="left" :show-after="500">
             <el-button class="scroll-nav-btn" @click="scrollToTop">
-              <svg class="scroll-nav-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="20"
-                height="20">
-                <path fill="currentColor"
-                  d="M6 17.59L7.41 19 12 14.42 16.59 19 18 17.59 12 11.59z M6 11.59L7.41 13 12 8.42 16.59 13 18 11.59 12 5.59z" />
-              </svg>
+              <el-icon :size="14">
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                  <path
+                    d="M492.367 74.709h46.406L960 503.076l-46.406 46.406-403.379-403.378-399.809 403.378L64 503.076 492.367 74.709z m0 399.809h46.406L960 902.884l-46.406 46.406-403.379-399.808-399.809 399.809L64 902.884l428.367-428.366z">
+                  </path>
+                </svg>
+              </el-icon>
             </el-button>
           </el-tooltip>
 
-          <!-- 原有：上一条消息 -->
+          <!-- 2. 上一条消息 -->
           <el-tooltip content="上一条消息" placement="left" :show-after="500">
             <el-button class="scroll-nav-btn" @click="navigateToPreviousMessage">
-              <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="16"
-                height="20">
-                <path fill="currentColor"
-                  d="m488.832 344.32-339.84 335.872a32 32 0 0 0 0 45.248l.064.064a32 32 0 0 0 45.248 0L512 412.928l317.696 312.576a32 32 0 0 0 45.248 0l.064-.064a32 32 0 0 0 0-45.248L533.824 344.32a32 32 0 0 0-44.992 0z">
-                </path>
-              </svg>
+              <el-icon :size="14">
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                  <path d="M902.5 749.2l57.5-57.5-421.6-416.9h-52.7L64 691.7l57.5 57.5 388.1-392.9 392.9 392.9z"></path>
+                </svg>
+              </el-icon>
             </el-button>
           </el-tooltip>
 
-          <!-- 原有：下一条消息 -->
+          <!-- 3. 下一条消息 -->
           <el-tooltip :content="nextButtonTooltip" placement="left" :show-after="500">
             <el-button class="scroll-nav-btn" @click="navigateToNextMessage">
-              <svg class="scroll-nav-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="16"
-                height="20">
-                <path fill="currentColor"
-                  d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.6 30.592 30.592 0 0 0-42.752 0z">
-                </path>
-              </svg>
+              <el-icon :size="14">
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                  <path d="M121.5 274.8L64 332.3l421.6 416.9h52.7l421.6-416.9-57.5-57.5-388.1 392.9-392.8-392.9z">
+                  </path>
+                </svg>
+              </el-icon>
             </el-button>
           </el-tooltip>
 
-          <!-- 跳到底部按钮 -->
+          <!-- 4. 跳到底部按钮 -->
           <el-tooltip content="跳到底部" placement="left" :show-after="500">
             <el-button class="scroll-nav-btn" @click="forceScrollToBottom">
-              <svg class="scroll-nav-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="20"
-                height="20">
-                <path fill="currentColor"
-                  d="M18 6.41L16.59 5 12 9.58 7.41 5 6 6.41 12 12.41z M18 12.41L16.59 11 12 15.58 7.41 11 6 12.41 12 18.41z" />
-              </svg>
+              <el-icon :size="14">
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                  <path
+                    d="M535.203 545.912h-46.406L64 121.116l46.406-46.406 403.378 399.809 399.81-399.81L960 121.116 535.203 545.912z m0 403.379h-46.406L64 524.494l46.406-49.976 403.378 403.379 399.809-403.379L960 524.494 535.203 949.291z">
+                  </path>
+                </svg>
+              </el-icon>
             </el-button>
           </el-tooltip>
         </div>
@@ -2883,8 +2934,8 @@ const handleGlobalKeyDown = (event) => {
   <ModelSelectionDialog v-model="changeModel_page" :modelList="modelList" :currentModel="model"
     @select="handleChangeModel" @save-model="handleSaveModel" />
 
-  <el-dialog v-model="systemPromptDialogVisible" title="" show-close="false" custom-class="system-prompt-dialog"
-    width="60%" :show-close="true" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"
+  <el-dialog v-model="systemPromptDialogVisible" title="" custom-class="system-prompt-dialog"
+    width="60%" :show-close="false" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"
     :close-on-press-escape="true">
     <template #header="{ close, titleId, titleClass }">
       <div style="display: none;"></div>
@@ -2906,8 +2957,8 @@ const handleGlobalKeyDown = (event) => {
       title="下载图片" />
   </div>
 
-  <el-dialog v-model="isMcpDialogVisible" width="80%" custom-class="mcp-dialog no-header-dialog"
-    @close="focusOnInput" :show-close="false">
+  <el-dialog v-model="isMcpDialogVisible" width="80%" custom-class="mcp-dialog no-header-dialog" @close="focusOnInput"
+    :show-close="false">
     <template #header>
       <div style="display: none;"></div>
     </template>
@@ -2951,7 +3002,7 @@ const handleGlobalKeyDown = (event) => {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                  }}</el-tag>
+                }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
@@ -3503,7 +3554,7 @@ html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::a
 .scroll-to-bottom-wrapper {
   position: absolute;
   bottom: 110px;
-  right: 1%;
+  right: 0.5%;
   z-index: 20;
   display: flex;
   flex-direction: column;
