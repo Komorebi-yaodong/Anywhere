@@ -1,12 +1,15 @@
 const { ipcRenderer } = require('electron');
 
 const {
+  
+    getRandomItem,
+} = require('./input.js');
+
+const {
     getConfig,
     updateConfig,
     saveSetting,
     getUser,
-    getRandomItem,
-    chatOpenAI,
     copyText,
     sethotkey,
     setZoomFactor,
@@ -65,7 +68,6 @@ window.api = {
     saveSetting,
     getUser,
     getRandomItem,
-    chatOpenAI,
     copyText,
     handleFilePath,
     saveFile,

@@ -4,8 +4,8 @@
   "description": "Bundler for Utools plugin preload scripts",
   "main": "index.js",
   "scripts": {
-    "build": "esbuild src/preload.js src/window_preload.js --bundle --platform=node --outdir=./public --format=cjs --external:electron",
-    "watch": "esbuild src/preload.js src/window_preload.js --bundle --platform=node --outdir=./public --format=cjs --external:electron --watch"
+    "build": "esbuild src/preload.js src/window_preload.js src/fast_window_preload.js --bundle --platform=node --outdir=./public --format=cjs --external:electron",
+    "watch": "esbuild src/preload.js src/window_preload.js src/fast_window_preload.js --bundle --platform=node --outdir=./public --format=cjs --external:electron --watch"
   },
   "keywords": [],
   "author": "",

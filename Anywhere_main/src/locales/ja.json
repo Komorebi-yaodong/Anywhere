@@ -8,7 +8,7 @@
       "settings": "設定 ⚙️"
     },
     "tabs": {
-      "chats": "クラウドチャット",
+      "chats": "過去の対話",
       "prompts": "クイックアシスタント",
       "mcp": "MCPサーバー",
       "providers": "サービスプロバイダー",
@@ -112,8 +112,7 @@
     },
     "showModeLabel": "表示モード",
     "showModeOptions": {
-      "input": "入力ボックス",
-      "clipboard": "クリップボード",
+      "fastinput": "高速入力",
       "window": "独立したウィンドウ"
     },
     "promptKeyLabelShort": "名前",

@@ -63,6 +63,24 @@ def movePublicFiles(dir, move_dir):
                 print(f"未知类型文件: {item_path}")
     else:
         print(f"目录 {public_dir} 不存在")
+
+# 将指定目录下的文件全部复制到指定目录下
+def moveFiles(dir, move_dir):
+    if os.path.exists(dir):
+        if os.path.exists(move_dir) and not os.path.isdir(move_dir):
+            os.remove(move_dir)  # 删除错误的文件
+        os.makedirs(move_dir, exist_ok=True)  # 确保是目录
+        for item in os.listdir(dir):
+            item_path = os.path.join(dir, item)
+            print("  >> ", item_path)
+            if os.path.isfile(item_path):
+                shutil.copy(item_path, move_dir)
+            elif os.path.isdir(item_path):
+                shutil.copytree(item_path, os.path.join(move_dir, item), dirs_exist_ok=True)
+            else:
+                print(f"未知类型文件: {item_path}")
+    else:
+        print(f"目录 {dir} 不存在")
     
 
 if __name__ == "__main__":
@@ -89,6 +107,13 @@ if __name__ == "__main__":
     # if input_makesure3.lower() == 'y':
     deleteFile(latest_version_dir, 'preload.js')
     deleteFile(latest_version_dir, 'window_preload.js')
-    print(f"已删除 {latest_version_dir} 目录下的 preload.js 和window_preload.js，正在更新preload文件至其中")
+    deleteFile(latest_version_dir, 'fast_window_preload.js')
+    print(f"已删除 {latest_version_dir} 目录下的多种preload.js，正在更新preload文件至其中")
     movePublicFiles("backend", latest_version_dir)
     print("preload 相关文件转移完成")
+
+    deleteFiles(latest_version_dir, 'fast_window')
+    print(f"已删除 {latest_version_dir} 目录下的 window 文件夹，正在更新fast_window文件夹至其中")
+    fast_window_dir = os.path.join(latest_version_dir, 'fast_window')
+    moveFiles("fast_window", fast_window_dir)
+    print("fast_window 相关文件转移完成")

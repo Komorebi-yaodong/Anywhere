@@ -1,40 +1,36 @@
 <script setup>
 import { computed } from 'vue';
 import { ElHeader, ElIcon } from 'element-plus';
-import { Loading } from '@element-plus/icons-vue';
+import { Loading, Edit } from '@element-plus/icons-vue';
 
 const props = defineProps({
   modelMap: Object,
   model: String,
   isMcpLoading: Boolean,
+  systemPrompt: String,
 });
 
 const emit = defineEmits([
   'open-model-dialog',
+  'show-system-prompt'
 ]);
 
-// 1. 字符串转颜色函数 (HSL 模式，保证亮度和饱和度适中)
+// 1. 字符串转颜色函数 (HSL 模式)
 const stringToColor = (str) => {
-  if (!str) return '#3b82f6'; // 默认蓝色
+  if (!str) return '#3b82f6';
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
-  
-  // H: 0-360 (色相)
   const h = Math.abs(hash) % 360;
-  // S: 60-80% (饱和度，保持鲜艳)
   const s = 60 + (Math.abs(hash) % 20); 
-  // L: 50-60% (亮度，保持清晰可见)
   const l = 50 + (Math.abs(hash) % 10);
-
   return `hsl(${h}, ${s}%, ${l}%)`;
 };
 
 // 2. 计算当前 Logo 颜色
 const logoColor = computed(() => {
-  // 使用 model ID 或显示名称作为 Hash 种子
-  const seed = props.model.split("|")[1] || 'default';
+  const seed = props.model ? (props.model.split("|")[1] || 'default') : 'default';
   return stringToColor(seed);
 });
 </script>
@@ -42,40 +38,56 @@ const logoColor = computed(() => {
 <template>
   <el-header class="model-header">
     <div class="model-header-wrapper">
-      <div 
-        class="model-pill" 
-        :class="{ 'is-disabled': isMcpLoading }" 
-        @click="!isMcpLoading && emit('open-model-dialog')"
-      >
-        <!-- 3. 应用动态颜色 -->
-        <div class="model-logo-container" :style="{ color: logoColor }">
-          <svg class="model-logo" width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <g clip-path="url(#clip0_11482_204655)">
-              <path d="M24.9439 24.7319C25.824 27.2847 25.4279 29.2944 23.7589 30.7231C22.2911 31.9822 19.8552 32.4878 18.3842 31.2946C16.8252 30.0291 15.9012 30.1076 14.3202 31.2914C12.7769 32.4438 10.8062 32.1141 9.19691 30.8926C7.59392 29.6743 7.04073 28.0069 7.33304 26.0413C7.39276 25.6425 7.7165 25.2908 7.5562 24.7633C6.48126 25.0396 5.45346 25.564 4.29051 25.3599C2.38579 25.0239 1.01225 24.0128 0.333338 22.1948C-0.370719 20.3076 0.0724596 18.6088 1.38942 17.1142C1.75717 16.6966 2.3795 16.4642 1.64087 15.6698C-0.226136 13.6602 -0.465012 11.5218 0.732513 9.54359C1.93004 7.56224 4.08621 6.84317 6.77043 7.53084C6.91815 7.62504 7.06588 7.71924 7.21046 7.8103C7.34562 7.55596 7.30161 7.34244 7.05645 7.17915C5.67662 3.03432 8.04024 -0.356908 12.0414 0.0324552C13.2515 0.148636 14.2196 0.732681 15.0462 1.57107C15.4266 1.95729 15.7126 2.19907 16.1683 1.65585C17.9442 -0.454249 20.9679 -0.259567 22.4577 0.713841C24.4316 2.00125 25.0162 3.81305 24.353 6.92167C24.3467 6.95307 24.4158 7.00017 24.5039 7.11007C25.3902 6.85259 26.286 6.41299 27.2824 6.49463C29.2782 6.65477 30.7649 7.58422 31.5664 9.43683C32.3899 11.3491 32.0159 13.0981 30.6958 14.6932C30.3815 15.0732 29.426 15.3401 30.3092 16.1157C32.4622 17.9965 32.2642 20.7849 31.2427 22.3769C29.9949 24.3206 28.1404 24.9674 25.3179 24.3928C25.1105 24.2107 24.8873 24.1541 24.639 24.3017C24.7427 24.4462 24.8465 24.5906 24.9502 24.7319H24.9439ZM2.46122 12.2315C2.45179 12.9694 2.87297 13.5974 3.44816 14.1657C4.96942 15.6666 6.46555 17.1896 7.98995 18.6873C8.91717 19.5948 9.87582 21.1554 10.8219 21.1585C11.7491 21.1585 12.6763 19.554 13.6067 18.6559C13.6821 18.5837 13.7513 18.5052 13.833 18.4393C14.295 18.0813 14.1504 17.783 13.7921 17.4282C11.3845 15.0481 9.01146 12.6334 6.58498 10.2721C5.80864 9.51533 4.8217 9.38031 3.83476 9.86702C2.91383 10.316 2.44236 11.0853 2.46122 12.2346V12.2315ZM12.1609 29.5267C12.9781 29.4671 13.5784 29.0997 14.1127 28.5596C15.6529 27.0053 17.2118 25.4667 18.7645 23.9249C20.6986 22.0011 20.6755 20.1213 18.6954 18.2854C18.62 18.2163 18.5477 18.1378 18.4817 18.0593C18.1925 17.7139 17.9316 17.7014 17.5984 18.0405C15.1468 20.5243 12.6606 22.9766 10.2341 25.4855C9.51436 26.2297 9.53322 27.2094 9.94811 28.1231C10.3787 29.0683 11.2022 29.4671 12.164 29.5299L12.1609 29.5267ZM21.0999 10.2156C20.1224 11.2926 19.2454 12.3257 18.2962 13.2865C17.8185 13.7701 17.8216 14.0715 18.3056 14.5457C20.6504 16.8442 22.9354 19.2023 25.2959 21.482C26.4589 22.6061 27.9204 22.5496 28.9168 21.4883C29.8377 20.5054 29.8283 19.0453 28.7879 17.9777C26.3174 15.4406 23.8092 12.9411 21.0999 10.2124V10.2156ZM22.3445 4.88066C22.3445 3.83189 21.8165 3.06258 20.927 2.62612C19.8866 2.11743 18.8934 2.35293 18.0668 3.1662C16.4355 4.77703 14.8105 6.39101 13.1949 8.01754C10.2907 10.9378 10.3127 10.9252 13.3741 13.6853C13.8927 14.1532 14.1284 14.1155 14.5905 13.6445C16.8504 11.3397 19.1511 9.07259 21.4393 6.79607C21.9737 6.26541 22.3382 5.65938 22.3445 4.88066ZM8.91717 4.83983C8.99575 5.81952 9.4075 6.66733 10.2058 7.07239C10.9979 7.47432 11.2399 6.46323 11.7083 6.08328C12.3494 5.56204 12.8932 4.92148 13.4904 4.34371C13.723 4.11763 13.9744 3.91667 13.6601 3.58382C12.8806 2.76114 12.0383 2.11429 10.7936 2.4754C9.58351 2.82708 9.05547 3.70001 8.91717 4.83983ZM27.1535 8.87791C26.0691 8.91873 25.2645 9.41799 24.859 10.1873C24.5039 10.8624 25.4374 11.1387 25.802 11.5752C26.33 12.2095 26.9523 12.7684 27.5558 13.3367C27.779 13.5471 27.9456 14.0181 28.4076 13.5754C29.2374 12.7778 29.8629 11.8986 29.4763 10.696C29.1054 9.54987 28.2693 8.92187 27.1535 8.88105V8.87791ZM4.46338 22.9766C5.9155 22.9986 6.72642 22.4962 7.13188 21.7332C7.53735 20.9701 6.51269 20.7127 6.13238 20.2354C5.62005 19.5885 4.97257 19.0516 4.40052 18.455C4.11136 18.1535 3.87248 18.0531 3.50788 18.3828C2.61209 19.1866 2.20034 20.1569 2.58066 21.3061C2.93898 22.3926 3.7719 22.9546 4.46338 22.9766ZM23.036 27.0649C23.0989 26.0036 22.5331 25.1778 21.7128 24.7633C21.1062 24.4556 20.7856 25.3725 20.3487 25.743C19.7169 26.2768 19.1731 26.9079 18.5822 27.492C18.3151 27.7557 18.0322 27.9881 18.4188 28.3869C19.1763 29.1656 20.0124 29.7528 21.1627 29.4325C22.3445 29.1028 22.9669 28.2895 23.0392 27.0681L23.036 27.0649Z" fill="currentColor"></path>
-            </g>
-            <defs>
-              <clipPath id="clip0_11482_204655">
-                <rect width="32" height="32" fill="white"></rect>
-              </clipPath>
-            </defs>
-          </svg>
+      
+      <div class="header-content-group">
+        
+        <!-- 1. 模型选择器 -->
+        <!-- 增加 is-loading 类绑定，用于控制加载时的样式 -->
+        <div 
+          class="model-pill expandable-pill" 
+          :class="{ 'is-disabled': isMcpLoading, 'is-loading': isMcpLoading }" 
+          @click="!isMcpLoading && emit('open-model-dialog')"
+        >
+          <!-- Logo -->
+          <div class="model-logo-container" :style="{ color: isMcpLoading ? '#F59E0B' : logoColor }">
+            <svg class="model-logo" width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <g clip-path="url(#clip0_11482_204655)">
+                <path d="M24.9439 24.7319C25.824 27.2847 25.4279 29.2944 23.7589 30.7231C22.2911 31.9822 19.8552 32.4878 18.3842 31.2946C16.8252 30.0291 15.9012 30.1076 14.3202 31.2914C12.7769 32.4438 10.8062 32.1141 9.19691 30.8926C7.59392 29.6743 7.04073 28.0069 7.33304 26.0413C7.39276 25.6425 7.7165 25.2908 7.5562 24.7633C6.48126 25.0396 5.45346 25.564 4.29051 25.3599C2.38579 25.0239 1.01225 24.0128 0.333338 22.1948C-0.370719 20.3076 0.0724596 18.6088 1.38942 17.1142C1.75717 16.6966 2.3795 16.4642 1.64087 15.6698C-0.226136 13.6602 -0.465012 11.5218 0.732513 9.54359C1.93004 7.56224 4.08621 6.84317 6.77043 7.53084C6.91815 7.62504 7.06588 7.71924 7.21046 7.8103C7.34562 7.55596 7.30161 7.34244 7.05645 7.17915C5.67662 3.03432 8.04024 -0.356908 12.0414 0.0324552C13.2515 0.148636 14.2196 0.732681 15.0462 1.57107C15.4266 1.95729 15.7126 2.19907 16.1683 1.65585C17.9442 -0.454249 20.9679 -0.259567 22.4577 0.713841C24.4316 2.00125 25.0162 3.81305 24.353 6.92167C24.3467 6.95307 24.4158 7.00017 24.5039 7.11007C25.3902 6.85259 26.286 6.41299 27.2824 6.49463C29.2782 6.65477 30.7649 7.58422 31.5664 9.43683C32.3899 11.3491 32.0159 13.0981 30.6958 14.6932C30.3815 15.0732 29.426 15.3401 30.3092 16.1157C32.4622 17.9965 32.2642 20.7849 31.2427 22.3769C29.9949 24.3206 28.1404 24.9674 25.3179 24.3928C25.1105 24.2107 24.8873 24.1541 24.639 24.3017C24.7427 24.4462 24.8465 24.5906 24.9502 24.7319H24.9439ZM2.46122 12.2315C2.45179 12.9694 2.87297 13.5974 3.44816 14.1657C4.96942 15.6666 6.46555 17.1896 7.98995 18.6873C8.91717 19.5948 9.87582 21.1554 10.8219 21.1585C11.7491 21.1585 12.6763 19.554 13.6067 18.6559C13.6821 18.5837 13.7513 18.5052 13.833 18.4393C14.295 18.0813 14.1504 17.783 13.7921 17.4282C11.3845 15.0481 9.01146 12.6334 6.58498 10.2721C5.80864 9.51533 4.8217 9.38031 3.83476 9.86702C2.91383 10.316 2.44236 11.0853 2.46122 12.2346V12.2315ZM12.1609 29.5267C12.9781 29.4671 13.5784 29.0997 14.1127 28.5596C15.6529 27.0053 17.2118 25.4667 18.7645 23.9249C20.6986 22.0011 20.6755 20.1213 18.6954 18.2854C18.62 18.2163 18.5477 18.1378 18.4817 18.0593C18.1925 17.7139 17.9316 17.7014 17.5984 18.0405C15.1468 20.5243 12.6606 22.9766 10.2341 25.4855C9.51436 26.2297 9.53322 27.2094 9.94811 28.1231C10.3787 29.0683 11.2022 29.4671 12.164 29.5299L12.1609 29.5267ZM21.0999 10.2156C20.1224 11.2926 19.2454 12.3257 18.2962 13.2865C17.8185 13.7701 17.8216 14.0715 18.3056 14.5457C20.6504 16.8442 22.9354 19.2023 25.2959 21.482C26.4589 22.6061 27.9204 22.5496 28.9168 21.4883C29.8377 20.5054 29.8283 19.0453 28.7879 17.9777C26.3174 15.4406 23.8092 12.9411 21.0999 10.2124V10.2156ZM22.3445 4.88066C22.3445 3.83189 21.8165 3.06258 20.927 2.62612C19.8866 2.11743 18.8934 2.35293 18.0668 3.1662C16.4355 4.77703 14.8105 6.39101 13.1949 8.01754C10.2907 10.9378 10.3127 10.9252 13.3741 13.6853C13.8927 14.1532 14.1284 14.1155 14.5905 13.6445C16.8504 11.3397 19.1511 9.07259 21.4393 6.79607C21.9737 6.26541 22.3382 5.65938 22.3445 4.88066ZM8.91717 4.83983C8.99575 5.81952 9.4075 6.66733 10.2058 7.07239C10.9979 7.47432 11.2399 6.46323 11.7083 6.08328C12.3494 5.56204 12.8932 4.92148 13.4904 4.34371C13.723 4.11763 13.9744 3.91667 13.6601 3.58382C12.8806 2.76114 12.0383 2.11429 10.7936 2.4754C9.58351 2.82708 9.05547 3.70001 8.91717 4.83983ZM27.1535 8.87791C26.0691 8.91873 25.2645 9.41799 24.859 10.1873C24.5039 10.8624 25.4374 11.1387 25.802 11.5752C26.33 12.2095 26.9523 12.7684 27.5558 13.3367C27.779 13.5471 27.9456 14.0181 28.4076 13.5754C29.2374 12.7778 29.8629 11.8986 29.4763 10.696C29.1054 9.54987 28.2693 8.92187 27.1535 8.88105V8.87791ZM4.46338 22.9766C5.9155 22.9986 6.72642 22.4962 7.13188 21.7332C7.53735 20.9701 6.51269 20.7127 6.13238 20.2354C5.62005 19.5885 4.97257 19.0516 4.40052 18.455C4.11136 18.1535 3.87248 18.0531 3.50788 18.3828C2.61209 19.1866 2.20034 20.1569 2.58066 21.3061C2.93898 22.3926 3.7719 22.9546 4.46338 22.9766ZM23.036 27.0649C23.0989 26.0036 22.5331 25.1778 21.7128 24.7633C21.1062 24.4556 20.7856 25.3725 20.3487 25.743C19.7169 26.2768 19.1731 26.9079 18.5822 27.492C18.3151 27.7557 18.0322 27.9881 18.4188 28.3869C19.1763 29.1656 20.0124 29.7528 21.1627 29.4325C22.3445 29.1028 22.9669 28.2895 23.0392 27.0681L23.036 27.0649Z" fill="currentColor"></path>
+              </g>
+              <defs>
+                <clipPath id="clip0_11482_204655">
+                  <rect width="32" height="32" fill="white"></rect>
+                </clipPath>
+              </defs>
+            </svg>
+          </div>
+          
+          <!-- 隐藏内容，hover 时显示 -->
+          <div class="expandable-content">
+            <span class="model-text">
+              {{ isMcpLoading ? 'MCP工具加载中...' : (modelMap[model] || model || '选择模型') }}
+            </span>
+            
+            <el-icon class="arrow-icon" :size="12">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7 10L12 5L17 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M7 14L12 19L17 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </el-icon>
+          </div>
         </div>
-        
-        <el-icon v-if="isMcpLoading" class="is-loading loading-icon">
-          <Loading />
-        </el-icon>
-        
-        <span class="model-text">
-          {{ isMcpLoading ? '加载工具中...' : (modelMap[model] || model || '选择模型') }}
-        </span>
-        
-        <!-- 2. 右侧上下箭头 -->
-        <el-icon class="arrow-icon" :size="12">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M7 10L12 5L17 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M7 14L12 19L17 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </el-icon>
+
+        <!-- 分隔线 -->
+        <div class="header-divider"></div>
+
+        <!-- 2. 系统提示词展示/编辑 (无 Tooltip，自然展开) -->
+        <div class="model-pill prompt-pill" @click="emit('show-system-prompt')">
+          <el-icon :size="14" class="prompt-icon"><Edit /></el-icon>
+          <!-- 增加 padding-right 防止字体渲染截断 -->
+          <span v-if="systemPrompt" class="model-text prompt-text">{{ systemPrompt }}</span>
+          <span v-else class="model-text prompt-text placeholder">系统提示词</span>
+        </div>
+
       </div>
     </div>
   </el-header>
@@ -96,24 +108,43 @@ const logoColor = computed(() => {
   height: 100%;
   display: flex;
   align-items: center;
-  justify-content: center;
 }
 
+.header-content-group {
+  display: flex;
+  align-items: center;
+  gap: 0px; /* 由分隔线控制间距 */
+  flex: 1; 
+  min-width: 0; 
+}
+
+/* 垂直分隔线样式 */
+.header-divider {
+  width: 1px;
+  height: 14px;
+  background-color: var(--el-border-color);
+  margin: 0 8px; /* 左右间距 */
+  flex-shrink: 0;
+}
+
+/* 统一的 Pill 样式基类 */
 .model-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px 4px 8px;
-  background-color: var(--el-fill-color-light);
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: transparent; /* 默认透明 */
   border-radius: 12px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
   user-select: none;
-  max-width: 100%;
+  height: 20px; 
+  box-sizing: content-box; 
+  flex-shrink: 0; 
 }
 
 .model-pill:hover {
-  background-color: var(--el-fill-color);
+  background-color: var(--el-fill-color); /* Hover 显示背景 */
 }
 
 .model-pill:active {
@@ -125,42 +156,103 @@ const logoColor = computed(() => {
   cursor: not-allowed;
 }
 
-.model-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--el-text-color-regular);
+/* === 可展开的模型选择器逻辑 === */
+.expandable-pill .expandable-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 300px;
+  opacity: 0;
+  transition: max-width 0.3s cubic-bezier(0.25, 0.8, 0.5, 1), opacity 0.2s ease;
 }
 
-.loading-icon {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+/* 悬浮时展开 OR 加载时展开 */
+.expandable-pill:hover .expandable-content,
+.expandable-pill.is-loading .expandable-content {
+  max-width: 250px; 
+  opacity: 1;
 }
 
-/* 右侧箭头图标样式 */
-.arrow-icon {
-  color: var(--el-text-color-secondary);
-  opacity: 0.7;
+.expandable-pill:hover,
+.expandable-pill.is-loading {
+  padding-right: 12px; 
+  background-color: var(--el-fill-color); /* 加载时保持背景色 */
 }
 
-/* Logo 容器 */
+/* 旋转动画 */
+@keyframes rotate-logo {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 .model-logo-container {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-/* Logo 样式 */
 .model-logo {
-  /* 颜色由 JS 动态绑定 */
-  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); /* 平滑的回弹效果 */
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.3s;
 }
 
-/* Hover 时旋转 Logo */
-.model-pill:hover .model-logo {
+.expandable-pill:hover .model-logo {
   transform: rotate(360deg);
+}
+
+/* 加载状态下的 Logo 动画 */
+.expandable-pill.is-loading .model-logo {
+  animation: rotate-logo 0.6s linear infinite;
+}
+
+/* === 系统提示词样式 === */
+.prompt-pill {
+  color: var(--el-text-color-regular); 
+  background-color: transparent; 
+  
+  flex: 1; 
+  min-width: 0; 
+}
+
+.prompt-pill:hover {
+  background-color: var(--el-fill-color); 
+}
+
+.prompt-icon {
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+}
+
+.prompt-text {
+  font-size: 12px;
+  color: var(--el-text-color-regular); 
+  padding-right: 4px; /* 防止斜体或部分字体被截断 */
+}
+
+/* 深色模式下的文字颜色修正 */
+html.dark .prompt-text {
+  color: var(--el-text-color-primary);
+}
+
+.prompt-text.placeholder {
+  color: var(--el-text-color-placeholder);
+  font-style: italic;
+}
+
+/* 通用文本样式 */
+.model-text {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 箭头和加载图标 */
+.loading-icon, .arrow-icon {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
 }
 </style>

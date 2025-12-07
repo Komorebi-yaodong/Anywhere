@@ -8,7 +8,7 @@
       "settings": "Настройки ⚙️"
     },
     "tabs": {
-      "chats": "Облачные чаты",
+      "chats": "История диалога",
       "prompts": "Быстрые ассистенты",
       "mcp": "MCP Серверы",
       "providers": "Провайдеры",
@@ -112,8 +112,7 @@
     },
     "showModeLabel": "Режим отображения",
     "showModeOptions": {
-      "input": "Поле ввода",
-      "clipboard": "Буфер обмена",
+      "fastinput": "быстрый ввод",
       "window": "Отдельное окно"
     },
     "promptKeyLabelShort": "Имя",

@@ -28,7 +28,7 @@ const displayConversationName = computed(() => {
 });
 
 const isMac = computed(() => props.os === 'macos' || props.os === 'darwin');
-const isWin = computed(() => props.os === 'win' || props.os === 'win32');
+const isWin = computed(() => props.os === 'win');
 const isLinux = computed(() => !isMac.value && !isWin.value);
 </script>
 
@@ -95,6 +95,8 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
         </el-tooltip>
       </div>
 
+      <div class="divider-vertical" v-if="isWin"></div>
+
       <!-- Windows 窗口控制 -->
       <div v-if="isWin" class="window-controls win-controls no-drag">
         <div class="win-btn minimize" @click="emit('minimize')" title="最小化">
@@ -153,9 +155,12 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
 .left-container {
   display: flex;
   align-items: center;
-  flex: 1;
+  /* 关键修改：取消 flex: 1，防止左侧容器无限撑大占满拖拽区 */
+  /* flex: 1; */ 
+  flex-shrink: 1; /* 允许收缩 */
   min-width: 0;
-  gap: 12px;
+  gap: 8px; /* 减小间距 */
+  margin-right: 10px; /* 保证与右侧至少有间距 */
 }
 
 .right-container {
@@ -164,6 +169,7 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
   justify-content: flex-end;
   flex-shrink: 0;
   height: 100%;
+  margin-left: auto; /* 将右侧容器推到最右边，中间留出拖拽空隙 */
 }
 
 /* App Info & Conversation Title */
@@ -193,7 +199,10 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
   font-size: 13px;
   white-space: nowrap;
   line-height: 1;
-  padding-top: 2px; /* 视觉对齐修正 */
+  padding-top: 2px; 
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .conversation-inner {
@@ -204,12 +213,12 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
   font-weight: 500;
   font-size: 13px;
   color: var(--el-text-color-regular);
-  max-width: 150px;
+  max-width: 90px; 
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1;
-  padding-top: 2px; /* 视觉对齐修正 */
+  padding-top: 2px; 
 }
 
 .download-icon {
@@ -228,14 +237,14 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
 /* ============ 功能按钮 (Pin, Top) ============ */
 .function-group {
   display: flex;
-  gap: 2px;
-  margin-right: 12px;
+  gap: 0px;
+  margin-right:4px;
   align-items: center;
   height: 100%;
 }
 
 .func-btn {
-  width: 36px;
+  width: 40px;
   height: 28px;
   display: flex;
   align-items: center;
@@ -264,29 +273,29 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
 /* ============ Windows 样式 ============ */
 .win-controls {
   display: flex;
-  gap: 6px;
-  margin-right: 10px;
+  gap: 0px; /* Windows 原生风格按钮通常是紧挨着的 */
+  margin-right: 0px; /* Windows 按钮通常靠边 */
   align-items: center;
   height: 100%;
+  margin-left:4px;
 }
 
 .win-btn {
-  width: 32px;
+  width: 40px; /* Windows 标准宽度较大 */
   height: 32px;
-  border-radius: 6px;
+  /* border-radius: 6px; */ /* Windows 按钮通常没有圆角 */
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   color: var(--el-text-color-secondary);
-  transition: all 0.2s;
+  transition: all 0.1s;
   font-size: 12px; 
 }
 
 .win-btn:hover {
   background-color: var(--el-fill-color);
   color: var(--el-text-color-primary);
-  transform: scale(1.1);
 }
 
 .win-btn.close:hover {
@@ -294,10 +303,10 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
   color: white;
 }
 
-/* ============ macOS 样式 (顶级审美·联动版) ============ */
+/* ============ macOS 样式 ============ */
 .mac-traffic-lights {
   display: flex;
-  gap: 8px; /* 间距 */
+  gap: 8px; 
   margin-right: 12px;
   align-items: center;
   height: 100%;
@@ -305,8 +314,8 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
 }
 
 .traffic-btn {
-  width: 14px;
-  height: 14px;
+  width: 13px; /* 微调尺寸 */
+  height: 13px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -315,55 +324,44 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
   position: relative;
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
   
-  /* 关键：使用 transform 进行缩放，will-change 优化性能 */
   transform-origin: center center;
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   will-change: transform;
 }
 
-/* 颜色 */
 .traffic-btn.close { background-color: #FF5F57; border: 0.5px solid #E0443E; }
 .traffic-btn.minimize { background-color: #FFBD2E; border: 0.5px solid #D69E2E; }
 .traffic-btn.maximize { background-color: #28C840; border: 0.5px solid #1C9A29; }
 
-/* ----------- 交互逻辑核心修改 ----------- */
-
-/* 1. 鼠标悬停在【容器】上时，所有按钮同时放大 */
 .mac-traffic-lights:hover .traffic-btn {
-  transform: scale(1.15); 
+  transform: scale(1.1); 
 }
 
-/* 2. 鼠标悬停在【容器】上时，所有图标同时清晰显示 */
 .mac-traffic-lights:hover .traffic-icon {
   opacity: 1;
-  color: rgba(0, 0, 0, 0.7);
+  color: rgba(0, 0, 0, 0.6);
 }
 
-/* 3. 鼠标按下具体的按钮时，该按钮单独缩小（按压感） */
 .traffic-btn:active {
   transform: scale(0.95) !important;
   filter: brightness(0.9);
 }
 
-/* 图标样式 */
 .traffic-icon {
-  font-size: 8px; 
+  font-size: 7px; 
   color: rgba(0, 0, 0, 0.6);
-  opacity: 0; /* 默认隐藏 */
+  opacity: 0; 
   transition: opacity 0.2s ease, color 0.1s ease;
 }
 
-/* 强制 SVG 加粗，解决图标太细的问题 */
 .traffic-icon :deep(svg) {
   stroke: currentColor;
-  stroke-width: 60px; /* SVG 内部描边加粗 */
+  stroke-width: 60px; 
 }
 
-/* 针对特定图标微调粗细 */
 .icon-minus :deep(svg) { stroke-width: 80px; }
 .icon-fullscreen :deep(svg) { stroke-width: 40px; }
 
-/* 深色模式适配 */
 .dark-mode .traffic-btn {
   border: none;
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);

@@ -1,6 +1,30 @@
-const {
-    getRandomItem
-} = require('./data.js');
+function getRandomItem(list) {
+  // 检查list是不是字符串
+  if (typeof list === "string") {
+    // 如果字符串包含逗号
+    if (list.includes(",")) {
+      list = list.split(",");
+      // 删除空白字符
+      list = list.filter(item => item.trim() !== "");
+    }
+    else if (list.includes("，")) {
+      list = list.split("，");
+      // 删除空白字符
+      list = list.filter(item => item.trim() !== "");
+    }
+    else {
+      return list;
+    }
+  }
+
+  if (list.length === 0) {
+    return "";
+  }
+  else {
+    const resault = list[Math.floor(Math.random() * list.length)];
+    return resault;
+  }
+}
 
 // 函数：处理文本
 async function requestTextOpenAI(code, content, config) {
@@ -44,6 +68,8 @@ async function requestTextOpenAI(code, content, config) {
             }
         }
     }
+
+    const isStream = config.prompts[code].stream ?? true;
     
     const response = await fetch(apiUrl + "/chat/completions", {
         method: "POST",
@@ -63,19 +89,15 @@ async function requestTextOpenAI(code, content, config) {
                     content: content,
                 },
             ],
-            stream: config.stream,
+            stream: isStream,
         }),
     });
     return response;
 }
 
 // 函数：输出
-async function handelReplyOpenAI(code, response, stream, showNotification) {
+async function handelReplyOpenAI(code, response, stream) {
     try {
-        if (!response.ok) {
-            utools.showNotification(`HTTP error! status: ${response.status}`);
-            return;
-        }
         if (stream) {
             const reader = response.body.getReader();
             const decoder = new TextDecoder("utf-8");
@@ -137,15 +159,9 @@ async function handelReplyOpenAI(code, response, stream, showNotification) {
                     }
                 }
             }
-            if (showNotification) {
-                utools.showNotification(code + " successfully!");
-            }
         } else {
             const data = await response.json();
             utools.hideMainWindowTypeString(data.choices[0].message.content.trimEnd());
-            if (showNotification) {
-                utools.showNotification(code + " successfully!");
-            }
         }
     } catch (error) {
         utools.showNotification("error: " + error);
@@ -155,4 +171,5 @@ async function handelReplyOpenAI(code, response, stream, showNotification) {
 module.exports = {
     requestTextOpenAI,
     handelReplyOpenAI,
+    getRandomItem,
 };

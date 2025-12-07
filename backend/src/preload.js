@@ -5,11 +5,11 @@ const {
   updateConfigWithoutFeatures,
   checkConfig,
   getUser,
-  getRandomItem,
-  chatOpenAI,
   copyText,
   sethotkey,
   openWindow,
+  openFastInputWindow,
+  openFastShowWindow,
   coderedirect,
   setZoomFactor,
   feature_suffix,
@@ -33,8 +33,7 @@ const {
 } = require('./file.js');
 
 const {
-  requestTextOpenAI,
-  handelReplyOpenAI,
+  getRandomItem,
 } = require('./input.js');
 
 // 引入重构后的 MCP 模块
@@ -51,7 +50,6 @@ window.api = {
   updateConfigWithoutFeatures,
   getUser,
   getRandomItem,
-  chatOpenAI,
   copyText,
   handleFilePath,
   sendfileDirect,
@@ -145,6 +143,7 @@ const commandHandlers = {
     utools.outPlugin();
   },
 
+  // 直接打开快捷助手
   handleAssistant: async ({ code, type, payload }) => {
     utools.hideMainWindow();
     // 使用 await
@@ -176,6 +175,7 @@ const commandHandlers = {
     utools.outPlugin();
   },
 
+  // 匹配调用
   handlePrompt: async ({ code, type, payload }) => {
     utools.hideMainWindow();
     // 使用 await
@@ -199,7 +199,7 @@ const commandHandlers = {
       };
       // 传递 config
       await openWindow(config, msg);
-    } else {
+    } else if (promptConfig.showMode === 'fastinput') {
       let content = null;
       if (type === "over") {
         if (config.skipLineBreak) {
@@ -217,17 +217,11 @@ const commandHandlers = {
       }
 
       if (content) {
-        if (promptConfig.showMode === 'input') {
-          const response = await requestTextOpenAI(code, content, config);
-          await handelReplyOpenAI(code, response, config.stream, config.showNotification);
-        } else if (promptConfig.showMode === 'clipboard') {
-          const config2 = { ...config, stream: false };
-          const response = await requestTextOpenAI(code, content, config2);
-          const data = await response.json();
-          const result = data.choices[0].message.content.replace(/<think>.*?<\/think>/gs, '').trim();
-          utools.copyText(result);
-          if (config.showNotification) utools.showNotification(code + " successfully!");
-        }
+        const msg = {
+          code,
+          content,
+        };
+        await openFastInputWindow(config, msg);
       }
     }
     utools.outPlugin();

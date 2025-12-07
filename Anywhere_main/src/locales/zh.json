@@ -8,7 +8,7 @@
       "settings": "设置 ⚙️"
     },
     "tabs": {
-      "chats": "云端对话",
+      "chats": "历史对话",
       "prompts": "快捷助手",
       "mcp": "MCP 服务",
       "providers": "服务商",
@@ -112,8 +112,7 @@
     },
     "showModeLabel": "显示模式",
     "showModeOptions": {
-      "input": "输入框",
-      "clipboard": "剪贴板",
+      "fastinput": "快速输入",
       "window": "独立窗口"
     },
     "promptKeyLabelShort": "名称",

@@ -3,6 +3,10 @@ const crypto = require('crypto');
 const windowMap = new Map();
 const feature_suffix = "anywhere助手^_^"
 
+const {
+    requestTextOpenAI
+} = require('./input.js');
+
 // 默认配置 (保持不变)
 const defaultConfig = {
   config: {
@@ -41,6 +45,7 @@ const defaultConfig = {
         isAlwaysOnTop: true,
       },
     },
+    fastWindowPosition: { x: 0, y: 0 },
     mcpServers: {},
     language: "zh",
     tags: {},
@@ -182,8 +187,8 @@ async function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  if (config.version !== "1.9.6") {
-    config.version = "1.9.6";
+  if (config.version !== "1.9.13") {
+    config.version = "1.9.13";
     flag = true;
   }
   if (config.isAlwaysOnTop_global === undefined) {
@@ -244,6 +249,10 @@ function checkConfig(config) {
 
   if (config.mcpServers === undefined) {
     config.mcpServers = {};
+    flag = true;
+  }
+  if (config.fastWindowPosition === undefined) {
+    config.fastWindowPosition = null;
     flag = true;
   }
 
@@ -342,7 +351,10 @@ function checkConfig(config) {
   }
 
   for (let key in config.prompts) {
-    // 为 over 类型的快捷助手添加 matchRegex 字段
+    if (config.prompts[key].showMode === 'input' || config.prompts[key].showMode === 'clipboard') {
+      config.prompts[key].showMode = 'fastinput';
+      flag = true;
+    }
     if (config.prompts[key].type === 'over' && config.prompts[key].matchRegex === undefined) {
       config.prompts[key].matchRegex = "";
       flag = true;
@@ -652,9 +664,9 @@ function updateConfig(newConfig) {
       if (prompt.type === "general") {
         expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
         expectedMatchFeature.cmds.push({ type: "img", label: key });
-        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i"});
+        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
       } else if (prompt.type === "files") {
-        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i"});
+        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
       } else if (prompt.type === "img") {
         expectedMatchFeature.cmds.push({ type: "img", label: key });
       } else if (prompt.type === "over") {
@@ -672,7 +684,7 @@ function updateConfig(newConfig) {
       }
       utools.setFeature(expectedMatchFeature);
 
-      // 更新或添加功能指令（仅限窗口模式）
+      // 更新或添加功能指令（仅限窗口模式和快速展示模式）
       if (prompt.showMode === "window") {
         utools.setFeature({
           code: functionCmdCode,
@@ -694,7 +706,7 @@ function updateConfig(newConfig) {
     if (code === "Anywhere Settings" || code === "Resume Conversation") continue;
     const promptKey = feature.explain;
     if (!enabledPromptKeys.has(promptKey) ||
-      (currentPrompts[promptKey] && currentPrompts[promptKey].showMode !== "window" && code.endsWith(feature_suffix))
+      (currentPrompts[promptKey] && (currentPrompts[promptKey].showMode !== "window") && code.endsWith(feature_suffix))
     ) {
       utools.removeFeature(code);
     }
@@ -773,121 +785,46 @@ function getPosition(config, promptCode) {
   return { x: Math.round(windowX), y: Math.round(windowY), width, height };
 }
 
-function getRandomItem(list) {
-  // 检查list是不是字符串
-  if (typeof list === "string") {
-    // 如果字符串包含逗号
-    if (list.includes(",")) {
-      list = list.split(",");
-      // 删除空白字符
-      list = list.filter(item => item.trim() !== "");
-    }
-    else if (list.includes("，")) {
-      list = list.split("，");
-      // 删除空白字符
-      list = list.filter(item => item.trim() !== "");
-    }
-    else {
-      return list;
-    }
-  }
-
-  if (list.length === 0) {
-    return "";
-  }
-  else {
-    const resault = list[Math.floor(Math.random() * list.length)];
-    return resault;
+function saveFastInputWindowPosition(position) {
+  const configDoc = utools.db.get("config");
+  if (configDoc) {
+    const data = configDoc.data;
+    data.config.fastWindowPosition = position;
+    utools.db.put({
+      _id: "config",
+      data: data,
+      _rev: configDoc._rev
+    });
   }
 }
 
-// 函数：请求chat
-async function chatOpenAI(history, config, modelInfo, CODE, signal, selectedVoice = null, overrideReasoningEffort = null) {
+function getFastInputPosition(config) {
+  const width = 300;
+  const height = 70;
 
-  let apiUrl = "";
-  let apiKey = "";
-  let model = "";
+  const primaryDisplay = utools.getPrimaryDisplay();
+  const displayBounds = primaryDisplay.bounds;
 
-  if (modelInfo.includes("|")) {
-    const [providerId, modelName] = modelInfo.split("|");
-    const provider = config.providers[providerId];
-    if (provider) {
-      apiUrl = provider.url;
-      apiKey = provider.api_key;
-      model = modelName;
-    }
-  }
+  let x, y;
 
-  if (config.prompts[CODE] && config.prompts[CODE].ifTextNecessary) {
-    const now = new Date();
-    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    let content = history[history.length - 1].content;
-    // 如果是字符串
-    if (typeof content === "string") {
-      history[history.length - 1].content = content + "\n\n" + timestamp;
-    }
-    else if (Array.isArray(content)) {
-      let flag = false;
-      for (let i = 0; i < content.length; i++) {
-        // 是文本类型，且不是文本文件
-        if (content[i].type === "text" && content[i].text && !(content[i].text.toLowerCase().startsWith('file name:') && content[i].text.toLowerCase().endsWith('file end'))) {
-          content[i].text = content[i].text + "\n\n" + timestamp;
-          flag = true;
-          break;
-        }
-      }
-      if (!flag) {
-        history[history.length - 1].content.push({
-          type: "text",
-          text: timestamp
-        });
-      }
-    }
-  }
-
-  let payload = {
-    model: model,
-    messages: history,
-  };
-
-  if (selectedVoice && typeof selectedVoice === 'string') {
-    // 强制非流式
-    payload.stream = false;
-    // 提取'-'之前的部分作为API调用的voice参数
-    const voiceForAPI = selectedVoice.split('-')[0].trim();
-    // 添加语音相关参数
-    payload.modalities = ["text", "audio"];
-    payload.audio = { voice: voiceForAPI, format: "wav" };
+  if (config.fastWindowPosition && typeof config.fastWindowPosition.x === 'number' && typeof config.fastWindowPosition.y === 'number') {
+    // 使用保存的位置
+    x = config.fastWindowPosition.x;
+    y = config.fastWindowPosition.y;
   } else {
-    if (config.prompts[CODE] && typeof config.prompts[CODE].stream === 'boolean') {
-      payload.stream = config.prompts[CODE].stream;
-    } else {
-      payload.stream = true; // 默认开启流式
-    }
+    // 默认位置：屏幕中央偏下 (90%高度处)
+    x = Math.floor(displayBounds.x + (displayBounds.width - width) / 2);
+    y = Math.floor(displayBounds.y + displayBounds.height * 0.85);
   }
 
-  // 添加温度参数
-  if (config.prompts[CODE] && config.prompts[CODE].isTemperature) {
-    payload.temperature = config.prompts[CODE].temperature;
-  }
+  // 边界检查，防止窗口跑出屏幕
+  const padding = 10;
+  if (x < displayBounds.x) x = displayBounds.x + padding;
+  if (x + width > displayBounds.x + displayBounds.width) x = displayBounds.x + displayBounds.width - width - padding;
+  if (y < displayBounds.y) y = displayBounds.y + padding;
+  if (y + height > displayBounds.y + displayBounds.height) y = displayBounds.y + displayBounds.height - height - padding;
 
-  // 思考预算逻辑：优先使用覆盖值，否则使用配置值
-  const reasoningEffort = overrideReasoningEffort;
-  if (reasoningEffort && reasoningEffort !== 'default') {
-    payload.reasoning_effort = reasoningEffort;
-  }
-
-  const response = await fetch(apiUrl + '/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + getRandomItem(apiKey)
-    },
-    body: JSON.stringify(payload),
-    signal: signal // 将 signal 传递给 fetch
-  });
-  return response;
+  return { x, y, width, height };
 }
 
 // utools 插件调用 copyText 函数
@@ -911,7 +848,6 @@ async function openWindow(config, msg) {
   const promptConfig = config.prompts[promptCode];
   const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
   let channel = "window";
-  
   const backgroundColor = config.isDarkMode ? `rgba(24, 24, 24, 1)` : 'rgba(255, 255, 255, 1)';
 
   // 为窗口生成唯一ID并添加到消息中
@@ -938,7 +874,6 @@ async function openWindow(config, msg) {
       devTools: true
     },
   };
-
   const entryPath = config.isDarkMode ? "./window/index.html?dark=1" : "./window/index.html";
   const ubWindow = utools.createBrowserWindow(
     entryPath,
@@ -951,7 +886,7 @@ async function openWindow(config, msg) {
       // // 计时结束
       // const windowShownTime = performance.now();
       // console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
-      
+
       ubWindow.webContents.send(channel, msg);
     }
   );
@@ -1020,6 +955,136 @@ async function savePromptWindowSettings(promptKey, settings) {
   return { success: false, message: `Failed to save settings after ${MAX_RETRIES} attempts due to persistent database conflicts.` };
 }
 
+async function openFastInputWindow(config, msg) {
+    // 计时开始
+    const startTime = performance.now();
+    console.log(`[Timer Start] Opening window for code: ${msg.code}`);
+    
+    // 1. 【并行】立即发起 AI 请求
+    const streamBuffer = []; // 缓冲区，用于存储窗口未就绪时收到的数据
+    let fastWindowRef = null; // 用于在请求回调中引用窗口
+
+    // 定义发送数据到窗口的辅助函数
+    const sendToWindow = (type, payload) => {
+        if (fastWindowRef && !fastWindowRef.isDestroyed()) {
+            fastWindowRef.webContents.send('stream-update', { type, payload });
+        } else {
+            // 窗口还没好，存入缓冲区
+            streamBuffer.push({ type, payload });
+        }
+    };
+
+    // 执行请求处理逻辑 (不 await，让其在后台运行)
+    requestTextOpenAI(msg.code, msg.content, config).then(async (response) => {
+        if (!response.ok) {
+            throw new Error(`API Error: ${response.status}`);
+        }
+
+        const isStream = config.prompts[msg.code].stream ?? true;
+
+        if (isStream) {
+            // --- 流式处理 ---
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                let boundary = buffer.lastIndexOf("\n");
+
+                if (boundary !== -1) {
+                    const completeData = buffer.substring(0, boundary);
+                    buffer = buffer.substring(boundary + 1);
+
+                    const lines = completeData.split("\n").filter((line) => line.trim() !== "");
+                    for (const line of lines) {
+                        const message = line.replace(/^data: /, "");
+                        if (message === "[DONE]") break;
+                        try {
+                            const parsed = JSON.parse(message);
+                            if (parsed.choices[0].delta.content) {
+                                const chunk = parsed.choices[0].delta.content;
+                                sendToWindow('chunk', chunk);
+                            }
+                        } catch (e) {
+                            // 忽略解析错误
+                        }
+                    }
+                }
+            }
+        } else {
+            // --- 非流式处理 ---
+            const data = await response.json();
+            const fullText = data.choices[0].message.content || "";
+            sendToWindow('chunk', fullText);
+        }
+        
+        isStreamEnded = true;
+        sendToWindow('done', null);
+
+    }).catch((error) => {
+        console.error("FastWindow AI Request Error:", error);
+        streamError = error.message;
+        sendToWindow('error', error.message);
+    });
+
+    // 2. 【并行】创建窗口
+    msg.config = config;
+    const { x, y, width, height } = getFastInputPosition(config);
+    let channel = "fast-window";
+    const senderId = crypto.randomUUID();
+    msg.senderId = senderId;
+
+    const windowOptions = {
+        show: true, 
+        width: width,
+        height: height,
+        useContentSize: true,
+        alwaysOnTop: true,
+        x: x,
+        y: y,
+        frame: false,
+        transparent: true,
+        hasShadow: false,
+        backgroundColor: config.isDarkMode ? 'rgba(0, 0, 0, 0)' : 'rgba(255, 255, 255, 0)',
+        resizable: false,
+        skipTaskbar: true,
+        webPreferences: {
+            preload: "./fast_window_preload.js",
+            devTools: true
+        }
+    };
+
+    const entryPath = "./fast_window/fast_input.html";
+
+    const fastWindow = utools.createBrowserWindow(
+        entryPath,
+        windowOptions,
+        () => {
+            fastWindowRef = fastWindow; // 赋值引用
+            windowMap.set(senderId, fastWindow);
+            
+            // 发送初始化配置
+            fastWindow.webContents.send(channel, msg);
+
+            // 3. 【同步】发送缓冲区中已积压的数据
+            if (streamBuffer.length > 0) {
+                streamBuffer.forEach(item => {
+                    fastWindow.webContents.send('stream-update', item);
+                });
+                streamBuffer.length = 0; // 清空
+            }
+
+            // 计时结束
+            const windowShownTime = performance.now();
+            console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+        }
+    );
+    fastWindow.webContents.openDevTools({ mode: "detach" }); // 调试用
+}
 
 module.exports = {
   getConfig,
@@ -1029,8 +1094,6 @@ module.exports = {
   updateConfigWithoutFeatures,
   savePromptWindowSettings,
   getUser,
-  getRandomItem,
-  chatOpenAI,
   copyText,
   sethotkey,
   openWindow,
@@ -1039,4 +1102,6 @@ module.exports = {
   feature_suffix,
   defaultConfig,
   windowMap,
+  saveFastInputWindowPosition,
+  openFastInputWindow,
 };

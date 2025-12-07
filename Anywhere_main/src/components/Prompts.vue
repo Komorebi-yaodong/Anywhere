@@ -748,8 +748,7 @@ async function refreshPromptsConfig() {
                     <el-col :span="12">
                       <el-form-item :label="t('prompts.showModeLabel')">
                         <el-select v-model="editingPrompt.showMode" style="width: 100%;">
-                          <el-option :label="t('prompts.showModeOptions.input')" value="input" />
-                          <el-option :label="t('prompts.showModeOptions.clipboard')" value="clipboard" />
+                          <el-option :label="t('prompts.showModeOptions.fastinput')" value="fastinput" />
                           <el-option :label="t('prompts.showModeOptions.window')" value="window" />
                         </el-select>
                       </el-form-item>
@@ -799,7 +798,7 @@ async function refreshPromptsConfig() {
                   </div>
                 </template>
                 <div class="llm-params-container">
-                  <div class="param-item" v-if="editingPrompt.showMode === 'window'">
+                  <div class="param-item" v-if="editingPrompt.showMode === 'window' || editingPrompt.showMode === 'fastinput'">
                     <span class="param-label">{{ t('prompts.streamLabel') }}</span>
                     <div class="spacer"></div>
                     <el-switch v-model="editingPrompt.stream" />

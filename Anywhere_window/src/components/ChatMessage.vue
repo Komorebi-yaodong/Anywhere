@@ -18,7 +18,7 @@ const props = defineProps({
   isAutoApprove: Boolean,
 });
 
-const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'show-system-prompt', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished', 'cancel-tool-call', 'confirm-tool', 'reject-tool', 'update-auto-approve']);
+const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished', 'cancel-tool-call', 'confirm-tool', 'reject-tool', 'update-auto-approve']);
 const editInputRef = ref(null);
 const isEditing = ref(false);
 const editedContent = ref('');
@@ -27,10 +27,8 @@ const preprocessKatex = (text) => {
   if (!text) return '';
   let processedText = text;
   processedText = processedText.replace(/\u2013/g, '-').replace(/\u2014/g, '-');
-
   processedText = processedText.replace(/\\$$([\s\S]*?)\\$$/g, '$$$$$1$$$$');
   processedText = processedText.replace(/\\$\s*(.*?)\s*\\$/g, '$$$1$');
-
   return processedText;
 };
 
@@ -122,16 +120,10 @@ const formatMessageText = (content) => {
 };
 
 const isEditable = computed(() => {
-  // 用户消息总是可编辑的，以便添加或修改文本。
-  if (props.message.role === 'user') {
-    return true;
-  }
-
-  // 对于其他角色（如助手），检查是否存在可编辑的文本内容。
+  if (props.message.role === 'user') return true;
   const content = props.message.content;
   if (typeof content === 'string') return true;
   if (Array.isArray(content)) {
-    // 只要内容数组中有一个是文本部分，就认为它是可编辑的
     return content.some(part => part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:')));
   }
   return false;
@@ -149,10 +141,7 @@ const switchToShowMode = () => {
   isEditing.value = false;
 };
 
-defineExpose({
-  switchToEditMode,
-  switchToShowMode
-});
+defineExpose({ switchToEditMode, switchToShowMode });
 
 const handleEditKeyDown = (event) => {
   if (event.key === 'Escape') {
@@ -170,42 +159,27 @@ const renderedMarkdownContent = computed(() => {
   let formattedContent = formatMessageContent(content, role);
   formattedContent = preprocessKatex(formattedContent);
 
-  // 使用 Map 存储所有需要保护的内容（代码块 + 公式），防止后续处理（加空格优化、DOMPurify）破坏它们
   const protectedMap = new Map();
   let placeholderIndex = 0;
-
   const addPlaceholder = (text) => {
     const placeholder = `__PROTECTED_CONTENT_${placeholderIndex++}__`;
     protectedMap.set(placeholder, text);
     return placeholder;
   };
 
-  // 1. 优先保护代码块 (```...``` 和 `...`)
   let processedContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
     return prefix + addPlaceholder(delimiter + inner + delimiter);
   });
-
-  // 2. 保护块级公式 ($$...$$)
-  processedContent = processedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => {
-    return addPlaceholder(match);
-  });
-
-  // 3. 保护行内公式 ($...$)
-  processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => {
-    return addPlaceholder(match);
-  });
-
-  // 4. 优化Markdown加粗渲染
+  processedContent = processedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => addPlaceholder(match));
+  processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => addPlaceholder(match));
   processedContent = processedContent.replace(/(^|[^\\])\*\*([^\n]+?)\*\*/g, '$1<strong>$2</strong>');
 
-  // 5. 执行 DOMPurify 净化 HTML
   const sanitizedPart = DOMPurify.sanitize(processedContent, {
     ADD_TAGS: ['video', 'audio', 'source'],
     USE_PROFILES: { html: true, svg: true, svgFilters: true },
     ADD_ATTR: ['style']
   });
 
-  // 5. 还原受保护的内容
   const finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
     return protectedMap.get(placeholder) || placeholder;
   });
@@ -227,7 +201,6 @@ const onCopy = () => {
 const onReAsk = () => emit('re-ask');
 const onDelete = () => emit('delete-message', props.index);
 const onToggleCollapse = (event) => emit('toggle-collapse', props.index, event);
-const onShowSystemPrompt = () => emit('show-system-prompt', props.message.content);
 const onAvatarClick = (role, event) => emit('avatar-click', role, event);
 const truncateFilename = (filename, maxLength = 30) => {
   if (typeof filename !== 'string' || filename.length <= maxLength) return filename;
@@ -243,25 +216,15 @@ const truncateFilename = (filename, maxLength = 30) => {
 </script>
 
 <template>
-  <div class="chat-message">
-    <!-- 系统提示词保持不变 -->
-    <div v-if="message.role === 'system'" class="system-prompt-container">
-      <p class="system-prompt-preview" @click="onShowSystemPrompt">
-        <span v-if="String(message.content).trim()">{{ String(message.content) }}</span>
-        <span v-else class="placeholder-text">系统提示词...</span>
-      </p>
-      <el-button :icon="Edit" @click="onShowSystemPrompt" size="small" circle text class="system-prompt-edit-btn" />
-    </div>
+  <div class="chat-message" v-if="message.role !== 'system'">
 
     <!-- 用户消息 -->
     <div v-if="message.role === 'user'" class="message-wrapper user-wrapper">
-      <!-- 顶部信息栏：时间 + 头像 -->
       <div class="message-meta-header user-meta-header">
         <span class="timestamp" v-if="message.timestamp">{{ formatTimestamp(message.timestamp) }}</span>
         <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)" class="chat-avatar-top">
       </div>
 
-      <!-- 气泡本体（无头像插槽） -->
       <Bubble class="user-bubble" placement="end" shape="corner" maxWidth="100%">
         <template #content>
           <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
@@ -307,27 +270,20 @@ const truncateFilename = (filename, maxLength = 30) => {
       </Bubble>
     </div>
 
-
     <!-- AI 消息 -->
     <div v-if="message.role === 'assistant'" class="message-wrapper ai-wrapper">
-      <!-- 顶部信息栏：修改为 (头像) + (垂直排列的信息列) -->
       <div class="message-meta-header ai-meta-header">
         <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar-top">
-
-        <!-- 新增：信息列容器 -->
         <div class="meta-info-column">
-          <!-- 第一行：名称 + 语音 -->
           <div class="meta-name-row">
             <span class="ai-name">{{ message.aiName }}</span>
             <span v-if="message.voiceName" class="voice-name">({{ message.voiceName }})</span>
           </div>
-          <!-- 第二行：时间 -->
           <span class="timestamp-row" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp)
           }}</span>
         </div>
       </div>
 
-      <!-- 气泡本体（保持不变） -->
       <Bubble class="ai-bubble" placement="start" shape="corner" maxWidth="100%"
         :loading="isLastMessage && isLoading && renderedMarkdownContent === ' ' && (!message.tool_calls || message.tool_calls.length === 0)">
         <template #header>
@@ -353,47 +309,49 @@ const truncateFilename = (filename, maxLength = 30) => {
             </div>
           </div>
           <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-container">
-            <!-- 单个工具块 -->
             <div v-for="toolCall in message.tool_calls" :key="toolCall.id" class="single-tool-wrapper">
-              
-              <!-- 1. 工具详情折叠面板 -->
-              <el-collapse 
-                class="tool-collapse" 
-                :model-value="(!isAutoApprove && (toolCall.approvalStatus === 'waiting' || toolCall.approvalStatus === 'executing')) ? [toolCall.id] : []"
-              >
+              <el-collapse class="tool-collapse"
+                :model-value="(!isAutoApprove && (toolCall.approvalStatus === 'waiting' || toolCall.approvalStatus === 'executing')) ? [toolCall.id] : []">
                 <el-collapse-item :name="toolCall.id">
-                  <!-- 标题栏 -->
                   <template #title>
                     <div class="tool-call-title">
                       <el-icon class="tool-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path><path d="m18 15 4-4"></path><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"></path></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="m15 12-8.373 8.373a1 1 0 0 1-3-3L12 9"></path>
+                          <path d="m18 15 4-4"></path>
+                          <path
+                            d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5">
+                          </path>
+                        </svg>
                       </el-icon>
                       <span class="tool-name">{{ toolCall.name }}</span>
-                      
-                      <!-- 状态显示区域 -->
                       <div class="tool-header-right">
-                        <el-tag v-if="toolCall.approvalStatus === 'waiting'" type="warning" size="small" effect="light" round>等待批准</el-tag>
-                        <el-tag v-else-if="toolCall.approvalStatus === 'executing'" type="primary" size="small" effect="light" round>执行中</el-tag>
-                        <el-tag v-else-if="toolCall.approvalStatus === 'rejected'" type="danger" size="small" effect="plain" round>已拒绝</el-tag>
-                        <el-tag v-else-if="toolCall.approvalStatus === 'finished'" type="success" size="small" effect="plain" round>完成</el-tag>
-
-                        <!-- 停止执行按钮：仅在执行中显示 -->
+                        <el-tag v-if="toolCall.approvalStatus === 'waiting'" type="warning" size="small" effect="light"
+                          round>等待批准</el-tag>
+                        <el-tag v-else-if="toolCall.approvalStatus === 'executing'" type="primary" size="small"
+                          effect="light" round>执行中</el-tag>
+                        <el-tag v-else-if="toolCall.approvalStatus === 'rejected'" type="danger" size="small"
+                          effect="plain" round>已拒绝</el-tag>
+                        <el-tag v-else-if="toolCall.approvalStatus === 'finished'" type="success" size="small"
+                          effect="plain" round>完成</el-tag>
                         <el-tooltip content="停止执行" placement="top" v-if="toolCall.approvalStatus === 'executing'">
                           <div class="stop-btn-wrapper" @click.stop="$emit('cancel-tool-call', toolCall.id)">
-                            <el-icon><CloseBold /></el-icon>
+                            <el-icon>
+                              <CloseBold />
+                            </el-icon>
                           </div>
                         </el-tooltip>
                       </div>
                     </div>
                   </template>
-                  
-                  <!-- 内容详情 -->
                   <div class="tool-call-details">
                     <div class="tool-detail-section">
                       <strong>参数:</strong>
                       <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
                     </div>
-                    <div class="tool-detail-section" v-if="toolCall.result && toolCall.result !== '等待批准...' && toolCall.result !== '执行中...'">
+                    <div class="tool-detail-section"
+                      v-if="toolCall.result && toolCall.result !== '等待批准...' && toolCall.result !== '执行中...'">
                       <strong>结果:</strong>
                       <div class="tool-result-wrapper">
                         <pre><code>{{ toolCall.result }}</code></pre>
@@ -402,28 +360,17 @@ const truncateFilename = (filename, maxLength = 30) => {
                   </div>
                 </el-collapse-item>
               </el-collapse>
-
-              <!-- [重点] 审批操作栏：位于折叠框下方 -->
               <div v-if="toolCall.approvalStatus === 'waiting'" class="tool-approval-actions">
                 <div class="actions-left">
-                    <el-button type="primary" size="small" :icon="Check" @click="$emit('confirm-tool', toolCall.id, true)">
-                        确认
-                    </el-button>
-                    <el-button size="small" :icon="Close" @click="$emit('reject-tool', toolCall.id, false)">
-                        取消
-                    </el-button>
+                  <el-button type="primary" size="small" :icon="Check"
+                    @click="$emit('confirm-tool', toolCall.id, true)">确认</el-button>
+                  <el-button size="small" :icon="Close" @click="$emit('reject-tool', toolCall.id, false)">取消</el-button>
                 </div>
-                <!-- 自动批准开关 -->
                 <div class="actions-right">
-                    <el-checkbox 
-                        :model-value="isAutoApprove" 
-                        @change="(val) => $emit('update-auto-approve', val)"
-                        label="自动批准后续调用" 
-                        size="small"
-                    />
+                  <el-checkbox :model-value="isAutoApprove" @change="(val) => $emit('update-auto-approve', val)"
+                    label="自动批准后续调用" size="small" />
                 </div>
               </div>
-
             </div>
           </div>
         </template>
@@ -446,6 +393,7 @@ const truncateFilename = (filename, maxLength = 30) => {
 </template>
 
 <style scoped lang="less">
+/* 使用与原文件相同的样式 */
 .chat-message {
   margin: 15px 0 0 0;
   display: flex;
@@ -459,7 +407,6 @@ const truncateFilename = (filename, maxLength = 30) => {
   flex-direction: column;
 }
 
-/* 用户消息靠右 */
 .user-wrapper {
   align-self: flex-end;
   align-items: flex-end;
@@ -468,7 +415,6 @@ const truncateFilename = (filename, maxLength = 30) => {
   margin-left: 5%;
 }
 
-/* AI 消息靠左 */
 .ai-wrapper {
   align-self: flex-start;
   align-items: flex-start;
@@ -477,7 +423,6 @@ const truncateFilename = (filename, maxLength = 30) => {
   max-width: 100%;
 }
 
-/* 顶部信息栏通用样式 */
 .message-meta-header {
   display: flex;
   align-items: center;
@@ -489,7 +434,6 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 .user-meta-header {
   flex-direction: row;
-  /* 时间在左，头像在右 */
   margin-bottom: 8px;
 }
 
@@ -517,7 +461,6 @@ const truncateFilename = (filename, maxLength = 30) => {
   margin-top: 1px;
 }
 
-/* 顶部小头像 */
 .chat-avatar-top {
   width: 32px;
   height: 32px;
@@ -548,6 +491,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     padding-bottom: 10px;
     margin-bottom: 0px;
   }
+
   :deep(.el-bubble-content-wrapper .el-bubble-footer) {
     margin-top: 0;
   }
@@ -577,62 +521,6 @@ html.dark .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
     background: #181818;
   }
-}
-
-.system-prompt-container {
-  width: auto;
-  max-width: 90%;
-  margin: 8px auto 18px auto;
-  align-self: center;
-  padding: 8px 15px;
-  border-radius: var(--el-border-radius-round);
-  border: 1px solid var(--el-border-color-light);
-  cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.system-prompt-container:hover {
-  background-color: var(--el-fill-color-lighter);
-  border-color: var(--el-color-primary-light-7);
-}
-
-.system-prompt-edit-btn {
-  margin-left: 10px;
-  opacity: 0;
-  transition: opacity 0.2s ease-in-out;
-}
-
-.system-prompt-container:hover .system-prompt-edit-btn {
-  opacity: 1;
-}
-
-html.dark .system-prompt-container {
-  border-color: var(--el-border-color-dark);
-}
-
-html.dark .system-prompt-container:hover {
-  background-color: var(--el-fill-color-darker);
-  border-color: var(--el-color-primary-dark-2);
-}
-
-.system-prompt-preview {
-  font-size: var(--el-font-size-small);
-  color: var(--el-text-color-secondary);
-  margin: 0;
-  line-height: 1.5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-grow: 1;
-}
-
-.placeholder-text {
-  color: var(--el-text-color-placeholder);
-  font-style: italic;
 }
 
 .markdown-wrapper {
@@ -666,7 +554,6 @@ html.dark .system-prompt-container:hover {
 
   :deep(.katex-display > .katex > .katex-html) {
     padding-bottom: 8px !important;
-
     scrollbar-width: thin;
     scrollbar-color: var(--el-text-color-disabled) transparent;
 
@@ -714,7 +601,7 @@ html.dark .system-prompt-container:hover {
     &::-webkit-media-controls-panel {
       background-color: var(--bg-tertiary, #F0F0F0);
       border-radius: 24px;
-      padding: 0 10px 0 10px; 
+      padding: 0 10px 0 10px;
       justify-content: center;
     }
 
@@ -1231,11 +1118,10 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
   flex-direction: column;
 }
 
-/* 折叠面板样式优化 */
 .tool-collapse {
   width: 100%;
   border: none;
-  --el-collapse-header-height: 38px; /* 稍微增加高度 */
+  --el-collapse-header-height: 38px;
 
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-light);
@@ -1283,7 +1169,7 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
 
 .tool-header-right {
   margin-left: auto;
-  margin-right: 12px; /* 避免与折叠箭头重叠 */
+  margin-right: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1293,61 +1179,60 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px; /* 尺寸适中 */
+  width: 24px;
   height: 24px;
-  border-radius: 50%; /* 圆形背景 */
+  border-radius: 50%;
   cursor: pointer;
   transition: all 0.2s ease;
-  
-  background-color: var(--el-text-color-primary); 
+  background-color: var(--el-text-color-primary);
   color: var(--el-bg-color);
-  
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 
   &:hover {
-    opacity: 0.85; /* 悬浮时轻微变淡 */
+    opacity: 0.85;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   }
-  
+
   &:active {
     transform: scale(0.95);
   }
 }
 
 html.dark .stop-btn-wrapper {
-  background-color: #E5EAF3; /* 亮白色 */
-  color: #141414; /* 深黑色 */
-  
+  background-color: #E5EAF3;
+  color: #141414;
+
   &:hover {
-    background-color: #ffffff; /* 悬浮更亮 */
+    background-color: #ffffff;
   }
 }
 
-/* 审批操作栏样式 */
 .tool-approval-actions {
-  /* 视觉上连接上方的折叠框 */
-  margin-top: -2px; 
+  margin-top: -2px;
   margin-left: 1px;
   margin-right: 1px;
   padding: 8px 12px;
-  
   background-color: var(--el-fill-color-lighter);
   border: 1px solid var(--el-border-color-lighter);
   border-top: 1px dashed var(--el-border-color-lighter);
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
-  
   display: flex;
   justify-content: space-between;
   align-items: center;
-  
-  /* 出现动画 */
   animation: slide-in 0.2s ease-out;
 }
 
 @keyframes slide-in {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .actions-left {
@@ -1357,13 +1242,13 @@ html.dark .stop-btn-wrapper {
 
 .actions-right {
   margin-left: auto;
+
   :deep(.el-checkbox__label) {
     font-size: 12px;
     color: var(--el-text-color-secondary);
   }
 }
 
-/* 工具详情内容样式 */
 .tool-call-details {
   .tool-detail-section {
     margin-bottom: 10px;
@@ -1427,19 +1312,19 @@ html.dark .stop-btn-wrapper {
   flex-grow: 1;
 }
 
-/* 深色模式适配 */
 html.dark .tool-collapse {
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-darker);
     border-color: var(--el-border-color-dark);
   }
+
   :deep(.el-collapse-item__wrap) {
     border-color: var(--el-border-color-dark);
   }
 }
 
 html.dark .stop-btn-wrapper:hover {
-  background-color: rgba(245, 108, 108, 0.2); /* 深色模式下的红色背景 */
+  background-color: rgba(245, 108, 108, 0.2);
   color: #F56C6C;
 }
 

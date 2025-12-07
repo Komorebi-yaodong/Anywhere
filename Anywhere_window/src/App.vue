@@ -20,14 +20,14 @@ import TextSearchUI from './utils/TextSearchUI.js';
 const showDismissibleMessage = (options) => {
   const opts = typeof options === 'string' ? { message: options } : options;
   const duration = opts.duration !== undefined ? opts.duration : 1000;
-  
+
   let messageInstance = null;
   const finalOpts = {
     ...opts,
     duration: duration,
     showClose: false,
     grouping: true,
-    offset: 40, 
+    offset: 40,
     onClick: () => {
       if (messageInstance) {
         messageInstance.close();
@@ -99,7 +99,7 @@ const messageIdCounter = ref(0);
 const sourcePromptConfig = ref(null);
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
-
+const currentSystemPrompt = ref("");
 
 const changeModel_page = ref(false);
 const systemPromptDialogVisible = ref(false);
@@ -411,8 +411,8 @@ const handleSaveSession = () => handleSaveAction();
 const handleDeleteMessage = (index) => deleteMessage(index);
 const handleCopyText = (content, index) => copyText(content, index);
 const handleReAsk = () => reaskAI();
-const handleShowSystemPrompt = (content) => {
-  systemPromptContent.value = content;
+const handleShowSystemPrompt = () => {
+  systemPromptContent.value = currentSystemPrompt.value;
   systemPromptDialogVisible.value = true;
 };
 const handleToggleCollapse = async (index, event) => {
@@ -654,17 +654,27 @@ const handleEditEnd = async ({ index, action, content }) => {
   }
 };
 
+const handleSystemPromptKeydown = (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    saveSystemPrompt();
+  }
+};
+
 const saveSystemPrompt = async () => {
   const newPromptContent = systemPromptContent.value;
+  currentSystemPrompt.value = newPromptContent;
+  
   const systemMessageIndex = history.value.findIndex(m => m.role === 'system');
-
   if (systemMessageIndex !== -1) {
     history.value[systemMessageIndex].content = newPromptContent;
-    chat_show.value[systemMessageIndex].content = newPromptContent;
+    if (chat_show.value[systemMessageIndex]) {
+        chat_show.value[systemMessageIndex].content = newPromptContent;
+    }
   } else {
-    const newSystemMsg = { role: "system", content: newPromptContent };
-    history.value.unshift(newSystemMsg);
-    chat_show.value.unshift({ ...newSystemMsg, id: messageIdCounter.value++ });
+    const newMsg = { role: "system", content: newPromptContent };
+    history.value.unshift(newMsg);
+    chat_show.value.unshift({ ...newMsg, id: messageIdCounter.value++ });
   }
 
   try {
@@ -675,15 +685,13 @@ const saveSystemPrompt = async () => {
       showDismissibleMessage.success('快捷助手提示词已更新');
     } else {
       const latestConfigData = await window.api.getConfig();
-
       const baseConfig = sourcePromptConfig.value || defaultConfig.config.prompts.AI;
-
       const newPrompt = {
-        ...baseConfig, // 继承源配置或默认配置
+        ...baseConfig,
         icon: AIAvart.value,
-        prompt: newPromptContent, // 覆盖为新的提示词
-        enable: true, // 新创建的默认启用
-        model: model.value || baseConfig.model, // 使用当前窗口选择的模型
+        prompt: newPromptContent,
+        enable: true,
+        model: model.value || baseConfig.model,
         enable: true,
         stream: true,
         isTemperature: false,
@@ -701,11 +709,10 @@ const saveSystemPrompt = async () => {
         reasoning_effort: "default",
         zoom: 1
       };
-
       latestConfigData.config.prompts[CODE.value] = newPrompt;
       await window.api.updateConfig(latestConfigData);
       currentConfig.value = latestConfigData.config;
-      sourcePromptConfig.value = newPrompt; // 更新源配置为刚创建的新配置
+      sourcePromptConfig.value = newPrompt;
       showDismissibleMessage.success(`已为您创建并保存新的快捷助手: "${CODE.value}"`);
     }
   } catch (error) {
@@ -715,7 +722,6 @@ const saveSystemPrompt = async () => {
 
   systemPromptDialogVisible.value = false;
 };
-
 
 const closePage = () => { window.close(); };
 
@@ -752,7 +758,6 @@ onMounted(async () => {
 
   // 统一的初始化函数，用于成功和失败两种情况
   const initializeWindow = async (data = null) => {
-    // 步骤 1: 加载配置
     try {
       const configData = data?.config ? { config: data.config } : await window.api.getConfig();
       currentConfig.value = configData.config;
@@ -761,7 +766,6 @@ onMounted(async () => {
       showDismissibleMessage.error('加载用户配置失败，使用默认配置。');
     }
 
-    // 步骤 2: 获取用户信息
     try {
       const userInfo = await window.api.getUser();
       UserAvart.value = userInfo.avatar;
@@ -770,10 +774,9 @@ onMounted(async () => {
     }
 
     if (data?.os) {
-      currentOS.value = data.os; // 'macos', 'win', 'linux'
+      currentOS.value = data.os;
     }
 
-    // 步骤 3: 设置模型列表
     modelList.value = []; modelMap.value = {};
     currentConfig.value.providerOrder.forEach(id => {
       const provider = currentConfig.value.providers[id];
@@ -786,8 +789,7 @@ onMounted(async () => {
       }
     });
 
-    // 步骤 4: 根据传入数据或默认值设置窗口状态
-    const code = data?.code || "AI"; // 如果没有传入code，则默认为 "AI"
+    const code = data?.code || "AI";
     const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
     isAlwaysOnTop.value = data?.isAlwaysOnTop ?? currentPromptConfig.isAlwaysOnTop ?? true;
     zoomLevel.value = currentPromptConfig.zoom || currentConfig.value.zoom || 1;
@@ -822,13 +824,19 @@ onMounted(async () => {
     }
 
     if (currentPromptConfig.prompt) {
+      currentSystemPrompt.value = currentPromptConfig.prompt;
       history.value = [{ role: "system", content: currentPromptConfig.prompt }];
-      chat_show.value = [{ role: "system", content: currentPromptConfig.prompt, id: messageIdCounter.value++ }];
+      chat_show.value = [{
+        role: "system",
+        content: currentPromptConfig.prompt,
+        id: messageIdCounter.value++
+      }];
     } else {
-      history.value = []; chat_show.value = [];
+      currentSystemPrompt.value = "";
+      history.value = [];
+      chat_show.value = [];
     }
 
-    // 步骤 5: 处理传入的 payload（如果有）
     let shouldDirectSend = false;
     let isFileDirectSend = false;
     if (data) {
@@ -883,14 +891,11 @@ onMounted(async () => {
 
     const defaultMcpServers = currentPromptConfig.defaultMcpServers;
     if (Array.isArray(defaultMcpServers) && defaultMcpServers.length > 0) {
-      // 将默认服务ID同时设置给 session (生效状态) 和 temp (临时编辑状态)
       sessionMcpServerIds.value = [...defaultMcpServers];
       tempSessionMcpServerIds.value = [...defaultMcpServers];
-      // 立即应用这些默认服务
       await applyMcpTools(false);
     }
 
-    // 步骤 6: 自动发送和UI更新
     if (shouldDirectSend) {
       scrollToBottom();
       if (isFileDirectSend) await askAI(false);
@@ -898,7 +903,6 @@ onMounted(async () => {
     }
 
     await addCopyButtonsToCodeBlocks();
-    // 步骤 7: 聚焦和启动位置轮询
     setTimeout(() => {
       chatInputRef.value?.focus({ cursor: 'end' });
     }, 100);
@@ -1089,13 +1093,11 @@ const saveSessionAsMarkdown = async () => {
   const formatContent = (content) => !Array.isArray(content) ? String(content).trim() : content.map(p => p.type === 'text' ? p.text.trim() : '').join(' ');
   const formatFiles = (content) => Array.isArray(content) ? content.filter(p => p.type !== 'text').map(p => p.type === 'file' ? p.file.filename : 'Image') : [];
 
-  // 辅助函数：为内容添加引用符号
   const addBlockquote = (text) => {
     if (!text) return '';
     return text.split('\n').map(line => `> ${line}`).join('\n');
   };
 
-  // 辅助函数：截断文本
   const truncate = (str, len = 50) => {
     if (!str) return '';
     const s = String(str);
@@ -1104,14 +1106,13 @@ const saveSessionAsMarkdown = async () => {
 
   markdownContent += `# 聊天记录: ${CODE.value} (${timestamp})\n\n### 当前模型: ${modelMap.value[model.value] || 'N/A'}\n\n`;
 
-  const systemPromptMessage = chat_show.value.find(m => m.role === 'system');
-  if (systemPromptMessage && systemPromptMessage.content) {
-    markdownContent += `### 系统提示词\n\n${addBlockquote(String(systemPromptMessage.content).trim())}\n\n`;
+  if (currentSystemPrompt.value && currentSystemPrompt.value.trim()) {
+    markdownContent += `### 系统提示词\n\n${addBlockquote(currentSystemPrompt.value.trim())}\n\n`;
   }
   markdownContent += '---\n\n';
 
   for (const message of chat_show.value) {
-    if (message.role === 'system') continue;
+    if (message.role === 'system') continue; // 跳过可能残留的系统消息
 
     if (message.role === 'user') {
       let userHeader = '### 👤 用户';
@@ -1135,11 +1136,9 @@ const saveSessionAsMarkdown = async () => {
       markdownContent += `${assistantHeader}\n\n`;
 
       if (message.reasoning_content) {
-        // 思考过程本来就是引用格式，这里保持原样或再加深一层
         markdownContent += `> *思考过程:*\n${addBlockquote(message.reasoning_content)}\n\n`;
       }
 
-      // 处理工具调用
       if (message.tool_calls && message.tool_calls.length > 0) {
         markdownContent += `> **工具调用:**\n`;
         message.tool_calls.forEach(tool => {
@@ -1220,7 +1219,6 @@ const saveSessionAsHtml = async () => {
       return s.length > len ? s.substring(0, len) + '...' : s;
     };
 
-    // 辅助函数：提取纯文本用于大纲显示
     const formatMessageText = (content) => {
       if (!content) return "";
       if (typeof content === 'string') return content;
@@ -1259,22 +1257,38 @@ const saveSessionAsHtml = async () => {
       return marked.parse(markdownString);
     };
 
+    // 在 HTML 导出中单独添加系统提示词块
+    if (currentSystemPrompt.value && currentSystemPrompt.value.trim()) {
+      const sysTocText = '系统提示词';
+      const sysDotClass = 'system-dot';
+      const sysMsgId = 'msg-system';
+      tocContent += `
+        <li class="timeline-item">
+            <a href="#${sysMsgId}" class="timeline-dot ${sysDotClass}" aria-label="${sysTocText}">
+                <span class="timeline-tooltip">${sysTocText}</span>
+            </a>
+        </li>`;
+
+      bodyContent += `
+            <div id="${sysMsgId}" class="message-wrapper align-left">
+              <div class="header system-header"><strong>系统提示词</strong></div>
+              <div class="message-body system-body">${DOMPurify.sanitize(marked.parse(currentSystemPrompt.value))}</div>
+            </div>
+          `;
+    }
+
     chat_show.value.forEach((message, index) => {
-      const isSystem = message.role === 'system';
+      if (message.role === 'system') return;
+
       const isUser = message.role === 'user';
       const msgId = `msg-${index}`;
 
-      // --- 生成时间轴大纲节点 ---
       let tocText = '';
-      if (isSystem) tocText = '系统提示词';
-      else if (isUser) tocText = truncate(formatMessageText(message.content), 30) || '用户发送图片/文件';
+      if (isUser) tocText = truncate(formatMessageText(message.content), 30) || '用户发送图片/文件';
       else tocText = truncate(formatMessageText(message.content), 30) || 'AI 回复';
 
-      // 根据角色设置点的样式类
       let dotClass = isUser ? 'user-dot' : 'ai-dot';
-      if (isSystem) dotClass = 'system-dot';
 
-      // 只有有实质内容的消息才显示在时间轴上
       tocContent += `
         <li class="timeline-item">
             <a href="#${msgId}" class="timeline-dot ${dotClass}" aria-label="${tocText}">
@@ -1319,11 +1333,9 @@ const saveSessionAsHtml = async () => {
         toolsHtml += '</div>';
       }
 
-      if (contentHtml || toolsHtml || isSystem) {
+      if (contentHtml || toolsHtml) {
         let headerHtml = '';
-        if (isSystem) {
-          headerHtml = `<div class="header system-header"><strong>系统提示词</strong></div>`;
-        } else if (isUser) {
+        if (isUser) {
           headerHtml = `
                <div class="header user-header">
                  <span class="timestamp">${time ? formatTimestamp(time) : ''}</span>
@@ -1343,7 +1355,7 @@ const saveSessionAsHtml = async () => {
                </div>`;
         }
 
-        const bodyHtml = contentHtml ? `<div class="message-body ${isUser ? 'user-body' : 'ai-body'} ${isSystem ? 'system-body' : ''}">${contentHtml}</div>` : '';
+        const bodyHtml = contentHtml ? `<div class="message-body ${isUser ? 'user-body' : 'ai-body'}">${contentHtml}</div>` : '';
 
         bodyContent += `
             <div id="${msgId}" class="message-wrapper ${alignClass}">
@@ -1462,6 +1474,12 @@ const saveSessionAsHtml = async () => {
         /* AI消息点：保持默认 */
         .timeline-dot.ai-dot {
             border-color: var(--timeline-dot-default);
+        }
+
+        /* 系统消息点 */
+        .timeline-dot.system-dot {
+            border-color: #795548;
+            background-color: #795548;
         }
 
         .timeline-dot:hover {
@@ -1715,14 +1733,12 @@ const handleSaveAction = async () => {
 
 
 const loadSession = async (jsonData) => {
-  // 1. 开始加载，重置状态
   loading.value = true;
   collapsedMessages.value.clear();
   messageRefs.clear();
   focusedMessageIndex.value = null;
 
   try {
-    // 2. 优先恢复基础数据和UI相关的状态，让界面尽快渲染
     CODE.value = jsonData.CODE;
     document.title = CODE.value;
     basic_msg.value = jsonData.basic_msg;
@@ -1735,7 +1751,6 @@ const loadSession = async (jsonData) => {
     tempReasoningEffort.value = jsonData.currentPromptConfig?.reasoning_effort || 'default';
     isAutoApproveTools.value = jsonData.isAutoApproveTools || true;
 
-    // 3. 恢复配置和模型映射
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
 
@@ -1767,7 +1782,6 @@ const loadSession = async (jsonData) => {
       }
     });
 
-    // 4. 恢复模型选择
     let restoredModel = '';
     if (jsonData.model && modelMap.value[jsonData.model]) restoredModel = jsonData.model;
     else if (jsonData.currentPromptConfig?.model && modelMap.value[jsonData.currentPromptConfig.model]) restoredModel = jsonData.currentPromptConfig.model;
@@ -1777,22 +1791,40 @@ const loadSession = async (jsonData) => {
     }
     model.value = restoredModel;
 
-    // 5. 恢复消息ID计数器
     if (chat_show.value && chat_show.value.length > 0) {
       chat_show.value.forEach(msg => { if (msg.id === undefined) msg.id = messageIdCounter.value++; });
       const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
       messageIdCounter.value = maxId + 1;
     }
 
-    // 6. 更新系统提示词（如果有变化）
-    if (currentConfig.value.prompts[CODE.value]?.prompt) {
-      if (history.value.length > 0 && history.value[0].role === "system") {
-        history.value[0].content = currentConfig.value.prompts[CODE.value].prompt;
-        chat_show.value[0].content = currentConfig.value.prompts[CODE.value].prompt;
-      } else {
-        history.value.unshift({ role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
-        chat_show.value.unshift({ id: messageIdCounter.value++, role: "system", content: currentConfig.value.prompts[CODE.value].prompt });
+    // 恢复会话时分离系统提示词
+    const systemMessageIndex = history.value.findIndex(m => m.role === 'system');
+    if (systemMessageIndex !== -1) {
+      // 1. 提取提示词到 Header 状态
+      currentSystemPrompt.value = history.value[systemMessageIndex].content;
+
+      // 2. 确保 chat_show 中也有对应的系统消息 (如果旧数据丢失了id需要补全)
+      // 如果 chat_show[systemMessageIndex] 不存在或 role 不对，则说明数据不一致，需要修复
+      if (!chat_show.value[systemMessageIndex] || chat_show.value[systemMessageIndex].role !== 'system') {
+        chat_show.value.unshift({
+          role: "system",
+          content: currentSystemPrompt.value,
+          id: messageIdCounter.value++
+        });
       }
+
+      // 撤销之前的 splice 操作，保留它在数组中！
+    } else if (currentConfig.value.prompts[CODE.value]?.prompt) {
+      // 如果历史记录里没有，但配置里有，则插入
+      currentSystemPrompt.value = currentConfig.value.prompts[CODE.value].prompt;
+      history.value.unshift({ role: "system", content: currentSystemPrompt.value });
+      chat_show.value.unshift({
+        role: "system",
+        content: currentSystemPrompt.value,
+        id: messageIdCounter.value++
+      });
+    } else {
+      currentSystemPrompt.value = "";
     }
 
     if (model.value) {
@@ -1806,13 +1838,10 @@ const loadSession = async (jsonData) => {
       return;
     }
 
-    // 7. 立即完成 UI 渲染状态，让用户看到聊天记录
     loading.value = false;
     await nextTick();
     scrollToBottom();
 
-    // 8. 在 UI 渲染完成后，再异步处理 MCP 加载
-    // 准备 MCP ID
     let mcpServersToLoad = [];
     if (jsonData.activeMcpServerIds && Array.isArray(jsonData.activeMcpServerIds)) {
       mcpServersToLoad = jsonData.activeMcpServerIds;
@@ -1820,16 +1849,13 @@ const loadSession = async (jsonData) => {
       mcpServersToLoad = jsonData.currentPromptConfig?.defaultMcpServers || [];
     }
 
-    // 验证 MCP ID
     const validMcpServerIds = mcpServersToLoad.filter(id =>
       currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
     );
 
-    // 异步执行工具加载，不阻塞 UI
     if (validMcpServerIds.length > 0) {
       sessionMcpServerIds.value = [...validMcpServerIds];
       tempSessionMcpServerIds.value = [...validMcpServerIds];
-      // 注意：这里不 await，让它在后台加载。ChatInput 会根据 isMcpLoading 状态显示加载动画
       applyMcpTools(false);
     } else {
       sessionMcpServerIds.value = [];
@@ -1840,7 +1866,7 @@ const loadSession = async (jsonData) => {
   } catch (error) {
     console.error("加载会话失败:", error);
     showDismissibleMessage.error(`加载会话失败: ${error.message}`);
-    loading.value = false; // 确保出错时也解除 loading
+    loading.value = false;
   }
 };
 
@@ -2145,7 +2171,15 @@ const askAI = async (forceSend = false) => {
       chatInputRef.value?.focus({ cursor: 'end' });
 
       // --- 为本次请求创建临时消息列表 ---
-      const messagesForThisRequest = JSON.parse(JSON.stringify(history.value));
+      let messagesForThisRequest = JSON.parse(JSON.stringify(history.value));
+
+      // 清除空的system
+      messagesForThisRequest = messagesForThisRequest.filter(msg => {
+        if (msg.role === 'system' && (!msg.content || msg.content.trim() === '')) {
+          return false; // 过滤掉空系统提示词
+        }
+        return true;
+      });
 
       // 删除 null 字段
       messagesForThisRequest.forEach(msg => {
@@ -2853,8 +2887,8 @@ const handleGlobalKeyDown = (event) => {
         :os="currentOS" @save-window-size="handleSaveWindowSize" @save-session="handleSaveSession"
         @toggle-pin="handleTogglePin" @toggle-always-on-top="handleToggleAlwaysOnTop" @minimize="handleMinimize"
         @maximize="handleMaximize" @close="handleCloseWindow" />
-      <ChatHeader :modelMap="modelMap" :model="model" :is-mcp-loading="isMcpLoading"
-        @open-model-dialog="handleOpenModelDialog" />
+      <ChatHeader :modelMap="modelMap" :model="model" :is-mcp-loading="isMcpLoading" :systemPrompt="currentSystemPrompt"
+        @open-model-dialog="handleOpenModelDialog" @show-system-prompt="handleShowSystemPrompt" />
 
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
@@ -2934,14 +2968,14 @@ const handleGlobalKeyDown = (event) => {
   <ModelSelectionDialog v-model="changeModel_page" :modelList="modelList" :currentModel="model"
     @select="handleChangeModel" @save-model="handleSaveModel" />
 
-  <el-dialog v-model="systemPromptDialogVisible" title="" custom-class="system-prompt-dialog"
-    width="60%" :show-close="false" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"
+  <el-dialog v-model="systemPromptDialogVisible" title="" custom-class="system-prompt-dialog" width="60%"
+    :show-close="false" :lock-scroll="false" :append-to-body="true" center :close-on-click-modal="true"
     :close-on-press-escape="true">
     <template #header="{ close, titleId, titleClass }">
       <div style="display: none;"></div>
     </template>
     <el-input v-model="systemPromptContent" type="textarea" :autosize="{ minRows: 4, maxRows: 15 }"
-      class="system-prompt-full-content" resize="none" />
+      class="system-prompt-full-content" resize="none" @keydown="handleSystemPromptKeydown" />
     <template #footer>
       <el-button @click="systemPromptDialogVisible = false">取消</el-button>
       <el-button type="primary" @click="saveSystemPrompt">保存</el-button>
@@ -3066,6 +3100,7 @@ html:not(.dark) {
 }
 
 .el-dialog__footer {
+  padding-top: 4px!important;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
 }
@@ -3484,14 +3519,15 @@ html.dark .mcp-server-item.is-checked {
   text-overflow: ellipsis;
 }
 
-html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner {
+html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner,
+html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner {
   background-color: #fff !important;
   border-color: #fff !important;
 }
 
-html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::after {
+html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner::after,
+html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner::after {
   border-color: #1d1d1d !important;
-  /* 设置为深色 */
 }
 
 .no-header-dialog .el-dialog__header {

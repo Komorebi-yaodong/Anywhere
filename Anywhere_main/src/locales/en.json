@@ -8,7 +8,7 @@
       "settings": "Settings ⚙️"
     },
     "tabs": {
-      "chats": "Cloud Chats",
+      "chats": "Chat History",
       "prompts": "Quick Prompts",
       "mcp": "MCP Servers",
       "providers": "Providers",
@@ -112,8 +112,7 @@
     },
     "showModeLabel": "Show Mode",
     "showModeOptions": {
-      "input": "Input Box",
-      "clipboard": "Clipboard",
+      "fastinput": "Fast Input",
       "window": "Standalone Window"
     },
     "promptKeyLabelShort": "Name",

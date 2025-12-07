@@ -23,6 +23,10 @@ WINDOW = [
     "./Anywhere_window/src/utils/",
 ]
 
+Copy_WINDOW = [
+    "./Fast_window/",
+]
+
 
 # 获取文件文本
 def read_text(file_path,iscode = True):
@@ -38,7 +42,7 @@ def get_text_from_dir(dir_path):
     text = ""
     for file in os.listdir(dir_path):
         file_path = os.path.join(dir_path, file)
-        if os.path.isfile(file_path) and (file.endswith(".md") or file.endswith(".js") or file.endswith(".vue") or file.endswith(".json")):
+        if os.path.isfile(file_path) and (file.endswith(".md") or file.endswith(".js") or file.endswith(".vue") or file.endswith(".json") or file.endswith(".html")):
             text += read_text(file_path)
     return text
 
@@ -47,18 +51,28 @@ def get_summary():
     utools_doc = read_text(UTOOLS_DOC,False)
     readme = read_text(README,False)
     preload = get_text_from_dir(PRELOAD)
+
     main_text = ""
     for file in MAIN:
         if os.path.isdir(file):
             main_text += get_text_from_dir(file)
         else:
             main_text += read_text(file)
+
     window_text = ""
     for file in WINDOW:
         if os.path.isdir(file):
             window_text += get_text_from_dir(file)
         else:
             window_text += read_text(file)
+
+    fast_window_text = ""
+    for file in Copy_WINDOW:
+        print(file)
+        if os.path.isdir(file):
+            fast_window_text += get_text_from_dir(file)
+        else:
+            fast_window_text += read_text(file)
     
     text = [
         "以下是Utools插件的开发文档",
@@ -71,6 +85,8 @@ def get_summary():
         main_text,
         "以下是独立窗口的前端代码，在./Anywhere_window/目录下，是独立窗口文件，其预加载文件为window_preload.js",
         window_text,
+        "以下是其他窗口的前端代码，在./Fast_window/目录下，是独立窗口文件，其预加载文件为fast_window_preload.js",
+        fast_window_text,
         "不论你进行如何修改，一定保证不会破坏已有的功能，前端修改一定要保持相同的主题风格，并保证节省开发者工作量的原则，请给出完整的函数代码并告诉我在哪里进行覆盖，直接告诉我在哪里进行怎样的修改就好了，不用给出全部文件代码\n\n"
     ]
 
