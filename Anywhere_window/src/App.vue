@@ -664,12 +664,12 @@ const handleSystemPromptKeydown = (e) => {
 const saveSystemPrompt = async () => {
   const newPromptContent = systemPromptContent.value;
   currentSystemPrompt.value = newPromptContent;
-  
+
   const systemMessageIndex = history.value.findIndex(m => m.role === 'system');
   if (systemMessageIndex !== -1) {
     history.value[systemMessageIndex].content = newPromptContent;
     if (chat_show.value[systemMessageIndex]) {
-        chat_show.value[systemMessageIndex].content = newPromptContent;
+      chat_show.value[systemMessageIndex].content = newPromptContent;
     }
   } else {
     const newMsg = { role: "system", content: newPromptContent };
@@ -1707,30 +1707,48 @@ const handleSaveAction = async () => {
     saveOptions.push({ title: '保存到云端', description: '同步到 WebDAV 服务器，支持跨设备访问。', buttonType: 'success', action: saveSessionToCloud });
   }
 
-  saveOptions.push({ title: '保存为 JSON', description: '保存为可恢复的会話文件，便于下次继续。', buttonType: 'primary', action: saveSessionAsJson });
+  // 标记 JSON 为默认选项 (isDefault: true)
+  saveOptions.push({ title: '保存为 JSON', description: '保存为可恢复的会話文件，便于下次继续。', buttonType: 'primary', action: saveSessionAsJson, isDefault: true });
   saveOptions.push({ title: '保存为 Markdown', description: '导出为可读性更强的 .md 文件，适合分享。', buttonType: '', action: saveSessionAsMarkdown });
-
   saveOptions.push({ title: '保存为 HTML', description: '导出为带样式的网页文件，保留格式和图片。', buttonType: '', action: saveSessionAsHtml });
 
   const messageVNode = h('div', { class: 'save-options-list' }, saveOptions.map(opt => {
-    return h('div', { class: 'save-option-item', onClick: () => { ElMessageBox.close(); opt.action(); } }, [
+    // 统一的触发逻辑
+    const trigger = () => { ElMessageBox.close(); opt.action(); };
+
+    return h('div', { class: 'save-option-item', onClick: trigger }, [
       h('div', { class: 'save-option-text' }, [
         h('h4', null, opt.title), h('p', null, opt.description)
       ]),
-      h(ElButton, { type: opt.buttonType, plain: true }, { default: () => '选择' })
+      h(ElButton, {
+        type: opt.buttonType,
+        plain: true,
+        // 如果是默认选项，添加特定 class 用于定位
+        class: opt.isDefault ? 'default-save-target' : '',
+        // 显式绑定点击事件，确保聚焦后按 Enter 键生效
+        onClick: (e) => { e.stopPropagation(); trigger(); }
+      }, { default: () => '选择' })
     ]);
   }));
+
   ElMessageBox({
     title: '',
     message: messageVNode,
     showConfirmButton: false,
     showCancelButton: false,
-    customClass: 'save-options-dialog no-header-msgbox', // [新增] no-header-msgbox
+    customClass: 'save-options-dialog no-header-msgbox',
     width: '450px',
     showClose: false
   }).catch(() => { });
-};
 
+  // 延迟执行聚焦，确保 DOM 已渲染
+  setTimeout(() => {
+    const targetBtn = document.querySelector('.default-save-target');
+    if (targetBtn) {
+      targetBtn.focus();
+    }
+  }, 100);
+};
 
 const loadSession = async (jsonData) => {
   loading.value = true;
@@ -2872,6 +2890,12 @@ const handleGlobalKeyDown = (event) => {
     handleSaveAction();
   }
 };
+
+const handleOpenSearch = () => {
+  if (textSearchInstance) {
+    textSearchInstance.show();
+  }
+};
 </script>
 
 <template>
@@ -2883,7 +2907,8 @@ const handleGlobalKeyDown = (event) => {
         @toggle-pin="handleTogglePin" @toggle-always-on-top="handleToggleAlwaysOnTop" @minimize="handleMinimize"
         @maximize="handleMaximize" @close="handleCloseWindow" />
       <ChatHeader :modelMap="modelMap" :model="model" :is-mcp-loading="isMcpLoading" :systemPrompt="currentSystemPrompt"
-        @open-model-dialog="handleOpenModelDialog" @show-system-prompt="handleShowSystemPrompt" />
+        @open-model-dialog="handleOpenModelDialog" @show-system-prompt="handleShowSystemPrompt"
+        @open-search="handleOpenSearch" />
 
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
@@ -3031,7 +3056,7 @@ const handleGlobalKeyDown = (event) => {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                }}</el-tag>
+                  }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
@@ -3069,13 +3094,15 @@ const handleGlobalKeyDown = (event) => {
 </template>
 
 <style>
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
 }
+
 html:not(.dark) {
   --text-primary: #000000;
   --el-text-color-primary: var(--text-primary);
@@ -3101,7 +3128,7 @@ html:not(.dark) {
 }
 
 .el-dialog__footer {
-  padding-top: 4px!important;
+  padding-top: 4px !important;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
 }

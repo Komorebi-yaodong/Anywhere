@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue';
-import { ElHeader, ElIcon } from 'element-plus';
-import { Loading, Edit } from '@element-plus/icons-vue';
+import { ElHeader, ElIcon, ElTooltip } from 'element-plus';
+import { Loading, Edit, Search } from '@element-plus/icons-vue'; // 引入 Search
 
 const props = defineProps({
   modelMap: Object,
@@ -12,7 +12,8 @@ const props = defineProps({
 
 const emit = defineEmits([
   'open-model-dialog',
-  'show-system-prompt'
+  'show-system-prompt',
+  'open-search' // 新增事件
 ]);
 
 // 1. 字符串转颜色函数 (HSL 模式)
@@ -42,7 +43,6 @@ const logoColor = computed(() => {
       <div class="header-content-group">
         
         <!-- 1. 模型选择器 -->
-        <!-- 增加 is-loading 类绑定，用于控制加载时的样式 -->
         <div 
           class="model-pill expandable-pill" 
           :class="{ 'is-disabled': isMcpLoading, 'is-loading': isMcpLoading }" 
@@ -80,13 +80,19 @@ const logoColor = computed(() => {
         <!-- 分隔线 -->
         <div class="header-divider"></div>
 
-        <!-- 2. 系统提示词展示/编辑 (无 Tooltip，自然展开) -->
+        <!-- 2. 系统提示词展示/编辑 -->
         <div class="model-pill prompt-pill" @click="emit('show-system-prompt')">
           <el-icon :size="14" class="prompt-icon"><Edit /></el-icon>
-          <!-- 增加 padding-right 防止字体渲染截断 -->
           <span v-if="systemPrompt" class="model-text prompt-text">{{ systemPrompt }}</span>
           <span v-else class="model-text prompt-text placeholder">系统提示词</span>
         </div>
+
+        <!-- 3. [新增] 搜索按钮 -->
+        <el-tooltip content="搜索内容 (Ctrl/Cmd+F)" placement="bottom" :show-after="500">
+          <div class="model-pill icon-pill" @click="emit('open-search')">
+            <el-icon :size="14" class="header-icon"><Search /></el-icon>
+          </div>
+        </el-tooltip>
 
       </div>
     </div>
@@ -253,6 +259,24 @@ html.dark .prompt-text {
 .loading-icon, .arrow-icon {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+}
+
+/* 新增：图标按钮样式 */
+.icon-pill {
+  color: var(--el-text-color-secondary);
+  flex: 0 0 auto; 
+  width: 28px;
+  justify-content: center;
+  margin-left: 2px;
+}
+
+.icon-pill:hover {
+  background-color: var(--el-fill-color);
+  color: var(--el-text-color-primary);
+}
+
+.header-icon {
   flex-shrink: 0;
 }
 </style>

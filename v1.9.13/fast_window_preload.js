@@ -854,6 +854,11 @@ var require_data = __commonJS({
       utools.redirectHotKeySetting(prompt_name, auto_copy);
     }
     async function openWindow(config, msg) {
+      let startTime;
+      if (utools.isDev()) {
+        startTime = performance.now();
+        console.log(`[Timer Start] Opening window for code: ${msg.code}`);
+      }
       msg.config = config;
       const promptCode = msg.originalCode || msg.code;
       const { x, y, width, height } = getPosition(config, promptCode);
@@ -888,6 +893,10 @@ var require_data = __commonJS({
         () => {
           windowMap.set(senderId2, ubWindow);
           ubWindow.show();
+          if (utools.isDev()) {
+            const windowShownTime = performance.now();
+            console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+          }
           ubWindow.webContents.send(channel2, msg);
         }
       );
@@ -934,8 +943,11 @@ var require_data = __commonJS({
       return { success: false, message: `Failed to save settings after ${MAX_RETRIES} attempts due to persistent database conflicts.` };
     }
     async function openFastInputWindow(config, msg) {
-      const startTime = performance.now();
-      console.log(`[Timer Start] Opening window for code: ${msg.code}`);
+      let startTime;
+      if (utools.isDev()) {
+        startTime = performance.now();
+        console.log(`[Timer Start] Opening window for code: ${msg.code}`);
+      }
       const streamBuffer = [];
       let fastWindowRef = null;
       const sendToWindow = (type, payload) => {
@@ -1027,8 +1039,10 @@ var require_data = __commonJS({
             });
             streamBuffer.length = 0;
           }
-          const windowShownTime = performance.now();
-          console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+          if (utools.isDev()) {
+            const windowShownTime = performance.now();
+            console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+          }
         }
       );
       if (utools.isDev()) {

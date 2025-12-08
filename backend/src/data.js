@@ -4,7 +4,7 @@ const windowMap = new Map();
 const feature_suffix = "anywhere助手^_^"
 
 const {
-    requestTextOpenAI
+  requestTextOpenAI
 } = require('./input.js');
 
 // 默认配置 (保持不变)
@@ -837,9 +837,12 @@ async function sethotkey(prompt_name, auto_copy) {
 }
 
 async function openWindow(config, msg) {
-  // // 计时开始
-  // const startTime = performance.now();
-  // console.log(`[Timer Start] Opening window for code: ${msg.code}`);
+  // 计时开始
+  let startTime;
+  if (utools.isDev()) {
+    startTime = performance.now();
+    console.log(`[Timer Start] Opening window for code: ${msg.code}`);
+  }
 
   msg.config = config;
 
@@ -882,14 +885,15 @@ async function openWindow(config, msg) {
       windowMap.set(senderId, ubWindow);
       ubWindow.show();
 
-      // // 计时结束
-      // const windowShownTime = performance.now();
-      // console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
-
+      // 计时结束
+      if (utools.isDev()) {
+        const windowShownTime = performance.now();
+        console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+      }
       ubWindow.webContents.send(channel, msg);
     }
   );
-  if (utools.isDev()){
+  if (utools.isDev()) {
     ubWindow.webContents.openDevTools({ mode: "detach" });
   }
 }
@@ -957,136 +961,140 @@ async function savePromptWindowSettings(promptKey, settings) {
 }
 
 async function openFastInputWindow(config, msg) {
-    // 计时开始
-    const startTime = performance.now();
+  // 计时开始
+  let startTime;
+  if (utools.isDev()) {
+    startTime = performance.now();
     console.log(`[Timer Start] Opening window for code: ${msg.code}`);
-    
-    // 1. 【并行】立即发起 AI 请求
-    const streamBuffer = []; // 缓冲区，用于存储窗口未就绪时收到的数据
-    let fastWindowRef = null; // 用于在请求回调中引用窗口
+  }
+  // 1. 【并行】立即发起 AI 请求
+  const streamBuffer = []; // 缓冲区，用于存储窗口未就绪时收到的数据
+  let fastWindowRef = null; // 用于在请求回调中引用窗口
 
-    // 定义发送数据到窗口的辅助函数
-    const sendToWindow = (type, payload) => {
-        if (fastWindowRef && !fastWindowRef.isDestroyed()) {
-            fastWindowRef.webContents.send('stream-update', { type, payload });
-        } else {
-            // 窗口还没好，存入缓冲区
-            streamBuffer.push({ type, payload });
-        }
-    };
-
-    // 执行请求处理逻辑 (不 await，让其在后台运行)
-    requestTextOpenAI(msg.code, msg.content, config).then(async (response) => {
-        if (!response.ok) {
-            throw new Error(`API Error: ${response.status}`);
-        }
-
-        const isStream = config.prompts[msg.code].stream ?? true;
-
-        if (isStream) {
-            // --- 流式处理 ---
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder("utf-8");
-            let buffer = "";
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                let boundary = buffer.lastIndexOf("\n");
-
-                if (boundary !== -1) {
-                    const completeData = buffer.substring(0, boundary);
-                    buffer = buffer.substring(boundary + 1);
-
-                    const lines = completeData.split("\n").filter((line) => line.trim() !== "");
-                    for (const line of lines) {
-                        const message = line.replace(/^data: /, "");
-                        if (message === "[DONE]") break;
-                        try {
-                            const parsed = JSON.parse(message);
-                            if (parsed.choices[0].delta.content) {
-                                const chunk = parsed.choices[0].delta.content;
-                                sendToWindow('chunk', chunk);
-                            }
-                        } catch (e) {
-                            // 忽略解析错误
-                        }
-                    }
-                }
-            }
-        } else {
-            // --- 非流式处理 ---
-            const data = await response.json();
-            const fullText = data.choices[0].message.content || "";
-            sendToWindow('chunk', fullText);
-        }
-        
-        isStreamEnded = true;
-        sendToWindow('done', null);
-
-    }).catch((error) => {
-        console.error("FastWindow AI Request Error:", error);
-        streamError = error.message;
-        sendToWindow('error', error.message);
-    });
-
-    // 2. 【并行】创建窗口
-    msg.config = config;
-    const { x, y, width, height } = getFastInputPosition(config);
-    let channel = "fast-window";
-    const senderId = crypto.randomUUID();
-    msg.senderId = senderId;
-
-    const windowOptions = {
-        show: true, 
-        width: width,
-        height: height,
-        useContentSize: true,
-        alwaysOnTop: true,
-        x: x,
-        y: y,
-        frame: false,
-        transparent: true,
-        hasShadow: false,
-        backgroundColor: config.isDarkMode ? 'rgba(0, 0, 0, 0)' : 'rgba(255, 255, 255, 0)',
-        resizable: false,
-        skipTaskbar: true,
-        webPreferences: {
-            preload: "./fast_window_preload.js",
-            devTools: utools.isDev()
-        }
-    };
-
-    const entryPath = "./fast_window/fast_input.html";
-
-    const fastWindow = utools.createBrowserWindow(
-        entryPath,
-        windowOptions,
-        () => {
-            fastWindowRef = fastWindow; // 赋值引用
-            windowMap.set(senderId, fastWindow);
-            
-            // 发送初始化配置
-            fastWindow.webContents.send(channel, msg);
-
-            // 3. 【同步】发送缓冲区中已积压的数据
-            if (streamBuffer.length > 0) {
-                streamBuffer.forEach(item => {
-                    fastWindow.webContents.send('stream-update', item);
-                });
-                streamBuffer.length = 0; // 清空
-            }
-
-            // 计时结束
-            const windowShownTime = performance.now();
-            console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
-        }
-    );
-    if (utools.isDev()) {// 调试用
-      fastWindow.webContents.openDevTools({ mode: "detach" });
+  // 定义发送数据到窗口的辅助函数
+  const sendToWindow = (type, payload) => {
+    if (fastWindowRef && !fastWindowRef.isDestroyed()) {
+      fastWindowRef.webContents.send('stream-update', { type, payload });
+    } else {
+      // 窗口还没好，存入缓冲区
+      streamBuffer.push({ type, payload });
     }
+  };
+
+  // 执行请求处理逻辑 (不 await，让其在后台运行)
+  requestTextOpenAI(msg.code, msg.content, config).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`);
+    }
+
+    const isStream = config.prompts[msg.code].stream ?? true;
+
+    if (isStream) {
+      // --- 流式处理 ---
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        let boundary = buffer.lastIndexOf("\n");
+
+        if (boundary !== -1) {
+          const completeData = buffer.substring(0, boundary);
+          buffer = buffer.substring(boundary + 1);
+
+          const lines = completeData.split("\n").filter((line) => line.trim() !== "");
+          for (const line of lines) {
+            const message = line.replace(/^data: /, "");
+            if (message === "[DONE]") break;
+            try {
+              const parsed = JSON.parse(message);
+              if (parsed.choices[0].delta.content) {
+                const chunk = parsed.choices[0].delta.content;
+                sendToWindow('chunk', chunk);
+              }
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+    } else {
+      // --- 非流式处理 ---
+      const data = await response.json();
+      const fullText = data.choices[0].message.content || "";
+      sendToWindow('chunk', fullText);
+    }
+
+    isStreamEnded = true;
+    sendToWindow('done', null);
+
+  }).catch((error) => {
+    console.error("FastWindow AI Request Error:", error);
+    streamError = error.message;
+    sendToWindow('error', error.message);
+  });
+
+  // 2. 【并行】创建窗口
+  msg.config = config;
+  const { x, y, width, height } = getFastInputPosition(config);
+  let channel = "fast-window";
+  const senderId = crypto.randomUUID();
+  msg.senderId = senderId;
+
+  const windowOptions = {
+    show: true,
+    width: width,
+    height: height,
+    useContentSize: true,
+    alwaysOnTop: true,
+    x: x,
+    y: y,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    backgroundColor: config.isDarkMode ? 'rgba(0, 0, 0, 0)' : 'rgba(255, 255, 255, 0)',
+    resizable: false,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: "./fast_window_preload.js",
+      devTools: utools.isDev()
+    }
+  };
+
+  const entryPath = "./fast_window/fast_input.html";
+
+  const fastWindow = utools.createBrowserWindow(
+    entryPath,
+    windowOptions,
+    () => {
+      fastWindowRef = fastWindow; // 赋值引用
+      windowMap.set(senderId, fastWindow);
+
+      // 发送初始化配置
+      fastWindow.webContents.send(channel, msg);
+
+      // 3. 【同步】发送缓冲区中已积压的数据
+      if (streamBuffer.length > 0) {
+        streamBuffer.forEach(item => {
+          fastWindow.webContents.send('stream-update', item);
+        });
+        streamBuffer.length = 0; // 清空
+      }
+
+      // 计时结束
+      if (utools.isDev()) {
+        const windowShownTime = performance.now();
+        console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+      }
+    }
+  );
+  if (utools.isDev()) {// 调试用
+    fastWindow.webContents.openDevTools({ mode: "detach" });
+  }
 }
 
 module.exports = {
