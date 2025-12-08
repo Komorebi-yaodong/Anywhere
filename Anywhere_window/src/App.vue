@@ -2090,14 +2090,9 @@ async function toggleMcpDialog() {
         const currentLocalMcpServers = currentConfig.value.mcpServers || {};
 
         // 2. 关键步骤：保护当前 Session 正在使用的 MCP 服务
-        // 如果当前会话启用了某个 MCP (sessionMcpServerIds 中存在)，但在新配置中该 ID 被删除了
-        // 我们必须保留该服务的旧配置，否则界面渲染卡片时会报错，且用户无法取消勾选
         sessionMcpServerIds.value.forEach(activeId => {
           if (!newMcpServers[activeId] && currentLocalMcpServers[activeId]) {
-            // 将旧配置回填到新配置对象中，仅在当前窗口内存中生效
             newMcpServers[activeId] = currentLocalMcpServers[activeId];
-            // 可选：可以在这里给 name 加个标记，例如 newMcpServers[activeId].name += " (已删除)"; 
-            // 但为了保持 UI 稳定，暂不修改名称
           }
         });
 
@@ -3094,13 +3089,14 @@ const handleOpenSearch = () => {
 </template>
 
 <style>
-html,
-body {
+
+html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background-color: transparent;
 }
 
 html:not(.dark) {
@@ -3110,14 +3106,12 @@ html:not(.dark) {
 
 .el-dialog {
   border-radius: 8px !important;
-  /* [修改] 设置较大的圆角 */
   overflow: hidden;
-  /* 确保内容不溢出圆角 */
+  background-color: var(--el-bg-color-main) !important;
 }
 
 .el-message-box {
   border-radius: 8px !important;
-  /* [修改] 设置较大的圆角 */
   overflow: hidden;
 }
 
@@ -3584,11 +3578,11 @@ html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner:
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background-color: var(--el-bg-color-page);
+  background-color: var(--el-bg-color-main);
   color: var(--el-text-color-primary);
   font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 
-  border: 1px solid var(--el-border-color-dark);
+  border: 1.5px solid var(--el-border-color-dark);
   box-sizing: border-box;
   border-radius: 8px;
 }
@@ -3610,7 +3604,7 @@ html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner:
   margin: 0;
   overflow-y: auto;
   scroll-behavior: smooth;
-  background-color: var(--el-bg-color);
+  background-color: transparent!important;
   scrollbar-gutter: stable;
 }
 

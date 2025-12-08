@@ -600,8 +600,8 @@ html.dark .drag-overlay {
     height: auto;
     width: 100%;
     flex-shrink: 0;
-    background-color: var(--el-bg-color);
     z-index: 10;
+    background-color: transparent;
 }
 
 .file-card-container {
@@ -704,7 +704,7 @@ html.dark .file-card-container :deep(.anticon-close:hover) {
 .waveform-display-area {
     width: 100%;
     height: 40px;
-    background-color: #F3F4F6;
+    background-color: var(--el-bg-color-input);
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -749,10 +749,11 @@ html.dark .waveform-display-area {
 }
 
 .option-selector-wrapper {
-    background-color: #F3F4F6;
+    background-color: var(--el-bg-color-input);
     border-radius: 12px;
     padding: 8px;
     max-height: 132px;
+    background-color: var(--el-bg-color-input);
 }
 
 html.dark .option-selector-wrapper {
@@ -764,7 +765,6 @@ html.dark .option-selector-wrapper {
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
-    /* Vertically align items */
 }
 
 .option-selector-content .el-button {
@@ -805,7 +805,7 @@ html.dark .el-divider--vertical {
 .chat-input-area-vertical {
     display: flex;
     flex-direction: column;
-    background-color: #F3F4F6;
+    background-color: var(--el-bg-color-input);
     border-radius: 12px;
     padding: 10px 12px;
     border: 1px solid #E4E7ED;

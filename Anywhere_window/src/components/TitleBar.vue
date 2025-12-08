@@ -142,6 +142,7 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
   color: var(--el-text-color-primary);
   flex-shrink: 0;
   z-index: 100;
+  background-color: transparent;
 }
 
 .os-macos {

@@ -106,7 +106,7 @@ const logoColor = computed(() => {
   padding: 0 16px;
   flex-shrink: 0;
   z-index: 9;
-  background-color: var(--el-bg-color);
+  background-color: transparent;
 }
 
 .model-header-wrapper {

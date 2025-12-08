@@ -604,6 +604,14 @@ async function forceSyncFile(basename, direction, signal) {
     font-weight: 600;
 }
 
+:deep(.el-table__border-left-patch) {
+    border-left: 1px solid var(--border-primary);
+}
+
+:deep(.el-table__border-right-patch) {
+    border-left: 1px solid var(--border-primary);
+}
+
 :deep(.el-table--border .el-table__inner-wrapper::after),
 :deep(.el-table--border::after),
 :deep(.el-table--border::before),

@@ -411,7 +411,7 @@ const truncateFilename = (filename, maxLength = 30) => {
   align-self: flex-end;
   align-items: flex-end;
   max-width: 90%;
-  margin-right: 5%;
+  margin-right: 4%;
   margin-left: 5%;
 }
 
@@ -486,10 +486,11 @@ const truncateFilename = (filename, maxLength = 30) => {
 .chat-message .user-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
     border-radius: 18px;
-    background-color: #f4f4f4;
+    background-color: var(--el-bg-color-userbubble);
     padding-top: 10px;
     padding-bottom: 10px;
     margin-bottom: 0px;
+    padding-right:14px;
   }
 
   :deep(.el-bubble-content-wrapper .el-bubble-footer) {
@@ -506,7 +507,7 @@ html.dark .chat-message .user-bubble {
 
 .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
-    background-color: #ffffff;
+    background-color: transparent;
     padding-left: 4px;
     padding-right: 0px;
     padding-bottom: 0px;
