@@ -3,9 +3,10 @@ html.dark {
 
     /* --- 背景色 --- */
     --el-bg-color-page: #202123;  /* ChatGPT 最深背景 */
-    --el-bg-color: #212121;      /* ChatGPT 组件/元素背景 */
+    --el-bg-color: #212121 !important;      /* ChatGPT 组件/元素背景 */
     --el-bg-color-overlay: #414158; /* ChatGPT 弹窗等背景 */
-    --el-bg-color-input: #303030; /* ChatGPT 弹窗等背景 */
+    --el-bg-color-input: #303030 !important; /* ChatGPT 弹窗等背景 */
+    --el-bg-color-userbubble: #2F2F2F !important;
 
     /* --- 文字颜色 --- */
     --el-text-color-primary: #ECECF1; /* ChatGPT 主要文字 (近白) */
@@ -25,11 +26,11 @@ html.dark {
     /* --- 填充颜色 --- */
     --el-fill-color-darker: #424242;   /* 用于非常暗的区域 */
     --el-fill-color-dark: #494949;    /* 暗填充 */
-    --el-fill-color: #424242;        /* 基础填充 */
-    --el-fill-color-light: #4A4B57;    /* 亮填充 */
+    --el-fill-color: #424242 !important;        /* 基础填充 */
+    --el-fill-color-light: #4A4B57 !important;    /* 亮填充 */
     --el-fill-color-lighter: #5a5c69;   /* 更亮填充 */
     --el-fill-color-extra-light: #666875;/* 最亮填充 */
-    --el-fill-color-blank: transparent;
+    --el-fill-color-blank: #212121 !important;
 
     /* --- 主题色 (ChatGPT 不明显使用单一主色) --- */
     /* 可能需要根据你的按钮等交互元素决定，这里用白色示例 */

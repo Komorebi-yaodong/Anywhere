@@ -103,5 +103,11 @@ window.api = {
       ipcRenderer.on('always-on-top-changed', (event, newState) => {
         callback(newState);
       });
+    },
+    // 监听配置更新消息
+    onConfigUpdated: (callback) => {
+      ipcRenderer.on('config-updated', (event, newConfig) => {
+        callback(newConfig);
+      });
     }
 };

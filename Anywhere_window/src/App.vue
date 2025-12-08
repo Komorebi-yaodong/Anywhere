@@ -731,6 +731,19 @@ watch(zoomLevel, (newZoom) => {
 watch(chat_show, async () => {
   await addCopyButtonsToCodeBlocks();
 }, { deep: true, flush: 'post' });
+watch(() => currentConfig.value?.isDarkMode, (isDark) => {
+  // 切换 HTML 根元素的类名
+  if (isDark) {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+  
+  // 更新搜索组件主题
+  if (textSearchInstance) {
+    textSearchInstance.setTheme(isDark ? 'dark' : 'light');
+  }
+}, { immediate: true });
 
 onMounted(async () => {
   if (isInit.value) return;
@@ -931,11 +944,19 @@ onMounted(async () => {
   window.addEventListener('error', handleGlobalImageError, true);
   window.addEventListener('keydown', handleGlobalKeyDown);
 
-  watch(() => currentConfig.value.isDarkMode, (isDark) => {
-    if (textSearchInstance) {
-      textSearchInstance.setTheme(isDark ? 'dark' : 'light');
-    }
-  });
+    if (window.api && window.api.onConfigUpdated) {
+    window.api.onConfigUpdated((newConfig) => {
+      if (newConfig) {
+        // 更新本地配置对象，这将触发上面的 watch
+        currentConfig.value = newConfig;
+        
+        // 同步缩放比例
+        if (newConfig.zoom !== undefined) {
+           zoomLevel.value = newConfig.zoom;
+        }
+      }
+    });
+  }
 });
 
 const autoSaveSession = async () => {
@@ -3089,8 +3110,8 @@ const handleOpenSearch = () => {
 </template>
 
 <style>
-
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -3099,15 +3120,39 @@ html, body {
   background-color: transparent;
 }
 
-html:not(.dark) {
+:root {
+  /* 浅色模式变量 */
+  --el-bg-color: #FFFFFD !important;
+  --el-bg-color-userbubble: #F5F4ED;
+  --el-fill-color: #F0F2F5 !important;
+  --el-fill-color-light: #F6F6F6 !important;
+  --el-bg-color-input: #F6F6F6 !important; /* 明确指定浅色输入框背景 */
+  --el-fill-color-blank: var(--el-fill-color-light)!important;
+  
   --text-primary: #000000;
   --el-text-color-primary: var(--text-primary);
+}
+html.dark {
+  /* 深色模式变量强制覆盖 */
+  --el-bg-color: #212121 !important; /* 修复窗口背景色 */
+  --el-bg-color-userbubble: #2F2F2F;
+  --el-fill-color: #424242 !important;
+  --el-fill-color-light: #2c2e33 !important;
+  --el-bg-color-input: #303030 !important; /* 修复输入框背景色 */
+  --el-fill-color-blank: #212121 !important;
+  
+  --text-primary: #ECECF1 !important;
+  --el-text-color-primary: #ECECF1 !important;
 }
 
 .el-dialog {
   border-radius: 8px !important;
   overflow: hidden;
-  background-color: var(--el-bg-color-main) !important;
+  background-color: var(--el-bg-color) !important;
+}
+
+html.dark .el-dialog {
+  background-color: var(--el-bg-color) !important;
 }
 
 .el-message-box {
@@ -3140,6 +3185,7 @@ html:not(.dark) {
   padding-bottom: 10px !important;
 }
 
+/* Save Options Dialog */
 .save-options-dialog.el-dialog {
   position: fixed;
   top: 50%;
@@ -3204,6 +3250,7 @@ html.dark .save-option-text p {
   color: var(--el-text-color-regular);
 }
 
+/* System Prompt Dialog */
 .system-prompt-dialog .el-dialog__header {
   padding: 15px 20px;
   margin-right: 0;
@@ -3260,7 +3307,7 @@ html.dark .system-prompt-full-content .el-textarea__inner {
   background-color: var(--el-fill-color-dark) !important;
 }
 
-
+/* Filename Prompt Dialog */
 .filename-prompt-dialog.el-dialog {
   position: fixed;
   top: 50%;
@@ -3307,15 +3354,13 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   border-color: var(--el-border-color);
 }
 
-/* 图片预览工具栏样式 */
+/* Custom Viewer Actions */
 .custom-viewer-actions {
   position: fixed;
   bottom: 100px;
-  /* 定位在默认工具栏上方 (默认栏在 bottom: 40px) */
   left: 50%;
   transform: translateX(-50%);
   z-index: 2100;
-  /* 确保在图片预览器之上 */
   padding: 6px 12px;
   background-color: rgba(0, 0, 0, 0.4);
   border-radius: 22px;
@@ -3374,6 +3419,7 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
   background: #999;
 }
 
+/* MCP Dialog Styles */
 .mcp-dialog .mcp-dialog-content p {
   margin-top: 0;
   margin-bottom: 15px;
@@ -3409,11 +3455,6 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
   color: var(--el-text-color-secondary);
 }
 
-.mcp-server-description {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
 .mcp-dialog-footer-search {
   flex-shrink: 0;
   padding: 15px 15px 0 0;
@@ -3430,7 +3471,6 @@ html.dark .mcp-dialog-footer-search {
   flex-direction: column;
   flex-grow: 1;
   overflow: hidden;
-  flex-direction: column;
   padding: 0 10px;
 }
 
@@ -3443,27 +3483,11 @@ html.dark .mcp-dialog-footer-search {
   padding: 0 5px;
 }
 
-.mcp-checkbox-group {
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-  gap: 10px;
-  max-height: 45vh;
-  overflow-y: auto;
-  padding-right: 5px;
-}
-
-.mcp-server-tags .el-tag {
-  height: 20px;
-  padding: 0 6px;
-}
-
 .mcp-server-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
   max-height: 35vh;
-  /* 您可以按需调整高度 */
   overflow-y: auto;
   padding: 5px;
 }
@@ -3498,47 +3522,14 @@ html.dark .mcp-server-item.is-checked {
 
 .mcp-server-item .el-checkbox {
   margin-top: 1px;
-  /* 微调复选框垂直位置 */
 }
 
 .mcp-server-content {
   flex: 1;
   min-width: 0;
-  /* 允许flex子元素收缩 */
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.mcp-server-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.mcp-server-name {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mcp-server-tags {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-  /* 防止标签被压缩 */
-}
-
-.mcp-server-description {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner,
@@ -3559,7 +3550,6 @@ html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner:
 
 .no-header-dialog .el-dialog__body {
   padding-top: 10px !important;
-  /* 恢复一些顶部间距 */
 }
 
 .no-header-msgbox .el-message-box__header {
@@ -3578,13 +3568,17 @@ html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner:
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background-color: var(--el-bg-color-main);
+  background-color: var(--el-bg-color);
   color: var(--el-text-color-primary);
   font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 
   border: 1.5px solid var(--el-border-color-dark);
   box-sizing: border-box;
   border-radius: 8px;
+}
+
+html.dark .app-container {
+  background-color: var(--el-bg-color);
 }
 
 .main-area-wrapper {
@@ -3604,7 +3598,7 @@ html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner:
   margin: 0;
   overflow-y: auto;
   scroll-behavior: smooth;
-  background-color: transparent!important;
+  background-color: transparent !important;
   scrollbar-gutter: stable;
 }
 

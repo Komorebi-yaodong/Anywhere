@@ -544,7 +544,7 @@ function checkConfig(config) {
  * @param {*} value - 要设置的值
  * @returns {{success: boolean, message?: string}} - 返回操作结果
  */
-function saveSetting(keyPath, value) {
+async function saveSetting(keyPath, value) {
   const rootKey = keyPath.split('.')[0];
   let docId;
   let targetKeyPath = keyPath;
@@ -564,7 +564,7 @@ function saveSetting(keyPath, value) {
     isBaseConfig = true;
   }
 
-  const doc = utools.db.get(docId);
+  const doc = await utools.db.promises.get(docId); // 使用 await 确保获取
   if (!doc) {
     console.error(`Config document "${docId}" not found, cannot save setting.`);
     return { success: false, message: `Config document "${docId}" not found` };
@@ -572,7 +572,6 @@ function saveSetting(keyPath, value) {
 
   let dataToUpdate = isBaseConfig ? doc.data.config : doc.data;
 
-  // 使用更稳健的路径解析逻辑，以处理包含点号的ID
   const pathParts = targetKeyPath.split('.');
   let current = dataToUpdate;
   for (let i = 0; i < pathParts.length - 1; i++) {
@@ -584,13 +583,20 @@ function saveSetting(keyPath, value) {
   }
   current[pathParts[pathParts.length - 1]] = value;
 
-  const result = utools.db.put({
+  const result = await utools.db.promises.put({
     _id: docId,
-    data: doc.data, // 直接使用被引用的、已更新的 doc.data
+    data: doc.data,
     _rev: doc._rev
   });
 
   if (result.ok) {
+    // 保存成功后，获取完整配置并广播给所有窗口
+    const fullConfig = await getConfig(); // 获取最新合并后的配置
+    for (const windowInstance of windowMap.values()) {
+      if (!windowInstance.isDestroyed()) {
+        windowInstance.webContents.send('config-updated', fullConfig.config);
+      }
+    }
     return { success: true };
   } else {
     console.error(`Failed to save setting to "${docId}"`, result);
@@ -638,6 +644,14 @@ function updateConfigWithoutFeatures(newConfig) {
     data: mcpServersPart,
     _rev: mcpServersDoc ? mcpServersDoc._rev : undefined,
   });
+
+  // 5. 广播配置更新给所有已打开的独立窗口
+  for (const windowInstance of windowMap.values()) {
+    if (!windowInstance.isDestroyed()) {
+      // 发送新的配置对象（plainConfig 即为 config 部分）
+      windowInstance.webContents.send('config-updated', plainConfig);
+    }
+  }
 }
 
 function updateConfig(newConfig) {

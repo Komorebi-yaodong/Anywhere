@@ -822,7 +822,7 @@ html.dark .chat-input-area-vertical {
 }
 
 .chat-textarea-vertical:deep(.el-textarea__inner) {
-    background-color: transparent;
+    background-color: transparent !important;
     box-shadow: none !important;
     border: none !important;
     padding: 0;

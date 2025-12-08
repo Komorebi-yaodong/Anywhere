@@ -630,7 +630,7 @@ var require_data = __commonJS({
         updateConfig({ "config": config });
       }
     }
-    function saveSetting(keyPath, value) {
+    async function saveSetting(keyPath, value) {
       const rootKey = keyPath.split(".")[0];
       let docId;
       let targetKeyPath = keyPath;
@@ -648,7 +648,7 @@ var require_data = __commonJS({
         docId = "config";
         isBaseConfig = true;
       }
-      const doc = utools.db.get(docId);
+      const doc = await utools.db.promises.get(docId);
       if (!doc) {
         console.error(`Config document "${docId}" not found, cannot save setting.`);
         return { success: false, message: `Config document "${docId}" not found` };
@@ -664,13 +664,18 @@ var require_data = __commonJS({
         current = current[part];
       }
       current[pathParts[pathParts.length - 1]] = value;
-      const result = utools.db.put({
+      const result = await utools.db.promises.put({
         _id: docId,
         data: doc.data,
-        // 直接使用被引用的、已更新的 doc.data
         _rev: doc._rev
       });
       if (result.ok) {
+        const fullConfig = await getConfig();
+        for (const windowInstance of windowMap.values()) {
+          if (!windowInstance.isDestroyed()) {
+            windowInstance.webContents.send("config-updated", fullConfig.config);
+          }
+        }
         return { success: true };
       } else {
         console.error(`Failed to save setting to "${docId}"`, result);
@@ -704,6 +709,11 @@ var require_data = __commonJS({
         data: mcpServersPart,
         _rev: mcpServersDoc ? mcpServersDoc._rev : void 0
       });
+      for (const windowInstance of windowMap.values()) {
+        if (!windowInstance.isDestroyed()) {
+          windowInstance.webContents.send("config-updated", plainConfig);
+        }
+      }
     }
     function updateConfig(newConfig) {
       const features = utools.getFeatures();

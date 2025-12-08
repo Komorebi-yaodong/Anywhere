@@ -21,6 +21,7 @@ WINDOW = [
     "./Anywhere_window/src/App.vue",
     "./Anywhere_window/src/components/",
     "./Anywhere_window/src/utils/",
+    "./Anywhere_window/src/assets/",
 ]
 
 Copy_WINDOW = [
@@ -42,7 +43,7 @@ def get_text_from_dir(dir_path):
     text = ""
     for file in os.listdir(dir_path):
         file_path = os.path.join(dir_path, file)
-        if os.path.isfile(file_path) and (file.endswith(".md") or file.endswith(".js") or file.endswith(".vue") or file.endswith(".json") or file.endswith(".html")):
+        if os.path.isfile(file_path) and (file.endswith(".md") or file.endswith(".js") or file.endswith(".vue") or file.endswith(".json") or file.endswith(".html") or file.endswith(".css")):
             text += read_text(file_path)
     return text
 
