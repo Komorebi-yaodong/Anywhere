@@ -510,7 +510,8 @@ html.dark .chat-message .user-bubble {
     background-color: transparent;
     padding-left: 4px;
     padding-right: 0px;
-    padding-bottom: 0px;
+    padding-bottom: 2px;
+    padding-top: 4px;
   }
 
   :deep(.el-bubble-content-wrapper .el-bubble-footer) {

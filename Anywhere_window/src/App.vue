@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar } from 'element-plus';
 import { createClient } from "webdav/web";
 import { QuestionFilled } from '@element-plus/icons-vue';
 
@@ -10,7 +10,7 @@ const ChatMessage = defineAsyncComponent(() => import('./components/ChatMessage.
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
-import { DocumentCopy, Download, Search } from '@element-plus/icons-vue';
+import { DocumentCopy, Download, Search, Tools } from '@element-plus/icons-vue';
 
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -3042,8 +3042,8 @@ const handleOpenSearch = () => {
           </el-button>
         </el-button-group>
         <el-button-group>
-          <el-button @click="selectAllMcpServers">全选当前</el-button>
-          <el-button @click="clearMcpTools">清除全部</el-button>
+          <el-button @click="selectAllMcpServers">全选</el-button>
+          <el-button @click="clearMcpTools">清空</el-button>
         </el-button-group>
       </div>
       <div class="mcp-server-list custom-scrollbar">
@@ -3054,6 +3054,9 @@ const handleOpenSearch = () => {
             @change="() => toggleMcpServerSelection(server.id)" @click.stop />
           <div class="mcp-server-content">
             <div class="mcp-server-header-row">
+              <el-avatar :src="server.logoUrl" shape="square" :size="20" class="mcp-server-icon">
+                <el-icon :size="12"><Tools /></el-icon>
+              </el-avatar>
               <span class="mcp-server-name">{{ server.name }}</span>
               <el-tooltip :content="server.isPersistent ? '持久连接已开启' : '持久连接已关闭'" placement="top">
                 <el-button text circle :class="{ 'is-persistent-active': server.isPersistent }"
@@ -3435,6 +3438,16 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
   margin-bottom: 4px;
 }
 
+.mcp-server-icon {
+  flex-shrink: 0;
+  background-color: var(--el-fill-color-light); /* 适配深/浅色模式的背景 */
+  color: var(--el-text-color-secondary);
+}
+
+html.dark .mcp-server-icon {
+  background-color: var(--el-fill-color);
+}
+
 .mcp-server-name {
   font-weight: 500;
   color: var(--el-text-color-primary);
@@ -3453,11 +3466,15 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
 .mcp-server-description {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .mcp-dialog-footer-search {
   flex-shrink: 0;
-  padding: 15px 15px 0 0;
+  padding: 10px 4px 0 4px;
   margin-top: 10px;
   border-top: 1px solid var(--el-border-color-lighter);
 }

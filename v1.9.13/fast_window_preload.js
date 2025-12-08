@@ -889,6 +889,7 @@ var require_data = __commonJS({
         y,
         frame: false,
         transparent: false,
+        hasShadow: true,
         minWidth: 480,
         minHeight: 580,
         webPreferences: {

@@ -883,6 +883,7 @@ async function openWindow(config, msg) {
     y: y,
     frame: false,
     transparent: false,
+    hasShadow:true,
     minWidth: 480,
     minHeight: 580,
     webPreferences: {
