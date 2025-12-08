@@ -740,7 +740,7 @@ html.dark .file-card-container :deep(.anticon-close:hover) {
 }
 
 html.dark .waveform-display-area {
-    background-color: #1F1F1F;
+    background-color: var(--el-bg-color-input);
 }
 
 /* MODIFIED: Universal Option Selector Styles */
@@ -756,7 +756,7 @@ html.dark .waveform-display-area {
 }
 
 html.dark .option-selector-wrapper {
-    background-color: #1F1F1F;
+    background-color: var(--el-bg-color-input);
 }
 
 .option-selector-content {
@@ -812,7 +812,7 @@ html.dark .el-divider--vertical {
 }
 
 html.dark .chat-input-area-vertical {
-    background-color: #1F1F1F;
+    background-color: var(--el-bg-color-input);
     border: 1px solid #414243;
 }
 

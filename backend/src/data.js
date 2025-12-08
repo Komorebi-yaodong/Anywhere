@@ -848,7 +848,7 @@ async function openWindow(config, msg) {
   const promptConfig = config.prompts[promptCode];
   const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
   let channel = "window";
-  const backgroundColor = config.isDarkMode ? `rgba(24, 24, 24, 1)` : 'rgba(255, 255, 255, 1)';
+  // const backgroundColor = config.isDarkMode ? `rgba(24, 24, 24, 1)` : 'rgba(255, 255, 255, 1)';
 
   // 为窗口生成唯一ID并添加到消息中
   const senderId = crypto.randomUUID();
@@ -857,7 +857,7 @@ async function openWindow(config, msg) {
 
   const windowOptions = {
     show: false,
-    backgroundColor: backgroundColor,
+    // backgroundColor: backgroundColor,
     title: "Anywhere",
     width: width,
     height: height,
@@ -868,10 +868,9 @@ async function openWindow(config, msg) {
     transparent: false,
     minWidth: 480,
     minHeight: 580,
-    // resizable: true,
     webPreferences: {
       preload: "./window_preload.js",
-      devTools: true
+      devTools: utools.isDev()
     },
   };
   const entryPath = config.isDarkMode ? "./window/index.html?dark=1" : "./window/index.html";
@@ -890,7 +889,9 @@ async function openWindow(config, msg) {
       ubWindow.webContents.send(channel, msg);
     }
   );
-  ubWindow.webContents.openDevTools({ mode: "detach" });
+  if (utools.isDev()){
+    ubWindow.webContents.openDevTools({ mode: "detach" });
+  }
 }
 
 async function coderedirect(label, payload) {
@@ -1054,7 +1055,7 @@ async function openFastInputWindow(config, msg) {
         skipTaskbar: true,
         webPreferences: {
             preload: "./fast_window_preload.js",
-            devTools: true
+            devTools: utools.isDev()
         }
     };
 
@@ -1083,7 +1084,9 @@ async function openFastInputWindow(config, msg) {
             console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
         }
     );
-    fastWindow.webContents.openDevTools({ mode: "detach" }); // 调试用
+    if (utools.isDev()) {// 调试用
+      fastWindow.webContents.openDevTools({ mode: "detach" });
+    }
 }
 
 module.exports = {

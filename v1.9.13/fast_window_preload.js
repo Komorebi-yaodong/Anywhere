@@ -860,13 +860,12 @@ var require_data = __commonJS({
       const promptConfig = config.prompts[promptCode];
       const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
       let channel2 = "window";
-      const backgroundColor = config.isDarkMode ? `rgba(24, 24, 24, 1)` : "rgba(255, 255, 255, 1)";
       const senderId2 = crypto.randomUUID();
       msg.senderId = senderId2;
       msg.isAlwaysOnTop = isAlwaysOnTop;
       const windowOptions = {
         show: false,
-        backgroundColor,
+        // backgroundColor: backgroundColor,
         title: "Anywhere",
         width,
         height,
@@ -877,10 +876,9 @@ var require_data = __commonJS({
         transparent: false,
         minWidth: 480,
         minHeight: 580,
-        // resizable: true,
         webPreferences: {
           preload: "./window_preload.js",
-          devTools: true
+          devTools: utools.isDev()
         }
       };
       const entryPath = config.isDarkMode ? "./window/index.html?dark=1" : "./window/index.html";
@@ -893,7 +891,9 @@ var require_data = __commonJS({
           ubWindow.webContents.send(channel2, msg);
         }
       );
-      ubWindow.webContents.openDevTools({ mode: "detach" });
+      if (utools.isDev()) {
+        ubWindow.webContents.openDevTools({ mode: "detach" });
+      }
     }
     async function coderedirect2(label, payload) {
       utools.redirect(label, payload);
@@ -1010,7 +1010,7 @@ var require_data = __commonJS({
         skipTaskbar: true,
         webPreferences: {
           preload: "./fast_window_preload.js",
-          devTools: true
+          devTools: utools.isDev()
         }
       };
       const entryPath = "./fast_window/fast_input.html";
@@ -1031,7 +1031,9 @@ var require_data = __commonJS({
           console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
         }
       );
-      fastWindow.webContents.openDevTools({ mode: "detach" });
+      if (utools.isDev()) {
+        fastWindow.webContents.openDevTools({ mode: "detach" });
+      }
     }
     module2.exports = {
       getConfig,

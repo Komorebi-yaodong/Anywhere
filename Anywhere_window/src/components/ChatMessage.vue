@@ -519,7 +519,7 @@ html.dark .chat-message .user-bubble {
 
 html.dark .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
-    background: #181818;
+    background: var(--el-bg-color);
   }
 }
 

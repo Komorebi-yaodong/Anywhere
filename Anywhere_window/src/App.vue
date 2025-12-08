@@ -2238,7 +2238,7 @@ const askAI = async (forceSend = false) => {
       // --- 仅在临时列表中注入MCP提示词 ---
       if (openaiFormattedTools.value.length > 0) {
         const mcpSystemPrompt = `
-## Agent Behavior Model: Strict ReAct and Tool Execution Guidance (Final Revised - English)
+## Agent Behavior Model: Strict ReAct and Tool Execution Guidance
 
 As an intelligent Agent that strictly adheres to the ReAct (Reasoning and Action) workflow and is capable of invoking external tools. Core mission is: **To accurately invoke tools based on structured reasoning, and efficiently synthesize user-friendly final responses.**
 
@@ -2248,7 +2248,6 @@ All tasks require the Agent to strictly follow the structured process below unti
 
 1.  **Thought (Reasoning)**:
     *   **Purpose:** Deeply analyze the user's request and plan the solution path. Evaluate current progress and decide the next step: Is a tool necessary? Which tool? What are the required parameters?
-    *   **Format (Internal):** \`Thought: [Logical thinking process in the user's language]\`
 
 2.  **Tool Call (Action)**:
     *   **Purpose:** Execute only when external data or an external operation is definitely required. This step has two parts:
@@ -2260,7 +2259,6 @@ All tasks require the Agent to strictly follow the structured process below unti
 
 3.  **Observation (Tool Response)**:
     *   **Purpose:** Receive the system's return result from the tool execution (this step cannot be controlled).
-    *   **Format (Internal):** \`Observation: [Raw Tool Output]\`
     *   **Loop (Internal):** Upon receiving an \`Observation\`, must return to step 1 (Thought) for result analysis and next step planning.
 
 4.  **Final Answer (Conclusion)**:
@@ -2290,10 +2288,7 @@ All tasks require the Agent to strictly follow the structured process below unti
           <source id="Audio Format" src="Audio Link URL">
         </audio>
         \`\`\`
-3.  **Output Visibility Control (Crucial Modification)**: **The Agent's output to the user must strictly follow this sequence and contain no other content:**
-    *   **Phase A (Pre-Action):** When a tool is needed, output the Tool Call justification statement (Step 2) *and then* generate the tool call object.
-    *   **Phase B (Post-Action / Final Answer):** After receiving the tool output, generate the final synthesized response.
-    *   **STRICT PROHIBITION for Phase B:** When generating the Final Answer, **YOU MUST NOT** output the "Need to call..." sentence again, and **YOU MUST NOT** summarize the tool action (e.g., "I have fetched the news"). **Start immediately with the information requested by the user.**
+3. **Language**: All output must conform to the user's linguistic habits.
 `;
         const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
         if (systemMessageIndex !== -1) {
@@ -2554,10 +2549,10 @@ All tasks require the Agent to strictly follow the structured process below unti
     if (chat_show.value[errorBubbleIndex].reasoning_content) {
       chat_show.value[errorBubbleIndex].status = "error";
     }
-    chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `错误: ${errorDisplay}` }];
+    chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `${errorDisplay}` }];
 
     // 将错误消息同步到主 history 数组
-    history.value.push({ role: 'assistant', content: `错误: ${errorDisplay}` });
+    history.value.push({ role: 'assistant', content: `${errorDisplay}` });
 
   } finally {
     loading.value = false;
@@ -3074,7 +3069,13 @@ const handleGlobalKeyDown = (event) => {
 </template>
 
 <style>
-/* Global styles directly used by App.vue or its dynamic content */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 html:not(.dark) {
   --text-primary: #000000;
   --el-text-color-primary: var(--text-primary);
@@ -3563,7 +3564,6 @@ html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner:
   border: 1px solid var(--el-border-color-dark);
   box-sizing: border-box;
   border-radius: 8px;
-  /* 如果你想要圆角可以加这个 */
 }
 
 .main-area-wrapper {
