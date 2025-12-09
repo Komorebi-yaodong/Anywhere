@@ -624,7 +624,6 @@ html.dark .chat-message .ai-bubble {
     }
 
     &::-webkit-media-controls-timeline {
-      background-color: var(--border-primary, #E5E7EB);
       border-radius: 3px;
       height: 6px;
       margin: 0 10px;
