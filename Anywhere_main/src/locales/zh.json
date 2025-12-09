@@ -112,7 +112,7 @@
     },
     "showModeLabel": "显示模式",
     "showModeOptions": {
-      "fastinput": "快速输入",
+      "fastinput": "快捷输入",
       "window": "独立窗口"
     },
     "promptKeyLabelShort": "名称",

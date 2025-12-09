@@ -817,16 +817,16 @@ function getFastInputPosition(config) {
   const height = 70;
 
   const primaryDisplay = utools.getPrimaryDisplay();
-  const displayBounds = primaryDisplay.bounds;
-
+  let displayBounds;
   let x, y;
 
   if (config.fastWindowPosition && typeof config.fastWindowPosition.x === 'number' && typeof config.fastWindowPosition.y === 'number') {
-    // 使用保存的位置
     x = config.fastWindowPosition.x;
     y = config.fastWindowPosition.y;
+    displayBounds = utools.getDisplayNearestPoint({"x":x, "y": y}).bounds;
   } else {
     // 默认位置：屏幕中央偏下 (90%高度处)
+    displayBounds = primaryDisplay.bounds;
     x = Math.floor(displayBounds.x + (displayBounds.width - width) / 2);
     y = Math.floor(displayBounds.y + displayBounds.height * 0.85);
   }
@@ -865,7 +865,7 @@ async function openWindow(config, msg) {
   const promptConfig = config.prompts[promptCode];
   const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
   let channel = "window";
-  // const backgroundColor = config.isDarkMode ? `rgba(24, 24, 24, 1)` : 'rgba(255, 255, 255, 1)';
+  const backgroundColor = config.isDarkMode ? `rgba(33, 33, 33, 1)` : 'rgba(255, 255, 253, 1)';
 
   // 为窗口生成唯一ID并添加到消息中
   const senderId = crypto.randomUUID();
@@ -874,7 +874,7 @@ async function openWindow(config, msg) {
 
   const windowOptions = {
     show: false,
-    // backgroundColor: backgroundColor,
+    backgroundColor: backgroundColor,
     title: "Anywhere",
     width: width,
     height: height,

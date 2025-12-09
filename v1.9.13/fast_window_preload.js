@@ -841,12 +841,14 @@ var require_data = __commonJS({
       const width = 300;
       const height = 70;
       const primaryDisplay = utools.getPrimaryDisplay();
-      const displayBounds = primaryDisplay.bounds;
+      let displayBounds;
       let x, y;
       if (config.fastWindowPosition && typeof config.fastWindowPosition.x === "number" && typeof config.fastWindowPosition.y === "number") {
         x = config.fastWindowPosition.x;
         y = config.fastWindowPosition.y;
+        displayBounds = utools.getDisplayNearestPoint({ "x": x, "y": y }).bounds;
       } else {
+        displayBounds = primaryDisplay.bounds;
         x = Math.floor(displayBounds.x + (displayBounds.width - width) / 2);
         y = Math.floor(displayBounds.y + displayBounds.height * 0.85);
       }
@@ -875,12 +877,13 @@ var require_data = __commonJS({
       const promptConfig = config.prompts[promptCode];
       const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
       let channel2 = "window";
+      const backgroundColor = config.isDarkMode ? `rgba(33, 33, 33, 1)` : "rgba(255, 255, 253, 1)";
       const senderId2 = crypto.randomUUID();
       msg.senderId = senderId2;
       msg.isAlwaysOnTop = isAlwaysOnTop;
       const windowOptions = {
         show: false,
-        // backgroundColor: backgroundColor,
+        backgroundColor,
         title: "Anywhere",
         width,
         height,

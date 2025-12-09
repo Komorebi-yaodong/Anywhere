@@ -3589,7 +3589,7 @@ html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner:
   color: var(--el-text-color-primary);
   font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 
-  border: 1.5px solid var(--el-border-color-dark);
+  // border: 1.0px solid var(--el-border-color-dark);
   box-sizing: border-box;
   border-radius: 8px;
 }
