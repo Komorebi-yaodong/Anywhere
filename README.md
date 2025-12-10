@@ -1,6 +1,6 @@
 # [Anywhere](https://github.com/Komorebi-yaodong/Anywhere)
 
-**你的智能快捷AI助手，随时随地，便捷召唤AI！**
+**你的智能快捷AI助手，随时随地，便捷召唤AI（支持MCP）！**
 
 Anywhere，一款功能强大、高效实用的AI助手，旨在为你提供卓越的AI服务体验。无论是日常学习、工作、创意探索，还是实现划词翻译、变量名命名、OCR、文件总结、音频转录，甚至AI绘图，它都能成为你的得力助手。
 
@@ -15,7 +15,7 @@ Anywhere，一款功能强大、高效实用的AI助手，旨在为你提供卓�
 1. **AI Studio（Google免费提供Gemini API，推荐）**
 
    * 访问[https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)申请你的API密钥
-   * 在Anywhere应用中填入URL，使用gemini官方url `https://generativelanguage.googleapis.com/v1beta/openai`或者使用作者提供的中转接口 `https://gemini-oai-cf.001412.xyz/v1`
+   * 在Anywhere应用中填入URL，使用gemini官方url `https://generativelanguage.googleapis.com/v1beta/openai`或者使用作者提供的中转接口 `https://gemini-oai.001412.xyz/v1`、`https://gemini-oai-cf.001412.xyz/v1`（备用接口）。
    * 在Anywhere应用中填入KEY：`你的密钥`
    * **模型后缀功能**：在手动添加模型时，为模型名称增加后缀以启用特殊功能（需中转站支持）：
      * `:search` - 联网搜索模型（调用Google搜索）
@@ -233,6 +233,7 @@ Anywhere，一款功能强大、高效实用的AI助手，旨在为你提供卓�
 5. **对话窗口关闭**：如果设置页面分离，关闭设置页面，如果此时有开启的对话窗口，也会一并关闭。
 6. **配置保存失败**：Utools数据库具有大小限制，请尽可能控制快捷助手图标大小，建议为128x128或更小。
 7. **Stdio 类型 MCP**：部分情况下，指令可能需要设置为绝对路径，例如 `node`设置为 `/user/local/bin/node`。
+8. **Windows10窗口边缘不显示**：更新系统设置：https://jingyan.baidu.com/article/90bc8fc8281fd6b753640cc2.html
 
 ---
 
