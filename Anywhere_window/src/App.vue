@@ -2172,6 +2172,10 @@ const askAI = async (forceSend = false) => {
           : userContentList;
         history.value.push({ role: "user", content: contentForHistory });
         chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
+        
+        // [修复-新增] 用户发送消息后，立即触发一次自动保存
+        autoSaveSession();
+
       } else return;
     } else return;
     prompt.value = "";
@@ -2597,6 +2601,9 @@ All tasks require the Agent to strictly follow the structured process below unti
     await nextTick();
     scrollToBottom();
     chatInputRef.value?.focus({ cursor: 'end' });
+    
+    // [修复-新增] AI 回复结束或出错后，立即触发一次自动保存
+    autoSaveSession();
   }
 };
 
@@ -2897,6 +2904,12 @@ const handleGlobalKeyDown = (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
     // 阻止浏览器的默认保存页面行为
     event.preventDefault();
+
+    // 如果AI正在回复，则不允许保存，避免状态冲突
+    if (loading.value) {
+      showDismissibleMessage.warning('请等待 AI 回复完成后再保存');
+      return;
+    }
 
     // 如果当前已经有其他弹窗，则不执行任何操作，避免弹窗重叠
     if (document.querySelector('.el-dialog, .el-message-box')) {
