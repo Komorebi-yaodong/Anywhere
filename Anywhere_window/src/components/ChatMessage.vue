@@ -662,7 +662,7 @@ html.dark .chat-message .ai-bubble {
     }
 
     &::-webkit-media-controls-timeline {
-      background-color: var(--border-primary, #373A40);
+      background-color: transparent;
     }
   }
 
