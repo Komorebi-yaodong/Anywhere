@@ -65,6 +65,12 @@ const setMessageRef = (el, index) => {
   else messageRefs.delete(index, el);
 };
 
+const urlParams = new URLSearchParams(window.location.search);
+const isDarkInit = urlParams.get('dark') === '1';
+if (isDarkInit) {
+  document.documentElement.classList.add('dark');
+}
+
 const defaultConfig = window.api.defaultConfig;
 const UserAvart = ref("user.png");
 const AIAvart = ref("ai.svg");
@@ -73,7 +79,11 @@ const CODE = ref("");
 
 const isInit = ref(false);
 const basic_msg = ref({ os: "macos", code: "AI", type: "over", payload: "请简洁地介绍一下你自己" });
-const currentConfig = ref(defaultConfig.config);
+const initialConfigData = JSON.parse(JSON.stringify(defaultConfig.config));
+if (isDarkInit) {
+  initialConfigData.isDarkMode = true;
+}
+const currentConfig = ref(initialConfigData);
 const autoCloseOnBlur = ref(false);
 const modelList = ref([]);
 const modelMap = ref({});
@@ -2276,45 +2286,13 @@ const askAI = async (forceSend = false) => {
       // --- 仅在临时列表中注入MCP提示词 ---
       if (openaiFormattedTools.value.length > 0) {
         const mcpSystemPrompt = `
-## Agent Behavior Model: Strict ReAct and Tool Execution Guidance
-
-As an intelligent Agent that strictly adheres to the ReAct (Reasoning and Action) workflow and is capable of invoking external tools. Core mission is: **To accurately invoke tools based on structured reasoning, and efficiently synthesize user-friendly final responses.**
-
-### Core Workflow: Strict ReAct Format (Internal Execution Steps)
-
-All tasks require the Agent to strictly follow the structured process below until the task is completed. **Note: Steps 1, 3, and the raw execution of Step 2 (Function Call) are internal process steps and must not be displayed to the user.**
-
-1.  **Thought (Reasoning)**:
-    *   **Purpose:** Deeply analyze the user's request and plan the solution path. Evaluate current progress and decide the next step: Is a tool necessary? Which tool? What are the required parameters?
-
-2.  **Tool Call (Action)**:
-    *   **Purpose:** Execute only when external data or an external operation is definitely required. This step has two parts:
-        *   **External Output (Justification):** Must provide a one-sentence justification for the invocation **before executing the tool call**.
-        *   **Internal Execution:** The actual function call mechanism.
-    *   **Statement Format (External Output):** \`Need to call [Tool Name] to [briefly state the objective].\` (Must use the user's language, e.g., if the user used Chinese: \`需要调用 [工具名称] 来 [简要说明目的]。\`)
-    *   **Execution Format (Internal):** Use the Function Call mechanism for tool invocation.
-    *   **Constraint:** **Parameter value validation is the highest priority.** Ensure all parameters are exact values required by the tool's Schema.
-
-3.  **Observation (Tool Response)**:
-    *   **Purpose:** Receive the system's return result from the tool execution (this step cannot be controlled).
-    *   **Loop (Internal):** Upon receiving an \`Observation\`, must return to step 1 (Thought) for result analysis and next step planning.
-
-4.  **Final Answer (Conclusion)**:
-    *   **Purpose:** Generate the final reply only when the task is fully resolved and all necessary information has been gathered. **This is the final required output.**
-    *   **Constraint:** Must parse the raw data from the tools and synthesize it into a natural, fluent, and complete response in the user's language.
-    *   **Negative Constraint (CRITICAL):** **Do NOT repeat the "Need to call..." justification sentence from Step 2. Do NOT mention technical tool names or IDs. Start the response directly with the natural language answer.**
-
-### Auxiliary Skills (Integrated Guidance)
-
-*   **Tool Logic Planning**: Ability to determine tool necessity, sequence, and parameter accuracy based on task requirements.
-*   **Parameter Validation**: Strictly differentiate between variable names and actual values to ensure zero error rate in tool arguments.
-*   **Result Synthesis**: Understand raw tool output and transform it into a natural, user-friendly final reply.
-*   **Multimedia Formatting**: Proficiency in using Markdown and specific HTML tags to ensure image, video, and audio links are displayed in a viewable format.
-
-### Mandatory Execution Rules (Constraint Rules)
-
-1.  **Synthesis**: Must always synthesize the tool output into valuable, easily understandable information from the user's perspective.
-2.  **Strict Multimedia Formatting Norms**: In all circumstances, the display format for multimedia content (images, videos, audio) must comply with the following specifications, and **must not** be contained within code blocks (\`\`\`):
+## Tool Use Rules
+Here are the rules you should always follow to solve your task:
+1. Always use the right arguments for the tools. Never use variable names as the action arguments, use the value instead.
+2. Call a tool only when needed. If no tool call is needed, just answer the question directly.
+3. Never re-do a tool call that you previously did with the exact same parameters.
+4. **Synthesis**: Must always synthesize the tool output into valuable, easily understandable information from the user's perspective.
+5.  **Strict Multimedia Formatting Norms**: In all circumstances, the display format for multimedia content (images, videos, audio) must comply with the following specifications, and **must not** be contained within code blocks (\`\`\`):
     *   **Image (Markdown)**: \`![Content Description](Image Link)\`
     *   **Video (HTML)**:
         \`\`\`html
@@ -2326,7 +2304,7 @@ All tasks require the Agent to strictly follow the structured process below unti
           <source id="Audio Format" src="Audio Link URL">
         </audio>
         \`\`\`
-3. **Language**: All output must conform to the user's linguistic habits.
+6. **Language**: All Respond must be in the user's language
 `;
         const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
         if (systemMessageIndex !== -1) {
