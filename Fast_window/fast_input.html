@@ -598,9 +598,9 @@
         btnInput.addEventListener('dragend', (e) => {
             btnInput.classList.remove('dragging');
 
-            if (window.api.typeText) {
-                window.api.typeText(fullTextData);
-            }
+            // if (window.api.typeText) {
+            //     window.api.typeText(fullTextData);
+            // }
             setTimeout(() => {
                 isTyping = false;
                 playCloseAnimation();
