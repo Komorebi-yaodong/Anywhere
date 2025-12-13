@@ -884,8 +884,6 @@ async function openWindow(config, msg) {
     frame: false,
     transparent: false,
     hasShadow:true,
-    minWidth: 480,
-    minHeight: 580,
     webPreferences: {
       preload: "./window_preload.js",
       devTools: utools.isDev()
