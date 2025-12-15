@@ -143,13 +143,22 @@ const switchToShowMode = () => {
 
 defineExpose({ switchToEditMode, switchToShowMode });
 
+const finishEdit = (action) => {
+  isEditing.value = false;
+  emit('edit-finished', {
+    id: props.message.id,
+    action: action,
+    content: editedContent.value
+  });
+};
+
 const handleEditKeyDown = (event) => {
   if (event.key === 'Escape') {
     event.preventDefault();
-    emit('edit-finished', { index: props.index, action: 'cancel' });
+    finishEdit('cancel');
   } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
-    emit('edit-finished', { index: props.index, action: 'save', content: editedContent.value });
+    finishEdit('save');
   }
 };
 
@@ -237,10 +246,8 @@ const truncateFilename = (filename, maxLength = 30) => {
               resize="none" @keydown="handleEditKeyDown" />
             <div class="editing-actions">
               <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
-              <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })"
-                size="small" circle type="primary" />
-              <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small"
-                circle />
+              <el-button :icon="Check" @click="finishEdit('save')" size="small" circle type="primary" />
+              <el-button :icon="Close" @click="finishEdit('cancel')" size="small" circle />
             </div>
           </div>
         </template>
@@ -302,10 +309,8 @@ const truncateFilename = (filename, maxLength = 30) => {
               resize="none" @keydown="handleEditKeyDown" />
             <div class="editing-actions">
               <span class="edit-shortcut-hint">Ctrl+Enter 确认 / Esc 取消</span>
-              <el-button :icon="Check" @click="emit('edit-finished', { index, action: 'save', content: editedContent })"
-                size="small" circle type="primary" />
-              <el-button :icon="Close" @click="emit('edit-finished', { index, action: 'cancel' })" size="small"
-                circle />
+              <el-button :icon="Check" @click="finishEdit('save')" size="small" circle type="primary" />
+              <el-button :icon="Close" @click="finishEdit('cancel')" size="small" circle />
             </div>
           </div>
           <div v-if="message.tool_calls && message.tool_calls.length > 0" class="tool-calls-container">
@@ -490,7 +495,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     padding-top: 10px;
     padding-bottom: 10px;
     margin-bottom: 0px;
-    padding-right:14px;
+    padding-right: 14px;
   }
 
   :deep(.el-bubble-content-wrapper .el-bubble-footer) {

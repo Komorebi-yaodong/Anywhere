@@ -647,20 +647,21 @@ const handleEditStart = async (index) => {
   });
 };
 
-const handleEditEnd = async ({ index, action, content }) => {
-  const childComponent = messageRefs.get(index);
-  if (childComponent) {
-    // 先处理数据和状态
-    if (action === 'save') {
-      handleEditMessage(index, content);
-      showDismissibleMessage.success('消息已更新');
-    }
-    childComponent.switchToShowMode();
-    // 注意：这里检查的是 chat_show，确保它是视觉上的最后一条
-    if (index === chat_show.value.length - 1 && chat_show.value[index].role === 'user') {
-      await nextTick();
-      await reaskAI(); // 调用 reaskAI 会复用现有逻辑，重新发送请求
-    }
+// Anywhere_window/src/App.vue
+
+const handleEditEnd = async ({ id, action, content }) => {
+  if (action !== 'save') return;
+
+  const currentIndex = chat_show.value.findIndex(m => m.id === id);
+  
+  if (currentIndex === -1) return;
+
+  handleEditMessage(currentIndex, content);
+  showDismissibleMessage.success('消息已更新');
+
+  if (currentIndex === chat_show.value.length - 1 && chat_show.value[currentIndex].role === 'user') {
+    await nextTick();
+    await reaskAI();
   }
 };
 
