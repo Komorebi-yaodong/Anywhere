@@ -3386,7 +3386,7 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   transform: translateX(-50%);
   z-index: 2100;
   padding: 6px 12px;
-  background-color: rgba(0, 0, 0, 0.4);
+  background-color: rgba(0, 0, 0, 0.45);
   border-radius: 22px;
   display: flex;
   gap: 16px;
@@ -3739,20 +3739,20 @@ body .app-container.has-bg {
 }
 
 .app-container.has-bg :deep(.chat-input-area-vertical) {
-  background-color: rgba(255, 255, 255, 0.7) !important;
+  background-color: rgba(255, 255, 255, 0.45) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  // border: 1px solid rgba(255, 255, 255, 0.5);
+  // box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 }
 .app-container.has-bg :deep(.chat-input-area-vertical .el-textarea__inner) {
   background-color: transparent !important;
 }
 
 html.dark .app-container.has-bg :deep(.chat-input-area-vertical) {
-  background-color: rgba(30, 30, 30, 0.7) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  background-color: rgba(30, 30, 30, 0.45) !important;
+  // border: 1px solid rgba(255, 255, 255, 0.1);
+  // box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
 }
 
 /* 弹窗 */
@@ -3781,12 +3781,12 @@ html.dark .app-container.has-bg :deep(.el-message-box) {
 /* 弹窗内输入框 */
 .app-container.has-bg :deep(.el-dialog .el-textarea__inner),
 .app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
-  background-color: rgba(240, 240, 240, 0.8) !important;
+  background-color: rgba(240, 240, 240, 0.45) !important;
   backdrop-filter: none !important;
 }
 html.dark .app-container.has-bg :deep(.el-dialog .el-textarea__inner),
 html.dark .app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
-  background-color: rgba(20, 20, 20, 0.8) !important;
+  background-color: rgba(20, 20, 20, 0.45) !important;
 }
 
 /* 模型选择药丸 */
@@ -3810,15 +3810,15 @@ html.dark .app-container.has-bg :deep(.model-pill:hover) {
 .app-container.has-bg :deep(.user-bubble .el-bubble-content) {
   background-color: rgba(245, 244, 237, 0.7) !important; /* 用户指定 */
   backdrop-filter: none !important;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 /* AI 气泡 */
 .app-container.has-bg :deep(.ai-bubble .el-bubble-content) {
-  background-color: rgba(255, 255, 255, 0.8) !important; /* 用户指定 */
+  background-color: rgba(255, 255, 255, 0.45) !important; /* 用户指定 */
   backdrop-filter: none !important;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   /* 用户指定 Padding */
   padding: 10px !important;
 }
@@ -3831,7 +3831,7 @@ html.dark .app-container.has-bg :deep(.user-bubble .el-bubble-content) {
 }
 
 html.dark .app-container.has-bg :deep(.ai-bubble .el-bubble-content) {
-  background-color: rgba(33, 33, 33, 0.8) !important;
+  background-color: rgba(33, 33, 33, 0.45) !important;
   border-color: rgba(255, 255, 255, 0.1);
 }
 
@@ -3856,24 +3856,20 @@ html.dark .app-container.has-bg :deep(.footer-actions .el-button.is-circle:hover
 .app-container.has-bg :deep(.el-thinking .trigger) {
   background-color: rgba(255, 255, 255, 0.7) !important;
   backdrop-filter: none !important;
-  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 .app-container.has-bg :deep(.el-thinking .content pre) {
-  background-color: rgba(0, 0, 0, 0.03) !important;
+  background-color: rgba(255, 255, 255, 0.3) !important;
 }
 
 html.dark .app-container.has-bg :deep(.el-thinking .trigger) {
   background-color: rgba(44, 46, 51, 0.7) !important;
-  border-color: rgba(255, 255, 255, 0.1);
 }
 html.dark .app-container.has-bg :deep(.el-thinking .content pre) {
   background-color: rgba(0, 0, 0, 0.3) !important;
-  border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* 工具调用 */
 .app-container.has-bg :deep(.tool-collapse .el-collapse-item__header) {
-  background-color: rgba(255, 255, 255, 0.8) !important;
+  background-color: rgba(255, 255, 255, 0.45) !important;
   backdrop-filter: none !important;
   border-color: rgba(255, 255, 255, 0.2);
 }
@@ -3895,12 +3891,5 @@ html.dark .app-container.has-bg :deep(.tool-collapse .el-collapse-item__wrap) {
 html.dark .app-container.has-bg :deep(.tool-call-details .tool-detail-section pre) {
   background-color: rgba(0, 0, 0, 0.5) !important;
   border-color: rgba(255, 255, 255, 0.05);
-}
-
-/* Markdown 代码块 */
-html.dark .app-container.has-bg :deep(pre) {
-  background-color: rgba(45, 45, 45, 0.9) !important;
-  backdrop-filter: none !important;
-  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 </style>
