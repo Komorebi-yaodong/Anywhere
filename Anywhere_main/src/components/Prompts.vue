@@ -304,7 +304,7 @@ function prepareAddPrompt() {
     autoCloseOnBlur: currentConfig.value.autoCloseOnBlur_global,
     matchRegex: "",
     backgroundImage: "",
-    backgroundOpacity: 0.5,
+    backgroundOpacity: 0.9,
   });
   showPromptEditDialog.value = true;
 }
@@ -348,7 +348,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     isAlwaysOnTop: p.isAlwaysOnTop ?? true, autoCloseOnBlur: p.autoCloseOnBlur ?? true,
     matchRegex: p.matchRegex || "",
     backgroundImage: p.backgroundImage || "",
-    backgroundOpacity: p.backgroundOpacity ?? 0.5,
+    backgroundOpacity: p.backgroundOpacity ?? 0.9,
   });
   showPromptEditDialog.value = true;
 }
