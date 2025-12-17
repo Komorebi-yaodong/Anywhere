@@ -60,9 +60,15 @@ let autoSaveInterval = null;
 
 let textSearchInstance = null;
 
-const setMessageRef = (el, index) => {
-  if (el) messageRefs.set(index, el);
-  else messageRefs.delete(index, el);
+const setMessageRef = (el, id) => {
+  if (el) messageRefs.set(id, el);
+  else messageRefs.delete(id);
+};
+
+const getMessageComponentByIndex = (index) => {
+  const msg = chat_show.value[index];
+  if (!msg) return undefined;
+  return messageRefs.get(msg.id);
 };
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -258,7 +264,7 @@ const findFocusedMessageIndex = () => {
   let closestIndex = -1;
   let smallestDistance = Infinity;
   for (let i = chat_show.value.length - 1; i >= 0; i--) {
-    const msgComponent = messageRefs.get(i);
+    const msgComponent = getMessageComponentByIndex(i);
     if (msgComponent) {
       const el = msgComponent.$el;
       const elTop = el.offsetTop;
@@ -290,7 +296,7 @@ const navigateToPreviousMessage = () => {
   findFocusedMessageIndex();
   const currentIndex = focusedMessageIndex.value;
   if (currentIndex === null) return;
-  const targetComponent = messageRefs.get(currentIndex);
+  const targetComponent = getMessageComponentByIndex(currentIndex);
   const container = chatContainerRef.value?.$el;
   if (!targetComponent || !container) return;
   const element = targetComponent.$el;
@@ -299,7 +305,7 @@ const navigateToPreviousMessage = () => {
   else if (currentIndex > 0) {
     const newIndex = currentIndex - 1;
     focusedMessageIndex.value = newIndex;
-    const previousComponent = messageRefs.get(newIndex);
+    const previousComponent = getMessageComponentByIndex(newIndex);
     if (previousComponent) previousComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 };
@@ -308,7 +314,7 @@ const navigateToNextMessage = () => {
   findFocusedMessageIndex();
   if (focusedMessageIndex.value !== null && focusedMessageIndex.value < chat_show.value.length - 1) {
     focusedMessageIndex.value++;
-    const targetComponent = messageRefs.get(focusedMessageIndex.value);
+    const targetComponent = getMessageComponentByIndex(focusedMessageIndex.value);
     if (targetComponent) targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } else {
     forceScrollToBottom();
@@ -626,7 +632,7 @@ const handleEditMessage = (index, newContent) => {
 
 const handleEditStart = async (index) => {
   const scrollContainer = chatContainerRef.value?.$el;
-  const childComponent = messageRefs.get(index);
+  const childComponent = getMessageComponentByIndex(index);
   const element = childComponent?.$el;
 
   if (!scrollContainer || !element || !childComponent) return;
@@ -638,7 +644,6 @@ const handleEditStart = async (index) => {
   await nextTick();
 
   // 步骤 3: 使用双重 requestAnimationFrame 等待浏览器完成布局和绘制
-  // 这是比 setTimeout(0) 更可靠的方式，确保在获取元素位置时，它已经是最终渲染的尺寸
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       // 在下一帧绘制前，执行立即滚动
@@ -653,7 +658,7 @@ const handleEditEnd = async ({ id, action, content }) => {
   if (action !== 'save') return;
 
   const currentIndex = chat_show.value.findIndex(m => m.id === id);
-  
+
   if (currentIndex === -1) return;
 
   handleEditMessage(currentIndex, content);
@@ -749,7 +754,7 @@ watch(() => currentConfig.value?.isDarkMode, (isDark) => {
   } else {
     document.documentElement.classList.remove('dark');
   }
-  
+
   // 更新搜索组件主题
   if (textSearchInstance) {
     textSearchInstance.setTheme(isDark ? 'dark' : 'light');
@@ -955,15 +960,15 @@ onMounted(async () => {
   window.addEventListener('error', handleGlobalImageError, true);
   window.addEventListener('keydown', handleGlobalKeyDown);
 
-    if (window.api && window.api.onConfigUpdated) {
+  if (window.api && window.api.onConfigUpdated) {
     window.api.onConfigUpdated((newConfig) => {
       if (newConfig) {
         // 更新本地配置对象，这将触发上面的 watch
         currentConfig.value = newConfig;
-        
+
         // 同步缩放比例
         if (newConfig.zoom !== undefined) {
-           zoomLevel.value = newConfig.zoom;
+          zoomLevel.value = newConfig.zoom;
         }
       }
     });
@@ -2183,7 +2188,7 @@ const askAI = async (forceSend = false) => {
           : userContentList;
         history.value.push({ role: "user", content: contentForHistory });
         chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
-        
+
         // [修复-新增] 用户发送消息后，立即触发一次自动保存
         autoSaveSession();
 
@@ -2580,7 +2585,7 @@ Here are the rules you should always follow to solve your task:
     await nextTick();
     scrollToBottom();
     chatInputRef.value?.focus({ cursor: 'end' });
-    
+
     // [修复-新增] AI 回复结束或出错后，立即触发一次自动保存
     autoSaveSession();
   }
@@ -2923,11 +2928,11 @@ const handleOpenSearch = () => {
           @scroll="handleScroll">
           <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :is-auto-approve="isAutoApproveTools"
             @update-auto-approve="handleToggleAutoApprove" @confirm-tool="handleToolApproval"
-            @reject-tool="handleToolApproval" :ref="el => setMessageRef(el, index)" :message="message" :index="index"
-            :is-last-message="index === chat_show.length - 1" :is-loading="loading" :user-avatar="UserAvart"
-            :ai-avatar="AIAvart" :is-collapsed="isCollapsed(index)" :is-dark-mode="currentConfig.isDarkMode"
-            @delete-message="handleDeleteMessage" @copy-text="handleCopyText" @re-ask="handleReAsk"
-            @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
+            @reject-tool="handleToolApproval" :ref="el => setMessageRef(el, message.id)" :message="message"
+            :index="index" :is-last-message="index === chat_show.length - 1" :is-loading="loading"
+            :user-avatar="UserAvart" :ai-avatar="AIAvart" :is-collapsed="isCollapsed(index)"
+            :is-dark-mode="currentConfig.isDarkMode" @delete-message="handleDeleteMessage" @copy-text="handleCopyText"
+            @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
             @avatar-click="onAvatarClick" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"
             @edit-message="handleEditMessage" @cancel-tool-call="handleCancelToolCall" />
         </el-main>
@@ -3047,7 +3052,9 @@ const handleOpenSearch = () => {
           <div class="mcp-server-content">
             <div class="mcp-server-header-row">
               <el-avatar :src="server.logoUrl" shape="square" :size="20" class="mcp-server-icon">
-                <el-icon :size="12"><Tools /></el-icon>
+                <el-icon :size="12">
+                  <Tools />
+                </el-icon>
               </el-avatar>
               <span class="mcp-server-name">{{ server.name }}</span>
               <el-tooltip :content="server.isPersistent ? '持久连接已开启' : '持久连接已关闭'" placement="top">
@@ -3067,7 +3074,7 @@ const handleOpenSearch = () => {
                   getDisplayTypeName(server.type) }}</el-tag>
                 <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
                   tag
-                  }}</el-tag>
+                }}</el-tag>
               </div>
             </div>
             <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
@@ -3121,21 +3128,25 @@ body {
   --el-bg-color-userbubble: #F5F4ED;
   --el-fill-color: #F0F2F5 !important;
   --el-fill-color-light: #F6F6F6 !important;
-  --el-bg-color-input: #F6F6F6 !important; /* 明确指定浅色输入框背景 */
-  --el-fill-color-blank: var(--el-fill-color-light)!important;
-  
+  --el-bg-color-input: #F6F6F6 !important;
+  /* 明确指定浅色输入框背景 */
+  --el-fill-color-blank: var(--el-fill-color-light) !important;
+
   --text-primary: #000000;
   --el-text-color-primary: var(--text-primary);
 }
+
 html.dark {
   /* 深色模式变量强制覆盖 */
-  --el-bg-color: #212121 !important; /* 修复窗口背景色 */
+  --el-bg-color: #212121 !important;
+  /* 修复窗口背景色 */
   --el-bg-color-userbubble: #2F2F2F;
   --el-fill-color: #424242 !important;
   --el-fill-color-light: #2c2e33 !important;
-  --el-bg-color-input: #303030 !important; /* 修复输入框背景色 */
+  --el-bg-color-input: #303030 !important;
+  /* 修复输入框背景色 */
   --el-fill-color-blank: #212121 !important;
-  
+
   --text-primary: #ECECF1 !important;
   --el-text-color-primary: #ECECF1 !important;
 }
@@ -3432,7 +3443,8 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
 
 .mcp-server-icon {
   flex-shrink: 0;
-  background-color: var(--el-fill-color-light); /* 适配深/浅色模式的背景 */
+  background-color: var(--el-fill-color-light);
+  /* 适配深/浅色模式的背景 */
   color: var(--el-text-color-secondary);
 }
 
