@@ -2926,13 +2926,10 @@ const handleOpenSearch = () => {
 <template>
   <main>
     <div v-if="windowBackgroundImage" class="window-bg-layer"
-      :style="{ backgroundImage: `url('${windowBackgroundImage}')` }">
-      <div class="window-bg-mask"
-        :style="{ 
-           backgroundColor: currentConfig.isDarkMode ? `rgba(0,0,0, ${1 - windowBackgroundOpacity})` : `rgba(255,255,255, ${1 - windowBackgroundOpacity})`,
-           backdropFilter: `blur(${(1 - windowBackgroundOpacity) * 20}px)`
-        }">
-      </div>
+      :style="{ 
+        backgroundImage: `url('${windowBackgroundImage}')`,
+        filter: `blur(${(1 - windowBackgroundOpacity) * 20}px)` 
+      }">
     </div>
     <el-container class="app-container" :class="{ 'has-bg': !!windowBackgroundImage }">
       <TitleBar :favicon="favicon" :promptName="CODE" :conversationName="defaultConversationName"
@@ -3612,11 +3609,11 @@ html.dark .mcp-dialog-footer .el-checkbox__input.is-checked .el-checkbox__inner:
   flex-direction: column;
   background-color: var(--el-bg-color);
   color: var(--el-text-color-primary);
-  font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-
-  // border: 1.0px solid var(--el-border-color-dark);
+  font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   box-sizing: border-box;
   border-radius: 8px;
+  position: relative;
+  z-index: 1;
 }
 
 html.dark .app-container {
@@ -3631,63 +3628,17 @@ html.dark .app-container {
   overflow: hidden;
 }
 
-.window-bg-layer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 0;
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-  pointer-events: none;
-}
-
-.window-bg-mask {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  transition: background-color 0.3s, backdrop-filter 0.3s;
-}
-
-.app-container.has-bg {
-  position: relative;
-  z-index: 1;
-  background-color: transparent !important;
-  background: none !important;
-}
-
-.app-container.has-bg :deep(.title-bar) {
-  background-color: transparent !important;
-}
-
-.app-container.has-bg :deep(.model-header) {
-  background-color: transparent !important;
-}
-
-.app-container.has-bg :deep(.input-footer) {
-  background-color: transparent !important;
-}
-
-.app-container.has-bg :deep(.user-bubble .el-bubble-content),
-.app-container.has-bg :deep(.ai-bubble .el-bubble-content) {
-  backdrop-filter: blur(5px);
-}
-
+/* 核心优化：滚动区域独立图层 */
 .chat-main {
   flex-grow: 1;
-  padding-left: 10px;
-  padding-right: 10px;
-  padding-top: 0;
-  padding-bottom: 0;
+  padding: 0 10px;
   margin: 0;
   overflow-y: auto;
   scroll-behavior: smooth;
   background-color: transparent !important;
   scrollbar-gutter: stable;
+  will-change: scroll-position; 
+  transform: translateZ(0); 
 }
 
 .scroll-to-bottom-wrapper {
@@ -3699,7 +3650,6 @@ html.dark .app-container {
   flex-direction: column;
   align-items: center;
   gap: 0px;
-  padding: 0px;
 }
 
 .scroll-nav-btn {
@@ -3714,7 +3664,7 @@ html.dark .app-container {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  transition: all 0.2s ease;
   margin: 0px !important;
 
   &:hover {
@@ -3728,161 +3678,91 @@ html.dark .scroll-nav-btn {
   background-color: var(--bg-tertiary);
   border-color: var(--border-primary);
   color: var(--text-primary);
-
-  &:hover {
-    background-color: var(--bg-secondary);
-  }
+  &:hover { background-color: var(--bg-secondary); }
 }
 
-.scroll-nav-icon {
-  transition: transform 0.2s ease;
-}
-
-.scroll-nav-btn:hover .scroll-nav-icon {
-  transform: translateY(0);
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 4px;
-}
-
+.custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: var(--el-text-color-disabled, #c0c4cc);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--el-text-color-secondary, #909399); }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--el-text-color-secondary, #909399);
-  background-clip: content-box;
-}
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #6b6b6b; background-clip: content-box; }
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #999; background-clip: content-box; }
 
-html.dark .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 4px;
-}
-
-html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #6b6b6b;
-  background-clip: content-box;
-}
-
-html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #999;
-  background-clip: content-box;
-}
-
-.mcp-dialog-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.mcp-limit-hint {
-  font-size: 12px;
-  color: var(--el-color-warning);
-}
-
-/* 当连接数超限时，提示变为红色 */
-.mcp-limit-hint.warning {
-  color: var(--el-color-danger);
-  font-weight: bold;
-}
+.mcp-dialog-footer { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.mcp-limit-hint { font-size: 12px; color: var(--el-color-warning); }
+.mcp-limit-hint.warning { color: var(--el-color-danger); font-weight: bold; }
+.footer-left-controls { display: flex; align-items: center; }
 
 :deep(.image-error-container) {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 15px;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 8px;
-  background-color: var(--el-fill-color-light);
-  color: var(--el-text-color-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 15px;
+  border: 1px dashed var(--el-border-color); border-radius: 8px;
+  background-color: var(--el-fill-color-light); color: var(--el-text-color-secondary);
+  cursor: pointer; transition: all 0.2s ease; font-size: 14px;
+}
+:deep(.image-error-container:hover) { border-color: var(--el-color-primary); color: var(--el-color-primary); background-color: var(--el-color-primary-light-9); }
+:deep(.image-error-container svg) { width: 24px; height: 24px; flex-shrink: 0; }
+
+.persistent-btn { color: var(--el-text-color-secondary); width: 28px; height: 28px; }
+.persistent-btn:hover { color: var(--el-color-primary); background-color: var(--el-color-primary-light-9); }
+html.dark .persistent-btn:hover { background-color: var(--el-fill-color-darker); }
+.persistent-btn.is-persistent-active { color: #67C23A; }
+.persistent-btn.is-persistent-active:hover { background-color: rgba(103, 194, 58, 0.1); }
+
+.window-bg-layer {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  z-index: 0;
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+  pointer-events: none;
+  /* 修复：移除 filter: none !important，允许 Vue 绑定 filter: blur(...) */
+  will-change: transform;
+  transform: translateZ(0);
 }
 
-:deep(.image-error-container:hover) {
-  border-color: var(--el-color-primary);
-  color: var(--el-color-primary);
-  background-color: var(--el-color-primary-light-9);
+.app-container.has-bg,
+html.dark .app-container.has-bg,
+body .app-container.has-bg {
+  background-color: transparent !important;
+  background: none !important;
 }
 
-:deep(.image-error-container svg) {
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-}
-
-.persistent-btn {
-  color: var(--el-text-color-secondary);
-  width: 28px;
-  height: 28px;
-}
-
-.persistent-btn:hover {
-  color: var(--el-color-primary);
-  background-color: var(--el-color-primary-light-9);
-}
-
-html.dark .persistent-btn:hover {
-  background-color: var(--el-fill-color-darker);
-}
-
-.persistent-btn.is-persistent-active {
-  color: #67C23A;
-  /* Green highlight for active state */
-}
-
-.persistent-btn.is-persistent-active:hover {
-  background-color: rgba(103, 194, 58, 0.1);
-}
-
-.footer-left-controls {
-  display: flex;
-  align-items: center;
+.app-container.has-bg :deep(.title-bar),
+.app-container.has-bg :deep(.model-header),
+.app-container.has-bg :deep(.input-footer) {
+  background-color: transparent !important;
 }
 
 .app-container.has-bg :deep(.chat-input-area-vertical) {
-  /* 浅色模式：半透明白 + 模糊 */
-  background-color: rgba(255, 255, 255, 0.55) !important;
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 }
-
 .app-container.has-bg :deep(.chat-input-area-vertical .el-textarea__inner) {
   background-color: transparent !important;
 }
 
 html.dark .app-container.has-bg :deep(.chat-input-area-vertical) {
-  /* 深色模式：半透明黑 + 模糊 */
-  background-color: rgba(30, 30, 30, 0.6) !important;
+  background-color: rgba(30, 30, 30, 0.7) !important;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
 }
 
-
+/* 弹窗 */
 .app-container.has-bg :deep(.el-dialog),
 .app-container.has-bg :deep(.el-message-box) {
-  /* 弹窗整体半透明背景 */
-  background-color: rgba(255, 255, 255, 0.75) !important;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: none !important;
   border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
 }
-
 .app-container.has-bg :deep(.el-dialog__header),
 .app-container.has-bg :deep(.el-dialog__body),
 .app-container.has-bg :deep(.el-dialog__footer),
@@ -3894,38 +3774,133 @@ html.dark .app-container.has-bg :deep(.chat-input-area-vertical) {
 
 html.dark .app-container.has-bg :deep(.el-dialog),
 html.dark .app-container.has-bg :deep(.el-message-box) {
-  background-color: rgba(40, 40, 40, 0.75) !important;
+  background-color: rgba(40, 40, 40, 0.9) !important;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
+/* 弹窗内输入框 */
 .app-container.has-bg :deep(.el-dialog .el-textarea__inner),
 .app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
-  background-color: rgba(255, 255, 255, 0.4) !important;
-  backdrop-filter: blur(5px);
-  border-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(240, 240, 240, 0.8) !important;
+  backdrop-filter: none !important;
 }
-
 html.dark .app-container.has-bg :deep(.el-dialog .el-textarea__inner),
 html.dark .app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
+  background-color: rgba(20, 20, 20, 0.8) !important;
+}
+
+/* 模型选择药丸 */
+.app-container.has-bg :deep(.model-pill) {
+  background-color: rgba(255, 255, 255, 0.6);
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.app-container.has-bg :deep(.model-pill:hover) {
+  background-color: #fff;
+}
+
+html.dark .app-container.has-bg :deep(.model-pill) {
+  background-color: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+html.dark .app-container.has-bg :deep(.model-pill:hover) {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.app-container.has-bg :deep(.user-bubble .el-bubble-content) {
+  background-color: rgba(245, 244, 237, 0.7) !important; /* 用户指定 */
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* AI 气泡 */
+.app-container.has-bg :deep(.ai-bubble .el-bubble-content) {
+  background-color: rgba(255, 255, 255, 0.8) !important; /* 用户指定 */
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  /* 用户指定 Padding */
+  padding: 10px !important;
+}
+
+/* 深色模式气泡 */
+html.dark .app-container.has-bg :deep(.user-bubble .el-bubble-content) {
+  background-color: rgba(47, 47, 47, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+html.dark .app-container.has-bg :deep(.ai-bubble .el-bubble-content) {
+  background-color: rgba(33, 33, 33, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 功能按钮 */
+.app-container.has-bg :deep(.footer-actions .el-button.is-circle) {
+  background-color: rgba(255, 255, 255, 0.6);
+  backdrop-filter: none !important;
+}
+.app-container.has-bg :deep(.footer-actions .el-button.is-circle:hover) {
+  background-color: #fff;
+}
+
+html.dark .app-container.has-bg :deep(.footer-actions .el-button.is-circle) {
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #e0e0e0;
+}
+html.dark .app-container.has-bg :deep(.footer-actions .el-button.is-circle:hover) {
+  background-color: rgba(60, 60, 60, 1);
+}
+
+/* 思考模式 */
+.app-container.has-bg :deep(.el-thinking .trigger) {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.app-container.has-bg :deep(.el-thinking .content pre) {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+html.dark .app-container.has-bg :deep(.el-thinking .trigger) {
+  background-color: rgba(44, 46, 51, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+html.dark .app-container.has-bg :deep(.el-thinking .content pre) {
   background-color: rgba(0, 0, 0, 0.3) !important;
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-.app-container.has-bg :deep(.model-pill) {
-  background-color: rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+/* 工具调用 */
+.app-container.has-bg :deep(.tool-collapse .el-collapse-item__header) {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: none !important;
+  border-color: rgba(255, 255, 255, 0.2);
 }
-.app-container.has-bg :deep(.model-pill:hover) {
-  background-color: rgba(255, 255, 255, 0.5);
+.app-container.has-bg :deep(.tool-collapse .el-collapse-item__wrap) {
+  background-color: transparent !important;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.app-container.has-bg :deep(.tool-call-details .tool-detail-section pre) {
+  background-color: rgba(255, 255, 255, 0.7) !important;
 }
 
-html.dark .app-container.has-bg :deep(.model-pill) {
-  background-color: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+html.dark .app-container.has-bg :deep(.tool-collapse .el-collapse-item__header) {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.1);
 }
-html.dark .app-container.has-bg :deep(.model-pill:hover) {
-  background-color: rgba(0, 0, 0, 0.5);
+html.dark .app-container.has-bg :deep(.tool-collapse .el-collapse-item__wrap) {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+html.dark .app-container.has-bg :deep(.tool-call-details .tool-detail-section pre) {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Markdown 代码块 */
+html.dark .app-container.has-bg :deep(pre) {
+  background-color: rgba(45, 45, 45, 0.9) !important;
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 </style>
