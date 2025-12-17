@@ -114,6 +114,18 @@ const tempReasoningEffort = ref('default');
 const messageIdCounter = ref(0);
 const sourcePromptConfig = ref(null);
 
+const windowBackgroundImage = computed(() => {
+  if (!CODE.value || !currentConfig.value?.prompts) return "";
+  const promptConfig = currentConfig.value.prompts[CODE.value];
+  return promptConfig?.backgroundImage || "";
+});
+
+const windowBackgroundOpacity = computed(() => {
+  if (!CODE.value || !currentConfig.value?.prompts) return 0.5;
+  const promptConfig = currentConfig.value.prompts[CODE.value];
+  return promptConfig?.backgroundOpacity ?? 0.5;
+});
+
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 const currentSystemPrompt = ref("");
 
@@ -2913,7 +2925,16 @@ const handleOpenSearch = () => {
 
 <template>
   <main>
-    <el-container class="app-container">
+    <div v-if="windowBackgroundImage" class="window-bg-layer"
+      :style="{ backgroundImage: `url('${windowBackgroundImage}')` }">
+      <div class="window-bg-mask"
+        :style="{ 
+           backgroundColor: currentConfig.isDarkMode ? `rgba(0,0,0, ${1 - windowBackgroundOpacity})` : `rgba(255,255,255, ${1 - windowBackgroundOpacity})`,
+           backdropFilter: `blur(${(1 - windowBackgroundOpacity) * 20}px)`
+        }">
+      </div>
+    </div>
+    <el-container class="app-container" :class="{ 'has-bg': !!windowBackgroundImage }">
       <TitleBar :favicon="favicon" :promptName="CODE" :conversationName="defaultConversationName"
         :isAlwaysOnTop="isAlwaysOnTop" :autoCloseOnBlur="autoCloseOnBlur" :isDarkMode="currentConfig.isDarkMode"
         :os="currentOS" @save-window-size="handleSaveWindowSize" @save-session="handleSaveSession"
@@ -3610,6 +3631,52 @@ html.dark .app-container {
   overflow: hidden;
 }
 
+.window-bg-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.window-bg-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transition: background-color 0.3s, backdrop-filter 0.3s;
+}
+
+.app-container.has-bg {
+  position: relative;
+  z-index: 1;
+  background-color: transparent !important;
+  background: none !important;
+}
+
+.app-container.has-bg :deep(.title-bar) {
+  background-color: transparent !important;
+}
+
+.app-container.has-bg :deep(.model-header) {
+  background-color: transparent !important;
+}
+
+.app-container.has-bg :deep(.input-footer) {
+  background-color: transparent !important;
+}
+
+.app-container.has-bg :deep(.user-bubble .el-bubble-content),
+.app-container.has-bg :deep(.ai-bubble .el-bubble-content) {
+  backdrop-filter: blur(5px);
+}
+
 .chat-main {
   flex-grow: 1;
   padding-left: 10px;
@@ -3783,5 +3850,82 @@ html.dark .persistent-btn:hover {
 .footer-left-controls {
   display: flex;
   align-items: center;
+}
+
+.app-container.has-bg :deep(.chat-input-area-vertical) {
+  /* 浅色模式：半透明白 + 模糊 */
+  background-color: rgba(255, 255, 255, 0.55) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.app-container.has-bg :deep(.chat-input-area-vertical .el-textarea__inner) {
+  background-color: transparent !important;
+}
+
+html.dark .app-container.has-bg :deep(.chat-input-area-vertical) {
+  /* 深色模式：半透明黑 + 模糊 */
+  background-color: rgba(30, 30, 30, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+
+.app-container.has-bg :deep(.el-dialog),
+.app-container.has-bg :deep(.el-message-box) {
+  /* 弹窗整体半透明背景 */
+  background-color: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+}
+
+.app-container.has-bg :deep(.el-dialog__header),
+.app-container.has-bg :deep(.el-dialog__body),
+.app-container.has-bg :deep(.el-dialog__footer),
+.app-container.has-bg :deep(.el-message-box__header),
+.app-container.has-bg :deep(.el-message-box__content),
+.app-container.has-bg :deep(.el-message-box__btns) {
+  background-color: transparent !important;
+}
+
+html.dark .app-container.has-bg :deep(.el-dialog),
+html.dark .app-container.has-bg :deep(.el-message-box) {
+  background-color: rgba(40, 40, 40, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.app-container.has-bg :deep(.el-dialog .el-textarea__inner),
+.app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
+  background-color: rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(5px);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html.dark .app-container.has-bg :deep(.el-dialog .el-textarea__inner),
+html.dark .app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.app-container.has-bg :deep(.model-pill) {
+  background-color: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.app-container.has-bg :deep(.model-pill:hover) {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+html.dark .app-container.has-bg :deep(.model-pill) {
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+html.dark .app-container.has-bg :deep(.model-pill:hover) {
+  background-color: rgba(0, 0, 0, 0.5);
 }
 </style>

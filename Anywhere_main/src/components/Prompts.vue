@@ -302,7 +302,9 @@ function prepareAddPrompt() {
     position_x: 0, position_y: 0,
     isAlwaysOnTop: currentConfig.value.isAlwaysOnTop_global,
     autoCloseOnBlur: currentConfig.value.autoCloseOnBlur_global,
-    matchRegex: "", // 新增
+    matchRegex: "",
+    backgroundImage: "",
+    backgroundOpacity: 0.5,
   });
   showPromptEditDialog.value = true;
 }
@@ -344,7 +346,9 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     defaultMcpServers: p.defaultMcpServers ?? [],
     window_width: p.window_width ?? 540, window_height: p.window_height ?? 700,
     isAlwaysOnTop: p.isAlwaysOnTop ?? true, autoCloseOnBlur: p.autoCloseOnBlur ?? true,
-    matchRegex: p.matchRegex || "", // 新增
+    matchRegex: p.matchRegex || "",
+    backgroundImage: p.backgroundImage || "",
+    backgroundOpacity: p.backgroundOpacity ?? 0.5,
   });
   showPromptEditDialog.value = true;
 }
@@ -370,7 +374,9 @@ function savePrompt() {
       defaultMcpServers: editingPrompt.defaultMcpServers,
       window_width: editingPrompt.window_width, window_height: editingPrompt.window_height,
       isAlwaysOnTop: editingPrompt.isAlwaysOnTop, autoCloseOnBlur: editingPrompt.autoCloseOnBlur,
-      matchRegex: editingPrompt.matchRegex, // 新增
+      matchRegex: editingPrompt.matchRegex,
+      backgroundImage: editingPrompt.backgroundImage,
+      backgroundOpacity: editingPrompt.backgroundOpacity,
     };
 
     // 1. 更新或创建 prompts 对象中的条目
@@ -798,7 +804,8 @@ async function refreshPromptsConfig() {
                   </div>
                 </template>
                 <div class="llm-params-container">
-                  <div class="param-item" v-if="editingPrompt.showMode === 'window' || editingPrompt.showMode === 'fastinput'">
+                  <div class="param-item"
+                    v-if="editingPrompt.showMode === 'window' || editingPrompt.showMode === 'fastinput'">
                     <span class="param-label">{{ t('prompts.streamLabel') }}</span>
                     <div class="spacer"></div>
                     <el-switch v-model="editingPrompt.stream" />
@@ -901,6 +908,26 @@ async function refreshPromptsConfig() {
                       <el-option v-for="server in availableMcpServers" :key="server.value" :label="server.label"
                         :value="server.value" />
                     </el-select>
+                  </div>
+                  <div v-if="editingPrompt.showMode === 'window'" class="param-item"
+                    style="align-items: flex-start; margin-top: 10px;">
+                    <div style="width: 100%;">
+                      <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                        <span class="param-label">窗口背景图片 (URL)</span>
+                        <div class="spacer"></div>
+                      </div>
+                      <el-input v-model="editingPrompt.backgroundImage" placeholder="输入图片链接 (http/https/data:image)"
+                        size="small" clearable />
+
+                      <div v-if="editingPrompt.backgroundImage" style="margin-top: 8px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 0px;">
+                          <span class="param-label" style="font-size: 12px;">背景不透明度: {{ editingPrompt.backgroundOpacity
+                          }}</span>
+                        </div>
+                        <el-slider v-model="editingPrompt.backgroundOpacity" :min="0.05" :max="1" :step="0.05"
+                          size="small" />
+                      </div>
+                    </div>
                   </div>
                   <el-row :gutter="20" v-if="editingPrompt.showMode === 'window'" class="dimensions-group-row">
                     <el-col :span="12">
@@ -1178,6 +1205,7 @@ async function refreshPromptsConfig() {
 .search-input-container :deep(.el-input__wrapper) {
   box-shadow: 0 0 0 1px var(--border-primary) inset !important;
 }
+
 .search-input-container :deep(.el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px var(--text-accent) inset !important;
 }
