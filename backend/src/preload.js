@@ -190,6 +190,11 @@ const commandHandlers = {
       return;
     }
 
+    // 正则匹配成功后，恢复为over
+    if (type === 'regex') {
+        type = 'over';
+    }
+
     if (promptConfig.showMode === 'window') {
       const msg = {
         os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",

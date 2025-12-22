@@ -765,7 +765,11 @@ async function refreshPromptsConfig() {
                       <span>{{ t('prompts.regex.label') }}</span>
                       <el-tooltip placement="right" raw-content>
                         <template #content>
-                          <div v-html="t('prompts.regex.tooltip')"></div>
+                          <div style="max-width: 350px; line-height: 1.6;" v-html="t('prompts.regex.tooltip')
+                            .replace(/(\d+\.\s)/g, '<br/>$1')
+                            .replace(/(•)/g, '<br/>&nbsp;&nbsp;$1')
+                            .replace(/(常用符号速查:|Quick Reference:)/g, '<br/><br/><b>$1</b>')">
+                          </div>
                         </template>
                         <el-icon class="tip-icon" style="margin-left: 4px;">
                           <QuestionFilled />
