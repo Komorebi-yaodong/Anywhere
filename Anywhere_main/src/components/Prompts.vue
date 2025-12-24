@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, inject, watch, nextTick } from 'vue';
-import { Plus, Delete, Close, ChatLineRound, UploadFilled, Position, QuestionFilled, Switch, Refresh } from '@element-plus/icons-vue';
+import { Plus, Delete, Close, ChatLineRound, UploadFilled, Position, QuestionFilled, Switch, Refresh, Edit, Download } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
 
@@ -93,8 +93,161 @@ const editingPrompt = reactive({
   window_height: 700,
   isAlwaysOnTop: true,
   autoCloseOnBlur: true,
-  matchRegex: "", // 新增
+  matchRegex: "",
+  backgroundImage: "",
+  backgroundOpacity: 0.9,
+  backgroundBlur: 0,
 });
+
+const showIconEditDialog = ref(false);
+const iconEditorState = reactive({
+  imgUrl: '',
+  scale: 1,
+  radius: 0, // 0 - 50 (%)
+  offsetX: 0,
+  offsetY: 0
+});
+const editorCanvasRef = ref(null);
+let editorImageObj = null;
+let isDraggingImage = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+
+// 处理图片选择/拖拽/粘贴入口
+const processIconFile = (file) => {
+  const isImage = file.type.startsWith('image/');
+  if (!isImage) {
+    ElMessage.error(t('prompts.alerts.invalidImageFormat', { formats: 'JPG, PNG, WEBP' }));
+    return;
+  }
+  // 此时不限制大小，因为会在编辑器中压缩裁剪
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    openIconEditor(e.target.result);
+  };
+  reader.readAsDataURL(file);
+};
+
+// 打开编辑器
+const openIconEditor = (dataUrl) => {
+  iconEditorState.imgUrl = dataUrl;
+  iconEditorState.scale = 1;
+  iconEditorState.radius = 0;
+  iconEditorState.offsetX = 0;
+  iconEditorState.offsetY = 0;
+
+  editorImageObj = new Image();
+  editorImageObj.onload = () => {
+    showIconEditDialog.value = true;
+    nextTick(() => drawEditorCanvas());
+  };
+  editorImageObj.src = dataUrl;
+};
+
+// 绘制 Canvas
+const drawEditorCanvas = () => {
+  const canvas = editorCanvasRef.value;
+  if (!canvas || !editorImageObj) return;
+  const ctx = canvas.getContext('2d');
+  const size = 256; // 输出尺寸固定为 256x256
+
+  // 清空
+  ctx.clearRect(0, 0, size, size);
+
+  // 1. 绘制圆角遮罩
+  ctx.save();
+  ctx.beginPath();
+  const r = (iconEditorState.radius / 100) * size; 
+  ctx.roundRect(0, 0, size, size, r);
+  ctx.clip();
+
+  // 2. 绘制图片 (应用缩放和偏移)
+  // 计算图片绘制尺寸（保持比例覆盖容器）
+  const imgAspect = editorImageObj.width / editorImageObj.height;
+  let drawW = size * iconEditorState.scale;
+  let drawH = size * iconEditorState.scale;
+
+  if (imgAspect > 1) {
+    drawH = size * iconEditorState.scale;
+    drawW = drawH * imgAspect;
+  } else {
+    drawW = size * iconEditorState.scale;
+    drawH = drawW / imgAspect;
+  }
+
+  // 居中 + 偏移
+  const x = (size - drawW) / 2 + iconEditorState.offsetX;
+  const y = (size - drawH) / 2 + iconEditorState.offsetY;
+
+  ctx.drawImage(editorImageObj, x, y, drawW, drawH);
+  ctx.restore();
+};
+
+// 保存编辑后的图标
+const saveEditedIcon = () => {
+  const canvas = editorCanvasRef.value;
+  if (canvas) {
+    editingPrompt.icon = canvas.toDataURL('image/png');
+    showIconEditDialog.value = false;
+  }
+};
+
+// 交互事件处理
+const handleIconUploadChange = (file) => {
+  processIconFile(file); // 使用新逻辑
+  return false; // 阻止默认上传
+};
+
+const handleIconDrop = (e) => {
+  const file = e.dataTransfer.files[0];
+  if (file) processIconFile(file);
+};
+
+const handleIconPaste = (e) => {
+  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+  for (let index in items) {
+    const item = items[index];
+    if (item.kind === 'file') {
+      const blob = item.getAsFile();
+      processIconFile(blob);
+      return;
+    }
+  }
+};
+
+// Canvas 拖拽图片逻辑
+const handleCanvasMouseDown = (e) => {
+  isDraggingImage = true;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+};
+const handleCanvasMouseMove = (e) => {
+  if (!isDraggingImage) return;
+  const dx = e.clientX - lastMouseX;
+  const dy = e.clientY - lastMouseY;
+  // 由于 Canvas 显示大小可能被 CSS 缩放，这里粗略映射
+  iconEditorState.offsetX += dx;
+  iconEditorState.offsetY += dy;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+  drawEditorCanvas();
+};
+const handleCanvasMouseUp = () => { isDraggingImage = false; };
+const handleCanvasWheel = (e) => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? -0.1 : 0.1;
+  let newScale = iconEditorState.scale + delta;
+  if (newScale < 0.1) newScale = 0.1;
+  if (newScale > 5) newScale = 5;
+  iconEditorState.scale = newScale;
+  drawEditorCanvas();
+};
+
+// 监听参数变化重绘
+watch(() => [iconEditorState.scale, iconEditorState.radius], () => {
+  drawEditorCanvas();
+});
+
 const isNewPrompt = ref(false);
 
 const showAddTagDialog = ref(false);
@@ -305,6 +458,7 @@ function prepareAddPrompt() {
     matchRegex: "",
     backgroundImage: "",
     backgroundOpacity: 0.9,
+    backgroundBlur: 0,
   });
   showPromptEditDialog.value = true;
 }
@@ -349,6 +503,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     matchRegex: p.matchRegex || "",
     backgroundImage: p.backgroundImage || "",
     backgroundOpacity: p.backgroundOpacity ?? 0.9,
+    backgroundBlur: p.backgroundBlur ?? 0,
   });
   showPromptEditDialog.value = true;
 }
@@ -377,6 +532,7 @@ function savePrompt() {
       matchRegex: editingPrompt.matchRegex,
       backgroundImage: editingPrompt.backgroundImage,
       backgroundOpacity: editingPrompt.backgroundOpacity,
+      backgroundBlur: editingPrompt.backgroundBlur,
     };
 
     // 1. 更新或创建 prompts 对象中的条目
@@ -704,27 +860,43 @@ async function refreshPromptsConfig() {
         <el-form :model="editingPrompt" @submit.prevent="savePrompt" class="edit-prompt-form">
           <div class="top-section-grid">
             <div class="icon-area">
-              <div class="icon-editor-area">
-                <el-upload class="icon-uploader" action="#" :show-file-list="false" :before-upload="handleIconUpload"
-                  accept="image/png, image/jpeg, image/svg+xml">
+              <div class="icon-editor-area" @paste="handleIconPaste" tabindex="0" style="outline: none;">
+                <el-upload class="icon-uploader" action="#" drag :show-file-list="false"
+                  :before-upload="handleIconUploadChange" accept="image/png, image/jpeg, image/webp"
+                  @drop.prevent="handleIconDrop" @dragover.prevent>
                   <template v-if="editingPrompt.icon">
                     <el-avatar :src="editingPrompt.icon" shape="square" :size="64" class="uploaded-icon-avatar" />
+                    <!-- [修改] 添加点击事件，阻止冒泡，点击时打开编辑器 -->
+                    <div class="icon-hover-mask" @click.stop.prevent="openIconEditor(editingPrompt.icon)">
+                      <el-icon>
+                        <Edit />
+                      </el-icon>
+                    </div>
                   </template>
                   <template v-else>
                     <div class="icon-uploader-placeholder">
                       <el-icon :size="20">
                         <UploadFilled />
                       </el-icon>
+                      <div class="icon-upload-text"
+                        style="font-size: 10px; margin-top: 4px; color: var(--text-tertiary); line-height: 1.2;">
+                        拖拽/粘贴<br>点击上传
+                      </div>
                     </div>
                   </template>
                 </el-upload>
+
                 <div class="icon-button-group">
-                  <el-button class="icon-action-button" size="small" @click="downloadEditingIcon">{{
-                    t('common.downloadIcon')
-                  }}</el-button>
-                  <el-button class="icon-action-button" size="small" @click="removeEditingIcon">{{
-                    t('common.removeIcon')
-                  }}</el-button>
+                  <el-button class="icon-action-button" size="small" @click="downloadEditingIcon" title="下载图标">
+                    <el-icon>
+                      <Download />
+                    </el-icon>
+                  </el-button>
+                  <el-button class="icon-action-button" size="small" @click="removeEditingIcon" title="移除图标">
+                    <el-icon>
+                      <Delete />
+                    </el-icon>
+                  </el-button>
                 </div>
               </div>
             </div>
@@ -930,6 +1102,11 @@ async function refreshPromptsConfig() {
                         </div>
                         <el-slider v-model="editingPrompt.backgroundOpacity" :min="0.05" :max="1" :step="0.05"
                           size="small" />
+                        <div style="display: flex; align-items: center; margin-bottom: 0px; margin-top: 4px;">
+                          <span class="param-label" style="font-size: 12px;">背景模糊度: {{ editingPrompt.backgroundBlur
+                          }}px</span>
+                        </div>
+                        <el-slider v-model="editingPrompt.backgroundBlur" :min="0" :max="20" :step="1" size="small" />
                       </div>
                     </div>
                   </div>
@@ -964,6 +1141,34 @@ async function refreshPromptsConfig() {
       <template #footer>
         <el-button @click="showPromptEditDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="savePrompt">{{ t('common.confirm') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 图标编辑器弹窗 -->
+    <el-dialog v-model="showIconEditDialog" title="编辑图标" width="400px" :close-on-click-modal="false" append-to-body>
+      <div class="icon-edit-container">
+        <div class="canvas-wrapper">
+          <canvas ref="editorCanvasRef" width="256" height="256" @mousedown="handleCanvasMouseDown"
+            @mousemove="handleCanvasMouseMove" @mouseup="handleCanvasMouseUp" @mouseleave="handleCanvasMouseUp"
+            @wheel="handleCanvasWheel"></canvas>
+          <div class="canvas-hint">拖拽移动 / 滚轮缩放</div>
+        </div>
+
+        <div class="editor-controls">
+          <div class="control-row">
+            <span class="label">缩放</span>
+            <el-slider v-model="iconEditorState.scale" :min="0.1" :max="3" :step="0.1" @input="drawEditorCanvas" />
+          </div>
+          <div class="control-row">
+            <span class="label">圆角</span>
+            <el-slider v-model="iconEditorState.radius" :min="0" :max="50" :step="1" @input="drawEditorCanvas"
+              :format-tooltip="val => val + '%'" />
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showIconEditDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveEditedIcon">确定使用</el-button>
       </template>
     </el-dialog>
 
@@ -1408,22 +1613,27 @@ html.dark .bottom-actions-container {
   align-items: center;
   gap: 8px;
   width: 100%;
+  margin-top: 12px;
 }
 
 .icon-uploader :deep(.el-upload-dragger) {
   width: 64px;
   height: 64px;
   padding: 0;
-  border: 2px dashed var(--border-primary);
+  border: 1px dashed var(--border-primary);
   border-radius: var(--radius-md);
   background-color: var(--bg-primary);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  position: relative;
+  transition: border-color 0.3s;
 }
 
 .icon-uploader :deep(.el-upload-dragger:hover) {
-  border-color: var(--border-accent);
+  border-color: var(--bg-accent);
 }
 
 .icon-uploader-placeholder {
@@ -1431,7 +1641,34 @@ html.dark .bottom-actions-container {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  width: 100%;
+  height: 100%;
+}
+
+.icon-hover-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 5;
+}
+
+.icon-uploader:hover .icon-hover-mask {
+  opacity: 1;
+}
+
+.uploaded-icon-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 0 !important;
 }
 
 .icon-button-group {
@@ -1445,6 +1682,86 @@ html.dark .bottom-actions-container {
   flex: 1;
   margin: 0;
 }
+
+/* ----------------------------------------------------
+   [New] Canvas Icon Editor Dialog Styles
+   ---------------------------------------------------- */
+.icon-edit-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.canvas-wrapper {
+  position: relative;
+  width: 256px;
+  height: 256px;
+  /* Checkerboard background */
+  background-image:
+    linear-gradient(45deg, #eee 25%, transparent 25%),
+    linear-gradient(-45deg, #eee 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #eee 75%),
+    linear-gradient(-45deg, transparent 75%, #eee 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: grab;
+}
+
+html.dark .canvas-wrapper {
+  background-image:
+    linear-gradient(45deg, #333 25%, transparent 25%),
+    linear-gradient(-45deg, #333 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #333 75%),
+    linear-gradient(-45deg, transparent 75%, #333 75%);
+}
+
+.canvas-wrapper:active {
+  cursor: grabbing;
+}
+
+.canvas-wrapper canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.canvas-hint {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background-color: var(--bg-primary);
+  opacity: 0.8;
+  padding: 4px 0;
+  pointer-events: none;
+}
+
+.editor-controls {
+  width: 100%;
+  padding: 0 10px;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 10px;
+}
+
+.control-row .label {
+  width: 40px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------- */
 
 .form-item-subtitle {
   font-size: 12px;

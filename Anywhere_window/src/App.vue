@@ -126,6 +126,12 @@ const windowBackgroundOpacity = computed(() => {
   return promptConfig?.backgroundOpacity ?? 0.5;
 });
 
+const windowBackgroundBlur = computed(() => {
+  if (!CODE.value || !currentConfig.value?.prompts) return 0;
+  const promptConfig = currentConfig.value.prompts[CODE.value];
+  return promptConfig?.backgroundBlur ?? 0;
+});
+
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 const currentSystemPrompt = ref("");
 
@@ -541,21 +547,22 @@ const handleCopyImageFromViewer = (url) => {
   if (!url) return;
   (async () => {
     try {
-      // 1. 如果已经是 Base64 格式，直接复制
-      if (url.startsWith('data:image')) {
-        await new Promise(resolve => setTimeout(resolve, 20));
-        await window.api.copyImage(url);
-        showDismissibleMessage.success('图片已复制到剪贴板');
-        return;
-      }
-
-      // 2. 如果是远程 URL，先下载
+      // showDismissibleMessage.info('正在获取图片...');
       const response = await fetch(url);
       if (!response.ok) throw new Error(`网络错误: ${response.statusText}`);
-
       const blob = await response.blob();
 
-      // Base64 是 uTools copyImage API 支持最稳定的格式
+      try {
+        if (['image/png', 'image/jpeg'].includes(blob.type)) {
+          const item = new ClipboardItem({ [blob.type]: blob });
+          await navigator.clipboard.write([item]);
+          showDismissibleMessage.success('图片已复制到剪贴板 (WebAPI)');
+          return;
+        }
+      } catch (webErr) {
+        console.warn('Web Clipboard API 写入失败，尝试回退方案:', webErr);
+      }
+
       const base64Data = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result);
@@ -564,15 +571,13 @@ const handleCopyImageFromViewer = (url) => {
       });
 
       await new Promise(resolve => setTimeout(resolve, 50));
-
-      // 传递 Base64 字符串给 uTools
+      
       await window.api.copyImage(base64Data);
-
       showDismissibleMessage.success('图片已复制到剪贴板');
+
     } catch (error) {
       console.error('复制图片失败:', error);
       showDismissibleMessage.error(`复制失败: ${error.message}`);
-    } finally {
     }
   })();
 };
@@ -2928,7 +2933,8 @@ const handleOpenSearch = () => {
     <div v-if="windowBackgroundImage" class="window-bg-layer"
       :style="{ 
         backgroundImage: `url('${windowBackgroundImage}')`,
-        filter: `blur(${(1 - windowBackgroundOpacity) * 20}px)` 
+        opacity: windowBackgroundOpacity,
+        filter: `blur(${windowBackgroundBlur}px)` 
       }">
     </div>
     <el-container class="app-container" :class="{ 'has-bg': !!windowBackgroundImage }">

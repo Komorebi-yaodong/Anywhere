@@ -69,7 +69,6 @@ def get_summary():
 
     fast_window_text = ""
     for file in Copy_WINDOW:
-        print(file)
         if os.path.isdir(file):
             fast_window_text += get_text_from_dir(file)
         else:

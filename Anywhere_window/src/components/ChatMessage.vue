@@ -231,7 +231,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     <div v-if="message.role === 'user'" class="message-wrapper user-wrapper">
       <div class="message-meta-header user-meta-header">
         <span class="timestamp" v-if="message.timestamp">{{ formatTimestamp(message.timestamp) }}</span>
-        <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)" class="chat-avatar-top">
+        <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)" class="chat-avatar-top user-avatar">
       </div>
 
       <Bubble class="user-bubble" placement="end" shape="corner" maxWidth="100%">
@@ -280,7 +280,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     <!-- AI 消息 -->
     <div v-if="message.role === 'assistant'" class="message-wrapper ai-wrapper">
       <div class="message-meta-header ai-meta-header">
-        <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar-top">
+        <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)" class="chat-avatar-top ai-avatar">
         <div class="meta-info-column">
           <div class="meta-name-row">
             <span class="ai-name">{{ message.aiName }}</span>
@@ -469,7 +469,6 @@ const truncateFilename = (filename, maxLength = 30) => {
 .chat-avatar-top {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
   cursor: pointer;
   object-fit: cover;
   transition: transform 0.2s;
@@ -477,6 +476,14 @@ const truncateFilename = (filename, maxLength = 30) => {
   &:hover {
     transform: scale(1.1);
   }
+}
+
+.user-avatar {
+  border-radius: 50%;
+}
+
+.ai-avatar {
+  border-radius: 6px;
 }
 
 .ai-name {
