@@ -277,7 +277,7 @@ async function saveSingleProviderSetting(key, value) {
   try {
     await window.api.saveSetting(keyPath, value);
   } catch (e) {
-    ElMessage.error('保存失败');
+    ElMessage.error(t('providers.alerts.saveFailed'));
   }
 }
 
@@ -365,10 +365,10 @@ const apiKeyCount = computed(() => {
                   <div class="models-actions-row">
                     <el-button :icon="Refresh" plain @click="activate_get_model_function">{{
                       t('providers.getModelsFromApiBtn')
-                      }}</el-button>
+                    }}</el-button>
                     <el-button :icon="Plus" plain @click="addModel_page = true">{{
                       t('providers.addManuallyBtn')
-                      }}</el-button>
+                    }}</el-button>
                   </div>
                 </el-form-item>
                 <div class="models-list-wrapper">
@@ -441,8 +441,7 @@ const apiKeyCount = computed(() => {
 
     <el-dialog v-model="getModel_page" :title="t('providers.availableModelsDialogTitle')" width="700px" top="10vh"
       :close-on-click-modal="false" class="available-models-dialog">
-      <el-input v-model="searchQuery"
-        :placeholder="t('providers.searchModelsPlaceholder', { default: '通过模型ID或所有者搜索...' })" clearable
+      <el-input v-model="searchQuery" :placeholder="t('providers.searchModelsPlaceholder')" clearable
         :prefix-icon="Search" class="dialog-search-input" />
 
       <el-alert v-if="getModel_form.error" :title="getModel_form.error" type="error" show-icon :closable="false"
@@ -646,7 +645,7 @@ const apiKeyCount = computed(() => {
   gap: 8px;
 }
 
-.provider-form{
+.provider-form {
   margin-top: 20px !important;
 }
 
@@ -705,7 +704,7 @@ const apiKeyCount = computed(() => {
 .model-tag :deep(.el-tag__close) {
   color: inherit !important;
   position: relative;
-  top: 0; 
+  top: 0;
   margin-left: 6px;
 }
 
@@ -822,12 +821,12 @@ html.dark .model-tag :deep(.el-tag__close:hover) {
 }
 
 .models-actions-row {
-    display: flex;
-    gap: 10px;
+  display: flex;
+  gap: 10px;
 }
 
 .models-list-wrapper {
-    margin-left: 0px;
-    margin-bottom: 18px;
+  margin-left: 0px;
+  margin-bottom: 18px;
 }
 </style>

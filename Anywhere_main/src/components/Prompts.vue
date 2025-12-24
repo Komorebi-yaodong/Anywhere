@@ -157,7 +157,7 @@ const drawEditorCanvas = () => {
   // 1. 绘制圆角遮罩
   ctx.save();
   ctx.beginPath();
-  const r = (iconEditorState.radius / 100) * size; 
+  const r = (iconEditorState.radius / 100) * size;
   ctx.roundRect(0, 0, size, size, r);
   ctx.clip();
 
@@ -388,7 +388,7 @@ async function atomicSave(updateFunction, syncFeatures = false) {
 
   } catch (error) {
     console.error("Atomic save failed:", error);
-    ElMessage.error('配置保存失败，请重试');
+    ElMessage.error(t('prompts.alerts.saveFailed'));
   }
 }
 
@@ -476,12 +476,12 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     }
   } catch (error) {
     console.error("Failed to refresh config before editing prompt:", error);
-    ElMessage.error("无法获取最新的快捷助手设置，可能显示旧数据。");
+    ElMessage.error(t('prompts.alerts.configFetchFailed'));
   }
 
   const p = currentConfig.value.prompts[promptKey];
   if (!p) {
-    ElMessage.error("快捷助手不存在，可能已被其他操作删除。");
+    ElMessage.error(t('prompts.alerts.promptNotFound'));
     return;
   }
 
@@ -625,7 +625,7 @@ async function handlePromptEnableChange(promptKey, value) {
     await window.api.saveSetting(`prompts.${promptKey}.enable`, value);
     atomicSave(config => { }, true);
   } catch (e) {
-    ElMessage.error('保存失败');
+    ElMessage.error(t('prompts.alerts.saveSettingFailed'));
     currentConfig.value.prompts[promptKey].enable = !value;
   }
 }
@@ -694,7 +694,7 @@ const handleIconUpload = (file) => {
 const removeEditingIcon = () => { editingPrompt.icon = ""; };
 
 const downloadEditingIcon = () => {
-  if (!editingPrompt.icon) { ElMessage.warning('没有可供下载的图标。'); return; }
+  if (!editingPrompt.icon) { ElMessage.warning(t('prompts.alerts.noIconToDownload')); return; }
   const link = document.createElement('a');
   link.href = editingPrompt.icon;
   const matches = editingPrompt.icon.match(/^data:image\/([a-zA-Z+]+);base64,/);
@@ -714,11 +714,11 @@ function prepareReplaceModels() {
 async function replaceModels() {
   const { sourceModel, targetModel } = replaceModelForm;
   if (!sourceModel || !targetModel) {
-    ElMessage.warning('请选择源模型和目标模型。');
+    ElMessage.warning(t('prompts.alerts.selectModels'));
     return;
   }
   if (sourceModel === targetModel) {
-    ElMessage.warning('源模型和目标模型不能相同。');
+    ElMessage.warning(t('prompts.alerts.sameModels'));
     return;
   }
 
@@ -880,19 +880,21 @@ async function refreshPromptsConfig() {
                       </el-icon>
                       <div class="icon-upload-text"
                         style="font-size: 10px; margin-top: 4px; color: var(--text-tertiary); line-height: 1.2;">
-                        拖拽/粘贴<br>点击上传
+                        <span v-html="t('prompts.icon.uploadText')"></span>
                       </div>
                     </div>
                   </template>
                 </el-upload>
 
                 <div class="icon-button-group">
-                  <el-button class="icon-action-button" size="small" @click="downloadEditingIcon" title="下载图标">
+                  <el-button class="icon-action-button" size="small" @click="downloadEditingIcon"
+                    :title="t('prompts.icon.downloadTooltip')">
                     <el-icon>
                       <Download />
                     </el-icon>
                   </el-button>
-                  <el-button class="icon-action-button" size="small" @click="removeEditingIcon" title="移除图标">
+                  <el-button class="icon-action-button" size="small" @click="removeEditingIcon"
+                    :title="t('prompts.icon.removeTooltip')">
                     <el-icon>
                       <Delete />
                     </el-icon>
@@ -1089,22 +1091,22 @@ async function refreshPromptsConfig() {
                     style="align-items: flex-start; margin-top: 10px;">
                     <div style="width: 100%;">
                       <div style="display: flex; align-items: center; margin-bottom: 5px;">
-                        <span class="param-label">窗口背景图片 (URL)</span>
+                        <span class="param-label">{{ t('prompts.background.imageLabel') }}</span>
                         <div class="spacer"></div>
                       </div>
-                      <el-input v-model="editingPrompt.backgroundImage" placeholder="输入图片链接 (http/https/data:image)"
-                        size="small" clearable />
-
+                      <el-input v-model="editingPrompt.backgroundImage"
+                        :placeholder="t('prompts.background.imagePlaceholder')" size="small" clearable />
                       <div v-if="editingPrompt.backgroundImage" style="margin-top: 8px;">
                         <div style="display: flex; align-items: center; margin-bottom: 0px;">
-                          <span class="param-label" style="font-size: 12px;">背景不透明度: {{ editingPrompt.backgroundOpacity
-                          }}</span>
+                          <span class="param-label" style="font-size: 12px;">{{ t('prompts.background.opacityLabel') }}:
+                            {{
+                            editingPrompt.backgroundOpacity }}</span>
                         </div>
                         <el-slider v-model="editingPrompt.backgroundOpacity" :min="0.05" :max="1" :step="0.05"
                           size="small" />
                         <div style="display: flex; align-items: center; margin-bottom: 0px; margin-top: 4px;">
-                          <span class="param-label" style="font-size: 12px;">背景模糊度: {{ editingPrompt.backgroundBlur
-                          }}px</span>
+                          <span class="param-label" style="font-size: 12px;">{{ t('prompts.background.blurLabel') }}: {{
+                            editingPrompt.backgroundBlur }}px</span>
                         </div>
                         <el-slider v-model="editingPrompt.backgroundBlur" :min="0" :max="20" :step="1" size="small" />
                       </div>
@@ -1211,8 +1213,7 @@ async function refreshPromptsConfig() {
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('prompts.replaceModelsDialog.sourceModel')">
-              <el-select v-model="replaceModelForm.sourceModel" filterable placeholder="请选择要被替换的模型"
-                style="width: 100%;">
+              <el-select v-model="replaceModelForm.sourceModel" filterable :placeholder="t('prompts.addToTagPlaceholder')" style="width: 100%;">
                 <el-option v-for="item in usedModels" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>

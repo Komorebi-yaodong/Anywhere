@@ -16,6 +16,10 @@
     }
   },
   "chats": {
+    "view": {
+      "local": "本地对话",
+      "cloud": "云端对话"
+    },
     "info": {
       "title": "说明",
       "localDesc": "· 本地对话：每隔15秒自动保存已命名的对话到本地（已保存的对话、json文件加载的对话、打开的云端对话），所有对话以json格式存储在 {path}，支持不同设备不同路径。",
@@ -42,7 +46,10 @@
     "rename": {
       "promptTitle": "重命名对话",
       "promptMessage": "请输入新的会话名称",
-      "invalidFilename": "文件名无效，必须以 .json 结尾"
+      "invalidFilename": "文件名无效，必须以 .json 结尾",
+      "syncTitle": "同步操作提示",
+      "syncCloudConfirm": "云端也存在同名文件，是否同步重命名？",
+      "syncLocalConfirm": "本地也存在同名文件，是否同步重命名？"
     },
     "tooltips": {
       "syncToCloud": "上传至云端",
@@ -79,7 +86,9 @@
       "syncNoUpload": "所有本地文件均已是最新或云端版本较新，无需上传。",
       "syncNoDownload": "所有云端文件均已同步或本地版本较新，无需下载。",
       "confirmSyncDeleteTitle": "同步删除确认",
-      "confirmSyncDeleteMessage": "您选择的文件中，有 {count} 个在 {location} 也存在。是否要一并删除？"
+      "confirmSyncDeleteMessage": "您选择的文件中，有 {count} 个在 {location} 也存在。是否要一并删除？",
+      "webdavRequired": "请先配置WebDAV",
+      "localPathRequired": "请先配置本地对话路径"
     }
   },
   "prompts": {
@@ -99,6 +108,17 @@
     "iconUploadTip": "支持 {formats} 格式，最大 {maxSize}",
     "dragIconHere": "拖拽",
     "orClickToUpload": "或点击",
+    "icon": {
+      "uploadText": "拖拽/粘贴<br>点击上传",
+      "downloadTooltip": "下载图标",
+      "removeTooltip": "移除图标"
+    },
+    "background": {
+      "imageLabel": "窗口背景图片 (URL)",
+      "imagePlaceholder": "输入图片链接 (http/https/data:image)",
+      "opacityLabel": "背景不透明度",
+      "blurLabel": "背景模糊度"
+    },
     "regex": {
       "label": "自定义正则匹配",
       "tooltip": "当输入类型为'文本'时，可通过此项设置正则表达式来匹配特定内容。1. 格式必须为 /.../flags，例如 /^https?:\\/\\// 用于匹配网址。2. 重要：表达式中的反斜杠 \\ 必须转义写成 \\\\。3. flags 是可选标志，如 i 表示不区分大小写 (例如 /hello/i)。4. 如果留空，则会匹配任意文本。常用符号速查:• . - 匹配除换行外的任意字符• \\d - 匹配任意数字• \\s - 匹配任意空白符 (空格, tab, 换行)• \\S - 匹配任意非空白符• \\w - 匹配字母、数字、下划线• [...] - 匹配括号内任一字符, 如 [abc]• * - 匹配0次或多次• + - 匹配1次或多次• ? - 匹配0次或1次• ^ - 匹配开头• $ - 匹配结尾",
@@ -151,7 +171,14 @@
       "invalidImageFormat": "图片格式无效请使用 {formats}",
       "imageSizeTooLarge": "图片大小超过 {maxSize}",
       "modelsReplacedSuccess": "成功替换了 {count} 个快捷助手的模型。",
-      "refreshSuccess": "快捷助手配置已刷新！"
+      "refreshSuccess": "快捷助手配置已刷新！",
+      "noIconToDownload": "没有可供下载的图标。",
+      "selectModels": "请选择源模型和目标模型。",
+      "sameModels": "源模型和目标模型不能相同。",
+      "configFetchFailed": "无法获取最新的快捷助手设置，可能显示旧数据。",
+      "promptNotFound": "快捷助手不存在，可能已被其他操作删除。",
+      "saveFailed": "配置保存失败，请重试",
+      "saveSettingFailed": "保存失败"
     },
     "tooltips": {
       "moveLeft": "左移",
@@ -186,6 +213,8 @@
     "addServer": "添加 MCP 服务",
     "editJson": "编辑 JSON",
     "noServers": "尚未配置 MCP 服务。",
+    "searchPlaceholder": "搜索名称、描述、提供者或标签...",
+    "noMatch": "未找到匹配的服务",
     "addServerTitle": "添加新 MCP 服务",
     "editServerTitle": "编辑 MCP 服务",
     "nameLabel": "名称",
@@ -223,7 +252,11 @@
       "saveFailed": "MCP 服务保存失败。",
       "deleteSuccess": "MCP 服务删除成功。",
       "deleteFailed": "MCP 服务删除失败。",
-      "invalidJson": "JSON 格式无效，请检查您的输入。"
+      "invalidJson": "JSON 格式无效，请检查您的输入。",
+      "configCopied": "服务器配置已复制到剪贴板",
+      "refreshSuccess": "MCP 服务配置已刷新！",
+      "configInvalid": "未能获取到有效的配置数据。",
+      "refreshFailed": "刷新配置失败，请稍后重试。"
     },
     "jsonDialog": {
       "title": "编辑 MCP 服务 JSON",
@@ -275,7 +308,8 @@
       "providerUrlNotSet": "服务商 URL 未设置",
       "fetchModelsError": "错误 {status}: {message}",
       "fetchModelsFailedDefault": "获取模型失败",
-      "configSaveFailed": "保存配置失败"
+      "configSaveFailed": "保存配置失败",
+      "saveFailed": "保存失败"
     }
   },
   "setting": {
@@ -360,13 +394,15 @@
       "restoreButton": "管理备份",
       "localChatPath": "本地对话路径",
       "localChatPathPlaceholder": "请选择用于存放对话记录的本地文件夹",
+      "selectFolder": "选择文件夹",
       "webdavDescription": "请先在“设置”页面配置 WebDAV URL 和数据路径",
       "backup": {
         "confirmTitle": "确认备份文件名",
         "confirmMessage": "请输入备份文件名建议使用默认文件名以保留时间戳",
         "invalidFilename": "文件名无效，必须以 .json 结尾",
         "cancelled": "备份已取消",
-        "emptyFilenameError": "文件名不能为空"
+        "emptyFilenameError": "文件名不能为空",
+        "inputFilename": "请输入文件名"
       },
       "manager": {
         "title": "备份数据管理",
@@ -400,7 +436,9 @@
     },
     "alerts": {
       "importSuccess": "配置导入成功",
-      "importFailed": "配置导入失败"
+      "importFailed": "配置导入失败",
+      "saveSuccess": "保存成功！",
+      "saveFailedPrefix": "保存设置失败: "
     }
   },
   "common": {

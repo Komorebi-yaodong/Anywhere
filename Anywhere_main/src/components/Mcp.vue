@@ -222,7 +222,7 @@ async function copyServerJson(server) {
     const { id, ...serverConfig } = server;
     const jsonString = JSON.stringify(serverConfig, null, 2);
     await window.api.copyText(jsonString);
-    ElMessage.success('服务器配置已复制到剪贴板');
+    ElMessage.success(t('mcp.alerts.configCopied'));
 }
 
 function prepareEditJson() {
@@ -254,13 +254,13 @@ async function refreshMcpConfig() {
         const latestConfigData = await window.api.getConfig();
         if (latestConfigData && latestConfigData.config) {
             currentConfig.value = latestConfigData.config;
-            ElMessage.success('MCP 服务配置已刷新！');
+            ElMessage.success(t('mcp.alerts.refreshSuccess')); // 替换
         } else {
-            throw new Error("未能获取到有效的配置数据。");
+            throw new Error(t('mcp.alerts.configInvalid')); // 替换
         }
     } catch (error) {
         console.error("刷新MCP配置失败:", error);
-        ElMessage.error('刷新配置失败，请稍后重试。');
+        ElMessage.error(t('mcp.alerts.refreshFailed')); // 替换
     }
 }
 </script>
@@ -274,11 +274,10 @@ async function refreshMcpConfig() {
                 </div>
                 <div v-else>
                     <div class="search-bar-container">
-                        <el-input v-model="searchQuery" placeholder="搜索名称、描述、提供者或标签..." :prefix-icon="Search"
-                            clearable />
+                        <el-input v-model="searchQuery" :placeholder="t('mcp.searchPlaceholder')" :prefix-icon="Search" clearable />
                     </div>
                     <div v-if="filteredMcpServersList.length === 0" class="empty-state">
-                        <el-empty description="未找到匹配的服务" />
+                        <el-empty :description="t('mcp.noMatch')" />
                     </div>
                     <div v-else class="mcp-grid-container">
                         <div v-for="server in filteredMcpServersList" :key="server.id" class="mcp-card">

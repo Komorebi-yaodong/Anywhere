@@ -58,7 +58,7 @@ async function saveSingleSetting(keyPath, value) {
     }
   } catch (error) {
     console.error(`Error saving setting for ${keyPath}:`, error);
-    ElMessage.error(`保存设置失败: ${keyPath}`);
+    ElMessage.error(`${t('setting.alerts.saveFailedPrefix')} ${keyPath}`);
   }
 }
 
@@ -107,7 +107,7 @@ async function handleGlobalToggleChange(key, value) {
 
   // 3. 保存整个更新后的配置
   await saveFullConfig();
-  ElMessage.success(t('common.save') + '成功！');
+  ElMessage.success(t('setting.alerts.saveSuccess'));
 }
 
 async function exportConfig() {
@@ -272,7 +272,7 @@ async function backupToWebdav() {
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
-          placeholder: '请输入文件名',
+          placeholder: t('setting.webdav.backup.inputFilename'),
           autofocus: true,
         }, {
           append: () => h('div', { class: 'input-suffix-display' }, '.json')
@@ -640,7 +640,7 @@ async function selectLocalChatPath() {
               @change="(value) => saveSingleSetting('webdav.localChatPath', value)"
               :placeholder="t('setting.webdav.localChatPathPlaceholder')" style="width: 320px;">
               <template #append>
-                <el-button @click="selectLocalChatPath">选择文件夹</el-button>
+                <el-button @click="selectLocalChatPath">{{ t('setting.webdav.selectFolder') }}</el-button>
               </template>
             </el-input>
           </div>

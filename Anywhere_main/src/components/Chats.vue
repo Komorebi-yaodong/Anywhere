@@ -147,7 +147,11 @@ async function renameFile(file) {
         if (activeView.value === 'local') {
             await window.api.renameLocalFile(file.path, `${localChatPath.value}/${finalFilename}`);
             if (isWebdavConfigValid.value && cloudChatFiles.value.some(f => f.basename === file.basename)) {
-                const confirm = await ElMessageBox.confirm(`云端也存在同名文件，是否同步重命名？`, '同步操作提示', { type: 'info' }).catch(() => false);
+                const confirm = await ElMessageBox.confirm(
+                    t('chats.rename.syncCloudConfirm'),
+                    t('chats.rename.syncTitle'),
+                    { type: 'info' }
+                ).catch(() => false);
                 if (confirm) {
                     const client = createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password });
                     await client.moveFile(`${webdavConfig.value.data_path}/${file.basename}`, `${webdavConfig.value.data_path}/${finalFilename}`);
@@ -157,7 +161,11 @@ async function renameFile(file) {
             const client = createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password });
             await client.moveFile(`${webdavConfig.value.data_path}/${file.basename}`, `${webdavConfig.value.data_path}/${finalFilename}`);
             if (localChatFiles.value.some(f => f.basename === file.basename)) {
-                const confirm = await ElMessageBox.confirm(`本地也存在同名文件，是否同步重命名？`, '同步操作提示', { type: 'info' }).catch(() => false);
+                const confirm = await ElMessageBox.confirm(
+                    t('chats.rename.syncLocalConfirm'),
+                    t('chats.rename.syncTitle'),
+                    { type: 'info' }
+                ).catch(() => false);
                 if (confirm) await window.api.renameLocalFile(`${localChatPath.value}/${file.basename}`, `${localChatPath.value}/${finalFilename}`);
             }
         }
@@ -187,7 +195,7 @@ async function deleteFiles(filesToDelete) {
             });
 
             if (counterpartFiles.length > 0) {
-                const location = activeView.value === 'local' ? '云端' : '本地';
+                const location = activeView.value === 'local' ? t('chats.view.cloud') : t('chats.view.local');
                 try {
                     await ElMessageBox.confirm(
                         t('chats.alerts.confirmSyncDeleteMessage', { count: counterpartFiles.length, location: location }),
@@ -273,7 +281,7 @@ async function runConcurrentTasks(tasks, signal, concurrencyLimit = 3) {
 }
 
 async function intelligentUpload() {
-    if (!isWebdavConfigValid.value) return ElMessage.warning('请先配置WebDAV');
+    if (!isWebdavConfigValid.value) return ElMessage.warning(t('chats.alerts.webdavRequired'));
     const filesToUpload = localChatFiles.value.filter(local => {
         const cloudFile = getFileMap(cloudChatFiles.value).get(local.basename);
         return !cloudFile || new Date(local.lastmod) > new Date(cloudFile.lastmod);
@@ -291,7 +299,7 @@ async function intelligentUpload() {
 }
 
 async function intelligentDownload() {
-    if (!localChatPath.value) return ElMessage.warning('请先配置本地对话路径');
+    if (!localChatPath.value) return ElMessage.warning(t('chats.alerts.localPathRequired'));
     const filesToDownload = cloudChatFiles.value.filter(cloud => {
         const localFile = getFileMap(localChatFiles.value).get(cloud.basename);
         return !localFile || new Date(cloud.lastmod) > new Date(localFile.lastmod);
@@ -411,8 +419,8 @@ async function forceSyncFile(basename, direction, signal) {
             </div>
             <div class="view-selector">
                 <el-radio-group v-model="activeView" @change="currentPage = 1">
-                    <el-radio-button value="local">本地对话</el-radio-button>
-                    <el-radio-button value="cloud" :disabled="!isWebdavConfigValid">云端对话</el-radio-button>
+                    <el-radio-button value="local">{{ t('chats.view.local') }}</el-radio-button>
+                    <el-radio-button value="cloud" :disabled="!isWebdavConfigValid">{{ t('chats.view.cloud') }}</el-radio-button>
                 </el-radio-group>
             </div>
 
@@ -506,7 +514,7 @@ async function forceSyncFile(basename, direction, signal) {
             <p class="sync-status-text">{{ syncStatusText }}</p>
         </div>
         <template #footer>
-            <el-button @click="cancelSync">取消</el-button>
+            <el-button @click="cancelSync">{{ t('common.cancel') }}</el-button>
         </template>
     </el-dialog>
 </template>

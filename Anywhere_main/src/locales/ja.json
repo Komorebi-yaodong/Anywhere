@@ -16,11 +16,15 @@
     }
   },
   "chats": {
+    "view": {
+      "local": "ローカル対話",
+      "cloud": "クラウド対話"
+    },
     "info": {
-      "title": "Information",
-      "localDesc": "· Local Chats: Named conversations (saved, loaded from JSON, or opened from cloud) are auto-saved every 15 seconds. All conversations are stored in JSON format at {path}. Different paths can be used on different devices.",
-      "pathNotSet": "Not configured",
-      "cloudDesc": "· Cloud Chats: Conversations uploaded to the cloud, which can be pulled to local at any time."
+      "title": "情報",
+      "localDesc": "· ローカル対話：名前付きの会話（保存済み、JSONからロード、またはクラウドから開いたもの）は15秒ごとに自動保存されます。すべての会話は {path} にJSON形式で保存されます。デバイスごとに異なるパスを使用できます。",
+      "pathNotSet": "未設定",
+      "cloudDesc": "· クラウド対話：クラウドにアップロードされた会話で、いつでもローカルにプルできます。"
     },
     "configRequired": {
       "title": "クラウドチャット",
@@ -42,7 +46,10 @@
     "rename": {
       "promptTitle": "チャットの名前を変更",
       "promptMessage": "新しい会話名を入力してください。",
-      "invalidFilename": "ファイル名が無効です。'.json'で終わる必要があります。"
+      "invalidFilename": "ファイル名が無効です。'.json'で終わる必要があります。",
+      "syncTitle": "同期操作の確認",
+      "syncCloudConfirm": "クラウドにも同名のファイルが存在します。同期して名前を変更しますか？",
+      "syncLocalConfirm": "ローカルにも同名のファイルが存在します。同期して名前を変更しますか？"
     },
     "tooltips": {
       "syncToCloud": "クラウドへアップロード",
@@ -79,7 +86,9 @@
       "syncNoUpload": "すべてのローカルファイルは最新であるか、クラウド版の方が新しいため、アップロードは不要です。",
       "syncNoDownload": "すべてのクラウドファイルは同期済みであるか、ローカル版の方が新しいため、ダウンロードは不要です。",
       "confirmSyncDeleteTitle": "同期削除の確認",
-      "confirmSyncDeleteMessage": "選択したファイルのうち{count}個が{location}にも存在します。そちらも一緒に削除しますか？"
+      "confirmSyncDeleteMessage": "選択したファイルのうち{count}個が{location}にも存在します。そちらも一緒に削除しますか？",
+      "webdavRequired": "WebDAVを先に設定してください",
+      "localPathRequired": "ローカルの会話パスを先に設定してください"
     }
   },
   "prompts": {
@@ -99,6 +108,17 @@
     "iconUploadTip": "{formats}形式をサポート、最大{maxSize}。",
     "dragIconHere": "ドラッグ",
     "orClickToUpload": "またはクリック",
+    "icon": {
+      "uploadText": "ドラッグ/貼り付け<br>クリックしてアップロード",
+      "downloadTooltip": "アイコンをダウンロード",
+      "removeTooltip": "アイコンを削除"
+    },
+    "background": {
+      "imageLabel": "ウィンドウ背景画像 (URL)",
+      "imagePlaceholder": "画像リンクを入力 (http/https/data:image)",
+      "opacityLabel": "背景の不透明度",
+      "blurLabel": "背景のぼかし"
+    },
     "regex": {
       "label": "カスタム正規表現",
       "tooltip": "入力タイプが「テキスト」の場合、ここで正規表現を設定して特定のコンテンツにマッチさせることができます。1. フォーマットは /.../flags である必要があります。例：/^https?:\\/\\// はURLにマッチします。2. 重要：式中のバックスラッシュ \\ は \\\\ としてエスケープする必要があります。3. flags はオプションのフラグです。例えば i は大文字小文字を区別しません (例: /hello/i)。4. 空白のままにすると、任意のテキストにマッチします。クイックリファレンス:• . - 改行を除く任意の1文字• \\d - 任意の数字• \\s - 任意の空白文字 (スペース, タブ, 改行)• \\S - 任意の非空白文字• \\w - 単語構成文字 (英数字, _)• [...] - カッコ内のいずれか1文字, 例 [abc]• * - 0回以上• + - 1回以上• ? - 0回または1回• ^ - 先頭にマッチ• $ - 末尾にマッチ",
@@ -151,7 +171,14 @@
       "invalidImageFormat": "無効な画像形式です。{formats}を使用してください。",
       "imageSizeTooLarge": "画像サイズが{maxSize}を超えています。",
       "modelsReplacedSuccess": "{count}個のクイックアシスタントのモデルを正常に置換しました。",
-      "refreshSuccess": "クイックアシスタントの設定が更新されました！"
+      "refreshSuccess": "クイックアシスタントの設定が更新されました！",
+      "noIconToDownload": "ダウンロードできるアイコンがありません。",
+      "selectModels": "ソースモデルとターゲットモデルを選択してください。",
+      "sameModels": "ソースモデルとターゲットモデルを同じにすることはできません。",
+      "configFetchFailed": "最新のアシスタント設定を取得できませんでした。データが古い可能性があります。",
+      "promptNotFound": "アシスタントが見つかりません。削除された可能性があります。",
+      "saveFailed": "設定の保存に失敗しました。再試行してください。",
+      "saveSettingFailed": "保存に失敗しました"
     },
     "tooltips": {
       "moveLeft": "左に移動",
@@ -186,6 +213,8 @@
     "addServer": "MCPサーバーを追加",
     "editJson": "JSONを編集",
     "noServers": "MCPサーバーが設定されていません。",
+    "searchPlaceholder": "名前、説明、プロバイダー、またはタグで検索...",
+    "noMatch": "一致するサービスが見つかりません",
     "addServerTitle": "新しいMCPサーバーを追加",
     "editServerTitle": "MCPサーバーを編集",
     "nameLabel": "名前",
@@ -223,7 +252,11 @@
       "saveFailed": "MCPサーバーの保存に失敗しました。",
       "deleteSuccess": "MCPサーバーの削除に成功しました。",
       "deleteFailed": "MCPサーバーの削除に失敗しました。",
-      "invalidJson": "無効なJSON形式です。入力を確認してください。"
+      "invalidJson": "無効なJSON形式です。入力を確認してください。",
+      "configCopied": "サーバー設定をクリップボードにコピーしました",
+      "refreshSuccess": "MCP設定を更新しました！",
+      "configInvalid": "有効な設定データを取得できませんでした。",
+      "refreshFailed": "更新に失敗しました。後でもう一度お試しください。"
     },
     "jsonDialog": {
       "title": "MCPサーバーのJSONを編集",
@@ -275,7 +308,8 @@
       "providerUrlNotSet": "サービスプロバイダーURLが設定されていません。",
       "fetchModelsError": "エラー {status}: {message}",
       "fetchModelsFailedDefault": "モデルの取得に失敗しました。",
-      "configSaveFailed": "設定の保存に失敗しました。"
+      "configSaveFailed": "設定の保存に失敗しました。",
+      "saveFailed": "保存に失敗しました"
     }
   },
   "setting": {
@@ -360,13 +394,15 @@
       "restoreButton": "バックアップ管理",
       "localChatPath": "ローカルのチャットパス",
       "localChatPathPlaceholder": "会話履歴を保存するローカルフォルダを選択してください",
+      "selectFolder": "フォルダを選択",
       "webdavDescription": "まず、「設定」ページでWebDAVのURLとデータパスを設定してください",
       "backup": {
         "confirmTitle": "バックアップファイル名の確認",
         "confirmMessage": "バックアップファイル名を入力してください。タイムスタンプを保持するために、デフォルト名の使用をお勧めします。",
         "invalidFilename": "無効なファイル名です。末尾は.jsonである必要があります。",
         "cancelled": "バックアップはキャンセルされました。",
-        "emptyFilenameError": "ファイル名は空にできません。"
+        "emptyFilenameError": "ファイル名は空にできません。",
+        "inputFilename": "ファイル名を入力してください"
       },
       "manager": {
         "title": "バックアップデータ管理",
@@ -400,7 +436,9 @@
     },
     "alerts": {
       "importSuccess": "設定のインポートに成功しました。",
-      "importFailed": "設定のインポートに失敗しました。"
+      "importFailed": "設定のインポートに失敗しました。",
+      "saveSuccess": "保存しました！",
+      "saveFailedPrefix": "設定の保存に失敗しました: "
     }
   },
   "common": {

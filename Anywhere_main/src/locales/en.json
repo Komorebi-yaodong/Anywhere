@@ -16,6 +16,10 @@
     }
   },
   "chats": {
+    "view": {
+      "local": "Local Chats",
+      "cloud": "Cloud Chats"
+    },
     "info": {
       "title": "Information",
       "localDesc": "· Local Chats: Named conversations (saved, loaded from JSON, or opened from cloud) are auto-saved every 15 seconds. All conversations are stored in JSON format at {path}. Different paths can be used on different devices.",
@@ -42,7 +46,10 @@
     "rename": {
       "promptTitle": "Rename Chat",
       "promptMessage": "Please enter the new conversation name.",
-      "invalidFilename": "Invalid filename, must end with .json."
+      "invalidFilename": "Invalid filename, must end with .json.",
+      "syncTitle": "Sync Operation",
+      "syncCloudConfirm": "A file with the same name exists in the cloud. Rename it synchronously?",
+      "syncLocalConfirm": "A file with the same name exists locally. Rename it synchronously?"
     },
     "tooltips": {
       "syncToCloud": "Upload to Cloud",
@@ -79,7 +86,9 @@
       "syncNoUpload": "All local files are up-to-date or newer on the cloud. Nothing to upload.",
       "syncNoDownload": "All cloud files are synced or newer locally. Nothing to download.",
       "confirmSyncDeleteTitle": "Confirm Sync Deletion",
-      "confirmSyncDeleteMessage": "{count} of the selected files also exist on the {location}. Do you want to delete them from there as well?"
+      "confirmSyncDeleteMessage": "{count} of the selected files also exist on the {location}. Do you want to delete them from there as well?",
+      "webdavRequired": "Please configure WebDAV first",
+      "localPathRequired": "Please configure local chat path first"
     }
   },
   "prompts": {
@@ -99,6 +108,17 @@
     "iconUploadTip": "Supports {formats} format, max size {maxSize}.",
     "dragIconHere": "Drag ",
     "orClickToUpload": "or click",
+    "icon": {
+      "uploadText": "Drag/Paste<br>Click to Upload",
+      "downloadTooltip": "Download Icon",
+      "removeTooltip": "Remove Icon"
+    },
+    "background": {
+      "imageLabel": "Window Background Image (URL)",
+      "imagePlaceholder": "Enter image link (http/https/data:image)",
+      "opacityLabel": "Background Opacity",
+      "blurLabel": "Background Blur"
+    },
     "regex": {
       "label": "Custom Regex Match",
       "tooltip": "When the input type is 'Text', you can set a regular expression here to match specific content.1. Format must be /.../flags, e.g., /^https?:\\/\\// to match URLs.2. Important: Backslashes \\ in the expression must be escaped as \\\\.3. flags are optional, like i for case-insensitivity (e.g., /hello/i).4. Leave empty to match any text.Quick Reference:• . - Matches any character except newline• \\d - Matches any digit• \\s - Matches any whitespace (space, tab, newline)• \\S - Matches any non-whitespace• \\w - Matches word characters (a-z, A-Z, 0-9, _)• [...] - Matches any character in the set, e.g., [abc]• * - Matches 0 or more times• + - Matches 1 or more times• ? - Matches 0 or 1 time• ^ - Matches start of string• $ - Matches end of string",
@@ -151,7 +171,14 @@
       "invalidImageFormat": "Invalid image format. Please use {formats}.",
       "imageSizeTooLarge": "Image size exceeds {maxSize}.",
       "modelsReplacedSuccess": "Successfully replaced the model for {count} prompts.",
-      "refreshSuccess": "Quick Prompts configuration has been refreshed!"
+      "refreshSuccess": "Quick Prompts configuration has been refreshed!",
+      "noIconToDownload": "No icon available to download.",
+      "selectModels": "Please select source and target models.",
+      "sameModels": "Source and target models cannot be the same.",
+      "configFetchFailed": "Failed to fetch latest prompts settings, data might be stale.",
+      "promptNotFound": "Prompt not found, it may have been deleted.",
+      "saveFailed": "Configuration save failed, please try again.",
+      "saveSettingFailed": "Save failed"
     },
     "tooltips": {
       "moveLeft": "Move Left",
@@ -186,6 +213,8 @@
     "addServer": "Add MCP Server",
     "editJson": "Edit JSON",
     "noServers": "No MCP servers configured.",
+    "searchPlaceholder": "Search name, description, provider or tags...",
+    "noMatch": "No matching services found",
     "addServerTitle": "Add New MCP Server",
     "editServerTitle": "Edit MCP Server",
     "nameLabel": "Name",
@@ -223,7 +252,11 @@
       "saveFailed": "Failed to save MCP server.",
       "deleteSuccess": "MCP server deleted successfully.",
       "deleteFailed": "Failed to delete MCP server.",
-      "invalidJson": "Invalid JSON format. Please check your input."
+      "invalidJson": "Invalid JSON format. Please check your input.",
+      "configCopied": "Server config copied to clipboard",
+      "refreshSuccess": "MCP config refreshed!",
+      "configInvalid": "Failed to get valid config data.",
+      "refreshFailed": "Refresh failed, please try again later."
     },
     "jsonDialog": {
       "title": "Edit MCP Servers JSON",
@@ -275,7 +308,8 @@
       "providerUrlNotSet": "Provider URL is not set.",
       "fetchModelsError": "Error {status}: {message}",
       "fetchModelsFailedDefault": "Failed to fetch models.",
-      "configSaveFailed": "Failed to save configuration."
+      "configSaveFailed": "Failed to save configuration.",
+      "saveFailed": "Save failed"
     }
   },
   "setting": {
@@ -360,13 +394,15 @@
       "restoreButton": "Manage Backups",
       "localChatPath": "Local Chat Path",
       "localChatPathPlaceholder": "Please select a local folder to store chat history",
+      "selectFolder": "Select Folder",
       "webdavDescription": "Please configure WebDAV URL and data path in 'Settings' first",
       "backup": {
         "confirmTitle": "Confirm Backup Filename",
         "confirmMessage": "Please enter the backup filename. It is recommended to use the default name to keep the timestamp.",
         "invalidFilename": "Invalid filename, must end with .json.",
         "cancelled": "Backup cancelled.",
-        "emptyFilenameError": "Filename cannot be empty."
+        "emptyFilenameError": "Filename cannot be empty.",
+        "inputFilename": "Please enter filename"
       },
       "manager": {
         "title": "Backup Data Management",
@@ -400,7 +436,9 @@
     },
     "alerts": {
       "importSuccess": "Configuration imported successfully.",
-      "importFailed": "Configuration import failed."
+      "importFailed": "Configuration import failed.",
+      "saveSuccess": "Saved successfully!",
+      "saveFailedPrefix": "Failed to save setting: "
     }
   },
   "common": {
