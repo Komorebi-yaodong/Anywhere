@@ -54,8 +54,9 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
       </div>
 
       <!-- App 信息 -->
-      <div class="app-info no-drag" @click="emit('save-window-size')">
-        <el-tooltip content="点击保存当前窗口大小与位置" placement="bottom" :show-after="500">
+      <!-- [修改] 添加 @dblclick.stop="emit('maximize')" -->
+      <div class="app-info no-drag" @click="emit('save-window-size')" @dblclick.stop="emit('maximize')">
+        <el-tooltip content="点击保存当前窗口大小与位置 / 双击全屏" placement="bottom" :show-after="500">
           <div class="app-info-inner">
             <img :src="favicon" class="app-logo" alt="Logo">
             <span class="app-title">{{ promptName || 'Anywhere' }}</span>
@@ -66,8 +67,9 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
       <div class="divider-vertical"></div>
 
       <!-- 对话名称 -->
-      <div class="conversation-info no-drag" @click="emit('save-session')">
-        <el-tooltip content="点击保存会话" placement="bottom" :show-after="500">
+      <!-- [修改] 添加 @dblclick.stop="emit('maximize')" -->
+      <div class="conversation-info no-drag" @click="emit('save-session')" @dblclick.stop="emit('maximize')">
+        <el-tooltip content="点击保存会话 / 双击全屏" placement="bottom" :show-after="500">
           <div class="conversation-inner">
             <span class="conversation-title">{{ displayConversationName }}</span>
             <el-icon class="download-icon"><Download /></el-icon>

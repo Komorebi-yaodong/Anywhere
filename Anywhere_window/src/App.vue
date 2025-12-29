@@ -3761,7 +3761,57 @@ html.dark .app-container.has-bg :deep(.chat-input-area-vertical) {
   // box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
 }
 
-/* 弹窗 */
+html.dark .app-container.has-bg :deep(.title-bar) {
+  /* 强制功能按钮（Pin, Top）和 Mac红绿灯图标变亮 */
+  .func-btn,
+  .traffic-icon {
+    color: rgba(255, 255, 255, 0.9) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); /* 增加文字阴影提高对比度 */
+  }
+  
+  .func-btn:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+
+  /* 强制 Windows/Linux 窗口控制按钮变亮 */
+  .win-btn, 
+  .linux-btn {
+    color: rgba(255, 255, 255, 0.9) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  }
+
+  .win-btn:hover,
+  .linux-btn:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+  
+  /* Windows 关闭按钮悬浮仍保持红色 */
+  .win-btn.close:hover {
+    background-color: #E81123 !important;
+    color: white !important;
+  }
+  
+  /* Linux 关闭按钮悬浮仍保持红色 */
+  .linux-btn.close:hover {
+    background-color: #E95420 !important;
+    color: white !important;
+  }
+
+  /* 标题和文字颜色增强 */
+  .app-title, .conversation-title, .download-icon {
+    color: rgba(255, 255, 255, 0.95);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  }
+  
+  .app-info-inner:hover, .conversation-inner:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+  
+  .divider-vertical {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+}
+
 .app-container.has-bg :deep(.el-dialog),
 .app-container.has-bg :deep(.el-message-box) {
   background-color: rgba(255, 255, 255, 0.9) !important;
