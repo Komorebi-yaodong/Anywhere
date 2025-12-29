@@ -2457,6 +2457,14 @@ Here are the rules you should always follow to solve your task:
         responseMessage = response.choices[0].message;
       }
 
+      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        responseMessage.tool_calls.forEach(tc => {
+          if (tc.function && tc.function.arguments) {
+            tc.function.arguments = sanitizeToolArgs(tc.function.arguments);
+          }
+        });
+      }
+
       // 将AI的回复同步到主 history 数组 (现在包含 extra_content/thought_signature)
       history.value.push(responseMessage);
 
@@ -2471,7 +2479,6 @@ Here are the rules you should always follow to solve your task:
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
         tool_calls_count++;
-        // 初始化时增加 approvalStatus 状态
         currentBubble.tool_calls = responseMessage.tool_calls.map(tc => ({
           id: tc.id,
           name: tc.function.name,
@@ -2784,12 +2791,35 @@ const formatTimestamp = (dateString) => {
   } catch (e) { return ''; }
 };
 
-const truncateText = (text, maxLength = 40) => {
-  if (typeof text !== 'string' || text.length <= maxLength) {
-    return text;
+const sanitizeToolArgs = (jsonString) => {
+  if (!jsonString) return "{}";
+  try {
+    JSON.parse(jsonString);
+    return jsonString;
+  } catch (e) {
+    let startIndex = jsonString.indexOf('{');
+    if (startIndex === -1) return "{}";
+
+    let braceCount = 0;
+    for (let i = startIndex; i < jsonString.length; i++) {
+      if (jsonString[i] === '{') braceCount++;
+      else if (jsonString[i] === '}') braceCount--;
+
+      if (braceCount === 0) {
+        const potential = jsonString.substring(startIndex, i + 1);
+        try {
+          JSON.parse(potential);
+          // console.log(`[ToolArgs] 修复了畸形参数: ${jsonString} -> ${potential}`);
+          return potential; 
+        } catch (innerE) {
+          return "{}";
+        }
+      }
+    }
+    return "{}";
   }
-  return text.substring(0, maxLength) + '...';
 };
+
 
 function toggleMcpServerSelection(serverId) {
   const index = tempSessionMcpServerIds.value.indexOf(serverId);

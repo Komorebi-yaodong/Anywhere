@@ -222,6 +222,31 @@ const truncateFilename = (filename, maxLength = 30) => {
   if (charsToKeep < 1) return ellipsis + extension;
   return nameWithoutExt.substring(0, charsToKeep) + ellipsis + extension;
 };
+const safeFormatToolArgs = (argsString) => {
+  if (!argsString) return '{}';
+  try {
+    return JSON.stringify(JSON.parse(argsString), null, 2);
+  } catch (e) {
+    let braceCount = 0;
+    let startIndex = argsString.indexOf('{');
+    if (startIndex !== -1) {
+      for (let i = startIndex; i < argsString.length; i++) {
+        if (argsString[i] === '{') braceCount++;
+        else if (argsString[i] === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            try {
+              const potential = argsString.substring(startIndex, i + 1);
+              return JSON.stringify(JSON.parse(potential), null, 2);
+            } catch (inner) {}
+            break;
+          }
+        }
+      }
+    }
+    return argsString;
+  }
+};
 </script>
 
 <template>
@@ -353,7 +378,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                   <div class="tool-call-details">
                     <div class="tool-detail-section">
                       <strong>参数:</strong>
-                      <pre><code>{{ JSON.stringify(JSON.parse(toolCall.args), null, 2) }}</code></pre>
+                      <pre><code>{{ safeFormatToolArgs(toolCall.args) }}</code></pre>
                     </div>
                     <div class="tool-detail-section"
                       v-if="toolCall.result && toolCall.result !== '等待批准...' && toolCall.result !== '执行中...'">

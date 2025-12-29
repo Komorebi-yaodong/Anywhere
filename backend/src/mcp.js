@@ -16,12 +16,12 @@ function normalizeTransportType(transport) {
 }
 
 /**
- * [新增] 独立连接并获取工具列表的函数
+ * 独立连接并获取工具列表的函数
  * 用于测试连接，以及无缓存时的临时连接获取
  * 包含 10s 超时和强制关闭逻辑
  */
 async function connectAndFetchTools(id, config) {
-  console.log(`[MCP] Connecting to ${id} (${config.transport})...`);
+  // console.log(`[MCP] Connecting to ${id} (${config.transport})...`);
   let tempClient = null;
   const controller = new AbortController();
   
@@ -36,7 +36,7 @@ async function connectAndFetchTools(id, config) {
     
     // 获取工具
     const tools = await tempClient.getTools();
-    console.log(`[MCP] Successfully fetched ${tools.length} tools from ${id}`);
+    // console.log(`[MCP] Successfully fetched ${tools.length} tools from ${id}`);
     
     return tools; // 返回原生工具数组
   } catch (error) {
@@ -47,9 +47,9 @@ async function connectAndFetchTools(id, config) {
     controller.abort(); // 确保信号中止
     if (tempClient) {
       try {
-        console.log(`[MCP] Closing temp connection for ${id}...`);
+        // console.log(`[MCP] Closing temp connection for ${id}...`);
         await tempClient.close();
-        console.log(`[MCP] Connection closed for ${id}`);
+        // console.log(`[MCP] Connection closed for ${id}`);
       } catch (closeError) {
         console.error(`[MCP] Error closing connection for ${id}:`, closeError);
       }
@@ -104,7 +104,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
   for (const { id, config } of onDemandConfigsToAdd) {
     // 检查缓存: 必须存在且为非空数组
     if (cachedToolsMap && cachedToolsMap[id] && Array.isArray(cachedToolsMap[id]) && cachedToolsMap[id].length > 0) {
-      console.log(`[MCP] Cache HIT for non-persistent server: ${config.name || id}`);
+      // console.log(`[MCP] Cache HIT for non-persistent server: ${config.name || id}`);
       const tools = cachedToolsMap[id];
       tools.forEach(tool => {
         fullToolInfoMap.set(tool.name, {
@@ -116,7 +116,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
       });
       currentlyConnectedServerIds.add(id);
     } else {
-      console.log(`[MCP] Cache MISS for non-persistent server: ${config.name || id}. Will fetch.`);
+      // console.log(`[MCP] Cache MISS for non-persistent server: ${config.name || id}. Will fetch.`);
       onDemandToConnect.push({ id, config });
     }
   }
@@ -168,7 +168,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
         continue;
       }
       try {
-        console.log(`[MCP] Establishing persistent connection for ${config.name || id}...`);
+        // console.log(`[MCP] Establishing persistent connection for ${config.name || id}...`);
         const modifiedConfig = { ...config, transport: normalizeTransportType(config.transport) };
         
         const client = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } });
