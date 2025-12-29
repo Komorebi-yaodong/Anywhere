@@ -2,7 +2,7 @@
 import { ref, reactive, computed, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox, ElScrollbar, ElAlert } from 'element-plus';
-import { Plus, Delete, Edit, CopyDocument, Tools, Search, Refresh, QuestionFilled } from '@element-plus/icons-vue';
+import { Plus, Delete, Edit, CopyDocument, Tools, Search, Refresh, QuestionFilled, Link } from '@element-plus/icons-vue';
 
 const { t } = useI18n();
 const currentConfig = inject('config');
@@ -14,13 +14,25 @@ const jsonEditorContent = ref('');
 const searchQuery = ref('');
 const advancedCollapse = ref([]);
 
+// [新增] 测试相关状态
+const showTestResultDialog = ref(false);
+const currentTestingServer = ref(null); // 保存当前正在查看/测试的服务器引用
+const testResult = reactive({
+    loading: false,
+    success: false,
+    message: '',
+    tools: [],
+    serverName: '',
+    isCached: false // 标记是否为缓存数据
+});
+
 const defaultServer = {
     id: null,
     name: '',
     description: '',
     type: 'sse',
     isActive: true,
-    isPersistent: false, // 持久化连接标记
+    isPersistent: false,
     baseUrl: '',
     command: '',
     args: [],
@@ -156,21 +168,15 @@ function prepareEditServer(server) {
 }
 
 async function saveServer() {
-    const addIfPresent = (obj, key, value) => {
-        if (value) obj[key] = value;
-    };
-    const addIfArrayPresent = (obj, key, value) => {
-        if (value && value.length > 0) obj[key] = value;
-    };
-    const addIfObjectPresent = (obj, key, value) => {
-        if (value && Object.keys(value).length > 0) obj[key] = value;
-    };
+    const addIfPresent = (obj, key, value) => { if (value) obj[key] = value; };
+    const addIfArrayPresent = (obj, key, value) => { if (value && value.length > 0) obj[key] = value; };
+    const addIfObjectPresent = (obj, key, value) => { if (value && Object.keys(value).length > 0) obj[key] = value; };
 
     const serverData = {
         name: editingServer.name,
         type: editingServer.type,
         isActive: editingServer.isActive,
-        isPersistent: editingServer.isPersistent, // 保存持久化标记
+        isPersistent: editingServer.isPersistent,
     };
 
     addIfPresent(serverData, 'description', editingServer.description);
@@ -201,15 +207,25 @@ function deleteServer(serverId, serverName) {
         { type: 'warning' }
     ).then(async () => {
         await atomicSave(config => {
+            // 1. 删除 MCP 服务配置
             if (config.mcpServers) {
                 delete config.mcpServers[serverId];
+            }
+
+            // 2. 遍历所有快捷助手，从 defaultMcpServers 中移除已删除的 ID
+            if (config.prompts) {
+                Object.values(config.prompts).forEach(prompt => {
+                    if (Array.isArray(prompt.defaultMcpServers)) {
+                        const originalLength = prompt.defaultMcpServers.length;
+                        prompt.defaultMcpServers = prompt.defaultMcpServers.filter(id => id !== serverId);
+                    }
+                });
             }
         });
         ElMessage.success(t('mcp.alerts.deleteSuccess'));
     }).catch(() => { });
 }
 
-// [修改] 将开关状态的更新也改为原子操作
 async function handleSwitchChange(serverId, key, value) {
     await atomicSave(config => {
         if (config.mcpServers && config.mcpServers[serverId]) {
@@ -235,7 +251,7 @@ async function saveJson() {
     try {
         const parsedJson = JSON.parse(jsonEditorContent.value);
         if (typeof parsedJson !== 'object' || parsedJson === null || !parsedJson.hasOwnProperty('mcpServers')) {
-            throw new Error('JSON必须是一个包含 "mcpServers" 键的对象。');
+            throw new Error(t('mcp.alerts.jsonError'));
         }
         const newMcpServers = parsedJson.mcpServers;
 
@@ -254,13 +270,92 @@ async function refreshMcpConfig() {
         const latestConfigData = await window.api.getConfig();
         if (latestConfigData && latestConfigData.config) {
             currentConfig.value = latestConfigData.config;
-            ElMessage.success(t('mcp.alerts.refreshSuccess')); // 替换
+            ElMessage.success(t('mcp.alerts.refreshSuccess'));
         } else {
-            throw new Error(t('mcp.alerts.configInvalid')); // 替换
+            throw new Error(t('mcp.alerts.configInvalid'));
         }
     } catch (error) {
         console.error("刷新MCP配置失败:", error);
-        ElMessage.error(t('mcp.alerts.refreshFailed')); // 替换
+        ElMessage.error(t('mcp.alerts.refreshFailed'));
+    }
+}
+
+// --- [核心修改] 连接测试与缓存逻辑 ---
+
+// 处理点击连接按钮
+async function handleTestClick(server) {
+    currentTestingServer.value = server;
+    testResult.serverName = server.name;
+    testResult.loading = true;
+    showTestResultDialog.value = true; // 先打开弹窗，显示加载中
+
+    try {
+        // 1. 尝试获取缓存
+        const cache = await window.api.getMcpToolCache();
+
+        // 2. 检查该服务器是否有非空缓存
+        if (cache && cache[server.id] && Array.isArray(cache[server.id]) && cache[server.id].length > 0) {
+            // [HIT] 使用缓存
+            testResult.tools = cache[server.id];
+            testResult.success = true;
+            testResult.isCached = true;
+            testResult.message = '';
+            testResult.loading = false;
+        } else {
+            // [MISS] 无缓存，执行真实连接测试
+            await triggerConnectionTest(server);
+        }
+    } catch (error) {
+        // 如果读取缓存出错，也降级为真实测试
+        console.error("Read cache failed, fallback to live test", error);
+        await triggerConnectionTest(server);
+    }
+}
+
+// 强制刷新（点击弹窗右上角刷新按钮）
+async function handleRefreshTest() {
+    if (currentTestingServer.value) {
+        await triggerConnectionTest(currentTestingServer.value);
+    }
+}
+
+// 执行真实连接测试
+async function triggerConnectionTest(server) {
+    testResult.loading = true;
+    testResult.isCached = false; // 标记为实时数据
+    testResult.success = false;
+    testResult.message = '';
+    testResult.tools = [];
+
+    // 构造配置对象
+    const configToTest = {
+        id: server.id,
+        name: server.name,
+        type: server.type,
+        command: server.command,
+        baseUrl: server.baseUrl,
+        env: typeof server.env === 'string' ? convertTextToObject(server.env) : server.env,
+        args: Array.isArray(server.args) ? server.args : convertTextToLines(server.args)
+    };
+
+    try {
+        const result = await window.api.testMcpConnection(configToTest);
+
+        if (result.success) {
+            testResult.success = true;
+            testResult.tools = result.tools || [];
+            ElMessage.success(t('mcp.alerts.testSuccess'));
+        } else {
+            testResult.success = false;
+            testResult.message = result.error;
+            ElMessage.error(t('mcp.alerts.testFailed'));
+        }
+    } catch (e) {
+        testResult.success = false;
+        testResult.message = e.message;
+        ElMessage.error(t('mcp.alerts.testFailed'));
+    } finally {
+        testResult.loading = false;
     }
 }
 </script>
@@ -274,7 +369,8 @@ async function refreshMcpConfig() {
                 </div>
                 <div v-else>
                     <div class="search-bar-container">
-                        <el-input v-model="searchQuery" :placeholder="t('mcp.searchPlaceholder')" :prefix-icon="Search" clearable />
+                        <el-input v-model="searchQuery" :placeholder="t('mcp.searchPlaceholder')" :prefix-icon="Search"
+                            clearable />
                     </div>
                     <div v-if="filteredMcpServersList.length === 0" class="empty-state">
                         <el-empty :description="t('mcp.noMatch')" />
@@ -291,9 +387,30 @@ async function refreshMcpConfig() {
                                     <span class="mcp-name">{{ server.name }}</span>
                                     <span class="mcp-provider" v-if="server.provider">{{ server.provider }}</span>
                                 </div>
-                                <el-switch :model-value="server.isActive"
-                                    @change="(value) => handleSwitchChange(server.id, 'isActive', value)" size="small"
-                                    class="mcp-active-toggle" />
+
+                                <!-- 持久连接开关移到 Header -->
+                                <div class="mcp-header-actions">
+                                    <el-tooltip
+                                        :content="server.isPersistent ? t('mcp.persistentOn') : t('mcp.persistentOff')"
+                                        placement="top">
+                                        <el-button text circle size="small"
+                                            :class="{ 'is-persistent-active': server.isPersistent }"
+                                            @click.stop="handleSwitchChange(server.id, 'isPersistent', !server.isPersistent)"
+                                            class="persistent-btn-header">
+                                            <el-icon :size="14">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                    stroke-linejoin="round">
+                                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                                </svg>
+                                            </el-icon>
+                                        </el-button>
+                                    </el-tooltip>
+
+                                    <el-switch :model-value="server.isActive"
+                                        @change="(value) => handleSwitchChange(server.id, 'isActive', value)"
+                                        size="small" class="mcp-active-toggle" />
+                                </div>
                             </div>
                             <div class="mcp-card-body">
                                 <p class="mcp-description">{{ server.description }}</p>
@@ -304,26 +421,18 @@ async function refreshMcpConfig() {
                                         getDisplayTypeName(server.type) }}</el-tag>
                                     <el-tag v-for="tag in server.tags" :key="tag" size="small">{{ tag }}</el-tag>
                                 </div>
-                                <!-- 持久连接开关 -->
-                                <div class="mcp-persistent-toggle">
-    <el-tooltip :content="t('mcp.persistent.tooltip')" placement="top">
-        <el-button 
-            text 
-            circle
-            :class="{ 'is-persistent-active': server.isPersistent }"
-            @click.stop="handleSwitchChange(server.id, 'isPersistent', !server.isPersistent)"
-            class="persistent-btn">
-            <el-icon :size="16">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-            </el-icon>
-        </el-button>
-    </el-tooltip>
-</div>
+                                <!-- 持久连接开关已移除 -->
                                 <div class="mcp-actions">
-                                    <el-button :icon="Edit" text circle @click="prepareEditServer(server)" />
+                                    <el-tooltip :content="t('mcp.testConnectionTooltip')" placement="top">
+                                        <el-button :icon="Link" text circle @click="handleTestClick(server)"
+                                            class="action-btn-compact" />
+                                    </el-tooltip>
+                                    <el-button :icon="Edit" text circle @click="prepareEditServer(server)"
+                                        class="action-btn-compact" />
                                     <el-button :icon="Delete" text circle type="danger"
-                                        @click="deleteServer(server.id, server.name)" />
-                                    <el-button :icon="CopyDocument" text circle @click="copyServerJson(server)" />
+                                        @click="deleteServer(server.id, server.name)" class="action-btn-compact" />
+                                    <el-button :icon="CopyDocument" text circle @click="copyServerJson(server)"
+                                        class="action-btn-compact" />
                                 </div>
                             </div>
                         </div>
@@ -341,9 +450,10 @@ async function refreshMcpConfig() {
             </el-button>
         </div>
 
+        <!-- 编辑弹窗 (保持不变) -->
         <el-dialog v-model="showEditDialog" :title="isNewServer ? t('mcp.addServerTitle') : t('mcp.editServerTitle')"
             width="700px" :close-on-click-modal="false" top="5vh">
-            <el-scrollbar max-height="60vh" class="mcp-dialog-scrollbar">
+            <el-scrollbar max-height="50vh" class="mcp-dialog-scrollbar">
                 <el-form :model="editingServer" label-position="top" @submit.prevent="saveServer">
                     <el-row :gutter="20">
                         <el-col :span="12">
@@ -446,6 +556,7 @@ async function refreshMcpConfig() {
             </template>
         </el-dialog>
 
+        <!-- JSON 编辑弹窗 (保持不变) -->
         <el-dialog v-model="showJsonDialog" :title="t('mcp.jsonDialog.title')" width="700px"
             :close-on-click-modal="false" top="5vh" custom-class="mcp-json-dialog">
             <el-alert :title="t('mcp.jsonDialog.description')" type="warning" show-icon :closable="false"
@@ -458,9 +569,56 @@ async function refreshMcpConfig() {
                 <el-button type="primary" @click="saveJson">{{ t('common.confirm') }}</el-button>
             </template>
         </el-dialog>
-        <!-- 悬浮刷新按钮 -->
+
+        <!-- 测试结果弹窗 -->
+        <el-dialog v-model="showTestResultDialog" width="600px" append-to-body top="5vh" class="test-result-dialog">
+            <template #header>
+                <div class="test-dialog-header">
+                    <span class="dialog-title">{{ `连接测试: ${testResult.serverName}` }}</span>
+                    <el-button v-if="!testResult.loading" :icon="Refresh" circle size="small" @click="handleRefreshTest"
+                        :title="t('mcp.refreshTooltip')" />
+                </div>
+            </template>
+
+            <div v-if="testResult.loading" class="test-loading-state">
+                <el-icon class="is-loading" :size="24">
+                    <Refresh />
+                </el-icon>
+                <p>{{ t('mcp.connecting') }}</p>
+            </div>
+
+            <div v-else class="test-result-content">
+                <el-alert v-if="testResult.success && !testResult.isCached"
+                    :title="t('mcp.connectionSuccess', { count: testResult.tools.length })" type="success" show-icon
+                    :closable="false" style="margin-bottom: 15px;" />
+                <el-alert v-else-if="!testResult.success" :title="t('mcp.connectionFailed')"
+                    :description="testResult.message" type="error" show-icon :closable="false"
+                    style="margin-bottom: 15px;" />
+
+                <div v-if="testResult.success && testResult.tools.length > 0">
+                    <div class="tool-list-header">
+                        <span style="font-weight: bold; color: var(--text-secondary);">{{ t('mcp.toolList') }}</span>
+                        <el-tag v-if="testResult.isCached" type="info" size="small" effect="plain" round
+                            class="cached-tag">{{
+                                t('mcp.cached') }}</el-tag>
+                    </div>
+                    <el-scrollbar max-height="50vh" class="tools-list-scrollbar">
+                        <div v-for="tool in testResult.tools" :key="tool.name" class="tool-item">
+                            <div class="tool-name">{{ tool.name }}</div>
+                            <div class="tool-desc">{{ tool.description || t('mcp.noDescription') }}</div>
+                        </div>
+                    </el-scrollbar>
+                </div>
+                <el-empty v-else-if="testResult.success" :description="t('mcp.noToolsProvided')" :image-size="60" />
+            </div>
+
+            <template #footer>
+                <el-button @click="showTestResultDialog = false">{{ t('common.close') }}</el-button>
+            </template>
+        </el-dialog>
+
         <el-button class="refresh-fab-button" :icon="Refresh" type="primary" circle @click="refreshMcpConfig"
-            title="刷新 MCP 服务配置" />
+            :title="t('mcp.refreshConfig')" />
     </div>
 </template>
 
@@ -501,10 +659,11 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
 }
 
 .search-bar-container :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px var(--border-primary) inset !important;
+    box-shadow: 0 0 0 1px var(--border-primary) inset !important;
 }
+
 .search-bar-container :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--text-accent) inset !important;
+    box-shadow: 0 0 0 1px var(--text-accent) inset !important;
 }
 
 .empty-state {
@@ -512,7 +671,6 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     justify-content: center;
     align-items: center;
     height: calc(100vh - 200px);
-    /* Adjust height for better centering */
 }
 
 .mcp-grid-container {
@@ -525,7 +683,7 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-lg);
-    padding: 8px 16px 10px 16px;
+    padding: 8px 16px 4px 16px;
     display: flex;
     flex-direction: column;
     transition: all 0.2s ease-in-out;
@@ -556,6 +714,13 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     min-width: 0;
 }
 
+.mcp-header-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .mcp-name {
     font-weight: 600;
     color: var(--text-primary);
@@ -573,7 +738,7 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
 }
 
 .mcp-active-toggle {
-    flex-shrink: 0;
+    margin-left: 4px;
 }
 
 .mcp-card-body {
@@ -593,10 +758,11 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     line-clamp: 2;
 }
 
+/* 底部布局调整 */
 .mcp-card-footer {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
+    align-items: center;
     margin-top: 0px;
     margin-bottom: 0px;
     gap: 12px;
@@ -612,28 +778,37 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     padding-top: 0px;
 }
 
-.persistent-btn {
-  color: var(--text-tertiary);
+/* Header 中的持久化按钮样式 */
+.persistent-btn-header {
+    color: var(--text-tertiary);
+    padding: 4px;
+    height: 24px;
+    width: 24px;
 }
 
-.persistent-btn:hover {
-  color: var(--text-accent);
-  background-color: var(--bg-tertiary);
+.persistent-btn-header:hover {
+    color: var(--text-accent);
+    background-color: var(--bg-tertiary);
 }
 
-.persistent-btn.is-persistent-active {
-  color: #67C23A; /* 启用状态的绿色高亮 */
+.persistent-btn-header.is-persistent-active {
+    color: #67C23A;
 }
 
-.persistent-btn.is-persistent-active:hover {
+.persistent-btn-header.is-persistent-active:hover {
     background-color: rgba(103, 194, 58, 0.1);
 }
 
 .mcp-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     flex-shrink: 0;
+}
+
+.action-btn-compact {
+    padding: 6px;
+    margin-left: 0 !important;
 }
 
 .mcp-actions .el-button {
@@ -816,5 +991,69 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
 
 .compact-form-item :deep(.el-form-item__content) {
     line-height: 1;
+}
+
+/* 测试弹窗相关样式 */
+.test-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-right: 20px;
+}
+
+.dialog-title {
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.test-loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.tool-list-header {
+    margin: 10px 0 5px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cached-tag {
+    height: 18px;
+    line-height: 16px;
+    font-size: 11px;
+}
+
+.tools-list-scrollbar {
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-primary);
+}
+
+.tool-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.tool-item:last-child {
+    border-bottom: none;
+}
+
+.tool-item .tool-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 13px;
+    margin-bottom: 2px;
+}
+
+.tool-item .tool-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
 }
 </style>

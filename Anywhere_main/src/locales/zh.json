@@ -88,7 +88,9 @@
       "confirmSyncDeleteTitle": "同步删除确认",
       "confirmSyncDeleteMessage": "您选择的文件中，有 {count} 个在 {location} 也存在。是否要一并删除？",
       "webdavRequired": "请先配置WebDAV",
-      "localPathRequired": "请先配置本地对话路径"
+      "localPathRequired": "请先配置本地对话路径",
+      "continueConfirm": "是否继续？",
+      "restoreChat": "恢复聊天"
     }
   },
   "prompts": {
@@ -108,10 +110,23 @@
     "iconUploadTip": "支持 {formats} 格式，最大 {maxSize}",
     "dragIconHere": "拖拽",
     "orClickToUpload": "或点击",
+    "disableAll": "全部禁用",
+    "enableAll": "全部启用",
+    "openWindow": "直接打开对话窗口",
+    "deletePrompt": "删除此快捷助手",
+    "inputPlaceholder": "请输入提示词内容...",
+    "selectNewModel": "请选择新的模型",
     "icon": {
       "uploadText": "拖拽/粘贴<br>点击上传",
       "downloadTooltip": "下载图标",
       "removeTooltip": "移除图标"
+    },
+    "iconEditor": {
+      "hint": "拖拽移动 / 滚轮缩放",
+      "scale": "缩放",
+      "radius": "圆角",
+      "cancel": "取消",
+      "confirm": "确定使用"
     },
     "background": {
       "imageLabel": "窗口背景图片 (URL)",
@@ -221,6 +236,18 @@
     "descriptionLabel": "描述",
     "typeLabel": "类型",
     "activeLabel": "启用",
+    "persistentOn": "持久连接已开启",
+    "persistentOff": "持久连接已关闭",
+    "testConnectionTooltip": "测试连接 / 查看缓存工具",
+    "refreshTooltip": "强制刷新（重新连接获取）",
+    "connecting": "正在连接并获取工具列表...",
+    "connectionSuccess": "连接成功！获取到 {count} 个工具",
+    "connectionFailed": "连接失败",
+    "toolList": "工具列表:",
+    "cached": "已缓存",
+    "noDescription": "无描述",
+    "noToolsProvided": "该服务未提供任何工具",
+    "refreshConfig": "刷新 MCP 服务配置",
     "typeOptions": {
       "stdio": "Stdio",
       "http": "可流式 HTTP",
@@ -253,6 +280,7 @@
       "deleteSuccess": "MCP 服务删除成功。",
       "deleteFailed": "MCP 服务删除失败。",
       "invalidJson": "JSON 格式无效，请检查您的输入。",
+      "jsonError": "JSON必须是一个包含 \"mcpServers\" 键的对象。",
       "configCopied": "服务器配置已复制到剪贴板",
       "refreshSuccess": "MCP 服务配置已刷新！",
       "configInvalid": "未能获取到有效的配置数据。",

@@ -136,7 +136,6 @@ async function getConfig() {
 
   // --- 1. 新用户初始化 ---
   if (!configDoc) {
-    // console.log("Anywhere: Initializing configuration for a new user.");
     const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(defaultConfig.config);
     await utools.db.promises.put({ _id: "config", data: baseConfigPart });
     await utools.db.promises.put({ _id: "prompts", data: promptsPart });
@@ -162,7 +161,7 @@ async function getConfig() {
     });
 
     if (updateResult.ok) {
-      console.log("Anywhere: Migration successful. Old config cleaned.");
+      // console.log("Anywhere: Migration successful. Old config cleaned.");
     } else {
       console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
     }
@@ -1110,6 +1109,32 @@ async function openFastInputWindow(config, msg) {
   }
 }
 
+/**
+ * 保存 MCP 工具列表到缓存文档
+ * @param {string} serverId - 服务器 ID
+ * @param {Array} tools - 工具列表
+ */
+async function saveMcpToolCache(serverId, tools) {
+  let doc = await utools.db.promises.get("mcp_tools_cache");
+  if (!doc) {
+    doc = { _id: "mcp_tools_cache", data: {} };
+  }
+  doc.data[serverId] = tools;
+  return await utools.db.promises.put({
+    _id: "mcp_tools_cache",
+    data: doc.data,
+    _rev: doc._rev
+  });
+}
+
+/**
+ * 获取所有 MCP 工具缓存
+ */
+async function getMcpToolCache() {
+  const doc = await utools.db.promises.get("mcp_tools_cache");
+  return doc ? doc.data : {};
+}
+
 module.exports = {
   getConfig,
   checkConfig,
@@ -1128,4 +1153,6 @@ module.exports = {
   windowMap,
   saveFastInputWindowPosition,
   openFastInputWindow,
+  saveMcpToolCache,
+  getMcpToolCache,
 };

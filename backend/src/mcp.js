@@ -1,11 +1,9 @@
-// ./backend/src/mcp.js
-
 const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
 
 const PERSISTENT_CONNECTION_LIMIT = 5; // uTools 限制最多5个持久连接
 const ON_DEMAND_CONCURRENCY_LIMIT = 5; // 非持久连接的并发限制
 
-let persistentClients = new Map(); // [关键] 存储持久化客户端实例，它们会一直存在直到被明确关闭
+let persistentClients = new Map(); // 存储持久化客户端实例，它们会一直存在直到被明确关闭
 let fullToolInfoMap = new Map();
 let currentlyConnectedServerIds = new Set();
 
@@ -18,11 +16,56 @@ function normalizeTransportType(transport) {
 }
 
 /**
- * 增量式地初始化/同步 MCP 客户端。
- * 1. 先处理非持久连接（即用即走），快速获取工具信息。
- * 2. 再处理持久连接，创建并维护客户端实例，并遵守连接数限制。
+ * [新增] 独立连接并获取工具列表的函数
+ * 用于测试连接，以及无缓存时的临时连接获取
+ * 包含 10s 超时和强制关闭逻辑
  */
-async function initializeMcpClient(activeServerConfigs = {}) {
+async function connectAndFetchTools(id, config) {
+  console.log(`[MCP] Connecting to ${id} (${config.transport})...`);
+  let tempClient = null;
+  const controller = new AbortController();
+  
+  // 设置超时，防止连接卡死导致无法关闭 (特别是 stdio)
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
+  try {
+    const modifiedConfig = { ...config, transport: normalizeTransportType(config.transport) };
+    
+    // 创建客户端
+    tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
+    
+    // 获取工具
+    const tools = await tempClient.getTools();
+    console.log(`[MCP] Successfully fetched ${tools.length} tools from ${id}`);
+    
+    return tools; // 返回原生工具数组
+  } catch (error) {
+    console.error(`[MCP] Error fetching tools from ${id}:`, error);
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    controller.abort(); // 确保信号中止
+    if (tempClient) {
+      try {
+        console.log(`[MCP] Closing temp connection for ${id}...`);
+        await tempClient.close();
+        console.log(`[MCP] Connection closed for ${id}`);
+      } catch (closeError) {
+        console.error(`[MCP] Error closing connection for ${id}:`, closeError);
+      }
+    }
+  }
+}
+
+/**
+ * 增量式地初始化/同步 MCP 客户端。
+ * 1. 先处理非持久连接（优先使用缓存，无缓存则即用即走）
+ * 2. 再处理持久连接
+ */
+async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}) {
+  // Debug Log
+  // console.log(`[MCP] Initialize called. Active: ${Object.keys(activeServerConfigs).length}, CacheKeys: ${Object.keys(cachedToolsMap || {}).length}`);
+
   const newIds = new Set(Object.keys(activeServerConfigs));
   const oldIds = new Set(currentlyConnectedServerIds);
 
@@ -32,7 +75,6 @@ async function initializeMcpClient(activeServerConfigs = {}) {
 
   // --- 步骤 1: 处理需要移除的服务 ---
   for (const id of idsToRemove) {
-    // [生命周期管理] 这是持久化客户端被关闭的两种情况之一：用户取消了选中。
     if (persistentClients.has(id)) {
       const client = persistentClients.get(id);
       await client.close();
@@ -56,23 +98,43 @@ async function initializeMcpClient(activeServerConfigs = {}) {
     .filter(({ config }) => config && config.isPersistent);
 
 
-  // --- 步骤 2: 优先处理所有非持久化（即用即走）的连接 ---
-  if (onDemandConfigsToAdd.length > 0) {
+  // --- 步骤 2: 处理非持久化（即用即走）连接 ---
+  const onDemandToConnect = [];
+  
+  for (const { id, config } of onDemandConfigsToAdd) {
+    // 检查缓存: 必须存在且为非空数组
+    if (cachedToolsMap && cachedToolsMap[id] && Array.isArray(cachedToolsMap[id]) && cachedToolsMap[id].length > 0) {
+      console.log(`[MCP] Cache HIT for non-persistent server: ${config.name || id}`);
+      const tools = cachedToolsMap[id];
+      tools.forEach(tool => {
+        fullToolInfoMap.set(tool.name, {
+          schema: tool.inputSchema || tool.schema, // 兼容缓存中的字段名
+          description: tool.description,
+          isPersistent: false,
+          serverConfig: { id, ...config },
+        });
+      });
+      currentlyConnectedServerIds.add(id);
+    } else {
+      console.log(`[MCP] Cache MISS for non-persistent server: ${config.name || id}. Will fetch.`);
+      onDemandToConnect.push({ id, config });
+    }
+  }
+
+  // 对无缓存的非持久化服务进行连接获取
+  if (onDemandToConnect.length > 0) {
     const pool = new Set();
     const allTasks = [];
 
-    for (const { id, config } of onDemandConfigsToAdd) {
+    for (const { id, config } of onDemandToConnect) {
       const taskPromise = (async () => {
-        // [生命周期管理] 创建一个临时客户端，用完即毁。
-        let tempClient = null;
-        const controller = new AbortController();
         try {
-          const modifiedConfig = { ...config, transport: normalizeTransportType(config.transport) };
-          tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
-          const tools = await tempClient.getTools();
+          // 复用 connectAndFetchTools 来获取工具并自动关闭连接
+          const tools = await connectAndFetchTools(id, config);
+          
           tools.forEach(tool => {
             fullToolInfoMap.set(tool.name, {
-              schema: tool.schema,
+              schema: tool.schema || tool.inputSchema,
               description: tool.description,
               isPersistent: false,
               serverConfig: { id, ...config },
@@ -82,9 +144,6 @@ async function initializeMcpClient(activeServerConfigs = {}) {
         } catch (error) {
           if (error.name !== 'AbortError') console.error(`[MCP Debug] Failed to process on-demand server ${id}. Error:`, error.message);
           failedServerIds.push(id);
-        } finally {
-          controller.abort();
-          if (tempClient) await tempClient.close(); // [关键] 立即关闭临时客户端
         }
       })();
 
@@ -100,7 +159,7 @@ async function initializeMcpClient(activeServerConfigs = {}) {
     await Promise.all(allTasks);
   }
 
-  // --- 步骤 3: 处理需要持久化的连接 ---
+  // --- 步骤 3: 处理需要持久化的连接 (必须建立真实连接) ---
   if (persistentConfigsToAdd.length > 0) {
     for (const { id, config } of persistentConfigsToAdd) {
       if (persistentClients.size >= PERSISTENT_CONNECTION_LIMIT) {
@@ -109,22 +168,22 @@ async function initializeMcpClient(activeServerConfigs = {}) {
         continue;
       }
       try {
+        console.log(`[MCP] Establishing persistent connection for ${config.name || id}...`);
         const modifiedConfig = { ...config, transport: normalizeTransportType(config.transport) };
         
-        // [生命周期管理] 创建持久化客户端，并存储在模块级变量中，不会在此函数中关闭。
         const client = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } });
         const tools = await client.getTools();
 
         tools.forEach(tool => {
           fullToolInfoMap.set(tool.name, {
-            instance: tool, // [关键] 存储工具实例，它与持久客户端绑定
-            schema: tool.schema,
+            instance: tool, // 存储工具实例，它与持久客户端绑定
+            schema: tool.schema || tool.inputSchema,
             description: tool.description,
             isPersistent: true,
             serverConfig: { id, ...config },
           });
         });
-        persistentClients.set(id, client); // [关键] 存储客户端实例以供将来使用
+        persistentClients.set(id, client); // 存储客户端实例
         currentlyConnectedServerIds.add(id);
       } catch (error) {
         console.error(`[MCP Debug] Failed to connect to persistent server ${id}:`, error);
@@ -143,7 +202,6 @@ async function initializeMcpClient(activeServerConfigs = {}) {
   };
 }
 
-// buildOpenaiFormattedTools 函数保持不变
 function buildOpenaiFormattedTools() {
   const formattedTools = [];
   for (const [toolName, toolInfo] of fullToolInfoMap.entries()) {
@@ -158,9 +216,7 @@ function buildOpenaiFormattedTools() {
 }
 
 /**
- *  MCP 工具。
- * - 如果工具是持久化的，则使用已存储的客户端实例。
- * - 如果工具是非持久化的，则创建临时客户端，后关闭。
+ * 此时如果是非持久化连接，会再次创建临时连接来执行工具
  */
 async function invokeMcpTool(toolName, toolArgs, signal) {
   const toolInfo = fullToolInfoMap.get(toolName);
@@ -183,7 +239,7 @@ async function invokeMcpTool(toolName, toolArgs, signal) {
       const modifiedConfig = { ...serverConfig };
       modifiedConfig.transport = normalizeTransportType(modifiedConfig.transport);
       
-      // [核心逻辑] 创建临时客户端
+      // 创建临时客户端
       tempClient = new MultiServerMCPClient({ [serverConfig.id]: { id: serverConfig.id, ...modifiedConfig } }, { signal: controller.signal });
       const tools = await tempClient.getTools();
       const toolToCall = tools.find(t => t.name === toolName);
@@ -191,18 +247,14 @@ async function invokeMcpTool(toolName, toolArgs, signal) {
       return await toolToCall.invoke(toolArgs, { signal: controller.signal });
     } finally {
       controller.abort();
-      if (tempClient) await tempClient.close(); // [核心逻辑] 临时客户端用完即关闭
+      if (tempClient) await tempClient.close();
     }
   }
 
   throw new Error(`Configuration error for tool "${toolName}".`);
 }
 
-/**
- * [重构] 关闭所有持久化连接的客户端。
- */
 async function closeMcpClient() {
-  // [生命周期管理] 这是持久化客户端被关闭的另一种情况：插件窗口关闭。
   if (persistentClients.size > 0) {
     for (const client of persistentClients.values()) {
       await client.close();
@@ -217,4 +269,5 @@ module.exports = {
   initializeMcpClient,
   invokeMcpTool,
   closeMcpClient,
+  connectAndFetchTools, // 导出供测试
 };

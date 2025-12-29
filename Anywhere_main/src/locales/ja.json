@@ -88,7 +88,9 @@
       "confirmSyncDeleteTitle": "同期削除の確認",
       "confirmSyncDeleteMessage": "選択したファイルのうち{count}個が{location}にも存在します。そちらも一緒に削除しますか？",
       "webdavRequired": "WebDAVを先に設定してください",
-      "localPathRequired": "ローカルの会話パスを先に設定してください"
+      "localPathRequired": "ローカルの会話パスを先に設定してください",
+      "continueConfirm": "続行しますか？",
+      "restoreChat": "チャットを復元"
     }
   },
   "prompts": {
@@ -108,10 +110,23 @@
     "iconUploadTip": "{formats}形式をサポート、最大{maxSize}。",
     "dragIconHere": "ドラッグ",
     "orClickToUpload": "またはクリック",
+    "disableAll": "すべて無効",
+    "enableAll": "すべて有効",
+    "openWindow": "対話ウィンドウを開く",
+    "deletePrompt": "このアシスタントを削除",
+    "inputPlaceholder": "プロンプト内容を入力...",
+    "selectNewModel": "新しいモデルを選択してください",
     "icon": {
       "uploadText": "ドラッグ/貼り付け<br>クリックしてアップロード",
       "downloadTooltip": "アイコンをダウンロード",
       "removeTooltip": "アイコンを削除"
+    },
+    "iconEditor": {
+      "hint": "ドラッグして移動 / ホイールで拡大縮小",
+      "scale": "拡大縮小",
+      "radius": "角丸",
+      "cancel": "キャンセル",
+      "confirm": "使用する"
     },
     "background": {
       "imageLabel": "ウィンドウ背景画像 (URL)",
@@ -221,6 +236,18 @@
     "descriptionLabel": "説明",
     "typeLabel": "タイプ",
     "activeLabel": "有効",
+    "persistentOn": "永続接続オン",
+    "persistentOff": "永続接続オフ",
+    "testConnectionTooltip": "接続テスト / キャッシュツール表示",
+    "refreshTooltip": "強制更新（再接続）",
+    "connecting": "接続してツールリストを取得中...",
+    "connectionSuccess": "接続成功！ {count} 個のツールを取得しました",
+    "connectionFailed": "接続失敗",
+    "toolList": "ツールリスト:",
+    "cached": "キャッシュ済み",
+    "noDescription": "説明なし",
+    "noToolsProvided": "このサービスはツールを提供していません",
+    "refreshConfig": "MCP設定を更新",
     "typeOptions": {
       "stdio": "Stdio",
       "http": "ストリーミングHTTP",
@@ -253,6 +280,7 @@
       "deleteSuccess": "MCPサーバーの削除に成功しました。",
       "deleteFailed": "MCPサーバーの削除に失敗しました。",
       "invalidJson": "無効なJSON形式です。入力を確認してください。",
+      "jsonError": "JSONは \"mcpServers\" キーを含むオブジェクトである必要があります。",
       "configCopied": "サーバー設定をクリップボードにコピーしました",
       "refreshSuccess": "MCP設定を更新しました！",
       "configInvalid": "有効な設定データを取得できませんでした。",

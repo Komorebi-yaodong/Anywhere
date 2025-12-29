@@ -15,6 +15,8 @@ const {
   feature_suffix,
   defaultConfig,
   savePromptWindowSettings,
+  saveMcpToolCache,
+  getMcpToolCache,
 } = require('./data.js');
 
 const {
@@ -40,7 +42,8 @@ const {
 const {
   initializeMcpClient,
   invokeMcpTool,
-  closeMcpClient
+  closeMcpClient,
+  connectAndFetchTools,
 } = require('./mcp.js');
 
 window.api = {
@@ -68,7 +71,42 @@ window.api = {
   savePromptWindowSettings,
   desktopCaptureSources: utools.desktopCaptureSources,
   copyImage: utools.copyImage,
-  initializeMcpClient,
+  getMcpToolCache,
+  initializeMcpClient: async (activeServerConfigs) => {
+    try {
+      const cache = await getMcpToolCache();
+      return await initializeMcpClient(activeServerConfigs, cache);
+    } catch (e) {
+      console.error("[Preload] Error loading MCP cache:", e);
+      return await initializeMcpClient(activeServerConfigs, {});
+    }
+  },
+  testMcpConnection: async (serverConfig) => {
+    try {
+      const rawTools = await connectAndFetchTools(serverConfig.id, {
+        transport: serverConfig.type,
+        command: serverConfig.command,
+        args: serverConfig.args,
+        url: serverConfig.baseUrl,
+        env: serverConfig.env,
+      });
+      
+      const sanitizedTools = rawTools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema || tool.schema || {} 
+      }));
+
+      const cleanTools = JSON.parse(JSON.stringify(sanitizedTools));
+      
+      await saveMcpToolCache(serverConfig.id, cleanTools);
+      
+      return { success: true, tools: cleanTools };
+    } catch (error) {
+      console.error("[Preload] MCP Test Connection Error:", error);
+      return { success: false, error: String(error.message || error) };
+    }
+  },
   invokeMcpTool,
   closeMcpClient,
   isFileTypeSupported,

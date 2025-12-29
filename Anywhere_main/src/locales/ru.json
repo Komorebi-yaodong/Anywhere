@@ -88,7 +88,9 @@
       "confirmSyncDeleteTitle": "Подтвердите синхронное удаление",
       "confirmSyncDeleteMessage": "{count} из выбранных файлов также существуют в {location}. Хотите удалить их и оттуда?",
       "webdavRequired": "Сначала настройте WebDAV",
-      "localPathRequired": "Сначала настройте локальный путь к чатам"
+      "localPathRequired": "Сначала настройте локальный путь к чатам",
+      "continueConfirm": "Продолжить?",
+      "restoreChat": "Восстановить чат"
     }
   },
   "prompts": {
@@ -108,10 +110,23 @@
     "iconUploadTip": "Поддерживает форматы {formats}, макс. размер {maxSize}.",
     "dragIconHere": "Перетащите ",
     "orClickToUpload": "или нажмите",
+    "disableAll": "Отключить все",
+    "enableAll": "Включить все",
+    "openWindow": "Открыть окно диалога",
+    "deletePrompt": "Удалить этого ассистента",
+    "inputPlaceholder": "Введите содержание подсказки...",
+    "selectNewModel": "Выберите новую модель",
     "icon": {
       "uploadText": "Перетащите/Вставьте<br>Нажмите для загрузки",
       "downloadTooltip": "Скачать иконку",
       "removeTooltip": "Удалить иконку"
+    },
+    "iconEditor": {
+      "hint": "Перетащите для перемещения / Скролл для масштаба",
+      "scale": "Масштаб",
+      "radius": "Радиус",
+      "cancel": "Отмена",
+      "confirm": "Применить"
     },
     "background": {
       "imageLabel": "Фоновое изображение окна (URL)",
@@ -221,6 +236,18 @@
     "descriptionLabel": "Описание",
     "typeLabel": "Тип",
     "activeLabel": "Активен",
+    "persistentOn": "Пост. соединение ВКЛ",
+    "persistentOff": "Пост. соединение ВЫКЛ",
+    "testConnectionTooltip": "Тест соединения / Кэш инструментов",
+    "refreshTooltip": "Принудительное обновление",
+    "connecting": "Подключение и получение списка инструментов...",
+    "connectionSuccess": "Успешно! Найдено {count} инструментов",
+    "connectionFailed": "Ошибка подключения",
+    "toolList": "Список инструментов:",
+    "cached": "Кэшировано",
+    "noDescription": "Нет описания",
+    "noToolsProvided": "Сервис не предоставляет инструментов",
+    "refreshConfig": "Обновить конфигурацию MCP",
     "typeOptions": {
       "stdio": "Stdio",
       "http": "Потоковый HTTP",
@@ -253,6 +280,7 @@
       "deleteSuccess": "MCP сервер успешно удален.",
       "deleteFailed": "Не удалось удалить MCP сервер.",
       "invalidJson": "Неверный формат JSON. Пожалуйста, проверьте ввод.",
+      "jsonError": "JSON должен быть объектом, содержащим ключ \"mcpServers\".",
       "configCopied": "Конфигурация сервера скопирована в буфер обмена",
       "refreshSuccess": "Конфигурация MCP обновлена!",
       "configInvalid": "Не удалось получить действительные данные конфигурации.",

@@ -448,8 +448,8 @@ const apiKeyCount = computed(() => {
         class="dialog-error-alert" />
 
       <el-table :data="filteredModels" v-loading="getModel_form.isLoading" style="width: 100%" max-height="50vh"
-        :empty-text="searchQuery ? t('providers.noModelsMatchSearch', { default: '未找到匹配的模型' }) : t('providers.noModelsFoundError')"
-        stripe border>
+        :empty-text="searchQuery ? t('providers.noModelsMatchSearch') : t('providers.noModelsFoundError')" stripe
+        border>
         <el-table-column prop="id" :label="t('providers.table.modelId')" sortable />
         <el-table-column prop="owned_by" :label="t('providers.table.ownedBy')" width="175" sortable />
         <el-table-column :label="t('providers.table.action')" width="100" align="center">

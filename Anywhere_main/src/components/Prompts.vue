@@ -779,11 +779,13 @@ async function refreshPromptsConfig() {
 
       <!-- 右侧操作按钮区域，顺序和禁用逻辑已调整 -->
       <div class="tab-actions">
-        <el-tooltip v-if="activeTabName === '__ALL_PROMPTS__'" :content="areAllPromptsEnabled ? '全部禁用' : '全部启用'">
+        <el-tooltip v-if="activeTabName === '__ALL_PROMPTS__'"
+          :content="areAllPromptsEnabled ? t('prompts.disableAll') : t('prompts.enableAll')">
           <el-switch :model-value="areAllPromptsEnabled" @change="(value) => toggleAllPrompts(value)"
             class="tag-enable-toggle" />
         </el-tooltip>
-        <el-tooltip v-else :content="areAllPromptsInTagEnabled(activeTabName) ? '全部禁用' : '全部启用'">
+        <el-tooltip v-else
+          :content="areAllPromptsInTagEnabled(activeTabName) ? t('prompts.disableAll') : t('prompts.enableAll')">
           <el-switch :model-value="areAllPromptsInTagEnabled(activeTabName)"
             @change="(value) => toggleAllPromptsInTag(activeTabName, value)" class="tag-enable-toggle"
             :disabled="!currentConfig.tags[activeTabName] || currentConfig.tags[activeTabName].length === 0" />
@@ -820,7 +822,8 @@ async function refreshPromptsConfig() {
               <el-tooltip :content="item.key" placement="top">
                 <span class="prompt-name" @click="prepareEditPrompt(item.key, activeTabName)">{{ item.key }}</span>
               </el-tooltip>
-              <el-tooltip v-if="item.showMode === 'window' && item.enable" content="直接打开对话窗口" placement="top">
+              <el-tooltip v-if="item.showMode === 'window' && item.enable" :content="t('prompts.openWindow')"
+                placement="top">
                 <el-button :icon="ChatLineRound" circle text @click.stop="openPromptWindow(item.key)"
                   class="open-prompt-btn" />
               </el-tooltip>
@@ -831,7 +834,7 @@ async function refreshPromptsConfig() {
                   size="small" @click="removePromptFromTag(activeTabName, item.key)"
                   :title="t('prompts.tooltips.removeFromTag')" />
                 <el-button v-else type="danger" :icon="Delete" circle plain size="small" @click="deletePrompt(item.key)"
-                  :title="'删除此快捷助手'" />
+                  :title="t('prompts.deletePrompt')" />
               </div>
             </div>
             <div class="prompt-description-container" @click="prepareEditPrompt(item.key, activeTabName)"
@@ -856,7 +859,7 @@ async function refreshPromptsConfig() {
 
     <el-dialog v-model="showPromptEditDialog" :title="isNewPrompt ? t('prompts.addNewPrompt') : t('prompts.editPrompt')"
       width="700px" :close-on-click-modal="false" top="5vh" custom-class="edit-prompt-dialog">
-      <el-scrollbar max-height="65vh" class="prompt-dialog-scrollbar">
+      <el-scrollbar max-height="60vh" class="prompt-dialog-scrollbar">
         <el-form :model="editingPrompt" @submit.prevent="savePrompt" class="edit-prompt-form">
           <div class="top-section-grid">
             <div class="icon-area">
@@ -970,7 +973,7 @@ async function refreshPromptsConfig() {
               <el-form-item :label="t('prompts.promptContentLabel')" label-position="top">
                 <el-scrollbar max-height="150px" class="prompt-textarea-scrollbar">
                   <el-input v-model="editingPrompt.prompt" type="textarea" :autosize="{ minRows: 6 }" resize="none"
-                    placeholder="请输入提示词内容..." />
+                    :placeholder="t('prompts.inputPlaceholder')" />
                 </el-scrollbar>
               </el-form-item>
               <el-form-item label-position="top">
@@ -1082,7 +1085,8 @@ async function refreshPromptsConfig() {
                       </el-icon></el-tooltip>
                     <div class="spacer"></div>
                     <el-select v-model="editingPrompt.defaultMcpServers" multiple filterable clearable
-                      :placeholder="t('prompts.defaultMcpServersPlaceholder')" style="width: 100%;">
+                      :reserve-keyword="false" :placeholder="t('prompts.defaultMcpServersPlaceholder')"
+                      style="width: 100%;">
                       <el-option v-for="server in availableMcpServers" :key="server.value" :label="server.label"
                         :value="server.value" />
                     </el-select>
@@ -1100,7 +1104,7 @@ async function refreshPromptsConfig() {
                         <div style="display: flex; align-items: center; margin-bottom: 0px;">
                           <span class="param-label" style="font-size: 12px;">{{ t('prompts.background.opacityLabel') }}:
                             {{
-                            editingPrompt.backgroundOpacity }}</span>
+                              editingPrompt.backgroundOpacity }}</span>
                         </div>
                         <el-slider v-model="editingPrompt.backgroundOpacity" :min="0.05" :max="1" :step="0.05"
                           size="small" />
@@ -1147,30 +1151,31 @@ async function refreshPromptsConfig() {
     </el-dialog>
 
     <!-- 图标编辑器弹窗 -->
-    <el-dialog v-model="showIconEditDialog" title="编辑图标" width="400px" :close-on-click-modal="false" append-to-body>
+    <el-dialog v-model="showIconEditDialog" :title="t('prompts.editPrompt')" width="400px" :close-on-click-modal="false"
+      append-to-body>
       <div class="icon-edit-container">
         <div class="canvas-wrapper">
           <canvas ref="editorCanvasRef" width="256" height="256" @mousedown="handleCanvasMouseDown"
             @mousemove="handleCanvasMouseMove" @mouseup="handleCanvasMouseUp" @mouseleave="handleCanvasMouseUp"
             @wheel="handleCanvasWheel"></canvas>
-          <div class="canvas-hint">拖拽移动 / 滚轮缩放</div>
+          <div class="canvas-hint">{{ t('prompts.iconEditor.hint') }}</div>
         </div>
 
         <div class="editor-controls">
           <div class="control-row">
-            <span class="label">缩放</span>
+            <span class="label">{{ t('prompts.iconEditor.scale') }}</span>
             <el-slider v-model="iconEditorState.scale" :min="0.1" :max="3" :step="0.1" @input="drawEditorCanvas" />
           </div>
           <div class="control-row">
-            <span class="label">圆角</span>
+            <span class="label">{{ t('prompts.iconEditor.radius') }}</span>
             <el-slider v-model="iconEditorState.radius" :min="0" :max="50" :step="1" @input="drawEditorCanvas"
               :format-tooltip="val => val + '%'" />
           </div>
         </div>
       </div>
       <template #footer>
-        <el-button @click="showIconEditDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveEditedIcon">确定使用</el-button>
+        <el-button @click="showIconEditDialog = false">{{ t('prompts.iconEditor.cancel') }}</el-button>
+        <el-button type="primary" @click="saveEditedIcon">{{ t('prompts.iconEditor.confirm') }}</el-button>
       </template>
     </el-dialog>
 
@@ -1213,14 +1218,16 @@ async function refreshPromptsConfig() {
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item :label="t('prompts.replaceModelsDialog.sourceModel')">
-              <el-select v-model="replaceModelForm.sourceModel" filterable :placeholder="t('prompts.addToTagPlaceholder')" style="width: 100%;">
+              <el-select v-model="replaceModelForm.sourceModel" filterable
+                :placeholder="t('prompts.replaceModelsDialog.sourceModel')" style="width: 100%;">
                 <el-option v-for="item in usedModels" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('prompts.replaceModelsDialog.targetModel')">
-              <el-select v-model="replaceModelForm.targetModel" filterable placeholder="请选择新的模型" style="width: 100%;">
+              <el-select v-model="replaceModelForm.targetModel" filterable :placeholder="t('prompts.selectNewModel')"
+                style="width: 100%;">
                 <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
@@ -1834,7 +1841,7 @@ html.dark .canvas-wrapper {
 }
 
 .dimensions-group-row {
-  margin-top: 12px;
+  margin-top: 0px;
   padding-top: 12px;
   border-top: 1px solid var(--border-primary);
 }

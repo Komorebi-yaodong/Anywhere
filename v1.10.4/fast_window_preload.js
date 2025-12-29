@@ -299,7 +299,6 @@ var require_data = __commonJS({
           _rev: configDoc._rev
         });
         if (updateResult.ok) {
-          console.log("Anywhere: Migration successful. Old config cleaned.");
         } else {
           console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
         }
@@ -1061,6 +1060,22 @@ var require_data = __commonJS({
         fastWindow.webContents.openDevTools({ mode: "detach" });
       }
     }
+    async function saveMcpToolCache(serverId, tools) {
+      let doc = await utools.db.promises.get("mcp_tools_cache");
+      if (!doc) {
+        doc = { _id: "mcp_tools_cache", data: {} };
+      }
+      doc.data[serverId] = tools;
+      return await utools.db.promises.put({
+        _id: "mcp_tools_cache",
+        data: doc.data,
+        _rev: doc._rev
+      });
+    }
+    async function getMcpToolCache() {
+      const doc = await utools.db.promises.get("mcp_tools_cache");
+      return doc ? doc.data : {};
+    }
     module2.exports = {
       getConfig,
       checkConfig,
@@ -1078,7 +1093,9 @@ var require_data = __commonJS({
       defaultConfig,
       windowMap,
       saveFastInputWindowPosition: saveFastInputWindowPosition2,
-      openFastInputWindow
+      openFastInputWindow,
+      saveMcpToolCache,
+      getMcpToolCache
     };
   }
 });

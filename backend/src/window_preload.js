@@ -15,6 +15,7 @@ const {
     setZoomFactor,
     defaultConfig,
     savePromptWindowSettings,
+    getMcpToolCache,
 } = require('./data.js');
 
 const {
@@ -28,7 +29,7 @@ const {
 const { 
   initializeMcpClient, 
   invokeMcpTool,
-  closeMcpClient
+  closeMcpClient,
 } = require('./mcp.js');
 
 const channel = "window";
@@ -78,7 +79,18 @@ window.api = {
     savePromptWindowSettings,
     desktopCaptureSources: utools.desktopCaptureSources,
     copyImage: utools.copyImage,
-    initializeMcpClient,
+    initializeMcpClient: async (activeServerConfigs) => {
+        try {
+            // 1. 从数据库读取缓存
+            const cache = await getMcpToolCache();            
+            // 2. 将缓存传递给核心逻辑
+            return await initializeMcpClient(activeServerConfigs, cache);
+        } catch (e) {
+            console.error("[WindowPreload] Error loading MCP cache:", e);
+            // 降级处理：不带缓存初始化
+            return await initializeMcpClient(activeServerConfigs, {});
+        }
+    },
     invokeMcpTool,
     closeMcpClient,
     isFileTypeSupported,

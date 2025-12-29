@@ -88,7 +88,9 @@
       "confirmSyncDeleteTitle": "Confirm Sync Deletion",
       "confirmSyncDeleteMessage": "{count} of the selected files also exist on the {location}. Do you want to delete them from there as well?",
       "webdavRequired": "Please configure WebDAV first",
-      "localPathRequired": "Please configure local chat path first"
+      "localPathRequired": "Please configure local chat path first",
+      "continueConfirm": "Continue?",
+      "restoreChat": "Restore Chat"
     }
   },
   "prompts": {
@@ -108,10 +110,23 @@
     "iconUploadTip": "Supports {formats} format, max size {maxSize}.",
     "dragIconHere": "Drag ",
     "orClickToUpload": "or click",
+    "disableAll": "Disable All",
+    "enableAll": "Enable All",
+    "openWindow": "Open Dialog Window",
+    "deletePrompt": "Delete this Prompt",
+    "inputPlaceholder": "Enter prompt content...",
+    "selectNewModel": "Please select a new model",
     "icon": {
       "uploadText": "Drag/Paste<br>Click to Upload",
       "downloadTooltip": "Download Icon",
       "removeTooltip": "Remove Icon"
+    },
+    "iconEditor": {
+      "hint": "Drag to move / Scroll to scale",
+      "scale": "Scale",
+      "radius": "Radius",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
     },
     "background": {
       "imageLabel": "Window Background Image (URL)",
@@ -221,6 +236,18 @@
     "descriptionLabel": "Description",
     "typeLabel": "Type",
     "activeLabel": "Active",
+    "persistentOn": "Persistent connection ON",
+    "persistentOff": "Persistent connection OFF",
+    "testConnectionTooltip": "Test Connection / View Cached Tools",
+    "refreshTooltip": "Force Refresh (Reconnect)",
+    "connecting": "Connecting and fetching tool list...",
+    "connectionSuccess": "Connected! Found {count} tools",
+    "connectionFailed": "Connection Failed",
+    "toolList": "Tool List:",
+    "cached": "Cached",
+    "noDescription": "No description",
+    "noToolsProvided": "No tools provided by this service",
+    "refreshConfig": "Refresh MCP Configuration",
     "typeOptions": {
       "stdio": "Stdio",
       "http": "Streamable HTTP",
@@ -253,6 +280,7 @@
       "deleteSuccess": "MCP server deleted successfully.",
       "deleteFailed": "Failed to delete MCP server.",
       "invalidJson": "Invalid JSON format. Please check your input.",
+      "jsonError": "JSON must be an object containing the \"mcpServers\" key.",
       "configCopied": "Server config copied to clipboard",
       "refreshSuccess": "MCP config refreshed!",
       "configInvalid": "Failed to get valid config data.",

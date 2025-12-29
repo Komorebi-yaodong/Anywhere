@@ -132,7 +132,7 @@ async function startChat(file) {
             const client = createClient(url, { username, password });
             jsonString = await client.getFileContents(`${data_path.endsWith('/') ? data_path.slice(0, -1) : data_path}/${file.basename}`, { format: "text" });
         }
-        await window.api.coderedirect("恢复聊天", JSON.stringify({ sessionData: jsonString, filename: file.basename }));
+        await window.api.coderedirect(t('chats.alerts.restoreChat'), JSON.stringify({ sessionData: jsonString, filename: file.basename }));
         ElMessage.success(t('chats.alerts.restoreInitiated'));
     } catch (error) { ElMessage.error(`${t('chats.alerts.restoreFailed')}: ${error.message}`); }
 }
@@ -289,12 +289,16 @@ async function intelligentUpload() {
     if (filesToUpload.length === 0) return ElMessage.info(t('chats.alerts.syncNoUpload'));
 
     try {
-        await ElMessageBox.confirm(t('chats.tooltips.uploadChanges', { count: filesToUpload.length }) + ' 是否继续？', t('chats.alerts.syncConfirmUploadTitle'), { type: 'info' });
+        await ElMessageBox.confirm(
+            t('chats.tooltips.uploadChanges', { count: filesToUpload.length }) + ' ' + t('chats.alerts.continueConfirm'),
+            t('chats.alerts.syncConfirmUploadTitle'),
+            { type: 'info' }
+        );
         const tasks = filesToUpload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'upload', signal) }));
         await executeSync(tasks, t('chats.alerts.syncConfirmUploadTitle'));
     } catch (error) {
         if (error === 'cancel' || error === 'close') return;
-        ElMessage.error(`操作失败: ${error.message}`);
+        ElMessage.error(`${error.message}`);
     }
 }
 
@@ -307,12 +311,16 @@ async function intelligentDownload() {
     if (filesToDownload.length === 0) return ElMessage.info(t('chats.alerts.syncNoDownload'));
 
     try {
-        await ElMessageBox.confirm(t('chats.tooltips.downloadChanges', { count: filesToDownload.length }) + ' 是否继续？', t('chats.alerts.syncConfirmDownloadTitle'), { type: 'info' });
+        await ElMessageBox.confirm(
+            t('chats.tooltips.downloadChanges', { count: filesToDownload.length }) + ' ' + t('chats.alerts.continueConfirm'),
+            t('chats.alerts.syncConfirmDownloadTitle'),
+            { type: 'info' }
+        );
         const tasks = filesToDownload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'download', signal) }));
         await executeSync(tasks, t('chats.alerts.syncConfirmDownloadTitle'));
     } catch (error) {
         if (error === 'cancel' || error === 'close') return;
-        ElMessage.error(`操作失败: ${error.message}`);
+        ElMessage.error(`${error.message}`);
     }
 }
 
