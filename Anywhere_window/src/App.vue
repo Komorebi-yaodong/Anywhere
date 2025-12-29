@@ -2960,6 +2960,7 @@ const handleOpenSearch = () => {
 
 <template>
   <main>
+    <div v-if="windowBackgroundImage" class="window-bg-base"></div>
     <div v-if="windowBackgroundImage" class="window-bg-layer"
       :style="{ 
         backgroundImage: `url('${windowBackgroundImage}')`,
@@ -3750,13 +3751,25 @@ html.dark .persistent-btn:hover { background-color: var(--el-fill-color-darker);
 .persistent-btn.is-persistent-active { color: #67C23A; }
 .persistent-btn.is-persistent-active:hover { background-color: rgba(103, 194, 58, 0.1); }
 
+.window-bg-base {
+  position: fixed;
+  top: 0; 
+  left: 0; 
+  width: 100vw; 
+  height: 100vh;
+  z-index: 0;
+  background-color: var(--el-bg-color); 
+  transition: background-color 0.3s ease;
+  pointer-events: none;
+  will-change: background-color;
+}
+
 .window-bg-layer {
   position: fixed;
   top: 0; left: 0; width: 100vw; height: 100vh;
   z-index: 0;
   background-position: center; background-size: cover; background-repeat: no-repeat;
   pointer-events: none;
-  /* 修复：移除 filter: none !important，允许 Vue 绑定 filter: blur(...) */
   will-change: transform;
   transform: translateZ(0);
 }

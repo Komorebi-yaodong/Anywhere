@@ -95,7 +95,7 @@ const editingPrompt = reactive({
   autoCloseOnBlur: true,
   matchRegex: "",
   backgroundImage: "",
-  backgroundOpacity: 0.9,
+  backgroundOpacity: 0.6,
   backgroundBlur: 0,
 });
 
@@ -457,7 +457,7 @@ function prepareAddPrompt() {
     autoCloseOnBlur: currentConfig.value.autoCloseOnBlur_global,
     matchRegex: "",
     backgroundImage: "",
-    backgroundOpacity: 0.9,
+    backgroundOpacity: 0.6,
     backgroundBlur: 0,
   });
   showPromptEditDialog.value = true;
@@ -502,7 +502,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     isAlwaysOnTop: p.isAlwaysOnTop ?? true, autoCloseOnBlur: p.autoCloseOnBlur ?? true,
     matchRegex: p.matchRegex || "",
     backgroundImage: p.backgroundImage || "",
-    backgroundOpacity: p.backgroundOpacity ?? 0.9,
+    backgroundOpacity: p.backgroundOpacity ?? 0.6,
     backgroundBlur: p.backgroundBlur ?? 0,
   });
   showPromptEditDialog.value = true;
