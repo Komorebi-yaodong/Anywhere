@@ -9,7 +9,6 @@ const {
   sethotkey,
   openWindow,
   openFastInputWindow,
-  openFastShowWindow,
   coderedirect,
   setZoomFactor,
   feature_suffix,
@@ -75,10 +74,10 @@ window.api = {
   initializeMcpClient: async (activeServerConfigs) => {
     try {
       const cache = await getMcpToolCache();
-      return await initializeMcpClient(activeServerConfigs, cache);
+      return await initializeMcpClient(activeServerConfigs, cache, saveMcpToolCache);
     } catch (e) {
       console.error("[Preload] Error loading MCP cache:", e);
-      return await initializeMcpClient(activeServerConfigs, {});
+      return await initializeMcpClient(activeServerConfigs, {}, saveMcpToolCache);
     }
   },
   testMcpConnection: async (serverConfig) => {

@@ -284,7 +284,9 @@
       "configCopied": "Server config copied to clipboard",
       "refreshSuccess": "MCP config refreshed!",
       "configInvalid": "Failed to get valid config data.",
-      "refreshFailed": "Refresh failed, please try again later."
+      "refreshFailed": "Refresh failed, please try again later.",
+      "testSuccess": "Connection successful.",
+      "testFailed": "Connection failed. Please check your configuration."
     },
     "jsonDialog": {
       "title": "Edit MCP Servers JSON",

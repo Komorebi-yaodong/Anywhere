@@ -1016,6 +1016,10 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
     color: var(--text-secondary);
 }
 
+.test-loading-state .is-loading {
+    animation-direction: reverse;
+}
+
 .tool-list-header {
     margin: 10px 0 5px 0;
     display: flex;

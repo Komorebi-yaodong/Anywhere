@@ -284,7 +284,9 @@
       "configCopied": "服务器配置已复制到剪贴板",
       "refreshSuccess": "MCP 服务配置已刷新！",
       "configInvalid": "未能获取到有效的配置数据。",
-      "refreshFailed": "刷新配置失败，请稍后重试。"
+      "refreshFailed": "刷新配置失败，请稍后重试。",
+      "testSuccess":"测试成功。",
+      "testFailed": "测试失败，请检查您的配置。"
     },
     "jsonDialog": {
       "title": "编辑 MCP 服务 JSON",

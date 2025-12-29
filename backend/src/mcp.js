@@ -59,10 +59,11 @@ async function connectAndFetchTools(id, config) {
 
 /**
  * 增量式地初始化/同步 MCP 客户端。
- * 1. 先处理非持久连接（优先使用缓存，无缓存则即用即走）
+ * 1. 先处理非持久连接（优先使用缓存，无缓存则即用即走并自动缓存）
  * 2. 再处理持久连接
+ * 3. saveCacheCallback 参数，用于自动缓存获取到的工具
  */
-async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}) {
+async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}, saveCacheCallback = null) {
   // Debug Log
   // console.log(`[MCP] Initialize called. Active: ${Object.keys(activeServerConfigs).length}, CacheKeys: ${Object.keys(cachedToolsMap || {}).length}`);
 
@@ -132,6 +133,18 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
           // 复用 connectAndFetchTools 来获取工具并自动关闭连接
           const tools = await connectAndFetchTools(id, config);
           
+          // [新增] 自动缓存逻辑
+          if (saveCacheCallback && typeof saveCacheCallback === 'function') {
+             const sanitizedTools = tools.map(tool => ({
+                name: tool.name,
+                description: tool.description,
+                inputSchema: tool.inputSchema || tool.schema || {} 
+             }));
+             const cleanTools = JSON.parse(JSON.stringify(sanitizedTools));
+             // 不使用 await 阻塞流程，异步写入数据库即可
+             saveCacheCallback(id, cleanTools).catch(e => console.error(`[MCP] Auto-cache failed for ${id}:`, e));
+          }
+
           tools.forEach(tool => {
             fullToolInfoMap.set(tool.name, {
               schema: tool.schema || tool.inputSchema,
@@ -173,6 +186,17 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
         
         const client = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } });
         const tools = await client.getTools();
+
+        // [新增] 持久化连接也顺便更新缓存，保证缓存是最新的
+        if (saveCacheCallback && typeof saveCacheCallback === 'function') {
+             const sanitizedTools = tools.map(tool => ({
+                name: tool.name,
+                description: tool.description,
+                inputSchema: tool.inputSchema || tool.schema || {} 
+             }));
+             const cleanTools = JSON.parse(JSON.stringify(sanitizedTools));
+             saveCacheCallback(id, cleanTools).catch(e => console.error(`[MCP] Auto-cache failed for persistent ${id}:`, e));
+        }
 
         tools.forEach(tool => {
           fullToolInfoMap.set(tool.name, {

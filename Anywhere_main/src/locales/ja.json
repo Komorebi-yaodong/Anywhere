@@ -284,7 +284,9 @@
       "configCopied": "サーバー設定をクリップボードにコピーしました",
       "refreshSuccess": "MCP設定を更新しました！",
       "configInvalid": "有効な設定データを取得できませんでした。",
-      "refreshFailed": "更新に失敗しました。後でもう一度お試しください。"
+      "refreshFailed": "更新に失敗しました。後でもう一度お試しください。",
+      "testSuccess": "テストに成功しました。",
+      "testFailed": "テストに失敗しました。設定を確認してください。"
     },
     "jsonDialog": {
       "title": "MCPサーバーのJSONを編集",
