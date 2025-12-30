@@ -805,7 +805,7 @@ onMounted(async () => {
   // 统一的初始化函数，用于成功和失败两种情况
   const initializeWindow = async (data = null) => {
     try {
-      const configData = data?.config ? { config: data.config } : await window.api.getConfig();
+      const configData = await window.api.getConfig();
       currentConfig.value = configData.config;
     } catch (err) {
       currentConfig.value = defaultConfig.config;

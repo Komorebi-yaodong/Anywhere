@@ -317,313 +317,173 @@ var require_data = __commonJS({
     }
     function checkConfig(config) {
       let flag = false;
-      if (config.version !== "1.9.13") {
-        config.version = "1.9.13";
-        flag = true;
-      }
-      if (config.isAlwaysOnTop_global === void 0) {
-        config.isAlwaysOnTop_global = true;
-        flag = true;
-      }
-      if (config.autoCloseOnBlur_global === void 0) {
-        config.autoCloseOnBlur_global = true;
-        flag = true;
-      }
-      if (config.window_width || config.window_height) {
-        delete config.window_width;
-        delete config.window_height;
-        flag = true;
-      }
-      if (config.stream !== void 0) {
-        delete config.stream;
-        flag = true;
-      }
-      if (config.autoCloseOnBlur !== void 0) {
-        delete config.autoCloseOnBlur;
-        flag = true;
-      }
-      if (config.isAlwaysOnTop !== void 0) {
-        delete config.isAlwaysOnTop;
-        flag = true;
-      }
-      if (config.CtrlEnterToSend == void 0) {
-        config.CtrlEnterToSend = false;
-        flag = true;
-      }
-      if (config.showNotification == void 0) {
-        config.showNotification = false;
-        flag = true;
-      }
-      if (config.position_x || config.position_y) {
-        delete config.position_x;
-        delete config.position_y;
-        flag = true;
-      }
-      if (config.fix_position == void 0) {
-        config.fix_position = false;
-        flag = true;
-      }
-      if (config.zoom == void 0) {
-        config.zoom = 1;
-        flag = true;
-      }
-      if (config.inputLayout) {
-        delete config.inputLayout;
-        flag = true;
-      }
-      if (config.mcpServers === void 0) {
-        config.mcpServers = {};
-        flag = true;
-      }
-      if (config.fastWindowPosition === void 0) {
-        config.fastWindowPosition = null;
-        flag = true;
-      }
-      if (config.voiceList === void 0) {
-        config.voiceList = [
-          "alloy-\u{1F469}",
-          "echo-\u{1F468}\u200D\u{1F9B0}\u6E05\u6670",
-          "nova-\u{1F469}\u6E05\u6670",
-          "sage-\u{1F467}\u5E74\u8F7B",
-          "shimmer-\u{1F467}\u660E\u4EAE",
-          "fable-\u{1F610}\u4E2D\u6027",
-          "coral-\u{1F469}\u5BA2\u670D",
-          "ash-\u{1F9D4}\u200D\u2642\uFE0F\u5546\u4E1A",
-          "ballad-\u{1F468}\u6545\u4E8B",
-          "verse-\u{1F468}\u8BD7\u6B4C",
-          "onyx-\u{1F468}\u200D\u{1F9B0}\u65B0\u95FB",
-          "Zephyr-\u{1F467}\u660E\u4EAE",
-          "Puck-\u{1F466}\u6B22\u5FEB",
-          "Charon-\u{1F466}\u4FE1\u606F\u4E30\u5BCC",
-          "Kore-\u{1F469}\u575A\u5B9A",
-          "Fenrir-\u{1F468}\u200D\u{1F9B0}\u6613\u6FC0\u52A8",
-          "Leda-\u{1F467}\u5E74\u8F7B",
-          "Orus-\u{1F468}\u200D\u{1F9B0}\u9274\u5B9A",
-          "Aoede-\u{1F469}\u8F7B\u677E",
-          "Callirrhoe-\u{1F469}\u968F\u548C",
-          "Autonoe-\u{1F469}\u660E\u4EAE",
-          "Enceladus-\u{1F9D4}\u200D\u2642\uFE0F\u547C\u5438\u611F",
-          "Iapetus-\u{1F466}\u6E05\u6670",
-          "Umbriel-\u{1F466}\u968F\u548C",
-          "Algieba-\u{1F466}\u5E73\u6ED1",
-          "Despina-\u{1F469}\u5E73\u6ED1",
-          "Erinome-\u{1F469}\u6E05\u6670",
-          "Algenib-\u{1F468}\u200D\u{1F9B0}\u6C99\u54D1",
-          "Rasalgethi-\u{1F468}\u200D\u{1F9B0}\u4FE1\u606F\u4E30\u5BCC",
-          "Laomedeia-\u{1F469}\u6B22\u5FEB",
-          "Achernar-\u{1F469}\u8F7B\u67D4",
-          "Alnilam-\u{1F466}\u575A\u5B9A",
-          "Schedar-\u{1F466}\u5E73\u7A33",
-          "Gacrux-\u{1F469}\u6210\u719F",
-          "Pulcherrima-\u{1F469}\u5411\u524D",
-          "Achird-\u{1F466}\u53CB\u597D",
-          "Zubenelgenubi-\u{1F466}\u4F11\u95F2",
-          "Vindemiatrix-\u{1F469}\u6E29\u67D4",
-          "Sadachbia-\u{1F468}\u200D\u{1F9B0}\u6D3B\u6CFC",
-          "Sadaltager-\u{1F468}\u200D\u{1F9B0}\u535A\u5B66",
-          "Sulafat-\u{1F469}\u6E29\u6696"
-        ];
-        flag = true;
-      }
-      if (config.webdav == void 0) {
-        config.webdav = {
-          url: "",
-          username: "",
-          password: "",
-          path: "/anywhere",
-          data_path: "/anywhere_data"
-        };
-        flag = true;
-      }
-      if (config.webdav.dataPath && config.webdav.data_path == void 0) {
-        config.webdav.data_path = config.webdav.dataPath;
-        delete config.webdav.dataPath;
-        flag = true;
-      } else if (config.webdav.dataPath) {
-        delete config.webdav.dataPath;
-      }
-      if (config.webdav.data_path == void 0) {
-        config.webdav.data_path = "/anywhere_data";
-        flag = true;
-      }
-      if (config.webdav.localChatPath == void 0) {
-        config.webdav.localChatPath = "";
+      const CURRENT_VERSION = "1.9.13";
+      if (config.version !== CURRENT_VERSION) {
+        config.version = CURRENT_VERSION;
         flag = true;
       }
       if (config.apiUrl) {
+        config.providers = config.providers || {};
+        config.providerOrder = config.providerOrder || [];
         config.providers["0"] = {
           name: "default",
           url: config.apiUrl,
           api_key: config.apiKey,
-          modelList: [config.modelSelect].concat(config.ModelsListByUser),
+          modelList: [config.modelSelect, ...config.ModelsListByUser || []].filter(Boolean),
           enable: true
         };
-        delete config.apiUrl;
-        delete config.apiKey;
-        delete config.modelList;
-        delete config.ModelsListByUser;
-        delete config.modelSelect;
-        delete config.activeProviderId;
+        config.activeProviderId = void 0;
         config.providerOrder.unshift("0");
         flag = true;
       }
-      for (let key in config.prompts) {
-        if (config.prompts[key].showMode === "input" || config.prompts[key].showMode === "clipboard") {
-          config.prompts[key].showMode = "fastinput";
+      const obsoleteKeys = [
+        "window_width",
+        "window_height",
+        "stream",
+        "autoCloseOnBlur",
+        "isAlwaysOnTop",
+        "inputLayout",
+        "tool_list",
+        "promptOrder",
+        "ModelsListByUser",
+        "apiUrl",
+        "apiKey",
+        "modelList",
+        "modelSelect",
+        "activeProviderId"
+      ];
+      obsoleteKeys.forEach((key) => {
+        if (config[key] !== void 0) {
+          delete config[key];
           flag = true;
         }
-        if (config.prompts[key].type === "over" && config.prompts[key].matchRegex === void 0) {
-          config.prompts[key].matchRegex = "";
+      });
+      const rootDefaults = {
+        isAlwaysOnTop_global: true,
+        autoCloseOnBlur_global: true,
+        CtrlEnterToSend: false,
+        showNotification: false,
+        fix_position: false,
+        zoom: 1,
+        language: "zh",
+        mcpServers: {},
+        tags: {},
+        isDarkMode: false,
+        fastWindowPosition: null,
+        // 直接引用 defaultConfig 中的完整列表，避免代码冗长
+        voiceList: defaultConfig.config.voiceList || []
+      };
+      for (const [key, val] of Object.entries(rootDefaults)) {
+        if (config[key] === void 0) {
+          config[key] = val;
           flag = true;
         }
-        if (config.prompts[key].defaultMcpServers === void 0) {
-          config.prompts[key].defaultMcpServers = [];
+      }
+      if (!config.webdav) {
+        config.webdav = { url: "", username: "", password: "", path: "/anywhere", data_path: "/anywhere_data", localChatPath: "" };
+        flag = true;
+      } else {
+        if (config.webdav.dataPath) {
+          config.webdav.data_path = config.webdav.data_path || config.webdav.dataPath;
+          delete config.webdav.dataPath;
           flag = true;
         }
-        if (config.prompts[key].isAlwaysOnTop === void 0) {
-          config.prompts[key].isAlwaysOnTop = true;
-          flag = true;
-        }
-        if (config.prompts[key].autoCloseOnBlur === void 0) {
-          config.prompts[key].autoCloseOnBlur = true;
-          flag = true;
-        }
-        if (config.prompts[key].window_width === void 0) {
-          config.prompts[key].window_width = 580;
-          flag = true;
-        }
-        if (config.prompts[key].window_height === void 0) {
-          config.prompts[key].window_height = 740;
-          flag = true;
-        }
-        if (config.prompts[key].position_x === void 0) {
-          config.prompts[key].position_x = 0;
-          flag = true;
-        }
-        if (config.prompts[key].position_y === void 0) {
-          config.prompts[key].position_y = 0;
-          flag = true;
-        }
-        if (config.prompts[key].stream === void 0) {
-          config.prompts[key].stream = true;
-          flag = true;
-        }
-        if (config.prompts[key].voice === void 0 || config.prompts[key].voice === null) {
-          config.prompts[key].voice = "";
-          flag = true;
-        }
-        if (config.prompts[key].enable === void 0) {
-          config.prompts[key].enable = true;
-          flag = true;
-        }
-        if (config.prompts[key].isTemperature === void 0) {
-          config.prompts[key].isTemperature = false;
-          config.prompts[key].temperature = 0.7;
-          flag = true;
-        }
-        if (config.prompts[key].icon === void 0) {
-          config.prompts[key].icon = "";
-          flag = true;
-        }
-        if (config.prompts[key].isDirectSend_file === void 0) {
-          if (config.prompts[key].isDirectSend === void 0) {
-            config.prompts[key].isDirectSend_file = false;
-          } else {
-            config.prompts[key].isDirectSend_file = config.prompts[key].isDirectSend;
-            delete config.prompts[key].isDirectSend;
+        const webdavDefaults = { data_path: "/anywhere_data", localChatPath: "" };
+        for (const [k, v] of Object.entries(webdavDefaults)) {
+          if (config.webdav[k] === void 0) {
+            config.webdav[k] = v;
+            flag = true;
           }
-          flag = true;
-        }
-        if (config.prompts[key].isDirectSend_normal === void 0) {
-          config.prompts[key].isDirectSend_normal = true;
-          flag = true;
-        }
-        if (config.prompts[key].ifTextNecessary === void 0) {
-          config.prompts[key].ifTextNecessary = false;
-          flag = true;
-        }
-        if (config.prompts[key].reasoning_effort === void 0) {
-          config.prompts[key].reasoning_effort = "default";
-          flag = true;
         }
       }
-      if (!config.tags) {
-        config.tags = {};
-        flag = true;
-      }
-      if (!config.language) {
-        config.language = "zh";
-        flag = true;
-      }
-      if (config.tool_list) {
-        delete config.tool_list;
-        flag = true;
-      }
-      if (config.ModelsListByUser) {
-        delete config.ModelsListByUser;
-        flag = true;
-      }
-      if (config.promptOrder) {
-        delete config.promptOrder;
-        flag = true;
-      }
-      for (let key in config.prompts) {
-        if (config.prompts[key].idex || config.prompts[key].idex === 0) {
-          delete config.prompts[key].idex;
-          flag = true;
-        }
-      }
-      for (let key in config.providers) {
-        if (config.providers[key].modelSelect) {
-          delete config.providers[key].modelSelect;
-          flag = true;
-        }
-        if (delete config.providers[key].modelListByUser) {
-          delete config.providers[key].modelListByUser;
-          flag = true;
-        }
-        if (config.providers[key].enable === void 0) {
-          config.providers[key].enable = true;
-          flag = true;
-        }
-      }
-      if (config.providerOrder.length === 0) {
-        for (let key in config.providers) {
-          config.providerOrder.push(key);
-        }
-        flag = true;
-      }
-      for (let i = 0; i < config.providerOrder.length; i++) {
-        if (typeof config.providerOrder[i] !== "string") {
-          config.providerOrder[i] = config.providerOrder[i].toString();
-          flag = true;
-        }
-        if (!config.providers[config.providerOrder[i]]) {
-          config.providerOrder.splice(i, 1);
-          flag = true;
-        }
-      }
-      for (let key in config.prompts) {
-        if (config.prompts[key].model) {
-          let model = config.prompts[key].model.split("|");
-          if (model.length === 2) {
-            if (!config.providers[model[0]]) {
-              config.prompts[key].model = "";
+      if (config.prompts) {
+        const promptDefaults = {
+          enable: true,
+          stream: true,
+          showMode: "window",
+          type: "general",
+          isTemperature: false,
+          temperature: 0.7,
+          isDirectSend_normal: true,
+          isDirectSend_file: false,
+          ifTextNecessary: false,
+          voice: "",
+          reasoning_effort: "default",
+          defaultMcpServers: [],
+          window_width: 580,
+          window_height: 740,
+          position_x: 0,
+          position_y: 0,
+          isAlwaysOnTop: true,
+          autoCloseOnBlur: true,
+          matchRegex: "",
+          icon: ""
+        };
+        for (const key of Object.keys(config.prompts)) {
+          const p = config.prompts[key];
+          if (!p || typeof p !== "object" || "0" in p || !p.type || p.prompt === void 0 || p.model === void 0) {
+            delete config.prompts[key];
+            flag = true;
+            continue;
+          }
+          if (["input", "clipboard"].includes(p.showMode)) {
+            p.showMode = "fastinput";
+            flag = true;
+          }
+          if (p.isDirectSend !== void 0) {
+            if (p.isDirectSend_file === void 0) p.isDirectSend_file = p.isDirectSend;
+            delete p.isDirectSend;
+            flag = true;
+          }
+          if (p.idex !== void 0) {
+            delete p.idex;
+            flag = true;
+          }
+          for (const [pk, pv] of Object.entries(promptDefaults)) {
+            if (p[pk] === void 0) {
+              p[pk] = pv;
               flag = true;
             }
           }
-        } else {
-          config.prompts[key].model = `${config.providerOrder[0]}|${config.providers[config.providerOrder[0]].modelList[0]}`;
-          flag = true;
-        }
-        if (config.prompts[key].model === "") {
-          config.prompts[key].model = `${config.providerOrder[0]}|${config.providers[config.providerOrder[0]].modelList[0]}`;
-          flag = true;
+          if (p.voice === null) {
+            p.voice = "";
+            flag = true;
+          }
+          let hasValidModel = p.model && config.providers && config.providers[p.model.split("|")[0]];
+          if (!hasValidModel) {
+            const firstProvId = config.providerOrder?.[0];
+            const firstModel = config.providers?.[firstProvId]?.modelList?.[0];
+            p.model = firstProvId && firstModel ? `${firstProvId}|${firstModel}` : "";
+            flag = true;
+          }
         }
       }
-      if (config.isDarkMode === void 0) {
-        config.isDarkMode = false;
+      if (config.providers) {
+        for (const key in config.providers) {
+          const prov = config.providers[key];
+          if (prov.modelSelect !== void 0) {
+            delete prov.modelSelect;
+            flag = true;
+          }
+          if (prov.modelListByUser !== void 0) {
+            delete prov.modelListByUser;
+            flag = true;
+          }
+          if (prov.enable === void 0) {
+            prov.enable = true;
+            flag = true;
+          }
+        }
+      }
+      if (!Array.isArray(config.providerOrder) || config.providerOrder.length === 0) {
+        config.providerOrder = Object.keys(config.providers || {});
         flag = true;
+      } else {
+        const validOrder = config.providerOrder.map(String).filter((id) => config.providers && config.providers[id]);
+        if (validOrder.length !== config.providerOrder.length) {
+          config.providerOrder = validOrder;
+          flag = true;
+        }
       }
       if (flag) {
         updateConfig({ "config": config });
@@ -632,37 +492,66 @@ var require_data = __commonJS({
     async function saveSetting(keyPath, value) {
       const rootKey = keyPath.split(".")[0];
       let docId;
-      let targetKeyPath = keyPath;
-      let isBaseConfig = false;
+      let targetObjectKey;
+      let targetPropKey;
       if (rootKey === "prompts") {
         docId = "prompts";
-        targetKeyPath = keyPath.substring("prompts.".length);
+        const firstDotIndex = keyPath.indexOf(".");
+        const lastDotIndex = keyPath.lastIndexOf(".");
+        if (firstDotIndex === -1 || lastDotIndex === -1 || firstDotIndex === lastDotIndex) {
+          console.error(`Invalid keyPath for prompts: ${keyPath}`);
+          return { success: false, message: `Invalid keyPath: ${keyPath}` };
+        }
+        targetObjectKey = keyPath.substring(firstDotIndex + 1, lastDotIndex);
+        targetPropKey = keyPath.substring(lastDotIndex + 1);
       } else if (rootKey === "providers") {
         docId = "providers";
-        targetKeyPath = keyPath.substring("providers.".length);
+        const firstDotIndex = keyPath.indexOf(".");
+        const lastDotIndex = keyPath.lastIndexOf(".");
+        if (firstDotIndex !== -1 && lastDotIndex !== -1 && firstDotIndex !== lastDotIndex) {
+          targetObjectKey = keyPath.substring(firstDotIndex + 1, lastDotIndex);
+          targetPropKey = keyPath.substring(lastDotIndex + 1);
+        } else {
+          const parts = keyPath.split(".");
+          targetObjectKey = parts[1];
+          targetPropKey = parts[2];
+        }
       } else if (rootKey === "mcpServers") {
         docId = "mcpServers";
-        targetKeyPath = keyPath.substring("mcpServers.".length);
+        const firstDotIndex = keyPath.indexOf(".");
+        const lastDotIndex = keyPath.lastIndexOf(".");
+        if (firstDotIndex !== -1 && lastDotIndex !== -1 && firstDotIndex !== lastDotIndex) {
+          targetObjectKey = keyPath.substring(firstDotIndex + 1, lastDotIndex);
+          targetPropKey = keyPath.substring(lastDotIndex + 1);
+        } else {
+          return { success: false, message: `Invalid keyPath for mcpServers: ${keyPath}` };
+        }
       } else {
         docId = "config";
-        isBaseConfig = true;
       }
       const doc = await utools.db.promises.get(docId);
       if (!doc) {
         console.error(`Config document "${docId}" not found, cannot save setting.`);
         return { success: false, message: `Config document "${docId}" not found` };
       }
-      let dataToUpdate = isBaseConfig ? doc.data.config : doc.data;
-      const pathParts = targetKeyPath.split(".");
-      let current = dataToUpdate;
-      for (let i = 0; i < pathParts.length - 1; i++) {
-        const part = pathParts[i];
-        if (current[part] === void 0 || typeof current[part] !== "object") {
-          current[part] = {};
+      let dataToUpdate = docId === "config" ? doc.data.config : doc.data;
+      if (docId === "config") {
+        const pathParts = keyPath.split(".");
+        let current = dataToUpdate;
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          const part = pathParts[i];
+          if (current[part] === void 0 || typeof current[part] !== "object") {
+            current[part] = {};
+          }
+          current = current[part];
         }
-        current = current[part];
+        current[pathParts[pathParts.length - 1]] = value;
+      } else {
+        if (!dataToUpdate[targetObjectKey]) {
+          dataToUpdate[targetObjectKey] = {};
+        }
+        dataToUpdate[targetObjectKey][targetPropKey] = value;
       }
-      current[pathParts[pathParts.length - 1]] = value;
       const result = await utools.db.promises.put({
         _id: docId,
         data: doc.data,
@@ -783,17 +672,17 @@ var require_data = __commonJS({
     function getPosition(config, promptCode) {
       const promptConfig = config.prompts[promptCode];
       const OVERFLOW_ALLOWANCE = 10;
-      let width = promptConfig?.window_width || 580;
-      let height = promptConfig?.window_height || 740;
+      let width = Number(promptConfig?.window_width) || 580;
+      let height = Number(promptConfig?.window_height) || 740;
       let windowX = 0, windowY = 0;
       const primaryDisplay = utools.getPrimaryDisplay();
       let currentDisplay;
       const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
       if (hasFixedPosition) {
-        let set_position = { x: promptConfig.position_x, y: promptConfig.position_y };
+        let set_position = { x: Number(promptConfig.position_x), y: Number(promptConfig.position_y) };
         currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
-        windowX = Math.floor(promptConfig.position_x);
-        windowY = Math.floor(promptConfig.position_y);
+        windowX = Math.floor(set_position.x);
+        windowY = Math.floor(set_position.y);
       } else {
         const mouse_position = utools.getCursorScreenPoint();
         currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
@@ -870,7 +759,6 @@ var require_data = __commonJS({
         startTime = performance.now();
         console.log(`[Timer Start] Opening window for code: ${msg.code}`);
       }
-      msg.config = config;
       const promptCode = msg.originalCode || msg.code;
       const { x, y, width, height } = getPosition(config, promptCode);
       const promptConfig = config.prompts[promptCode];
