@@ -16,6 +16,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 
 import TextSearchUI from './utils/TextSearchUI.js';
+import { formatTimestamp, sanitizeToolArgs } from './utils/formatters.js';
 
 const showDismissibleMessage = (options) => {
   const opts = typeof options === 'string' ? { message: options } : options;
@@ -139,35 +140,47 @@ const windowBackgroundBlur = computed(() => {
   return promptConfig?.backgroundBlur ?? 0;
 });
 
-watch(() => {
-    if (!CODE.value || !currentConfig.value?.prompts) return null;
-    return currentConfig.value.prompts[CODE.value]?.backgroundImage;
-}, async (newUrl) => {
-    // 重置 Blob URL (释放旧内存)
-    if (cachedBackgroundBlobUrl.value) {
-        URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
-        cachedBackgroundBlobUrl.value = "";
+const loadBackground = async (newUrl) => {
+    // 如果 URL 为空，清理缓存
+    if (!newUrl) {
+        if (cachedBackgroundBlobUrl.value) {
+            if (cachedBackgroundBlobUrl.value.startsWith('blob:')) {
+                URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
+            }
+            cachedBackgroundBlobUrl.value = "";
+        }
+        return;
     }
 
-    // data协议或本地文件不走缓存
-    if (!newUrl || newUrl.startsWith('data:') || newUrl.startsWith('file:')) return;
+    // data协议或本地文件不走缓存逻辑
+    if (newUrl.startsWith('data:') || newUrl.startsWith('file:')) return;
 
     try {
-        // 1. 尝试从缓存获取 Buffer
         const buffer = await window.api.getCachedBackgroundImage(newUrl);
         if (buffer) {
-            // 缓存命中：转换为 Blob URL 瞬间显示
             const blob = new Blob([buffer]);
-            cachedBackgroundBlobUrl.value = URL.createObjectURL(blob);
+            const newBlobUrl = URL.createObjectURL(blob);
+            
+            // 释放旧的 Blob URL
+            if (cachedBackgroundBlobUrl.value && cachedBackgroundBlobUrl.value.startsWith('blob:')) {
+                URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
+            }
+            cachedBackgroundBlobUrl.value = newBlobUrl;
         } else {
-            // 缓存未命中：通知后端去下载缓存（异步执行，不 await，不阻塞当前网络图片加载）
-            // 当前 UI 会降级使用 newUrl 直接加载网络图片
+            // 缓存未命中时，触发后台下载，本次前端仍可能需要回退到网络加载或保持空
             window.api.cacheBackgroundImage(newUrl);
         }
     } catch (e) {
         console.error("Failed to load cached background:", e);
     }
-}, { immediate: true });
+};
+
+watch(() => {
+    if (!CODE.value || !currentConfig.value?.prompts) return null;
+    return currentConfig.value.prompts[CODE.value]?.backgroundImage;
+}, async (newUrl) => {
+    await loadBackground(newUrl);
+}, { immediate: false });
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 const currentSystemPrompt = ref("");
@@ -874,6 +887,9 @@ onMounted(async () => {
 
     const code = data?.code || "AI";
     const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
+    if (currentPromptConfig.backgroundImage) {
+        loadBackground(currentPromptConfig.backgroundImage); 
+    }
     isAlwaysOnTop.value = data?.isAlwaysOnTop ?? currentPromptConfig.isAlwaysOnTop ?? true;
     zoomLevel.value = currentPromptConfig.zoom || currentConfig.value.zoom || 1;
     if (window.api && typeof window.api.setZoomFactor === 'function') {
@@ -2068,34 +2084,6 @@ const sendFile = async () => {
   return contentList;
 };
 
-function getRandomItem(list) {
-  // 检查list是不是字符串
-  if (typeof list === "string") {
-    // 如果字符串包含逗号
-    if (list.includes(",")) {
-      list = list.split(",");
-      // 删除空白字符
-      list = list.filter(item => item.trim() !== "");
-    }
-    else if (list.includes("，")) {
-      list = list.split("，");
-      // 删除空白字符
-      list = list.filter(item => item.trim() !== "");
-    }
-    else {
-      return list;
-    }
-  }
-
-  if (list.length === 0) {
-    return "";
-  }
-  else {
-    const resault = list[Math.floor(Math.random() * list.length)];
-    return resault;
-  }
-}
-
 async function applyMcpTools(show_none = true) {
   // 1. 立即关闭弹窗并显示加载状态
   isMcpDialogVisible.value = false;
@@ -2268,7 +2256,7 @@ const askAI = async (forceSend = false) => {
     const { OpenAI } = await import('openai');
 
     const openai = new OpenAI({
-      apiKey: () => getRandomItem(api_key.value),
+      apiKey: () => window.api.getRandomItem(api_key.value),
       baseURL: base_url.value,
       dangerouslyAllowBrowser: true,
       maxRetries: 3,
@@ -2817,46 +2805,6 @@ const clearHistory = () => {
   chatInputRef.value?.focus({ cursor: 'end' });
   showDismissibleMessage.success('历史记录已清除');
 };
-
-const formatTimestamp = (dateString) => {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    const datePart = date.toLocaleDateString('sv-SE');
-    const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-    return `${datePart} ${timePart}`;
-  } catch (e) { return ''; }
-};
-
-const sanitizeToolArgs = (jsonString) => {
-  if (!jsonString) return "{}";
-  try {
-    JSON.parse(jsonString);
-    return jsonString;
-  } catch (e) {
-    let startIndex = jsonString.indexOf('{');
-    if (startIndex === -1) return "{}";
-
-    let braceCount = 0;
-    for (let i = startIndex; i < jsonString.length; i++) {
-      if (jsonString[i] === '{') braceCount++;
-      else if (jsonString[i] === '}') braceCount--;
-
-      if (braceCount === 0) {
-        const potential = jsonString.substring(startIndex, i + 1);
-        try {
-          JSON.parse(potential);
-          // console.log(`[ToolArgs] 修复了畸形参数: ${jsonString} -> ${potential}`);
-          return potential; 
-        } catch (innerE) {
-          return "{}";
-        }
-      }
-    }
-    return "{}";
-  }
-};
-
 
 function toggleMcpServerSelection(serverId) {
   const index = tempSessionMcpServerIds.value.indexOf(serverId);

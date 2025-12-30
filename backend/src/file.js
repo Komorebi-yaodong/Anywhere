@@ -201,51 +201,37 @@ async function sendfileDirect(filePathList) {
     if (!filePathList || filePathList.length === 0) {
         return [];
     }
-
     const contentPromises = filePathList.map(async (item) => {
         try {
             const filePath = item.path;
             if (!filePath || typeof filePath !== 'string') {
                 return null;
             }
-
             // 1. 路径 -> File 对象
             const fileObject = await handleFilePath(filePath);
             if (!fileObject) {
                 utools.showNotification('无法读取或访问文件:', filePath);
                 return null;
             }
-
-            // 2. 检查文件类型是否支持
-            const handler = getFileHandler(fileObject.name);
-            if (!handler) {
-                utools.showNotification(`不支持的文件类型: ${fileObject.name}`);
-                return null;
-            }
-
-            // 3. File 对象 -> Base64 Data URL (这是原始代码缺失的一步)
-            // 我们需要一种在 Node.js 中将 Buffer 转为 Data URL 的方式
+            // 2. File 对象 -> Base64 Data URL
             const base64String = fileObject.stream ? Buffer.from(await fileObject.arrayBuffer()).toString('base64') : '';
             const dataUrl = `data:${fileObject.type};base64,${base64String}`;
-
-            // 模拟 Vue 组件中 fileList 的对象结构
             const fileForHandler = {
                 name: fileObject.name,
                 size: fileObject.size,
                 type: fileObject.type,
                 url: dataUrl
             };
-
-            // 4. 使用 handler 处理
-            const processedContent = await handler(fileForHandler);
-            return processedContent;
-
+            return await parseFileObject(fileForHandler);
         } catch (error) {
-            utools.showNotification('处理文件路径时出错:', item.path, error);
+            console.error(`处理文件出错: ${item.path}`, error);
+            // 仅在非不支持类型错误时弹窗，避免骚扰
+            if (!error.message.includes('不支持的文件类型')) {
+               utools.showNotification('处理文件出错:', item.path);
+            }
             return null;
         }
     });
-
     // 等待所有文件处理完成，并过滤掉失败的(null)
     const contentList = (await Promise.all(contentPromises)).filter(Boolean);
 

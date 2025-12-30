@@ -6,6 +6,8 @@ import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, C
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
 
+import { formatTimestamp, formatMessageText, sanitizeToolArgs } from '../utils/formatters.js';
+
 const props = defineProps({
   message: Object,
   index: Number,
@@ -35,18 +37,6 @@ const preprocessKatex = (text) => {
 const mermaidConfig = computed(() => ({
   theme: props.isDarkMode ? 'dark' : 'neutral',
 }));
-
-const formatTimestamp = (dateString) => {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    const datePart = date.toLocaleDateString('sv-SE');
-    const timePart = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-    return `${datePart} ${timePart}`;
-  } catch (e) {
-    return '';
-  }
-};
 
 const formatMessageContent = (content, role) => {
   if (!content) return "";
@@ -104,19 +94,6 @@ const formatMessageFile = (content) => {
     });
   }
   return files;
-};
-
-const formatMessageText = (content) => {
-  if (!content) return "";
-  if (!Array.isArray(content)) return String(content);
-
-  let textString = "";
-  content.forEach(part => {
-    if (part.type === 'text' && part.text && !(part.text.toLowerCase().startsWith('file name:') && part.text.toLowerCase().endsWith('file end'))) {
-      textString += part.text;
-    }
-  });
-  return textString.trim();
 };
 
 const isEditable = computed(() => {
@@ -221,31 +198,6 @@ const truncateFilename = (filename, maxLength = 30) => {
   const charsToKeep = maxLength - extension.length - ellipsis.length;
   if (charsToKeep < 1) return ellipsis + extension;
   return nameWithoutExt.substring(0, charsToKeep) + ellipsis + extension;
-};
-const safeFormatToolArgs = (argsString) => {
-  if (!argsString) return '{}';
-  try {
-    return JSON.stringify(JSON.parse(argsString), null, 2);
-  } catch (e) {
-    let braceCount = 0;
-    let startIndex = argsString.indexOf('{');
-    if (startIndex !== -1) {
-      for (let i = startIndex; i < argsString.length; i++) {
-        if (argsString[i] === '{') braceCount++;
-        else if (argsString[i] === '}') {
-          braceCount--;
-          if (braceCount === 0) {
-            try {
-              const potential = argsString.substring(startIndex, i + 1);
-              return JSON.stringify(JSON.parse(potential), null, 2);
-            } catch (inner) {}
-            break;
-          }
-        }
-      }
-    }
-    return argsString;
-  }
 };
 </script>
 
@@ -378,7 +330,7 @@ const safeFormatToolArgs = (argsString) => {
                   <div class="tool-call-details">
                     <div class="tool-detail-section">
                       <strong>参数:</strong>
-                      <pre><code>{{ safeFormatToolArgs(toolCall.args) }}</code></pre>
+                      <pre><code>{{ sanitizeToolArgs(toolCall.args) }}</code></pre>
                     </div>
                     <div class="tool-detail-section"
                       v-if="toolCall.result && toolCall.result !== '等待批准...' && toolCall.result !== '执行中...'">
