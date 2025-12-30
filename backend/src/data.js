@@ -444,11 +444,10 @@ async function saveSetting(keyPath, value) {
 }
 
 /**
- * [已重构] 更新完整的配置，将其拆分为三部分并分别存储
- * @param {object} newConfig - 完整的配置对象，结构为 { config: {...} }
+ * 更新完整的配置，将其拆分并分别存储
  */
 function updateConfigWithoutFeatures(newConfig) {
-  // 核心修复：在将配置存入数据库前，将其转换为纯净的 JavaScript 对象，以移除 Vue 的响应式 Proxy。
+  // 在将配置存入数据库前，将其转换为纯净的 JavaScript 对象，以移除 Vue 的响应式 Proxy。
   const plainConfig = JSON.parse(JSON.stringify(newConfig.config));
   const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(plainConfig);
 
@@ -491,6 +490,8 @@ function updateConfigWithoutFeatures(newConfig) {
       windowInstance.webContents.send('config-updated', plainConfig);
     }
   }
+
+  cleanUpBackgroundCache(newConfig);
 }
 
 function updateConfig(newConfig) {
@@ -966,6 +967,143 @@ async function getMcpToolCache() {
   return doc ? doc.data : {};
 }
 
+/**
+ * 计算 URL 的 MD5 Hash 作为 ID
+ */
+function getUrlHash(url) {
+  return crypto.createHash('md5').update(url).digest('hex');
+}
+
+/**
+ * 获取缓存的背景图片
+ * @param {string} url 图片原始 URL
+ * @returns {Promise<Uint8Array|null>} 返回图片的 Buffer 数据或 null
+ */
+async function getCachedBackgroundImage(url) {
+  if (!url) return null;
+  const hash = getUrlHash(url);
+  
+  // 1. 检查映射是否存在
+  const cacheDoc = await utools.db.promises.get("background_cache");
+  if (!cacheDoc || !cacheDoc.data || !cacheDoc.data[hash]) {
+    return null;
+  }
+
+  // 2. 获取附件
+  const attachmentId = cacheDoc.data[hash];
+  const buffer = await utools.db.promises.getAttachment(attachmentId);
+  return buffer;
+}
+
+/**
+ * 缓存背景图片
+ * @param {string} url 图片原始 URL
+ */
+async function cacheBackgroundImage(url) {
+  if (!url || url.startsWith('data:') || url.startsWith('file:')) return;
+  
+  const hash = getUrlHash(url);
+  const attachmentId = `bg-${hash}`;
+
+  try {
+    // 1. 检查是否已缓存
+    let cacheDoc = await utools.db.promises.get("background_cache");
+    if (!cacheDoc) {
+      cacheDoc = { _id: "background_cache", data: {} };
+      await utools.db.promises.put(cacheDoc);
+      cacheDoc = await utools.db.promises.get("background_cache"); // 获取带 rev 的新文档
+    }
+
+    if (cacheDoc.data[hash]) {
+        // 映射存在，检查附件是否真的存在
+        const existingBuf = await utools.db.promises.getAttachment(cacheDoc.data[hash]);
+        if (existingBuf) return; // 已存在且有效，无需重复下载
+    }
+
+    // 2. 下载图片
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // 3. 存储附件 (限制 10MB)
+    if (buffer.length > 10 * 1024 * 1024) {
+        console.warn("Background image too large to cache (>10MB):", url);
+        return;
+    }
+
+    const attachResult = await utools.db.promises.postAttachment(attachmentId, buffer, response.headers.get("content-type") || "image/png");
+    
+    if (attachResult.ok) {
+        // 4. 更新映射文档 重新获取以避免冲突
+        cacheDoc = await utools.db.promises.get("background_cache"); 
+        cacheDoc.data[hash] = attachmentId;
+        await utools.db.promises.put({
+            _id: "background_cache",
+            data: cacheDoc.data,
+            _rev: cacheDoc._rev
+        });
+        // console.log(`[Cache] Cached background for ${url}`);
+    }
+  } catch (error) {
+    console.error(`[Cache] Error caching background ${url}:`, error);
+  }
+}
+
+/**
+ * 清理未使用的背景图片缓存
+ * @param {object} fullConfig 当前的完整配置对象
+ */
+async function cleanUpBackgroundCache(fullConfig) {
+  try {
+    const prompts = fullConfig.config.prompts || {};
+    // 1. 收集所有正在使用的 URL Hash
+    const activeHashes = new Set();
+    Object.values(prompts).forEach(p => {
+        if (p.backgroundImage && !p.backgroundImage.startsWith('data:')) {
+            activeHashes.add(getUrlHash(p.backgroundImage));
+        }
+    });
+
+    // 2. 获取缓存记录
+    const cacheDoc = await utools.db.promises.get("background_cache");
+    if (!cacheDoc || !cacheDoc.data) return;
+
+    const cacheData = cacheDoc.data;
+    let hasChanges = false;
+
+    // 3. 遍历缓存，删除未使用的
+    for (const [hash, attachmentId] of Object.entries(cacheData)) {
+        if (!activeHashes.has(hash)) {
+            // 删除附件
+            try {
+                const removeResult = await utools.db.promises.remove(attachmentId);
+                if (removeResult.ok || removeResult.error) { // 即使附件不存在(error)也应该删除映射
+                     delete cacheData[hash];
+                     hasChanges = true;
+                     // console.log(`[Cache] Removed unused background cache: ${attachmentId}`);
+                }
+            } catch (e) {
+                // 附件可能已经不存在了，直接删除映射
+                delete cacheData[hash];
+                hasChanges = true;
+            }
+        }
+    }
+
+    // 4. 更新映射文档
+    if (hasChanges) {
+        await utools.db.promises.put({
+            _id: "background_cache",
+            data: cacheData,
+            _rev: cacheDoc._rev
+        });
+    }
+  } catch (error) {
+    console.error("[Cache] Cleanup failed:", error);
+  }
+}
+
 module.exports = {
   getConfig,
   checkConfig,
@@ -986,4 +1124,6 @@ module.exports = {
   openFastInputWindow,
   saveMcpToolCache,
   getMcpToolCache,
+  getCachedBackgroundImage,
+  cacheBackgroundImage,
 };

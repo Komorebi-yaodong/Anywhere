@@ -113,8 +113,15 @@ const selectedVoice = ref(null);
 const tempReasoningEffort = ref('default');
 const messageIdCounter = ref(0);
 const sourcePromptConfig = ref(null);
+const cachedBackgroundBlobUrl = ref("");
 
 const windowBackgroundImage = computed(() => {
+  // 1. 如果有缓存的 Blob，直接使用
+  if (cachedBackgroundBlobUrl.value) {
+      return cachedBackgroundBlobUrl.value;
+  }
+  
+  // 2. 否则使用配置中的 URL
   if (!CODE.value || !currentConfig.value?.prompts) return "";
   const promptConfig = currentConfig.value.prompts[CODE.value];
   return promptConfig?.backgroundImage || "";
@@ -131,6 +138,36 @@ const windowBackgroundBlur = computed(() => {
   const promptConfig = currentConfig.value.prompts[CODE.value];
   return promptConfig?.backgroundBlur ?? 0;
 });
+
+watch(() => {
+    if (!CODE.value || !currentConfig.value?.prompts) return null;
+    return currentConfig.value.prompts[CODE.value]?.backgroundImage;
+}, async (newUrl) => {
+    // 重置 Blob URL (释放旧内存)
+    if (cachedBackgroundBlobUrl.value) {
+        URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
+        cachedBackgroundBlobUrl.value = "";
+    }
+
+    // data协议或本地文件不走缓存
+    if (!newUrl || newUrl.startsWith('data:') || newUrl.startsWith('file:')) return;
+
+    try {
+        // 1. 尝试从缓存获取 Buffer
+        const buffer = await window.api.getCachedBackgroundImage(newUrl);
+        if (buffer) {
+            // 缓存命中：转换为 Blob URL 瞬间显示
+            const blob = new Blob([buffer]);
+            cachedBackgroundBlobUrl.value = URL.createObjectURL(blob);
+        } else {
+            // 缓存未命中：通知后端去下载缓存（异步执行，不 await，不阻塞当前网络图片加载）
+            // 当前 UI 会降级使用 newUrl 直接加载网络图片
+            window.api.cacheBackgroundImage(newUrl);
+        }
+    } catch (e) {
+        console.error("Failed to load cached background:", e);
+    }
+}, { immediate: true });
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 const currentSystemPrompt = ref("");

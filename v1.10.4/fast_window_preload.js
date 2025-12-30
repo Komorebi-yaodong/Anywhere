@@ -602,6 +602,7 @@ var require_data = __commonJS({
           windowInstance.webContents.send("config-updated", plainConfig);
         }
       }
+      cleanUpBackgroundCache(newConfig);
     }
     function updateConfig(newConfig) {
       const features = utools.getFeatures();
@@ -964,6 +965,95 @@ var require_data = __commonJS({
       const doc = await utools.db.promises.get("mcp_tools_cache");
       return doc ? doc.data : {};
     }
+    function getUrlHash(url) {
+      return crypto.createHash("md5").update(url).digest("hex");
+    }
+    async function getCachedBackgroundImage(url) {
+      if (!url) return null;
+      const hash = getUrlHash(url);
+      const cacheDoc = await utools.db.promises.get("background_cache");
+      if (!cacheDoc || !cacheDoc.data || !cacheDoc.data[hash]) {
+        return null;
+      }
+      const attachmentId = cacheDoc.data[hash];
+      const buffer = await utools.db.promises.getAttachment(attachmentId);
+      return buffer;
+    }
+    async function cacheBackgroundImage(url) {
+      if (!url || url.startsWith("data:") || url.startsWith("file:")) return;
+      const hash = getUrlHash(url);
+      const attachmentId = `bg-${hash}`;
+      try {
+        let cacheDoc = await utools.db.promises.get("background_cache");
+        if (!cacheDoc) {
+          cacheDoc = { _id: "background_cache", data: {} };
+          await utools.db.promises.put(cacheDoc);
+          cacheDoc = await utools.db.promises.get("background_cache");
+        }
+        if (cacheDoc.data[hash]) {
+          const existingBuf = await utools.db.promises.getAttachment(cacheDoc.data[hash]);
+          if (existingBuf) return;
+        }
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        if (buffer.length > 10 * 1024 * 1024) {
+          console.warn("Background image too large to cache (>10MB):", url);
+          return;
+        }
+        const attachResult = await utools.db.promises.postAttachment(attachmentId, buffer, response.headers.get("content-type") || "image/png");
+        if (attachResult.ok) {
+          cacheDoc = await utools.db.promises.get("background_cache");
+          cacheDoc.data[hash] = attachmentId;
+          await utools.db.promises.put({
+            _id: "background_cache",
+            data: cacheDoc.data,
+            _rev: cacheDoc._rev
+          });
+        }
+      } catch (error) {
+        console.error(`[Cache] Error caching background ${url}:`, error);
+      }
+    }
+    async function cleanUpBackgroundCache(fullConfig) {
+      try {
+        const prompts = fullConfig.config.prompts || {};
+        const activeHashes = /* @__PURE__ */ new Set();
+        Object.values(prompts).forEach((p) => {
+          if (p.backgroundImage && !p.backgroundImage.startsWith("data:")) {
+            activeHashes.add(getUrlHash(p.backgroundImage));
+          }
+        });
+        const cacheDoc = await utools.db.promises.get("background_cache");
+        if (!cacheDoc || !cacheDoc.data) return;
+        const cacheData = cacheDoc.data;
+        let hasChanges = false;
+        for (const [hash, attachmentId] of Object.entries(cacheData)) {
+          if (!activeHashes.has(hash)) {
+            try {
+              const removeResult = await utools.db.promises.remove(attachmentId);
+              if (removeResult.ok || removeResult.error) {
+                delete cacheData[hash];
+                hasChanges = true;
+              }
+            } catch (e) {
+              delete cacheData[hash];
+              hasChanges = true;
+            }
+          }
+        }
+        if (hasChanges) {
+          await utools.db.promises.put({
+            _id: "background_cache",
+            data: cacheData,
+            _rev: cacheDoc._rev
+          });
+        }
+      } catch (error) {
+        console.error("[Cache] Cleanup failed:", error);
+      }
+    }
     module2.exports = {
       getConfig,
       checkConfig,
@@ -983,7 +1073,9 @@ var require_data = __commonJS({
       saveFastInputWindowPosition: saveFastInputWindowPosition2,
       openFastInputWindow,
       saveMcpToolCache,
-      getMcpToolCache
+      getMcpToolCache,
+      getCachedBackgroundImage,
+      cacheBackgroundImage
     };
   }
 });

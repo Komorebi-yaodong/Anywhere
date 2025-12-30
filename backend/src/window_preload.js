@@ -17,6 +17,8 @@ const {
     savePromptWindowSettings,
     saveMcpToolCache,
     getMcpToolCache,
+    getCachedBackgroundImage,
+    cacheBackgroundImage,
 } = require('./data.js');
 
 const {
@@ -119,5 +121,10 @@ window.api = {
       ipcRenderer.on('config-updated', (event, newConfig) => {
         callback(newConfig);
       });
-    }
+    },
+    getCachedBackgroundImage,
+    cacheBackgroundImage: (url) => {
+        // 异步执行，不阻塞 UI
+        cacheBackgroundImage(url).catch(e => console.error(e));
+    },
 };
