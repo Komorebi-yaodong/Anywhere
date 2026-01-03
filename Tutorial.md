@@ -50,7 +50,7 @@
 
 > **一些免费的服务**
 >
-> * **Google AI Studio**: 访问 [aistudio.google.com/apikey](https://aistudio.google.com/apikey) 获取免费 Gemini API 密钥。URL 可填写作者提供的中转接口 `https://gemini-oai-cf.001412.xyz/v1`。
+> * **Google AI Studio**: 访问 [aistudio.google.com/apikey](https://aistudio.google.com/apikey) 获取免费 Gemini API 密钥。URL 可填写作者提供的中转接口 `https://gemini-oai-cf.141277.xyz/v1`。
 > * **OpenAI**: 访问 [platform.openai.com/api-keys](https://platform.openai.com/api-keys) 获取密钥。免费账户可使用 `gpt-4o-mini` 等模型。URL: `https://api.openai.com/v1`。
 > * **OpenRouter**: 访问 [openrouter.ai](https://openrouter.ai) 注册，可免费体验多种模型。URL: `https://openrouter.ai/api/v1`。
 

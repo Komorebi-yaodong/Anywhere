@@ -153,6 +153,7 @@ const renderedMarkdownContent = computed(() => {
     return placeholder;
   };
 
+  // 1. 保护代码块和数学公式不被 DOMPurify 处理
   let processedContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
     return prefix + addPlaceholder(delimiter + inner + delimiter);
   });
@@ -160,12 +161,19 @@ const renderedMarkdownContent = computed(() => {
   processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => addPlaceholder(match));
   processedContent = processedContent.replace(/(^|[^\\])\*\*([^\n]+?)\*\*/g, '$1<strong>$2</strong>');
 
-  const sanitizedPart = DOMPurify.sanitize(processedContent, {
+  // 2. 进行 HTML 清洗
+  let sanitizedPart = DOMPurify.sanitize(processedContent, {
     ADD_TAGS: ['video', 'audio', 'source'],
     USE_PROFILES: { html: true, svg: true, svgFilters: true },
     ADD_ATTR: ['style']
   });
 
+  // 全局将 &gt; 恢复为 >
+  // DOMPurify 会将 Markdown 的引用符号 ">" 转义为 "&gt;"，导致无法渲染为引用块。
+  // 这里将其还原。由于我们不还原 &lt; (<)，所以不会引入 XSS 风险（无法构造 <script> 标签）。
+  sanitizedPart = sanitizedPart.replace(/&gt;/g, '>');
+
+  // 3. 恢复受保护的内容（代码块等）
   const finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
     return protectedMap.get(placeholder) || placeholder;
   });
@@ -717,7 +725,7 @@ html.dark .chat-message .ai-bubble {
     padding: 0.5em 1em;
     border-left: 4px solid #b3b3b3;
     background-color: rgba(0, 0, 0, 0.035) !important;
-    color: var(--text-secondary);
+    color: var(--el-text-color-secondary);
     border-radius: 0 8px 8px 0;
 
     html.dark & {

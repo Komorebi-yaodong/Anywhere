@@ -15,7 +15,7 @@ Anywhere，一款功能强大、高效实用的AI助手，旨在为你提供卓�
 1. **AI Studio（Google免费提供Gemini API，推荐）**
 
    * 访问[https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)申请你的API密钥
-   * 在Anywhere应用中填入URL，使用gemini官方url `https://generativelanguage.googleapis.com/v1beta/openai`或者使用作者提供的中转接口 `https://gemini-oai.001412.xyz/v1`、`https://gemini-oai-cf.001412.xyz/v1`（备用接口）。
+   * 在Anywhere应用中填入URL，使用gemini官方url `https://generativelanguage.googleapis.com/v1beta/openai`或者使用作者提供的中转接口 `https://gemini-oai.141277.xyz/v1`、`https://gemini-oai-cf.141277.xyz/v1`（备用接口）。
    * 在Anywhere应用中填入KEY：`你的密钥`
    * **模型后缀功能**：在手动添加模型时，为模型名称增加后缀以启用特殊功能（需中转站支持）：
      * `:search` - 联网搜索模型（调用Google搜索）
@@ -40,7 +40,7 @@ Anywhere，一款功能强大、高效实用的AI助手，旨在为你提供卓�
    * `openai-audio`支持语音回复，选择OpenAI支持的声音即可语音聊天
 
 **作者常用提示词库**：
-访问 `https://komorebi.001412.xyz`获取并使用作者常用的提示词库（需网络访问GitHub）。
+访问 `https://komorebi.141277.xyz`获取并使用作者常用的提示词库（需网络访问GitHub）。
 
 推荐以下MCP平台：
 
@@ -247,7 +247,7 @@ Anywhere，一款功能强大、高效实用的AI助手，旨在为你提供卓�
 [Anywhere 教程](https://github.com/Komorebi-yaodong/Anywhere/blob/main/Tutorial.md)
 
 参考作者使用的提示词（来源于自己设计/网络收集），请访问：
-[Anywhere 提示词（一直更新）](https://komorebi.001412.xyz/post?file=posts%2F5.md)
+[Anywhere 提示词（一直更新）](https://komorebi.141277.xyz/post?file=posts%2F5.md)
 
 ---
 
