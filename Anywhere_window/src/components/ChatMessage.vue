@@ -780,11 +780,33 @@ html.dark .chat-message .ai-bubble {
     }
 
     :deep(table) {
-      border-color: #373A40;
+      display: block;
+      overflow-x: auto;
+      width: 100%;
+      max-width: 100%;
+      border-spacing: 0;
+      border-collapse: collapse;
+      margin-bottom: 1em;
+      
+      /* 优化表格滚动条样式 */
+      &::-webkit-scrollbar {
+        height: 6px;
+      }
+      &::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      &::-webkit-scrollbar-thumb {
+        background-color: var(--el-text-color-disabled);
+        border-radius: 3px;
+      }
+      &::-webkit-scrollbar-thumb:hover {
+        background-color: var(--el-text-color-secondary);
+      }
     }
 
     :deep(th) {
       background-color: #2c2e33;
+      min-width: 60px;
     }
 
     :deep(tr) {
@@ -798,6 +820,7 @@ html.dark .chat-message .ai-bubble {
 
     :deep(td) {
       border-color: #373A40;
+      min-width: 60px;
     }
 
     :deep(.pre-md) {
