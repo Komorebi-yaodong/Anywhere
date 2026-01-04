@@ -168,6 +168,7 @@ const loadBackground = async (newUrl) => {
             cachedBackgroundBlobUrl.value = newBlobUrl;
         } else {
             // 缓存未命中时，触发后台下载，本次前端仍可能需要回退到网络加载或保持空
+            console.log(`[Background] Cache miss, downloading in background: ${newUrl}`);
             window.api.cacheBackgroundImage(newUrl);
         }
     } catch (e) {
@@ -2946,10 +2947,11 @@ const handleOpenSearch = () => {
 <template>
   <main>
     <div v-if="windowBackgroundImage" class="window-bg-base"></div>
-    <div v-if="windowBackgroundImage" class="window-bg-layer"
+    <div class="window-bg-layer"
+      :class="{ 'is-visible': !!windowBackgroundImage }"
       :style="{ 
-        backgroundImage: `url('${windowBackgroundImage}')`,
-        opacity: windowBackgroundOpacity,
+        backgroundImage: windowBackgroundImage ? `url('${windowBackgroundImage}')` : 'none',
+        opacity: windowBackgroundImage ? windowBackgroundOpacity : 0, 
         filter: `blur(${windowBackgroundBlur}px)` 
       }">
     </div>
@@ -3753,10 +3755,16 @@ html.dark .persistent-btn:hover { background-color: var(--el-fill-color-darker);
   position: fixed;
   top: 0; left: 0; width: 100vw; height: 100vh;
   z-index: 0;
-  background-position: center; background-size: cover; background-repeat: no-repeat;
+  background-position: center; 
+  background-size: cover; 
+  background-repeat: no-repeat;
   pointer-events: none;
-  will-change: transform;
+  will-change: transform, opacity; /* [修改] 增加 opacity 优化 */
   transform: translateZ(0);
+  
+  /* 核心优化：默认透明，且具有过渡效果 */
+  opacity: 0; 
+  transition: opacity 0.4s ease-in-out, filter 0.3s ease; 
 }
 
 .app-container.has-bg,

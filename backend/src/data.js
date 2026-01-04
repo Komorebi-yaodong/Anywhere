@@ -1,4 +1,4 @@
-const webFrame = require('electron').webFrame;
+const { webFrame, nativeImage } = require('electron');
 const crypto = require('crypto');
 const windowMap = new Map();
 const feature_suffix = "anywhere助手^_^"
@@ -975,7 +975,7 @@ function getUrlHash(url) {
 }
 
 /**
- * 获取缓存的背景图片
+ * 获取缓存的背景图片（包含旧数据自动压缩迁移逻辑）
  * @param {string} url 图片原始 URL
  * @returns {Promise<Uint8Array|null>} 返回图片的 Buffer 数据或 null
  */
@@ -989,14 +989,50 @@ async function getCachedBackgroundImage(url) {
     return null;
   }
 
-  // 2. 获取附件
   const attachmentId = cacheDoc.data[hash];
-  const buffer = await utools.db.promises.getAttachment(attachmentId);
+  
+  // 2. 获取附件
+  let buffer = await utools.db.promises.getAttachment(attachmentId);
+  if (!buffer) return null;
+
+  if (buffer.length > 500 * 1024) {
+      // console.log(`[Cache] Image is too large (${(buffer.length/1024/1024).toFixed(2)}MB), compressing...`);
+      try {
+          const image = nativeImage.createFromBuffer(buffer);
+          if (!image.isEmpty()) {
+              const size = image.getSize();
+              // 策略：宽度限制 1920，JPEG 质量 75
+              if (size.width > 1920) {
+                  const newHeight = Math.floor(size.height * (1920 / size.width));
+                  const resizedImage = image.resize({ width: 1920, height: newHeight, quality: 'better' });
+                  buffer = resizedImage.toJPEG(75);
+              } else {
+                  buffer = image.toJPEG(75);
+              }
+
+              (async () => {
+                  try {
+                      // uTools 的 attachment 文档无法直接更新内容，需要删除重建
+                      // 1. 删除旧文档
+                      await utools.db.promises.remove(attachmentId);
+                      // 2. 写入新文档 (ID不变)
+                      await utools.db.promises.postAttachment(attachmentId, buffer, "image/jpeg");
+                      // console.log(`[Cache] Migrated/Compressed image: ${attachmentId}`);
+                  } catch (dbErr) {
+                      console.error("[Cache] Failed to update compressed image to DB:", dbErr);
+                  }
+              })();
+          }
+      } catch (err) {
+          console.warn("[Cache] Failed to compress legacy image, returning original:", err);
+      }
+  }
+
   return buffer;
 }
 
 /**
- * 缓存背景图片
+ * 缓存背景图片（增加压缩逻辑）
  * @param {string} url 图片原始 URL
  */
 async function cacheBackgroundImage(url) {
@@ -1011,31 +1047,51 @@ async function cacheBackgroundImage(url) {
     if (!cacheDoc) {
       cacheDoc = { _id: "background_cache", data: {} };
       await utools.db.promises.put(cacheDoc);
-      cacheDoc = await utools.db.promises.get("background_cache"); // 获取带 rev 的新文档
+      cacheDoc = await utools.db.promises.get("background_cache");
     }
 
     if (cacheDoc.data[hash]) {
-        // 映射存在，检查附件是否真的存在
         const existingBuf = await utools.db.promises.getAttachment(cacheDoc.data[hash]);
-        if (existingBuf) return; // 已存在且有效，无需重复下载
+        if (existingBuf) return; 
     }
 
     // 2. 下载图片
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
     const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    let buffer = Buffer.from(arrayBuffer);
 
-    // 3. 存储附件 (限制 10MB)
+    // 3. [新增] 图片压缩处理
+    try {
+        const image = nativeImage.createFromBuffer(buffer);
+        if (!image.isEmpty()) {
+            const size = image.getSize();
+            // 如果宽度大于 1920，等比缩放
+            if (size.width > 1920) {
+                const newHeight = Math.floor(size.height * (1920 / size.width));
+                const resizedImage = image.resize({ width: 1920, height: newHeight, quality: 'better' });
+                // 转为 JPEG，质量 75，通常能将大图压到几百KB
+                buffer = resizedImage.toJPEG(75);
+            } else {
+                // 即使尺寸不大，也转为 JPEG 75 压缩体积
+                buffer = image.toJPEG(75);
+            }
+        }
+    } catch (compressErr) {
+        console.warn("[Cache] Image compression failed, using original buffer:", compressErr);
+    }
+
+    // 4. 存储附件 (限制 10MB -> 压缩后通常远小于此)
     if (buffer.length > 10 * 1024 * 1024) {
-        console.warn("Background image too large to cache (>10MB):", url);
+        console.warn("Background image too large (>10MB):", url);
         return;
     }
 
-    const attachResult = await utools.db.promises.postAttachment(attachmentId, buffer, response.headers.get("content-type") || "image/png");
+    // 统一存储为 image/jpeg 类型
+    const attachResult = await utools.db.promises.postAttachment(attachmentId, buffer, "image/jpeg");
     
     if (attachResult.ok) {
-        // 4. 更新映射文档 重新获取以避免冲突
+        // 5. 更新映射文档
         cacheDoc = await utools.db.promises.get("background_cache"); 
         cacheDoc.data[hash] = attachmentId;
         await utools.db.promises.put({
@@ -1043,7 +1099,6 @@ async function cacheBackgroundImage(url) {
             data: cacheDoc.data,
             _rev: cacheDoc._rev
         });
-        // console.log(`[Cache] Cached background for ${url}`);
     }
   } catch (error) {
     console.error(`[Cache] Error caching background ${url}:`, error);

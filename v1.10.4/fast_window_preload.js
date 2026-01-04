@@ -158,7 +158,7 @@ var require_input = __commonJS({
 // src/data.js
 var require_data = __commonJS({
   "src/data.js"(exports2, module2) {
-    var webFrame = require("electron").webFrame;
+    var { webFrame, nativeImage } = require("electron");
     var crypto = require("crypto");
     var windowMap = /* @__PURE__ */ new Map();
     var feature_suffix = "anywhere\u52A9\u624B^_^";
@@ -976,7 +976,33 @@ var require_data = __commonJS({
         return null;
       }
       const attachmentId = cacheDoc.data[hash];
-      const buffer = await utools.db.promises.getAttachment(attachmentId);
+      let buffer = await utools.db.promises.getAttachment(attachmentId);
+      if (!buffer) return null;
+      if (buffer.length > 500 * 1024) {
+        try {
+          const image = nativeImage.createFromBuffer(buffer);
+          if (!image.isEmpty()) {
+            const size = image.getSize();
+            if (size.width > 1920) {
+              const newHeight = Math.floor(size.height * (1920 / size.width));
+              const resizedImage = image.resize({ width: 1920, height: newHeight, quality: "better" });
+              buffer = resizedImage.toJPEG(75);
+            } else {
+              buffer = image.toJPEG(75);
+            }
+            (async () => {
+              try {
+                await utools.db.promises.remove(attachmentId);
+                await utools.db.promises.postAttachment(attachmentId, buffer, "image/jpeg");
+              } catch (dbErr) {
+                console.error("[Cache] Failed to update compressed image to DB:", dbErr);
+              }
+            })();
+          }
+        } catch (err) {
+          console.warn("[Cache] Failed to compress legacy image, returning original:", err);
+        }
+      }
       return buffer;
     }
     async function cacheBackgroundImage(url) {
@@ -997,12 +1023,27 @@ var require_data = __commonJS({
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
         const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
+        let buffer = Buffer.from(arrayBuffer);
+        try {
+          const image = nativeImage.createFromBuffer(buffer);
+          if (!image.isEmpty()) {
+            const size = image.getSize();
+            if (size.width > 1920) {
+              const newHeight = Math.floor(size.height * (1920 / size.width));
+              const resizedImage = image.resize({ width: 1920, height: newHeight, quality: "better" });
+              buffer = resizedImage.toJPEG(75);
+            } else {
+              buffer = image.toJPEG(75);
+            }
+          }
+        } catch (compressErr) {
+          console.warn("[Cache] Image compression failed, using original buffer:", compressErr);
+        }
         if (buffer.length > 10 * 1024 * 1024) {
-          console.warn("Background image too large to cache (>10MB):", url);
+          console.warn("Background image too large (>10MB):", url);
           return;
         }
-        const attachResult = await utools.db.promises.postAttachment(attachmentId, buffer, response.headers.get("content-type") || "image/png");
+        const attachResult = await utools.db.promises.postAttachment(attachmentId, buffer, "image/jpeg");
         if (attachResult.ok) {
           cacheDoc = await utools.db.promises.get("background_cache");
           cacheDoc.data[hash] = attachmentId;
