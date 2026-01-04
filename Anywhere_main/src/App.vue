@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, provide } from 'vue'
+import { ref, watch, onMounted, provide, onBeforeUnmount } from 'vue'
 import Chats from './components/Chats.vue'
 import Prompts from './components/Prompts.vue'
 import Mcp from './components/Mcp.vue' // 引入新组件
@@ -27,7 +27,62 @@ watch(() => config.value?.isDarkMode, (isDark) => {
   }
 }, { deep: true }); // [MODIFIED] deep watch might be more robust here
 
+const handleGlobalEsc = (e) => {
+  if (e.key === 'Escape') {
+    // 1. 优先检查图片预览组件 (Image Viewer)
+    const imageViewerCloseBtn = document.querySelector('.el-image-viewer__close');
+    if (imageViewerCloseBtn && window.getComputedStyle(imageViewerCloseBtn).display !== 'none') {
+      e.stopPropagation(); // 阻止 uTools 退出
+      imageViewerCloseBtn.click(); // 手动触发关闭
+      return;
+    }
+
+    // 2. 检查可见的弹窗遮罩层 (Dialog Overlays)
+    const overlays = Array.from(document.querySelectorAll('.el-overlay')).filter(el => {
+      return el.style.display !== 'none' && !el.classList.contains('is-hidden');
+    });
+
+    if (overlays.length > 0) {
+      // 找到层级最高（最上层）的弹窗
+      const topOverlay = overlays.reduce((max, current) => {
+        return (parseInt(window.getComputedStyle(current).zIndex) || 0) >
+               (parseInt(window.getComputedStyle(max).zIndex) || 0) ? current : max;
+      });
+
+      // 阻止 uTools 退出
+      e.stopPropagation();
+
+      // A. 尝试点击右上角的关闭(X)按钮
+      // 同时支持 Dialog 和 MessageBox 的关闭按钮类名
+      const headerBtn = topOverlay.querySelector('.el-dialog__headerbtn, .el-message-box__headerbtn');
+      if (headerBtn) {
+        headerBtn.click();
+        return;
+      }
+
+      // B. 尝试点击底部的取消/关闭按钮
+      // 同时支持 Dialog Footer 和 MessageBox Buttons 容器
+      const footer = topOverlay.querySelector('.el-dialog__footer, .el-message-box__btns');
+      if (footer) {
+        // 特殊处理 Setting.vue 中备份管理的布局 (关闭按钮在 .footer-right)
+        const rightBtn = footer.querySelector('.footer-right .el-button');
+        if (rightBtn) {
+          rightBtn.click();
+          return;
+        }
+        // 通用处理：点击底部第一个按钮 (通常是 取消/Cancel)
+        const buttons = footer.querySelectorAll('.el-button');
+        if (buttons.length > 0) {
+          buttons[0].click();
+          return;
+        }
+      }
+    }
+  }
+};
+
 onMounted(async () => {
+  window.addEventListener('keydown', handleGlobalEsc, true);
   try {
     const result = await window.api.getConfig();
     if (result && result.config) {
@@ -49,6 +104,9 @@ onMounted(async () => {
   }
 });
 
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalEsc, true);
+});
 
 function changeTab(newTab) {
   tab.value = newTab;

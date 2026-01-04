@@ -267,13 +267,15 @@ async function backupToWebdav() {
   try {
     await ElMessageBox({
       title: t('setting.webdav.backup.confirmTitle'),
-      message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--text-secondary);' }, t('setting.webdav.backup.confirmMessage')),
+      // 修改处：增加容器 Flex 居中样式，增加 P 标签文字居中，限制 Input 宽度
+      message: () => h('div', { style: 'display: flex; flex-direction: column; align-items: center; width: 100%;' }, [
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--text-secondary); text-align: center; width: 100%;' }, t('setting.webdav.backup.confirmMessage')),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
           placeholder: t('setting.webdav.backup.inputFilename'),
           autofocus: true,
+          style: 'width: 100%; max-width: 400px;'
         }, {
           append: () => h('div', { class: 'input-suffix-display' }, '.json')
         })
@@ -282,6 +284,7 @@ async function backupToWebdav() {
       confirmButtonText: t('common.confirm'),
       cancelButtonText: t('common.cancel'),
       customClass: 'filename-prompt-dialog',
+      center: true, // 修改处：开启 Element Plus 弹窗居中模式
       beforeClose: async (action, instance, done) => {
         if (action === 'confirm') {
           let finalBasename = inputValue.value.trim();
