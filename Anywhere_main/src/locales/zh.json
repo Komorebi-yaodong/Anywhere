@@ -389,7 +389,8 @@
       "label": "主题",
       "description": "浅色模式或深色模式",
       "dark": "深色",
-      "light": "浅色"
+      "light": "浅色",
+      "system": "跟随系统"
     },
     "fixPosition": {
       "label": "固定窗口位置",

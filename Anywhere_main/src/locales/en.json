@@ -389,7 +389,8 @@
       "label": "Theme",
       "description": "Light mode or dark mode",
       "dark": "Dark",
-      "light": "Light"
+      "light": "Light",
+      "system": "Follow System"
     },
     "fixPosition": {
       "label": "Fix Window Position",

@@ -336,6 +336,10 @@ var require_data = __commonJS({
         config.providerOrder.unshift("0");
         flag = true;
       }
+      if (config.themeMode === void 0 && config.isDarkMode !== void 0) {
+        config.themeMode = config.isDarkMode ? "dark" : "light";
+        flag = true;
+      }
       const obsoleteKeys = [
         "window_width",
         "window_height",
@@ -369,6 +373,7 @@ var require_data = __commonJS({
         mcpServers: {},
         tags: {},
         isDarkMode: false,
+        themeMode: "system",
         fastWindowPosition: null,
         // 直接引用 defaultConfig 中的完整列表，避免代码冗长
         voiceList: defaultConfig.config.voiceList || []

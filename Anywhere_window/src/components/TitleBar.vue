@@ -37,7 +37,7 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
     
     <!-- 1. 左侧区域 -->
     <div class="left-container">
-      <!-- macOS 红绿灯 (加粗、无位移版) -->
+      <!-- macOS 红绿灯 -->
       <div v-if="isMac" class="window-controls mac-traffic-lights no-drag">
         <!-- 关闭 (使用 CloseBold 更粗) -->
         <div class="traffic-btn close" @click="emit('close')">
@@ -54,7 +54,6 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
       </div>
 
       <!-- App 信息 -->
-      <!-- [修改] 添加 @dblclick.stop="emit('maximize')" -->
       <div class="app-info no-drag" @click="emit('save-window-size')" @dblclick.stop="emit('maximize')">
         <el-tooltip content="点击保存当前窗口大小与位置 / 双击全屏" placement="bottom" :show-after="500">
           <div class="app-info-inner">
@@ -67,9 +66,8 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
       <div class="divider-vertical"></div>
 
       <!-- 对话名称 -->
-      <!-- [修改] 添加 @dblclick.stop="emit('maximize')" -->
       <div class="conversation-info no-drag" @click="emit('save-session')" @dblclick.stop="emit('maximize')">
-        <el-tooltip content="点击保存会话 / 双击全屏" placement="bottom" :show-after="500">
+        <el-tooltip content="点击保存会话" placement="bottom" :show-after="500">
           <div class="conversation-inner">
             <span class="conversation-title">{{ displayConversationName }}</span>
             <el-icon class="download-icon"><Download /></el-icon>
@@ -158,7 +156,6 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
 .left-container {
   display: flex;
   align-items: center;
-  /* 关键修改：取消 flex: 1，防止左侧容器无限撑大占满拖拽区 */
   /* flex: 1; */ 
   flex-shrink: 1; /* 允许收缩 */
   min-width: 0;

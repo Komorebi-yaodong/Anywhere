@@ -81,13 +81,36 @@ const handleGlobalEsc = (e) => {
   }
 };
 
+const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+const handleSystemThemeChange = (e) => {
+  // 只有当设置为 "system" 时才响应
+  if (config.value?.themeMode === 'system') {
+    const isDark = e.matches;
+    if (config.value.isDarkMode !== isDark) {
+      config.value.isDarkMode = isDark;
+      // 同步更新到数据库，确保独立窗口打开时也是正确的颜色
+      if (window.api && window.api.saveSetting) {
+        window.api.saveSetting('isDarkMode', isDark);
+      }
+    }
+  }
+};
+
 onMounted(async () => {
   window.addEventListener('keydown', handleGlobalEsc, true);
+  mediaQuery.addEventListener('change', handleSystemThemeChange);
   try {
     const result = await window.api.getConfig();
     if (result && result.config) {
       const baseConfig = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
       config.value = Object.assign({}, baseConfig, result.config);
+      if (config.value.themeMode === 'system') {
+        const systemDark = mediaQuery.matches;
+        if (config.value.isDarkMode !== systemDark) {
+          config.value.isDarkMode = systemDark;
+          window.api.saveSetting('isDarkMode', systemDark);
+        }
+      }
     } else {
       config.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
     }
@@ -96,7 +119,7 @@ onMounted(async () => {
     config.value = JSON.parse(JSON.stringify(window.api.defaultConfig.config));
   }
 
-  // [NEW] Immediately apply dark mode on mount
+  // Immediately apply dark mode on mount
   if (config.value?.isDarkMode) {
     document.documentElement.classList.add('dark');
   } else {
@@ -106,6 +129,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleGlobalEsc, true);
+  mediaQuery.removeEventListener('change', handleSystemThemeChange);
 });
 
 function changeTab(newTab) {

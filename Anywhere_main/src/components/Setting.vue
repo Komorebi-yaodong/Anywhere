@@ -183,6 +183,28 @@ function importConfig() {
   input.click();
 }
 
+async function handleThemeChange(mode) {
+  if (!currentConfig.value) return;
+  
+  // 1. 保存用户选择的模式
+  await saveSingleSetting('themeMode', mode);
+  
+  // 2. 计算实际的布尔值
+  let newIsDarkMode = currentConfig.value.isDarkMode;
+  
+  if (mode === 'system') {
+    // 检测系统当前主题
+    newIsDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } else if (mode === 'dark') {
+    newIsDarkMode = true;
+  } else {
+    newIsDarkMode = false;
+  }
+  
+  // 3. 更新本地状态并保存布尔值（为了兼容旧逻辑和其他窗口）
+  currentConfig.value.isDarkMode = newIsDarkMode;
+  await saveSingleSetting('isDarkMode', newIsDarkMode);
+}
 
 // --- Voice Management (使用 saveFullConfig 因为它修改的是一个数组) ---
 const addNewVoice = () => {
@@ -538,8 +560,16 @@ async function selectLocalChatPath() {
               <span class="setting-option-label">{{ t('setting.darkMode.label') }}</span>
               <span class="setting-option-description">{{ t('setting.darkMode.description') }}</span>
             </div>
-            <el-switch v-model="currentConfig.isDarkMode" @change="(value) => saveSingleSetting('isDarkMode', value)"
-              inline-prompt :active-text="t('setting.darkMode.dark')" :inactive-text="t('setting.darkMode.light')" />
+            <el-select 
+              v-model="currentConfig.themeMode" 
+              @change="handleThemeChange" 
+              size="default" 
+              style="width: 120px;"
+            >
+              <el-option :label="t('setting.darkMode.system')" value="system"></el-option>
+              <el-option :label="t('setting.darkMode.light')" value="light"></el-option>
+              <el-option :label="t('setting.darkMode.dark')" value="dark"></el-option>
+            </el-select>
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">

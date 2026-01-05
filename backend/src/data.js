@@ -234,6 +234,7 @@ function checkConfig(config) {
     mcpServers: {},
     tags: {},
     isDarkMode: false,
+    themeMode: "system",
     fastWindowPosition: null,
     // 直接引用 defaultConfig 中的完整列表，避免代码冗长
     voiceList: defaultConfig.config.voiceList || [] 

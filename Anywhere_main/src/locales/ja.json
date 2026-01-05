@@ -389,7 +389,8 @@
       "label": "テーマ",
       "description": "ライトモードまたはダークモード",
       "dark": "ダーク",
-      "light": "ライト"
+      "light": "ライト",
+      "system": "システムに従う"
     },
     "fixPosition": {
       "label": "ウィンドウ位置を固定",
