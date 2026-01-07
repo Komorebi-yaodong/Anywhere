@@ -38,8 +38,10 @@ const preprocessKatex = (text) => {
   // 3. 将 \( ... \) 转换为 $ ... $ (行内公式)
   processedText = processedText.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$');
 
-  // 4. 修复可能存在的转义问题，例如 \\tag 变成 \tag
-  // processedText = processedText.replace(/\\\\tag/g, '\\tag');
+  // 4. 修复 LaTeX \tag{} 导致渲染失败或换行的问题
+  // 将 \tag{...} 替换为 \qquad \text{(...)} 进行模拟显示
+  // \qquad 添加间距，\text{(...)} 显示带括号的标签文本
+  processedText = processedText.replace(/(?<!\\)\\tag\s*\{([^{}]+)\}/g, '\\qquad \\text{($1)}');
 
   return processedText;
 };
