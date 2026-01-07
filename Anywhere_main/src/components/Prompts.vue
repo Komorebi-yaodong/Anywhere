@@ -745,11 +745,11 @@ async function refreshPromptsConfig() {
       currentConfig.value = latestConfigData.config;
       ElMessage.success(t('prompts.alerts.refreshSuccess'));
     } else {
-      throw new Error("未能获取到有效的配置数据。");
+      throw new Error(t('prompts.alerts.configInvalid'));
     }
   } catch (error) {
     console.error("刷新配置失败:", error);
-    ElMessage.error('刷新配置失败，请稍后重试。');
+    ElMessage.error(t('prompts.alerts.refreshFailed'));
   }
 }
 </script>
@@ -869,7 +869,6 @@ async function refreshPromptsConfig() {
                   @drop.prevent="handleIconDrop" @dragover.prevent>
                   <template v-if="editingPrompt.icon">
                     <el-avatar :src="editingPrompt.icon" shape="square" :size="64" class="uploaded-icon-avatar" />
-                    <!-- [修改] 添加点击事件，阻止冒泡，点击时打开编辑器 -->
                     <div class="icon-hover-mask" @click.stop.prevent="openIconEditor(editingPrompt.icon)">
                       <el-icon>
                         <Edit />
@@ -882,8 +881,8 @@ async function refreshPromptsConfig() {
                         <UploadFilled />
                       </el-icon>
                       <div class="icon-upload-text"
-                        style="font-size: 10px; margin-top: 4px; color: var(--text-tertiary); line-height: 1.2;">
-                        <span v-html="t('prompts.icon.uploadText')"></span>
+                        style="font-size: 10px; margin-top: 4px; color: var(--text-tertiary); line-height: 1.2; white-space: pre-line;">
+                        {{ t('prompts.icon.uploadText') }}
                       </div>
                     </div>
                   </template>
@@ -1296,7 +1295,6 @@ async function refreshPromptsConfig() {
   margin-bottom: 0;
 }
 
-/* START: 滚动条样式修正 */
 .tags-tabs-container :deep(.el-tabs__nav-wrap) {
   overflow-x: auto;
   padding-bottom: 8px;
@@ -1326,8 +1324,6 @@ async function refreshPromptsConfig() {
   scrollbar-width: thin;
   scrollbar-color: var(--border-primary) transparent;
 }
-
-/* END: 滚动条样式修正 */
 
 .tags-tabs-container :deep(.el-tabs__nav-prev),
 .tags-tabs-container :deep(.el-tabs__nav-next) {
@@ -1850,12 +1846,20 @@ html.dark .canvas-wrapper {
   margin-bottom: 0;
 }
 
+:deep(.el-dialog__body) {
+  padding: 15px 20px 10px 20px !important;
+}
+
+:deep(.el-dialog__footer) {
+  padding: 5px;
+}
+
 .dimensions-group-row :deep(.el-form-item__label) {
   margin-bottom: 6px !important;
 }
 
-:deep(.edit-prompt-dialog .el-dialog__header) {
-  padding: 15px 24px !important;
+:deep(.el-dialog__header) {
+  padding: 5px !important;
 }
 
 .prompt-dialog-scrollbar :deep(.el-scrollbar__view) {

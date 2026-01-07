@@ -117,7 +117,7 @@
     "inputPlaceholder": "请输入提示词内容...",
     "selectNewModel": "请选择新的模型",
     "icon": {
-      "uploadText": "拖拽/粘贴<br>点击上传",
+      "uploadText": "拖拽/粘贴\n点击上传",
       "downloadTooltip": "下载图标",
       "removeTooltip": "移除图标"
     },
@@ -329,6 +329,19 @@
       "modelId": "模型 ID",
       "ownedBy": "所有者",
       "action": "操作"
+    },
+    "folders": {
+      "createSuccess": "目录创建成功",
+      "renameSuccess": "目录重命名成功",
+      "deleteSuccess": "目录已删除",
+      "deleteConfirmTitle": "删除确认",
+      "deleteConfirmMessage": "确定要删除此目录吗？内部的服务商将移动到根目录。",
+      "root": "根目录",
+      "empty": "(空)",
+      "newFolderTitle": "新建目录",
+      "renameFolderTitle": "重命名目录",
+      "folderNameLabel": "目录名称",
+      "folderNamePlaceholder": "请输入名称"
     },
     "noModelsFoundError": "未找到模型或 API 错误",
     "noModelsMatchSearch": "未找到匹配的模型",

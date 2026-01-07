@@ -177,6 +177,7 @@ var require_data = __commonJS({
           }
         },
         providerOrder: ["0"],
+        providerFolders: {},
         prompts: {
           AI: {
             type: "over",
@@ -336,10 +337,6 @@ var require_data = __commonJS({
         config.providerOrder.unshift("0");
         flag = true;
       }
-      if (config.themeMode === void 0 && config.isDarkMode !== void 0) {
-        config.themeMode = config.isDarkMode ? "dark" : "light";
-        flag = true;
-      }
       const obsoleteKeys = [
         "window_width",
         "window_height",
@@ -370,6 +367,7 @@ var require_data = __commonJS({
         fix_position: false,
         zoom: 1,
         language: "zh",
+        providerFolders: {},
         mcpServers: {},
         tags: {},
         isDarkMode: false,
@@ -476,6 +474,10 @@ var require_data = __commonJS({
           }
           if (prov.enable === void 0) {
             prov.enable = true;
+            flag = true;
+          }
+          if (prov.folderId === void 0) {
+            prov.folderId = "";
             flag = true;
           }
         }

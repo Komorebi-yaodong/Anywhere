@@ -117,7 +117,7 @@
     "inputPlaceholder": "Введите содержание подсказки...",
     "selectNewModel": "Выберите новую модель",
     "icon": {
-      "uploadText": "Перетащите/Вставьте<br>Нажмите для загрузки",
+      "uploadText": "Перетащите/Вставьте\nНажмите для загрузки",
       "downloadTooltip": "Скачать иконку",
       "removeTooltip": "Удалить иконку"
     },
@@ -329,6 +329,19 @@
       "modelId": "ID модели",
       "ownedBy": "Владелец",
       "action": "Действие"
+    },
+    "folders": {
+      "createSuccess": "Папка успешно создана",
+      "renameSuccess": "Папка успешно переименована",
+      "deleteSuccess": "Папка удалена",
+      "deleteConfirmTitle": "Подтверждение удаления",
+      "deleteConfirmMessage": "Вы уверены, что хотите удалить эту папку? Находящиеся в ней поставщики услуг будут перемещены в корневой каталог.",
+      "root": "Корневой каталог",
+      "empty": "(пусто)",
+      "newFolderTitle": "Новая папка",
+      "renameFolderTitle": "Переименовать папку",
+      "folderNameLabel": "Имя папки",
+      "folderNamePlaceholder": "Введите имя"
     },
     "noModelsFoundError": "Модели не найдены или ошибка API.",
     "noModelsMatchSearch": "Соответствующие модели не найдены.",

@@ -28,9 +28,19 @@ const editedContent = ref('');
 const preprocessKatex = (text) => {
   if (!text) return '';
   let processedText = text;
+  
+  // 1. 替换非标准连字符
   processedText = processedText.replace(/\u2013/g, '-').replace(/\u2014/g, '-');
-  processedText = processedText.replace(/\\$$([\s\S]*?)\\$$/g, '$$$$$1$$$$');
-  processedText = processedText.replace(/\\$\s*(.*?)\s*\\$/g, '$$$1$');
+  
+  // 2. 将 \[ ... \] 转换为 $$ ... $$ (块级公式)
+  processedText = processedText.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
+  
+  // 3. 将 \( ... \) 转换为 $ ... $ (行内公式)
+  processedText = processedText.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$');
+
+  // 4. 修复可能存在的转义问题，例如 \\tag 变成 \tag
+  // processedText = processedText.replace(/\\\\tag/g, '\\tag');
+
   return processedText;
 };
 

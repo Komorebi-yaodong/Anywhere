@@ -20,6 +20,7 @@ const defaultConfig = {
       },
     },
     providerOrder: ["0",],
+    providerFolders: {}, 
     prompts: {
       AI: {
         type: "over",
@@ -231,6 +232,7 @@ function checkConfig(config) {
     fix_position: false,
     zoom: 1,
     language: "zh",
+    providerFolders: {}, 
     mcpServers: {},
     tags: {},
     isDarkMode: false,
@@ -315,6 +317,7 @@ function checkConfig(config) {
       if (prov.modelSelect !== undefined) { delete prov.modelSelect; flag = true; }
       if (prov.modelListByUser !== undefined) { delete prov.modelListByUser; flag = true; }
       if (prov.enable === undefined) { prov.enable = true; flag = true; }
+      if (prov.folderId === undefined) { prov.folderId = ""; flag = true; }
     }
   }
 

@@ -2,14 +2,14 @@
   "app": {
     "header": {
       "chats": "Chats 💬",
-      "prompts": "Quick Prompts 🚀",
+      "prompts": "Agent Prompts 🚀",
       "mcp": "MCP Servers 🔧",
       "providers": "Providers ☁️",
       "settings": "Settings ⚙️"
     },
     "tabs": {
       "chats": "Chat History",
-      "prompts": "Quick Prompts",
+      "prompts": "Agent Prompts",
       "mcp": "MCP Servers",
       "providers": "Providers",
       "settings": "Settings"
@@ -117,7 +117,7 @@
     "inputPlaceholder": "Enter prompt content...",
     "selectNewModel": "Please select a new model",
     "icon": {
-      "uploadText": "Drag/Paste<br>Click to Upload",
+      "uploadText": "Drag/Paste\nClick to Upload",
       "downloadTooltip": "Download Icon",
       "removeTooltip": "Remove Icon"
     },
@@ -186,7 +186,7 @@
       "invalidImageFormat": "Invalid image format. Please use {formats}.",
       "imageSizeTooLarge": "Image size exceeds {maxSize}.",
       "modelsReplacedSuccess": "Successfully replaced the model for {count} prompts.",
-      "refreshSuccess": "Quick Prompts configuration has been refreshed!",
+      "refreshSuccess": "Agent Prompts configuration has been refreshed!",
       "noIconToDownload": "No icon available to download.",
       "selectModels": "Please select source and target models.",
       "sameModels": "Source and target models cannot be the same.",
@@ -329,6 +329,19 @@
       "modelId": "Model ID",
       "ownedBy": "Owned By",
       "action": "Action"
+    },
+    "folders": {
+      "createSuccess": "Directory created successfully",
+      "renameSuccess": "Directory renamed successfully",
+      "deleteSuccess": "Directory deleted",
+      "deleteConfirmTitle": "Confirm Deletion",
+      "deleteConfirmMessage": "Are you sure you want to delete this directory? Providers inside will move to root.",
+      "root": "Root",
+      "empty": "(Empty)",
+      "newFolderTitle": "New Directory",
+      "renameFolderTitle": "Rename Directory",
+      "folderNameLabel": "Directory Name",
+      "folderNamePlaceholder": "Enter name"
     },
     "noModelsFoundError": "No models found or API error.",
     "noModelsMatchSearch": "No models match search.",
