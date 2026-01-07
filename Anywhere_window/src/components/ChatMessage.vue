@@ -38,9 +38,17 @@ const preprocessKatex = (text) => {
   // 3. 将 \( ... \) 转换为 $ ... $ (行内公式)
   processedText = processedText.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$');
 
-  // 4. 修复 LaTeX \tag{} 导致渲染失败或换行的问题
-  // 将 \tag{...} 替换为 \qquad \text{(...)} 进行模拟显示
-  // \qquad 添加间距，\text{(...)} 显示带括号的标签文本
+  // 4. 将 {align} 和 {equation} 替换为 {aligned}
+  // KaTeX 在 $$...$$ 内部通常不支持 align 环境（它是顶级环境）。
+  // 使用 aligned 环境可以完美解决渲染问题，同时配合下方的 \tag 模拟显示。
+  processedText = processedText.replace(/\\begin\{align\*?\}/g, '\\begin{aligned}');
+  processedText = processedText.replace(/\\end\{align\*?\}/g, '\\end{aligned}');
+  processedText = processedText.replace(/\\begin\{equation\*?\}/g, '\\begin{aligned}');
+  processedText = processedText.replace(/\\end\{equation\*?\}/g, '\\end{aligned}');
+
+  // 5. 模拟 LaTeX \tag{} 显示
+  // 由于 aligned 环境不支持原生 \tag，或者 Markdown 渲染器会吞掉反斜杠，
+  // 将其替换为右侧间距 + 文本的形式： \qquad \text{(...)}
   processedText = processedText.replace(/(?<!\\)\\tag\s*\{([^{}]+)\}/g, '\\qquad \\text{($1)}');
 
   return processedText;
