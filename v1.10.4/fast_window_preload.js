@@ -64504,6 +64504,20 @@ var require_mcp_builtin = __commonJS({
             },
             required: ["code"]
           }
+        },
+        {
+          name: "run_python_file",
+          description: "Execute a local Python script file. Supports setting working directory and arguments.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              file_path: { type: "string", description: "Absolute path to the .py file." },
+              working_directory: { type: "string", description: "Optional. The directory to execute the script in. If not provided, defaults to the file's directory." },
+              interpreter: { type: "string", description: "Optional. Path to specific python executable." },
+              args: { type: "array", items: { type: "string" }, description: "Optional. Command line arguments to pass to the script." }
+            },
+            required: ["file_path"]
+          }
         }
       ],
       "builtin_filesystem": [
@@ -64638,6 +64652,52 @@ ${output}`);
       },
       run_python_code: async ({ code, interpreter }) => {
         return await runPythonScript(code, interpreter);
+      },
+      // [新增] 执行本地 Python 文件处理逻辑
+      run_python_file: async ({ file_path, working_directory, interpreter, args = [] }) => {
+        return new Promise(async (resolve, reject2) => {
+          const cleanPath = file_path.replace(/^["']|["']$/g, "");
+          if (!fs.existsSync(cleanPath)) {
+            return resolve(`Error: Python file not found at ${cleanPath}`);
+          }
+          let pythonPath = interpreter;
+          if (!pythonPath) {
+            const paths = await findAllPythonPaths();
+            pythonPath = paths.length > 0 ? paths[0] : isWin ? "python" : "python3";
+          }
+          const cwd = working_directory ? working_directory.replace(/^["']|["']$/g, "") : path.dirname(cleanPath);
+          if (!fs.existsSync(cwd)) {
+            return resolve(`Error: Working directory not found at ${cwd}`);
+          }
+          const scriptArgs = Array.isArray(args) ? args : [args];
+          const spawnArgs = [cleanPath, ...scriptArgs];
+          const env2 = { ...process.env, PYTHONIOENCODING: "utf-8" };
+          const child = spawn(pythonPath, spawnArgs, { cwd, env: env2 });
+          let output = "";
+          let errorOutput = "";
+          child.stdout.on("data", (data) => {
+            output += data.toString();
+          });
+          child.stderr.on("data", (data) => {
+            errorOutput += data.toString();
+          });
+          child.on("close", (code) => {
+            const header = `[Executed: ${path.basename(cleanPath)}]
+[CWD: ${cwd}]
+-------------------
+`;
+            if (code === 0) {
+              resolve(header + (output || "Execution completed with no output."));
+            } else {
+              resolve(`${header}Error (Exit Code ${code}):
+${errorOutput}
+${output}`);
+            }
+          });
+          child.on("error", (err) => {
+            resolve(`Execution failed to start: ${err.message}`);
+          });
+        });
       },
       // Filesystem (Local + URL)
       read_file: async ({ file_path }) => {
