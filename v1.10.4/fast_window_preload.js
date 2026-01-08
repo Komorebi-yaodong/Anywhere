@@ -64213,7 +64213,7 @@ ${csvData}
     };
     var fileHandlers = {
       text: {
-        extensions: [".txt", ".md", ".markdown", ".json", ".xml", ".html", ".css", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".php", ".rb", ".rs", ".sh", ".sql", ".vue"],
+        extensions: [".txt", ".md", ".markdown", ".json", ".xml", ".html", ".css", ".csv", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".php", ".rb", ".rs", ".sh", ".sql", ".vue", ".tex", ".latex", ".bib", ".sty", ".yaml", ".yml", ".ini", ".bat", ".log", ".toml"],
         handler: async (file) => ({ type: "text", text: `file name:${file.name}
 file content:${await parseTextFile(file.url)}
 file end` })
@@ -64225,7 +64225,7 @@ file content:${await parseWord(file.url)}
 file end` })
       },
       excel: {
-        extensions: [".xlsx", ".xls", ".csv"],
+        extensions: [".xlsx", ".xls"],
         handler: async (file) => ({ type: "text", text: `file name:${file.name}
 file content:${await parseExcel(file.url)}
 file end` })
@@ -64286,7 +64286,6 @@ file end` })
       ".css": "text/css",
       ".csv": "text/csv",
       ".py": "text/plain",
-      // 或 'application/x-python'
       ".js": "application/javascript",
       ".ts": "application/typescript",
       ".java": "text/x-java-source",
@@ -64302,9 +64301,21 @@ file end` })
       ".sh": "application/x-sh",
       ".sql": "application/sql",
       ".vue": "text/plain",
+      ".tex": "text/x-tex",
+      ".latex": "text/x-tex",
+      ".bib": "text/plain",
+      ".sty": "text/plain",
+      ".yaml": "text/yaml",
+      ".yml": "text/yaml",
+      ".ini": "text/plain",
+      ".toml": "text/plain",
+      ".bat": "text/plain",
+      ".log": "text/plain",
       // 文档
       ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       ".pdf": "application/pdf",
+      ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ".xls": "application/vnd.ms-excel",
       // 图片
       ".png": "image/png",
       ".jpg": "image/jpeg",
@@ -65348,9 +65359,9 @@ var require_data = __commonJS({
           if (prompt.type === "general") {
             expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
             expectedMatchFeature.cmds.push({ type: "img", label: key });
-            expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+            expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue|tex|latex|bib|sty|yaml|yml|ini|bat|log|toml)$/i" });
           } else if (prompt.type === "files") {
-            expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue)$/i" });
+            expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue|tex|latex|bib|sty|yaml|yml|ini|bat|log|toml)$/i" });
           } else if (prompt.type === "img") {
             expectedMatchFeature.cmds.push({ type: "img", label: key });
           } else if (prompt.type === "over") {

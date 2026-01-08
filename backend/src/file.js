@@ -39,7 +39,7 @@ const parseExcel = async (base64Data) => {
 // Centralized file handling configuration
 const fileHandlers = {
   text: {
-    extensions: ['.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.php', '.rb', '.rs', '.sh', '.sql', '.vue'],
+    extensions: ['.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css','.csv', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.php', '.rb', '.rs', '.sh', '.sql', '.vue', '.tex', '.latex', '.bib', '.sty', '.yaml', '.yml', '.ini', '.bat', '.log', '.toml'],
     handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseTextFile(file.url)}\nfile end` })
   },
   docx: {
@@ -47,7 +47,7 @@ const fileHandlers = {
     handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseWord(file.url)}\nfile end` })
   },
   excel: {
-    extensions: ['.xlsx', '.xls', '.csv'],
+    extensions: ['.xlsx', '.xls'],
     handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseExcel(file.url)}\nfile end` })
   },
   image: {
@@ -132,7 +132,7 @@ const extensionToMimeType = {
     '.html': 'text/html',
     '.css': 'text/css',
     '.csv': 'text/csv',
-    '.py': 'text/plain', // 或 'application/x-python'
+    '.py': 'text/plain', 
     '.js': 'application/javascript',
     '.ts': 'application/typescript',
     '.java': 'text/x-java-source',
@@ -148,10 +148,22 @@ const extensionToMimeType = {
     '.sh': 'application/x-sh',
     '.sql': 'application/sql',
     '.vue': 'text/plain',
+    '.tex': 'text/x-tex',
+    '.latex': 'text/x-tex',
+    '.bib': 'text/plain',
+    '.sty': 'text/plain',
+    '.yaml': 'text/yaml',
+    '.yml': 'text/yaml',
+    '.ini': 'text/plain',
+    '.toml': 'text/plain',
+    '.bat': 'text/plain',
+    '.log': 'text/plain',
 
     // 文档
     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     '.pdf': 'application/pdf',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xls': 'application/vnd.ms-excel',
 
     // 图片
     '.png': 'image/png',
