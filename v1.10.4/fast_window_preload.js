@@ -64655,6 +64655,21 @@ ${output}`);
         });
       });
     };
+    var isPathSafe = (targetPath) => {
+      const forbiddenPatterns = [
+        /[\\/]\.ssh[\\/]/i,
+        /[\\/]\.aws[\\/]/i,
+        /[\\/]\.env/i,
+        /[\\/]\.gitconfig/i,
+        /id_rsa/i,
+        /authorized_keys/i,
+        /\/etc\/shadow/i,
+        /\/etc\/passwd/i,
+        /C:\\Windows\\System32\\config/i
+        // Windows SAM hive
+      ];
+      return !forbiddenPatterns.some((regex) => regex.test(targetPath));
+    };
     var handlers = {
       // Python
       list_python_interpreters: async () => {
@@ -64664,7 +64679,6 @@ ${output}`);
       run_python_code: async ({ code, interpreter }) => {
         return await runPythonScript(code, interpreter);
       },
-      // [新增] 执行本地 Python 文件处理逻辑
       run_python_file: async ({ file_path, working_directory, interpreter, args = [] }) => {
         return new Promise(async (resolve, reject2) => {
           const cleanPath = file_path.replace(/^["']|["']$/g, "");
@@ -64740,7 +64754,14 @@ ${output}`);
             }
           } else {
             file_path = file_path.replace(/^["']|["']$/g, "");
+            if (!isPathSafe(file_path)) {
+              return `[Security Block] Access to sensitive system file '${path.basename(file_path)}' is restricted.`;
+            }
             if (!fs.existsSync(file_path)) return `Error: File not found at ${file_path}`;
+            const stats = await fs.promises.stat(file_path);
+            if (stats.size > 50 * 1024 * 1024) {
+              return `Error: File is too large (${(stats.size / 1024 / 1024).toFixed(2)}MB). Max limit is 50MB.`;
+            }
             const fileObj = await handleFilePath(file_path);
             if (!fileObj) return `Error: Unable to access or read file at ${file_path}`;
             const arrayBuffer = await fileObj.arrayBuffer();
@@ -64771,6 +64792,24 @@ Content extraction is currently NOT supported for this file type.
       execute_bash_command: async ({ command }) => {
         return new Promise((resolve) => {
           const trimmedCmd = command.trim();
+          const dangerousPatterns = [
+            /^rm\s+(-rf|-r|-f)\s+\/$/i,
+            // rm -rf /
+            />\s*\/dev\/sd/i,
+            // 写入设备
+            /mkfs/i,
+            /dd\s+/i,
+            /wget\s+/i,
+            // 防止下载木马
+            /curl\s+.*\|\s*sh/i,
+            // 管道执行网络脚本
+            /chmod\s+777/i,
+            /cat\s+.*id_rsa/i
+            // 读取私钥
+          ];
+          if (dangerousPatterns.some((p) => p.test(trimmedCmd))) {
+            return resolve(`[Security Block] The command contains potentially destructive operations and has been blocked.`);
+          }
           if (trimmedCmd.startsWith("cd ")) {
             let targetDir = trimmedCmd.substring(3).trim();
             targetDir = targetDir.replace(/^["']|["']$/g, "");
@@ -64791,7 +64830,6 @@ Content extraction is currently NOT supported for this file type.
             encoding: "utf-8",
             maxBuffer: 1024 * 1024 * 5,
             timeout: 15e3
-            // 15s timeout
           };
           let finalCommand = command;
           let shellToUse;

@@ -211,8 +211,25 @@ const runPythonScript = (code, interpreter) => {
     });
 };
 
-// --- Execution Handlers ---
+// 安全检查辅助函数
+const isPathSafe = (targetPath) => {
+    // 基础黑名单：SSH密钥、AWS凭证、环境变量文件、Git配置、系统Shadow文件
+    const forbiddenPatterns = [
+        /[\\/]\.ssh[\\/]/i,
+        /[\\/]\.aws[\\/]/i,
+        /[\\/]\.env/i,
+        /[\\/]\.gitconfig/i,
+        /id_rsa/i,
+        /authorized_keys/i,
+        /\/etc\/shadow/i,
+        /\/etc\/passwd/i,
+        /C:\\Windows\\System32\\config/i // Windows SAM hive
+    ];
+    
+    return !forbiddenPatterns.some(regex => regex.test(targetPath));
+};
 
+// --- Execution Handlers ---
 const handlers = {
     // Python
     list_python_interpreters: async () => {
@@ -222,38 +239,28 @@ const handlers = {
     run_python_code: async ({ code, interpreter }) => {
         return await runPythonScript(code, interpreter);
     },
-    // [新增] 执行本地 Python 文件处理逻辑
     run_python_file: async ({ file_path, working_directory, interpreter, args = [] }) => {
         return new Promise(async (resolve, reject) => {
-            // 1. 验证文件路径
-            // 移除可能存在的引号
             const cleanPath = file_path.replace(/^["']|["']$/g, '');
             if (!fs.existsSync(cleanPath)) {
                 return resolve(`Error: Python file not found at ${cleanPath}`);
             }
 
-            // 2. 确定解释器
             let pythonPath = interpreter;
             if (!pythonPath) {
                 const paths = await findAllPythonPaths();
                 pythonPath = paths.length > 0 ? paths[0] : (isWin ? 'python' : 'python3');
             }
 
-            // 3. 确定工作目录 (优先使用传入的目录，否则使用文件所在目录)
             const cwd = working_directory ? working_directory.replace(/^["']|["']$/g, '') : path.dirname(cleanPath);
             if (!fs.existsSync(cwd)) {
                  return resolve(`Error: Working directory not found at ${cwd}`);
             }
 
-            // 4. 准备参数
-            // 确保 args 是数组
             const scriptArgs = Array.isArray(args) ? args : [args];
             const spawnArgs = [cleanPath, ...scriptArgs];
-
-            // 5. 设置环境编码
             const env = { ...process.env, PYTHONIOENCODING: 'utf-8' };
 
-            // 6. 执行
             const child = spawn(pythonPath, spawnArgs, { cwd, env });
 
             let output = "";
@@ -282,9 +289,8 @@ const handlers = {
         try {
             let fileForHandler;
 
-            // --- 1. 判断是 URL 还是本地文件 ---
             if (file_path.startsWith('http://') || file_path.startsWith('https://')) {
-                // 处理 URL
+                // 处理 URL (保持原逻辑)
                 try {
                     const response = await fetch(file_path);
                     if (!response.ok) {
@@ -296,10 +302,7 @@ const handlers = {
                     const base64String = buffer.toString('base64');
                     const contentType = response.headers.get('content-type');
 
-                    // 尝试从 URL 路径获取文件名
                     let filename = path.basename(new URL(file_path).pathname);
-                    
-                    // 如果 URL 中没有后缀，尝试从 Content-Type 推断
                     if (!filename || !filename.includes('.')) {
                         const ext = getExtensionFromContentType(contentType) || '.txt';
                         filename = `downloaded_file${ext}`;
@@ -317,10 +320,20 @@ const handlers = {
                 }
             } else {
                 // 处理本地文件
-                // 如果路径包含引号，去除之（防止用户从终端复制路径带引号）
                 file_path = file_path.replace(/^["']|["']$/g, '');
                 
+                // 安全检查
+                if (!isPathSafe(file_path)) {
+                    return `[Security Block] Access to sensitive system file '${path.basename(file_path)}' is restricted.`;
+                }
+                
                 if (!fs.existsSync(file_path)) return `Error: File not found at ${file_path}`;
+
+                // 大文件检查 (限制 50MB)
+                const stats = await fs.promises.stat(file_path);
+                if (stats.size > 50 * 1024 * 1024) {
+                    return `Error: File is too large (${(stats.size / 1024 / 1024).toFixed(2)}MB). Max limit is 50MB.`;
+                }
 
                 const fileObj = await handleFilePath(file_path);
                 if (!fileObj) return `Error: Unable to access or read file at ${file_path}`;
@@ -337,7 +350,6 @@ const handlers = {
                 };
             }
 
-            // --- 2. 调用通用解析逻辑 (处理 Word, Excel, Text) ---
             const result = await parseFileObject(fileForHandler);
 
             if (!result) return "Error: Unsupported file type or parsing failed.";
@@ -346,8 +358,6 @@ const handlers = {
                 return result.text;
             } 
             else {
-                // [安全拦截] 任何返回 type: 'file' (包含base64) 或 'image_url' 的结果
-                // 都被拦截并替换为文本提示，防止 Base64 数据发送给 AI
                 const typeInfo = result.type === 'image_url' ? 'Image' : 'Binary/PDF';
                 return `[System] File '${fileForHandler.name}' detected as ${typeInfo}. \nContent extraction is currently NOT supported for this file type. \n(Binary data suppressed to protect context window).`;
             }
@@ -361,6 +371,22 @@ const handlers = {
     execute_bash_command: async ({ command }) => {
         return new Promise((resolve) => {
             const trimmedCmd = command.trim();
+
+            // [新增] 高危命令简单拦截
+            const dangerousPatterns = [
+                /^rm\s+(-rf|-r|-f)\s+\/$/i, // rm -rf /
+                />\s*\/dev\/sd/i,     // 写入设备
+                /mkfs/i, 
+                /dd\s+/i,
+                /wget\s+/i,           // 防止下载木马
+                /curl\s+.*\|\s*sh/i,  // 管道执行网络脚本
+                /chmod\s+777/i,
+                /cat\s+.*id_rsa/i     // 读取私钥
+            ];
+            
+            if (dangerousPatterns.some(p => p.test(trimmedCmd))) {
+                return resolve(`[Security Block] The command contains potentially destructive operations and has been blocked.`);
+            }
 
             if (trimmedCmd.startsWith('cd ')) {
                 let targetDir = trimmedCmd.substring(3).trim();
@@ -383,7 +409,7 @@ const handlers = {
                 cwd: bashCwd,
                 encoding: 'utf-8',
                 maxBuffer: 1024 * 1024 * 5,
-                timeout: 15000 // 15s timeout
+                timeout: 15000 
             };
 
             let finalCommand = command;

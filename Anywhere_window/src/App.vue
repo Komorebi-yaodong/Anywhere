@@ -2354,10 +2354,14 @@ Here are the rules you should always follow to solve your task:
         </audio>
         \`\`\`
 6. **Language**: All Respond must be in the user's language
+7. **Security & Safety**: Tools must be executed securely, and the invocation of any commands that could lead to system damage, data loss, or sensitive privacy disclosure is strictly prohibited.
+    1.  **Comprehensive Risk Assessment**: Identify whether the operation involves sensitive data or irreversible data modification.
+    2.  **Mandatory Warning Prompts**: For any risky operation, clear and detailed warnings must be issued to the user before execution, explaining potential consequences (e.g., exposure of sensitive information, data loss).
+    3.  **Seek Explicit Confirmation**: Before executing irreversible or high-risk operations (e.g., deleting files, reading sensitive files), explicit secondary confirmation from the user must be required.
 `;
         const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
         if (systemMessageIndex !== -1) {
-          if (!messagesForThisRequest[systemMessageIndex].content.includes("##工具调用声明")) {
+          if (!messagesForThisRequest[systemMessageIndex].content.includes("## Tool Use Rules")) {
             messagesForThisRequest[systemMessageIndex].content += mcpSystemPrompt;
           }
         } else {
