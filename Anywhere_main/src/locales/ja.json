@@ -251,7 +251,8 @@
     "typeOptions": {
       "stdio": "Stdio",
       "http": "ストリーミングHTTP",
-      "sse": "SSE"
+      "sse": "SSE",
+      "builtin": "組み込み"
     },
     "stdio": {
       "command": "コマンド",

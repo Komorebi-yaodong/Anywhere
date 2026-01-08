@@ -251,7 +251,8 @@
     "typeOptions": {
       "stdio": "Stdio",
       "http": "Потоковый HTTP",
-      "sse": "SSE"
+      "sse": "SSE",
+      "builtin": "Встроенный"
     },
     "stdio": {
       "command": "Команда",

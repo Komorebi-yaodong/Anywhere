@@ -251,7 +251,8 @@
     "typeOptions": {
       "stdio": "Stdio",
       "http": "可流式 HTTP",
-      "sse": "SSE"
+      "sse": "SSE",
+      "builtin": "内置"
     },
     "stdio": {
       "command": "命令",

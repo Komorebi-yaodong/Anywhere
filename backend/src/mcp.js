@@ -1,4 +1,5 @@
 const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
+const { getBuiltinTools, invokeBuiltinTool } = require('./mcp_builtin.js');
 
 const PERSISTENT_CONNECTION_LIMIT = 5; // uTools 限制最多5个持久连接
 const ON_DEMAND_CONCURRENCY_LIMIT = 5; // 非持久连接的并发限制
@@ -21,6 +22,11 @@ function normalizeTransportType(transport) {
  * 包含 10s 超时和强制关闭逻辑
  */
 async function connectAndFetchTools(id, config) {
+  // [拦截] 内置类型直接返回定义的工具列表
+  if (config.transport === 'builtin' || config.type === 'builtin') {
+      return getBuiltinTools(id); 
+  }
+
   // console.log(`[MCP] Connecting to ${id} (${config.transport})...`);
   let tempClient = null;
   const controller = new AbortController();
@@ -103,8 +109,10 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
   const onDemandToConnect = [];
   
   for (const { id, config } of onDemandConfigsToAdd) {
-    // 检查缓存: 必须存在且为非空数组
-    if (cachedToolsMap && cachedToolsMap[id] && Array.isArray(cachedToolsMap[id]) && cachedToolsMap[id].length > 0) {
+    const isBuiltin = config.transport === 'builtin' || config.type === 'builtin';
+
+    // 如果是内置服务，强制跳过缓存，确保读取代码中的最新定义
+    if (!isBuiltin && cachedToolsMap && cachedToolsMap[id] && Array.isArray(cachedToolsMap[id]) && cachedToolsMap[id].length > 0) {
       // console.log(`[MCP] Cache HIT for non-persistent server: ${config.name || id}`);
       const tools = cachedToolsMap[id];
       tools.forEach(tool => {
@@ -113,16 +121,17 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
           description: tool.description,
           isPersistent: false,
           serverConfig: { id, ...config },
+          isBuiltin: false
         });
       });
       currentlyConnectedServerIds.add(id);
     } else {
-      // console.log(`[MCP] Cache MISS for non-persistent server: ${config.name || id}. Will fetch.`);
+      // console.log(`[MCP] Cache MISS (or Built-in refresh) for server: ${config.name || id}. Will fetch.`);
       onDemandToConnect.push({ id, config });
     }
   }
 
-  // 对无缓存的非持久化服务进行连接获取
+  // 对无缓存(或内置)的非持久化服务进行连接获取
   if (onDemandToConnect.length > 0) {
     const pool = new Set();
     const allTasks = [];
@@ -131,9 +140,10 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
       const taskPromise = (async () => {
         try {
           // 复用 connectAndFetchTools 来获取工具并自动关闭连接
+          // connectAndFetchTools 已修改支持 builtin
           const tools = await connectAndFetchTools(id, config);
           
-          // [新增] 自动缓存逻辑
+          // [新增] 自动缓存逻辑 (仅对非内置服务有意义，但为了保持逻辑一致性，内置服务也写入缓存也没坏处，虽然下次读取会跳过)
           if (saveCacheCallback && typeof saveCacheCallback === 'function') {
              const sanitizedTools = tools.map(tool => ({
                 name: tool.name,
@@ -145,12 +155,15 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
              saveCacheCallback(id, cleanTools).catch(e => console.error(`[MCP] Auto-cache failed for ${id}:`, e));
           }
 
+          const isBuiltin = config.transport === 'builtin' || config.type === 'builtin';
+
           tools.forEach(tool => {
             fullToolInfoMap.set(tool.name, {
               schema: tool.schema || tool.inputSchema,
               description: tool.description,
               isPersistent: false,
               serverConfig: { id, ...config },
+              isBuiltin: isBuiltin // [标记内置]
             });
           });
           currentlyConnectedServerIds.add(id);
@@ -175,6 +188,28 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
   // --- 步骤 3: 处理需要持久化的连接 (必须建立真实连接) ---
   if (persistentConfigsToAdd.length > 0) {
     for (const { id, config } of persistentConfigsToAdd) {
+      // [拦截] 内置且持久化的服务 (如 Bash)
+      if (config.transport === 'builtin' || config.type === 'builtin') {
+          try {
+              // 对于内置服务，直接获取工具列表，不需要建立真实 Socket 连接
+              const tools = getBuiltinTools(id);
+              tools.forEach(tool => {
+                  fullToolInfoMap.set(tool.name, {
+                      schema: tool.schema || tool.inputSchema,
+                      description: tool.description,
+                      isPersistent: true,
+                      serverConfig: { id, ...config },
+                      isBuiltin: true // [标记内置]
+                  });
+              });
+              currentlyConnectedServerIds.add(id);
+          } catch (e) {
+              failedServerIds.push(id);
+          }
+          continue; // 跳过 MultiServerMCPClient 创建
+      }
+
+      // 常规持久化 MCP
       if (persistentClients.size >= PERSISTENT_CONNECTION_LIMIT) {
         console.error(`[MCP Debug] Persistent server '${config.name}' not connected due to connection limit (${PERSISTENT_CONNECTION_LIMIT}).`);
         failedServerIds.push(id);
@@ -187,7 +222,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
         const client = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } });
         const tools = await client.getTools();
 
-        // [新增] 持久化连接也顺便更新缓存，保证缓存是最新的
+        // 持久化连接也顺便更新缓存
         if (saveCacheCallback && typeof saveCacheCallback === 'function') {
              const sanitizedTools = tools.map(tool => ({
                 name: tool.name,
@@ -205,6 +240,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
             description: tool.description,
             isPersistent: true,
             serverConfig: { id, ...config },
+            isBuiltin: false
           });
         });
         persistentClients.set(id, client); // 存储客户端实例
@@ -246,6 +282,11 @@ async function invokeMcpTool(toolName, toolArgs, signal) {
   const toolInfo = fullToolInfoMap.get(toolName);
   if (!toolInfo) {
     throw new Error(`Tool "${toolName}" not found or its server is not available.`);
+  }
+
+  // [拦截] 内置工具调用
+  if (toolInfo.isBuiltin) {
+      return await invokeBuiltinTool(toolName, toolArgs);
   }
 
   if (toolInfo.isPersistent && toolInfo.instance) {

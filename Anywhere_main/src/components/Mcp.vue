@@ -93,6 +93,8 @@ function getDisplayTypeName(type) {
     const streamableHttpRegex = /^streamable[\s_-]?http$/i;
     const lowerType = type.toLowerCase();
 
+    if (lowerType === 'builtin') return t('mcp.typeOptions.builtin');
+
     if (streamableHttpRegex.test(lowerType) || lowerType === 'http') {
         return t('mcp.typeOptions.http');
     }
@@ -421,15 +423,14 @@ async function triggerConnectionTest(server) {
                                         getDisplayTypeName(server.type) }}</el-tag>
                                     <el-tag v-for="tag in server.tags" :key="tag" size="small">{{ tag }}</el-tag>
                                 </div>
-                                <!-- 持久连接开关已移除 -->
                                 <div class="mcp-actions">
                                     <el-tooltip :content="t('mcp.testConnectionTooltip')" placement="top">
                                         <el-button :icon="Link" text circle @click="handleTestClick(server)"
                                             class="action-btn-compact" />
                                     </el-tooltip>
-                                    <el-button :icon="Edit" text circle @click="prepareEditServer(server)"
+                                    <el-button v-if="server.type !== 'builtin'" :icon="Edit" text circle @click="prepareEditServer(server)"
                                         class="action-btn-compact" />
-                                    <el-button :icon="Delete" text circle type="danger"
+                                    <el-button v-if="server.type !== 'builtin'" :icon="Delete" text circle type="danger"
                                         @click="deleteServer(server.id, server.name)" class="action-btn-compact" />
                                     <el-button :icon="CopyDocument" text circle @click="copyServerJson(server)"
                                         class="action-btn-compact" />

@@ -13,6 +13,8 @@
   "dependencies": {
     "@langchain/mcp-adapters": "^1.0.0",
     "mammoth": "^1.11.0",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.530",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
