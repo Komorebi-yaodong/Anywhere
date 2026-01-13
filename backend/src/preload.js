@@ -88,6 +88,7 @@ window.api = {
         args: serverConfig.args,
         url: serverConfig.baseUrl,
         env: serverConfig.env,
+        headers: serverConfig.headers,
       });
       
       const sanitizedTools = rawTools.map(tool => ({

@@ -337,6 +337,7 @@ async function triggerConnectionTest(server) {
         command: server.command,
         baseUrl: server.baseUrl,
         env: typeof server.env === 'string' ? convertTextToObject(server.env) : server.env,
+        headers: typeof server.headers === 'string' ? convertTextToObject(server.headers) : server.headers,
         args: Array.isArray(server.args) ? server.args : convertTextToLines(server.args)
     };
 
@@ -453,7 +454,7 @@ async function triggerConnectionTest(server) {
 
         <!-- 编辑弹窗 (保持不变) -->
         <el-dialog v-model="showEditDialog" :title="isNewServer ? t('mcp.addServerTitle') : t('mcp.editServerTitle')"
-            width="700px" :close-on-click-modal="false" top="5vh">
+            width="700px" :close-on-click-modal="false">
             <el-scrollbar max-height="50vh" class="mcp-dialog-scrollbar">
                 <el-form :model="editingServer" label-position="top" @submit.prevent="saveServer">
                     <el-row :gutter="20">
@@ -559,7 +560,7 @@ async function triggerConnectionTest(server) {
 
         <!-- JSON 编辑弹窗 (保持不变) -->
         <el-dialog v-model="showJsonDialog" :title="t('mcp.jsonDialog.title')" width="700px"
-            :close-on-click-modal="false" top="5vh" custom-class="mcp-json-dialog">
+            :close-on-click-modal="false" custom-class="mcp-json-dialog">
             <el-alert :title="t('mcp.jsonDialog.description')" type="warning" show-icon :closable="false"
                 style="margin-bottom: 15px;" />
             <el-scrollbar max-height="50vh" class="json-editor-scrollbar">
@@ -572,7 +573,7 @@ async function triggerConnectionTest(server) {
         </el-dialog>
 
         <!-- 测试结果弹窗 -->
-        <el-dialog v-model="showTestResultDialog" width="600px" append-to-body top="5vh" class="test-result-dialog">
+        <el-dialog v-model="showTestResultDialog" width="600px" append-to-body class="test-result-dialog">
             <template #header>
                 <div class="test-dialog-header">
                     <span class="dialog-title">{{ `连接测试: ${testResult.serverName}` }}</span>

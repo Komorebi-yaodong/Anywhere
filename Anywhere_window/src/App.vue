@@ -2103,6 +2103,7 @@ async function applyMcpTools(show_none = true) {
         args: serverConf.args,
         url: serverConf.baseUrl,
         env: serverConf.env,
+        headers: serverConf.headers,
         isPersistent: serverConf.isPersistent,
       };
     }
