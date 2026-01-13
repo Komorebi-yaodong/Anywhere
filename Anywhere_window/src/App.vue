@@ -119,9 +119,9 @@ const cachedBackgroundBlobUrl = ref("");
 const windowBackgroundImage = computed(() => {
   // 1. 如果有缓存的 Blob，直接使用
   if (cachedBackgroundBlobUrl.value) {
-      return cachedBackgroundBlobUrl.value;
+    return cachedBackgroundBlobUrl.value;
   }
-  
+
   // 2. 否则使用配置中的 URL
   if (!CODE.value || !currentConfig.value?.prompts) return "";
   const promptConfig = currentConfig.value.prompts[CODE.value];
@@ -141,46 +141,46 @@ const windowBackgroundBlur = computed(() => {
 });
 
 const loadBackground = async (newUrl) => {
-    // 如果 URL 为空，清理缓存
-    if (!newUrl) {
-        if (cachedBackgroundBlobUrl.value) {
-            if (cachedBackgroundBlobUrl.value.startsWith('blob:')) {
-                URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
-            }
-            cachedBackgroundBlobUrl.value = "";
-        }
-        return;
+  // 如果 URL 为空，清理缓存
+  if (!newUrl) {
+    if (cachedBackgroundBlobUrl.value) {
+      if (cachedBackgroundBlobUrl.value.startsWith('blob:')) {
+        URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
+      }
+      cachedBackgroundBlobUrl.value = "";
     }
+    return;
+  }
 
-    // data协议或本地文件不走缓存逻辑
-    if (newUrl.startsWith('data:') || newUrl.startsWith('file:')) return;
+  // data协议或本地文件不走缓存逻辑
+  if (newUrl.startsWith('data:') || newUrl.startsWith('file:')) return;
 
-    try {
-        const buffer = await window.api.getCachedBackgroundImage(newUrl);
-        if (buffer) {
-            const blob = new Blob([buffer]);
-            const newBlobUrl = URL.createObjectURL(blob);
-            
-            // 释放旧的 Blob URL
-            if (cachedBackgroundBlobUrl.value && cachedBackgroundBlobUrl.value.startsWith('blob:')) {
-                URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
-            }
-            cachedBackgroundBlobUrl.value = newBlobUrl;
-        } else {
-            // 缓存未命中时，触发后台下载，本次前端仍可能需要回退到网络加载或保持空
-            console.log(`[Background] Cache miss, downloading in background: ${newUrl}`);
-            window.api.cacheBackgroundImage(newUrl);
-        }
-    } catch (e) {
-        console.error("Failed to load cached background:", e);
+  try {
+    const buffer = await window.api.getCachedBackgroundImage(newUrl);
+    if (buffer) {
+      const blob = new Blob([buffer]);
+      const newBlobUrl = URL.createObjectURL(blob);
+
+      // 释放旧的 Blob URL
+      if (cachedBackgroundBlobUrl.value && cachedBackgroundBlobUrl.value.startsWith('blob:')) {
+        URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
+      }
+      cachedBackgroundBlobUrl.value = newBlobUrl;
+    } else {
+      // 缓存未命中时，触发后台下载，本次前端仍可能需要回退到网络加载或保持空
+      console.log(`[Background] Cache miss, downloading in background: ${newUrl}`);
+      window.api.cacheBackgroundImage(newUrl);
     }
+  } catch (e) {
+    console.error("Failed to load cached background:", e);
+  }
 };
 
 watch(() => {
-    if (!CODE.value || !currentConfig.value?.prompts) return null;
-    return currentConfig.value.prompts[CODE.value]?.backgroundImage;
+  if (!CODE.value || !currentConfig.value?.prompts) return null;
+  return currentConfig.value.prompts[CODE.value]?.backgroundImage;
 }, async (newUrl) => {
-    await loadBackground(newUrl);
+  await loadBackground(newUrl);
 }, { immediate: false });
 
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
@@ -622,7 +622,7 @@ const handleCopyImageFromViewer = (url) => {
       });
 
       await new Promise(resolve => setTimeout(resolve, 50));
-      
+
       await window.api.copyImage(base64Data);
       showDismissibleMessage.success('图片已复制到剪贴板');
 
@@ -889,7 +889,7 @@ onMounted(async () => {
     const code = data?.code || "AI";
     const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
     if (currentPromptConfig.backgroundImage) {
-        loadBackground(currentPromptConfig.backgroundImage); 
+      loadBackground(currentPromptConfig.backgroundImage);
     }
     isAlwaysOnTop.value = data?.isAlwaysOnTop ?? currentPromptConfig.isAlwaysOnTop ?? true;
     zoomLevel.value = currentPromptConfig.zoom || currentConfig.value.zoom || 1;
@@ -2622,13 +2622,46 @@ Here are the rules you should always follow to solve your task:
         aiName: modelMap.value[model.value] || model.value.split('|')[1], voiceName: selectedVoice.value
       });
     }
-    if (chat_show.value[errorBubbleIndex].reasoning_content) {
+    const currentBubble = chat_show.value[errorBubbleIndex];
+    if (chat_show.value[errorBubbleIndex].reasoning_content && currentBubble.status === 'thinking') {
       chat_show.value[errorBubbleIndex].status = "error";
     }
-    chat_show.value[errorBubbleIndex].content = [{ type: "text", text: `${errorDisplay}` }];
+    // 1. 尝试获取已生成的文本内容
+    let existingText = "";
+    if (currentBubble.content && Array.isArray(currentBubble.content)) {
+      existingText = currentBubble.content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('');
+    } else if (typeof currentBubble.content === 'string') {
+      existingText = currentBubble.content;
+    }
 
-    // 将错误消息同步到主 history 数组
-    history.value.push({ role: 'assistant', content: `${errorDisplay}` });
+    if (existingText && existingText.trim().length > 0) {
+      // 情况 A: AI 已经回复了部分内容，中途报错
+      // 使用引用块格式追加错误信息，使其与正文区分，保持美观
+      const combinedText = `${existingText}\n\n> **Error**: ${errorDisplay}`;
+
+      // 更新 UI 显示
+      currentBubble.content = [{ type: "text", text: combinedText }];
+
+      // 同步到历史记录 (确保保存会话时包含部分生成的内容)
+      history.value.push({
+        role: 'assistant',
+        content: combinedText,
+        reasoning_content: currentBubble.reasoning_content || null
+      });
+    } else {
+      // 情况 B: AI 尚未回复内容，直接报错
+      currentBubble.content = [{ type: "text", text: `${errorDisplay}` }];
+
+      // 同步到历史记录
+      history.value.push({
+        role: 'assistant',
+        content: `${errorDisplay}`,
+        reasoning_content: currentBubble.reasoning_content || null
+      });
+    }
 
   } finally {
     loading.value = false;
@@ -2640,7 +2673,7 @@ Here are the rules you should always follow to solve your task:
     scrollToBottom();
     chatInputRef.value?.focus({ cursor: 'end' });
 
-    // [修复-新增] AI 回复结束或出错后，立即触发一次自动保存
+    // AI 回复结束或出错后，立即触发一次自动保存
     autoSaveSession();
   }
 };
@@ -2955,13 +2988,11 @@ const handleOpenSearch = () => {
 <template>
   <main>
     <div v-if="windowBackgroundImage" class="window-bg-base"></div>
-    <div class="window-bg-layer"
-      :class="{ 'is-visible': !!windowBackgroundImage }"
-      :style="{ 
-        backgroundImage: windowBackgroundImage ? `url('${windowBackgroundImage}')` : 'none',
-        opacity: windowBackgroundImage ? windowBackgroundOpacity : 0, 
-        filter: `blur(${windowBackgroundBlur}px)` 
-      }">
+    <div class="window-bg-layer" :class="{ 'is-visible': !!windowBackgroundImage }" :style="{
+      backgroundImage: windowBackgroundImage ? `url('${windowBackgroundImage}')` : 'none',
+      opacity: windowBackgroundImage ? windowBackgroundOpacity : 0,
+      filter: `blur(${windowBackgroundBlur}px)`
+    }">
     </div>
     <el-container class="app-container" :class="{ 'has-bg': !!windowBackgroundImage }">
       <TitleBar :favicon="favicon" :promptName="CODE" :conversationName="defaultConversationName"
@@ -3669,8 +3700,8 @@ html.dark .app-container {
   scroll-behavior: smooth;
   background-color: transparent !important;
   scrollbar-gutter: stable;
-  will-change: scroll-position; 
-  transform: translateZ(0); 
+  will-change: scroll-position;
+  transform: translateZ(0);
 }
 
 .scroll-to-bottom-wrapper {
@@ -3710,50 +3741,122 @@ html.dark .scroll-nav-btn {
   background-color: var(--bg-tertiary);
   border-color: var(--border-primary);
   color: var(--text-primary);
-  &:hover { background-color: var(--bg-secondary); }
+
+  &:hover {
+    background-color: var(--bg-secondary);
+  }
 }
 
-.custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: var(--el-text-color-disabled, #c0c4cc);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--el-text-color-secondary, #909399); }
 
-html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #6b6b6b; background-clip: content-box; }
-html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #999; background-clip: content-box; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--el-text-color-secondary, #909399);
+}
 
-.mcp-dialog-footer { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-.mcp-limit-hint { font-size: 12px; color: var(--el-color-warning); }
-.mcp-limit-hint.warning { color: var(--el-color-danger); font-weight: bold; }
-.footer-left-controls { display: flex; align-items: center; }
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #6b6b6b;
+  background-clip: content-box;
+}
+
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #999;
+  background-clip: content-box;
+}
+
+.mcp-dialog-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.mcp-limit-hint {
+  font-size: 12px;
+  color: var(--el-color-warning);
+}
+
+.mcp-limit-hint.warning {
+  color: var(--el-color-danger);
+  font-weight: bold;
+}
+
+.footer-left-controls {
+  display: flex;
+  align-items: center;
+}
 
 :deep(.image-error-container) {
-  display: inline-flex; align-items: center; gap: 8px; padding: 10px 15px;
-  border: 1px dashed var(--el-border-color); border-radius: 8px;
-  background-color: var(--el-fill-color-light); color: var(--el-text-color-secondary);
-  cursor: pointer; transition: all 0.2s ease; font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 15px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 8px;
+  background-color: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
 }
-:deep(.image-error-container:hover) { border-color: var(--el-color-primary); color: var(--el-color-primary); background-color: var(--el-color-primary-light-9); }
-:deep(.image-error-container svg) { width: 24px; height: 24px; flex-shrink: 0; }
 
-.persistent-btn { color: var(--el-text-color-secondary); width: 28px; height: 28px; }
-.persistent-btn:hover { color: var(--el-color-primary); background-color: var(--el-color-primary-light-9); }
-html.dark .persistent-btn:hover { background-color: var(--el-fill-color-darker); }
-.persistent-btn.is-persistent-active { color: #67C23A; }
-.persistent-btn.is-persistent-active:hover { background-color: rgba(103, 194, 58, 0.1); }
+:deep(.image-error-container:hover) {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+:deep(.image-error-container svg) {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.persistent-btn {
+  color: var(--el-text-color-secondary);
+  width: 28px;
+  height: 28px;
+}
+
+.persistent-btn:hover {
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+html.dark .persistent-btn:hover {
+  background-color: var(--el-fill-color-darker);
+}
+
+.persistent-btn.is-persistent-active {
+  color: #67C23A;
+}
+
+.persistent-btn.is-persistent-active:hover {
+  background-color: rgba(103, 194, 58, 0.1);
+}
 
 .window-bg-base {
   position: fixed;
-  top: 0; 
-  left: 0; 
-  width: 100vw; 
+  top: 0;
+  left: 0;
+  width: 100vw;
   height: 100vh;
   z-index: 0;
-  background-color: var(--el-bg-color); 
+  background-color: var(--el-bg-color);
   transition: background-color 0.3s ease;
   pointer-events: none;
   will-change: background-color;
@@ -3761,18 +3864,22 @@ html.dark .persistent-btn:hover { background-color: var(--el-fill-color-darker);
 
 .window-bg-layer {
   position: fixed;
-  top: 0; left: 0; width: 100vw; height: 100vh;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
   z-index: 0;
-  background-position: center; 
-  background-size: cover; 
+  background-position: center;
+  background-size: cover;
   background-repeat: no-repeat;
   pointer-events: none;
-  will-change: transform, opacity; /* [修改] 增加 opacity 优化 */
+  will-change: transform, opacity;
+  /* [修改] 增加 opacity 优化 */
   transform: translateZ(0);
-  
+
   /* 核心优化：默认透明，且具有过渡效果 */
-  opacity: 0; 
-  transition: opacity 0.4s ease-in-out, filter 0.3s ease; 
+  opacity: 0;
+  transition: opacity 0.4s ease-in-out, filter 0.3s ease;
 }
 
 .app-container.has-bg,
@@ -3795,6 +3902,7 @@ body .app-container.has-bg {
   // border: 1px solid rgba(255, 255, 255, 0.5);
   // box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 }
+
 .app-container.has-bg :deep(.chat-input-area-vertical .el-textarea__inner) {
   background-color: transparent !important;
 }
@@ -3806,19 +3914,21 @@ html.dark .app-container.has-bg :deep(.chat-input-area-vertical) {
 }
 
 html.dark .app-container.has-bg :deep(.title-bar) {
+
   /* 强制功能按钮（Pin, Top）和 Mac红绿灯图标变亮 */
   .func-btn,
   .traffic-icon {
     color: rgba(255, 255, 255, 0.9) !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); /* 增加文字阴影提高对比度 */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    /* 增加文字阴影提高对比度 */
   }
-  
+
   .func-btn:hover {
     background-color: rgba(255, 255, 255, 0.15);
   }
 
   /* 强制 Windows/Linux 窗口控制按钮变亮 */
-  .win-btn, 
+  .win-btn,
   .linux-btn {
     color: rgba(255, 255, 255, 0.9) !important;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
@@ -3828,13 +3938,13 @@ html.dark .app-container.has-bg :deep(.title-bar) {
   .linux-btn:hover {
     background-color: rgba(255, 255, 255, 0.15);
   }
-  
+
   /* Windows 关闭按钮悬浮仍保持红色 */
   .win-btn.close:hover {
     background-color: #E81123 !important;
     color: white !important;
   }
-  
+
   /* Linux 关闭按钮悬浮仍保持红色 */
   .linux-btn.close:hover {
     background-color: #E95420 !important;
@@ -3842,15 +3952,18 @@ html.dark .app-container.has-bg :deep(.title-bar) {
   }
 
   /* 标题和文字颜色增强 */
-  .app-title, .conversation-title, .download-icon {
+  .app-title,
+  .conversation-title,
+  .download-icon {
     color: rgba(255, 255, 255, 0.95);
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   }
-  
-  .app-info-inner:hover, .conversation-inner:hover {
+
+  .app-info-inner:hover,
+  .conversation-inner:hover {
     background-color: rgba(255, 255, 255, 0.15);
   }
-  
+
   .divider-vertical {
     background-color: rgba(255, 255, 255, 0.3);
   }
@@ -3863,6 +3976,7 @@ html.dark .app-container.has-bg :deep(.title-bar) {
   border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
 }
+
 .app-container.has-bg :deep(.el-dialog__header),
 .app-container.has-bg :deep(.el-dialog__body),
 .app-container.has-bg :deep(.el-dialog__footer),
@@ -3884,6 +3998,7 @@ html.dark .app-container.has-bg :deep(.el-message-box) {
   background-color: rgba(240, 240, 240, 0.45) !important;
   backdrop-filter: none !important;
 }
+
 html.dark .app-container.has-bg :deep(.el-dialog .el-textarea__inner),
 html.dark .app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
   background-color: rgba(20, 20, 20, 0.45) !important;
@@ -3895,6 +4010,7 @@ html.dark .app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
   backdrop-filter: none !important;
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
+
 .app-container.has-bg :deep(.model-pill:hover) {
   background-color: #fff;
 }
@@ -3903,12 +4019,14 @@ html.dark .app-container.has-bg :deep(.model-pill) {
   background-color: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
+
 html.dark .app-container.has-bg :deep(.model-pill:hover) {
   background-color: rgba(0, 0, 0, 0.7);
 }
 
 .app-container.has-bg :deep(.user-bubble .el-bubble-content) {
-  background-color: rgba(245, 244, 237, 0.7) !important; /* 用户指定 */
+  background-color: rgba(245, 244, 237, 0.7) !important;
+  /* 用户指定 */
   backdrop-filter: none !important;
   border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -3916,7 +4034,8 @@ html.dark .app-container.has-bg :deep(.model-pill:hover) {
 
 /* AI 气泡 */
 .app-container.has-bg :deep(.ai-bubble .el-bubble-content) {
-  background-color: rgba(255, 255, 255, 0.45) !important; /* 用户指定 */
+  background-color: rgba(255, 255, 255, 0.45) !important;
+  /* 用户指定 */
   backdrop-filter: none !important;
   border: 1px solid rgba(255, 255, 255, 0.45);
   /* 用户指定 Padding */
@@ -3940,6 +4059,7 @@ html.dark .app-container.has-bg :deep(.ai-bubble .el-bubble-content) {
   background-color: rgba(255, 255, 255, 0.6);
   backdrop-filter: none !important;
 }
+
 .app-container.has-bg :deep(.footer-actions .el-button.is-circle:hover) {
   background-color: #fff;
 }
@@ -3948,6 +4068,7 @@ html.dark .app-container.has-bg :deep(.footer-actions .el-button.is-circle) {
   background-color: rgba(0, 0, 0, 0.5);
   color: #e0e0e0;
 }
+
 html.dark .app-container.has-bg :deep(.footer-actions .el-button.is-circle:hover) {
   background-color: rgba(60, 60, 60, 1);
 }
@@ -3957,6 +4078,7 @@ html.dark .app-container.has-bg :deep(.footer-actions .el-button.is-circle:hover
   background-color: rgba(255, 255, 255, 0.7) !important;
   backdrop-filter: none !important;
 }
+
 .app-container.has-bg :deep(.el-thinking .content pre) {
   background-color: rgba(255, 255, 255, 0.3) !important;
 }
@@ -3964,6 +4086,7 @@ html.dark .app-container.has-bg :deep(.footer-actions .el-button.is-circle:hover
 html.dark .app-container.has-bg :deep(.el-thinking .trigger) {
   background-color: rgba(44, 46, 51, 0.7) !important;
 }
+
 html.dark .app-container.has-bg :deep(.el-thinking .content pre) {
   background-color: rgba(0, 0, 0, 0.3) !important;
 }
@@ -3973,10 +4096,12 @@ html.dark .app-container.has-bg :deep(.el-thinking .content pre) {
   backdrop-filter: none !important;
   border-color: rgba(255, 255, 255, 0.2);
 }
+
 .app-container.has-bg :deep(.tool-collapse .el-collapse-item__wrap) {
   background-color: transparent !important;
   border-color: rgba(255, 255, 255, 0.2);
 }
+
 .app-container.has-bg :deep(.tool-call-details .tool-detail-section pre) {
   background-color: rgba(255, 255, 255, 0.7) !important;
 }
@@ -3985,9 +4110,11 @@ html.dark .app-container.has-bg :deep(.tool-collapse .el-collapse-item__header) 
   background-color: rgba(0, 0, 0, 0.7) !important;
   border-color: rgba(255, 255, 255, 0.1);
 }
+
 html.dark .app-container.has-bg :deep(.tool-collapse .el-collapse-item__wrap) {
   border-color: rgba(255, 255, 255, 0.1);
 }
+
 html.dark .app-container.has-bg :deep(.tool-call-details .tool-detail-section pre) {
   background-color: rgba(0, 0, 0, 0.5) !important;
   border-color: rgba(255, 255, 255, 0.05);

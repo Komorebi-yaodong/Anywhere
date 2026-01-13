@@ -617,7 +617,7 @@ const apiKeyCount = computed(() => {
                 </div>
 
                 <!-- 文件夹位置选择器 -->
-                <el-form-item :label="t('providers.folders.root')">
+                <el-form-item :label="t('providers.folders.floder_label')">
                   <div class="folder-selector">
                     <el-radio-group :model-value="selectedProvider.folderId || ''" @change="set_provider_folder"
                       size="small">

@@ -337,6 +337,7 @@
       "deleteSuccess": "Directory deleted",
       "deleteConfirmTitle": "Confirm Deletion",
       "deleteConfirmMessage": "Are you sure you want to delete this directory? Providers inside will move to root.",
+      "floder_label": "Folder",
       "root": "Root",
       "empty": "(Empty)",
       "newFolderTitle": "New Directory",

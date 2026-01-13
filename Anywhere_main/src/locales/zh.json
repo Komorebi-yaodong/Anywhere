@@ -337,6 +337,7 @@
       "deleteSuccess": "目录已删除",
       "deleteConfirmTitle": "删除确认",
       "deleteConfirmMessage": "确定要删除此目录吗？内部的服务商将移动到根目录。",
+      "floder_label": "目录",
       "root": "根目录",
       "empty": "(空)",
       "newFolderTitle": "新建目录",

@@ -337,6 +337,7 @@
       "deleteSuccess": "フォルダを削除しました",
       "deleteConfirmTitle": "削除の確認",
       "deleteConfirmMessage": "このフォルダを削除しますか？中のサービスプロバイダーはルートディレクトリに移動されます。",
+      "floder_label": "フォルダ",
       "root": "ルートディレクトリ",
       "empty": "(空)",
       "newFolderTitle": "新規フォルダ",
