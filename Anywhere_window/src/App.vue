@@ -57,6 +57,10 @@ const isForcingScroll = ref(false);
 const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
 
+// [新增] 核心状态：是否粘滞在底部
+const isSticky = ref(true); 
+let chatObserver = null;    // DOM 观察器实例
+
 let autoSaveInterval = null;
 
 let textSearchInstance = null;
@@ -117,12 +121,9 @@ const sourcePromptConfig = ref(null);
 const cachedBackgroundBlobUrl = ref("");
 
 const windowBackgroundImage = computed(() => {
-  // 1. 如果有缓存的 Blob，直接使用
   if (cachedBackgroundBlobUrl.value) {
     return cachedBackgroundBlobUrl.value;
   }
-
-  // 2. 否则使用配置中的 URL
   if (!CODE.value || !currentConfig.value?.prompts) return "";
   const promptConfig = currentConfig.value.prompts[CODE.value];
   return promptConfig?.backgroundImage || "";
@@ -141,7 +142,6 @@ const windowBackgroundBlur = computed(() => {
 });
 
 const loadBackground = async (newUrl) => {
-  // 如果 URL 为空，清理缓存
   if (!newUrl) {
     if (cachedBackgroundBlobUrl.value) {
       if (cachedBackgroundBlobUrl.value.startsWith('blob:')) {
@@ -151,8 +151,6 @@ const loadBackground = async (newUrl) => {
     }
     return;
   }
-
-  // data协议或本地文件不走缓存逻辑
   if (newUrl.startsWith('data:') || newUrl.startsWith('file:')) return;
 
   try {
@@ -160,14 +158,11 @@ const loadBackground = async (newUrl) => {
     if (buffer) {
       const blob = new Blob([buffer]);
       const newBlobUrl = URL.createObjectURL(blob);
-
-      // 释放旧的 Blob URL
       if (cachedBackgroundBlobUrl.value && cachedBackgroundBlobUrl.value.startsWith('blob:')) {
         URL.revokeObjectURL(cachedBackgroundBlobUrl.value);
       }
       cachedBackgroundBlobUrl.value = newBlobUrl;
     } else {
-      // 缓存未命中时，触发后台下载，本次前端仍可能需要回退到网络加载或保持空
       console.log(`[Background] Cache miss, downloading in background: ${newUrl}`);
       window.api.cacheBackgroundImage(newUrl);
     }
@@ -196,8 +191,8 @@ const imageViewerInitialIndex = ref(0);
 const toolCallControllers = ref(new Map());
 const tempSessionMcpServerIds = ref([]);
 
-const isAutoApproveTools = ref(true); // 默认不自动批准
-const pendingToolApprovals = ref(new Map()); // 存储等待审批的 resolve 函数
+const isAutoApproveTools = ref(true); 
+const pendingToolApprovals = ref(new Map()); 
 
 const handleToolApproval = (toolCallId, isApproved) => {
   const resolver = pendingToolApprovals.value.get(toolCallId);
@@ -227,32 +222,25 @@ const handleToggleAutoApprove = (val) => {
   }
 };
 
-// --- MCP State ---
 const isMcpDialogVisible = ref(false);
-const sessionMcpServerIds = ref([]); // Store IDs of servers active for this session
+const sessionMcpServerIds = ref([]); 
 const openaiFormattedTools = ref([]);
 const mcpSearchQuery = ref('');
 const isMcpLoading = ref(false);
-const mcpFilter = ref('all'); // MCP过滤器状态, 'all', 'selected', 'unselected'
+const mcpFilter = ref('all'); 
 
 const isMcpActive = computed(() => sessionMcpServerIds.value.length > 0);
 
-// 计算MCP连接数
 const mcpConnectionCount = computed(() => {
   if (!currentConfig.value || !currentConfig.value.mcpServers) return 0;
-
-  // 将依赖从 sessionMcpServerIds.value 改为 tempSessionMcpServerIds.value
   const persistentCount = tempSessionMcpServerIds.value.filter(id => {
     const server = currentConfig.value.mcpServers[id];
     return server && server.isPersistent;
   }).length;
-
-  // 将依赖从 sessionMcpServerIds.value 改为 tempSessionMcpServerIds.value
   const hasOnDemand = tempSessionMcpServerIds.value.some(id => {
     const server = currentConfig.value.mcpServers[id];
     return server && !server.isPersistent;
   });
-
   return persistentCount + (hasOnDemand ? 1 : 0);
 });
 
@@ -266,27 +254,21 @@ const availableMcpServers = computed(() => {
 
 const filteredMcpServers = computed(() => {
   let servers = availableMcpServers.value;
-
-  // Filter by selection status
   if (mcpFilter.value === 'selected') {
     servers = servers.filter(server => tempSessionMcpServerIds.value.includes(server.id));
   } else if (mcpFilter.value === 'unselected') {
     servers = servers.filter(server => !tempSessionMcpServerIds.value.includes(server.id));
   }
-
-  // Filter by search query
   if (mcpSearchQuery.value) {
     const query = mcpSearchQuery.value.toLowerCase();
     servers = servers.filter(server =>
       (server.name && server.name.toLowerCase().includes(query)) ||
       (server.description && server.description.toLowerCase().includes(query)) ||
-      (server.tags && Array.isArray(server.tags) && server.tags.some(tag => tag.toLowerCase().includes(query))) // 新增：支持标签搜索
+      (server.tags && Array.isArray(server.tags) && server.tags.some(tag => tag.toLowerCase().includes(query))) 
     );
   }
-
   return servers;
 });
-
 
 const isViewingLastMessage = computed(() => {
   if (focusedMessageIndex.value === null) return false;
@@ -297,15 +279,17 @@ const nextButtonTooltip = computed(() => {
   return isViewingLastMessage.value ? '滚动到底部' : '查看下一条消息';
 });
 
-const scrollToBottom = async () => {
-  if (isAtBottom.value) {
-    await nextTick();
-    const el = chatContainerRef.value?.$el;
-    if (el) {
-      el.style.scrollBehavior = 'auto';
-      el.scrollTop = el.scrollHeight;
-      el.style.scrollBehavior = 'smooth';
-    }
+// [修改] 滚动到底部函数
+const scrollToBottom = async (behavior = 'auto') => {
+  await nextTick();
+  const el = chatContainerRef.value?.$el;
+  if (el) {
+    // 重新激活粘滞状态
+    isSticky.value = true;
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: behavior 
+    });
   }
 };
 
@@ -316,13 +300,17 @@ const scrollToTop = () => {
   }
 };
 
+// [修改] 强制滚动（点击按钮时）
 const forceScrollToBottom = () => {
   isForcingScroll.value = true;
+  isSticky.value = true; // 强制激活粘滞
   isAtBottom.value = true;
   showScrollToBottomButton.value = false;
   focusedMessageIndex.value = null;
-  const el = chatContainerRef.value?.$el;
-  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  
+  // 点击按钮时，为了视觉反馈，可以使用平滑滚动
+  scrollToBottom('smooth');
+  
   setTimeout(() => { isForcingScroll.value = false; }, 500);
 };
 
@@ -350,15 +338,31 @@ const findFocusedMessageIndex = () => {
   if (closestIndex !== -1) focusedMessageIndex.value = closestIndex;
 };
 
+// [修改] 滚动监听：仅负责更新 isSticky 状态和 UI 按钮显示
 const handleScroll = (event) => {
-  if (isForcingScroll.value) { return; }
+  if (isForcingScroll.value) return;
+  
   const el = event.target;
   if (!el) return;
-  const isScrolledToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 10;
-  if (isAtBottom.value && !isScrolledToBottom) findFocusedMessageIndex();
-  isAtBottom.value = isScrolledToBottom;
-  showScrollToBottomButton.value = !isScrolledToBottom;
-  if (isScrolledToBottom) focusedMessageIndex.value = null;
+
+  // 计算距离底部的距离
+  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  const tolerance = 20; // 容差值
+
+  // 核心逻辑：用户只要向上滚动离开底部，就取消粘滞；一旦触底，重新激活粘滞
+  const atBottom = distanceToBottom <= tolerance;
+  
+  if (atBottom) {
+    if (!isSticky.value) isSticky.value = true;
+    if (!isAtBottom.value) isAtBottom.value = true;
+    showScrollToBottomButton.value = false;
+    focusedMessageIndex.value = null;
+  } else {
+    if (isSticky.value) isSticky.value = false; // 用户主动离开了底部
+    if (isAtBottom.value) isAtBottom.value = false;
+    showScrollToBottomButton.value = true;
+    findFocusedMessageIndex();
+  }
 };
 
 const navigateToPreviousMessage = () => {
@@ -442,11 +446,9 @@ const handleOpenModelDialog = async () => {
   try {
     const result = await window.api.getConfig();
     if (result && result.config) {
-      // 1. 更新本地配置中的服务商信息
       currentConfig.value.providers = result.config.providers;
       currentConfig.value.providerOrder = result.config.providerOrder;
 
-      // 2. 重新生成模型列表和映射
       const newModelList = [];
       const newModelMap = {};
       currentConfig.value.providerOrder.forEach(id => {
@@ -462,8 +464,6 @@ const handleOpenModelDialog = async () => {
       modelList.value = newModelList;
       modelMap.value = newModelMap;
 
-      // 3. [新增关键修复] 立即同步当前正在使用的服务商凭证
-      // 确保即使用户不切换模型，只在设置里改了Key，这里也能立即生效
       if (currentProviderID.value && currentConfig.value.providers[currentProviderID.value]) {
         const activeProvider = currentConfig.value.providers[currentProviderID.value];
         base_url.value = activeProvider.url;
@@ -481,7 +481,6 @@ const handleChangeModel = (chosenModel) => {
   const provider = currentConfig.value.providers[currentProviderID.value];
   base_url.value = provider.url;
   api_key.value = provider.api_key;
-  // changeModel_page.value = false;
   chatInputRef.value?.focus({ cursor: 'end' });
 };
 const handleTogglePin = () => {
@@ -571,17 +570,12 @@ const handleWindowBlur = () => {
 
 const handleWindowFocus = () => {
   setTimeout(() => {
-    // 如果正在编辑系统提示词，不抢占焦点
     if (systemPromptDialogVisible.value) {
       return;
     }
-
-    // 检查当前焦点是否在某个消息的编辑输入框内
     if (document.activeElement && document.activeElement.tagName.toLowerCase() === 'textarea' && document.activeElement.closest('.editing-wrapper')) {
-      // 如果是，则不执行任何操作，保持焦点在编辑框内
       return;
     }
-    // 检查焦点是否在查找框内
     if (document.activeElement && document.activeElement.closest('.text-search-container')) {
       return;
     }
@@ -598,7 +592,6 @@ const handleCopyImageFromViewer = (url) => {
   if (!url) return;
   (async () => {
     try {
-      // showDismissibleMessage.info('正在获取图片...');
       const response = await fetch(url);
       if (!response.ok) throw new Error(`网络错误: ${response.statusText}`);
       const blob = await response.blob();
@@ -653,11 +646,9 @@ const handleDownloadImageFromViewer = async (url) => {
 const handleEditMessage = (index, newContent) => {
   if (index < 0 || index >= chat_show.value.length) return;
 
-  // 1. 找到 history 数组中正确的索引，这会考虑到 chat_show 中不可见的 'tool' 消息。
   let history_idx = -1;
   let show_counter = -1;
   for (let i = 0; i < history.value.length; i++) {
-    // 只有非 'tool' 类型的消息才计入 show_counter
     if (history.value[i].role !== 'tool') {
       show_counter++;
     }
@@ -667,33 +658,27 @@ const handleEditMessage = (index, newContent) => {
     }
   }
 
-  // 2. 定义一个通用的内容更新函数
   const updateContent = (message) => {
     if (!message) return;
     if (typeof message.content === 'string' || message.content === null) {
       message.content = newContent;
     } else if (Array.isArray(message.content)) {
-      // 寻找第一个可编辑的文本部分并更新它
       const textPart = message.content.find(p => p.type === 'text' && !(p.text && p.text.toLowerCase().startsWith('file name:')));
       if (textPart) {
         textPart.text = newContent;
       } else {
-        // 如果没有文本部分，则添加一个新的
         message.content.push({ type: 'text', text: newContent });
       }
     }
   };
 
-  // 3. 使用原始的 UI 索引更新 chat_show 数组
   if (chat_show.value[index]) {
     updateContent(chat_show.value[index]);
   }
 
-  // 4. 使用我们计算出的正确索引来更新 history 数组
   if (history_idx !== -1 && history.value[history_idx]) {
     updateContent(history.value[history_idx]);
   } else {
-    // 如果找不到映射，这是一个潜在的问题，进行日志记录以方便调试
     console.error("错误：无法将 chat_show 索引映射到 history 索引。下次API请求可能会使用旧数据。");
   }
 };
@@ -705,22 +690,16 @@ const handleEditStart = async (index) => {
 
   if (!scrollContainer || !element || !childComponent) return;
 
-  // 步骤 1: 切换到编辑模式
   childComponent.switchToEditMode();
 
-  // 步骤 2: 等待 Vue 完成 DOM 更新
   await nextTick();
 
-  // 步骤 3: 使用双重 requestAnimationFrame 等待浏览器完成布局和绘制
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      // 在下一帧绘制前，执行立即滚动
       element.scrollIntoView({ behavior: 'auto', block: 'nearest' });
     });
   });
 };
-
-// Anywhere_window/src/App.vue
 
 const handleEditEnd = async ({ id, action, content }) => {
   if (action !== 'save') return;
@@ -816,14 +795,12 @@ watch(chat_show, async () => {
   await addCopyButtonsToCodeBlocks();
 }, { deep: true, flush: 'post' });
 watch(() => currentConfig.value?.isDarkMode, (isDark) => {
-  // 切换 HTML 根元素的类名
   if (isDark) {
     document.documentElement.classList.add('dark');
   } else {
     document.documentElement.classList.remove('dark');
   }
 
-  // 更新搜索组件主题
   if (textSearchInstance) {
     textSearchInstance.setTheme(isDark ? 'dark' : 'light');
   }
@@ -841,19 +818,32 @@ onMounted(async () => {
 
   textSearchInstance = new TextSearchUI({
     scope: '.chat-main',
-    theme: currentConfig.value?.isDarkMode ? 'dark' : 'light' // 初始主题
+    theme: currentConfig.value?.isDarkMode ? 'dark' : 'light' 
   });
 
-  // 初始化通用事件监听器
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
   window.addEventListener('blur', handleWindowBlur);
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) {
     chatMainElement.addEventListener('click', handleMarkdownImageClick);
+    
+    chatObserver = new MutationObserver(() => {
+      // 只要处于粘滞状态，任何 DOM 变化（文字生成、元素高度变化）
+      // 都立即将 scrollTop 设为最大值。这在浏览器重绘前发生，因此视觉上是“内容上推”。
+      if (isSticky.value) {
+        chatMainElement.scrollTop = chatMainElement.scrollHeight;
+      }
+    });
+    
+    // 监听子节点变化（新消息）和子树字符数据变化（打字机效果）
+    chatObserver.observe(chatMainElement, { 
+      childList: true, 
+      subtree: true, 
+      characterData: true 
+    });
   }
 
-  // 统一的初始化函数，用于成功和失败两种情况
   const initializeWindow = async (data = null) => {
     try {
       const configData = await window.api.getConfig();
@@ -1018,13 +1008,7 @@ onMounted(async () => {
       code: "Moss",
       config: await window.api.getConfig().config,
     };
-    // ElMessage.warning({
-    //   message: '窗口初始化数据缺失，已加载默认对话。可能是预加载脚本不匹配导致。',
-    //   duration: 5000,
-    //   showClose: true,
-    // });
     await initializeWindow(data);
-    // await initializeWindow(null);
   }
   if (autoSaveInterval) clearInterval(autoSaveInterval);
   autoSaveInterval = setInterval(autoSaveSession, 15000);
@@ -1034,10 +1018,7 @@ onMounted(async () => {
   if (window.api && window.api.onConfigUpdated) {
     window.api.onConfigUpdated((newConfig) => {
       if (newConfig) {
-        // 更新本地配置对象，这将触发上面的 watch
         currentConfig.value = newConfig;
-
-        // 同步缩放比例
         if (newConfig.zoom !== undefined) {
           zoomLevel.value = newConfig.zoom;
         }
@@ -1047,10 +1028,6 @@ onMounted(async () => {
 });
 
 const autoSaveSession = async () => {
-  // 检查是否满足自动保存的条件：
-  // 1. AI不在回复中 (loading.value === false)
-  // 2. 本地保存路径已配置
-  // 3. 当前会话有默认文件名 (通过加载或手动保存获得)
   if (loading.value || !currentConfig.value?.webdav?.localChatPath || !defaultConversationName.value) {
     return;
   }
@@ -1059,12 +1036,8 @@ const autoSaveSession = async () => {
     const sessionData = getSessionDataAsObject();
     const jsonString = JSON.stringify(sessionData, null, 2);
     const filePath = `${currentConfig.value.webdav.localChatPath}/${defaultConversationName.value}.json`;
-
-    // 调用后端API静默写入文件
     await window.api.writeLocalFile(filePath, jsonString);
-    // console.log(`Auto-saved session to ${filePath}`); // 调试时可以取消注释
   } catch (error) {
-    // 自动保存失败时，只在控制台打印错误，不打扰用户
     console.error('Auto-save failed:', error);
   }
 };
@@ -1080,6 +1053,11 @@ onBeforeUnmount(async () => {
   await window.api.closeMcpClient();
   window.removeEventListener('error', handleGlobalImageError, true);
   window.removeEventListener('keydown', handleGlobalKeyDown);
+  
+  if (chatObserver) {
+    chatObserver.disconnect();
+    chatObserver = null;
+  }
 });
 
 const saveWindowSize = async () => {
@@ -1088,13 +1066,11 @@ const saveWindowSize = async () => {
     return;
   }
 
-  // 检查窗口是否处于全屏状态
   if (window.fullScreen) {
     showDismissibleMessage.warning('无法在全屏模式下保存窗口位置和大小。');
     return;
   }
 
-  // 将位置信息一并加入待保存的设置中
   const settingsToSave = {
     window_height: window.outerHeight,
     window_width: window.outerWidth,
@@ -1106,7 +1082,6 @@ const saveWindowSize = async () => {
   try {
     const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
     if (result.success) {
-      // 更新成功提示信息
       showDismissibleMessage.success('当前快捷助手的窗口大小、位置与缩放已保存');
       if (currentConfig.value.prompts[CODE.value]) {
         Object.assign(currentConfig.value.prompts[CODE.value], settingsToSave);
@@ -1220,7 +1195,7 @@ const saveSessionAsMarkdown = async () => {
   markdownContent += '---\n\n';
 
   for (const message of chat_show.value) {
-    if (message.role === 'system') continue; // 跳过可能残留的系统消息
+    if (message.role === 'system') continue; 
 
     if (message.role === 'user') {
       let userHeader = '### 👤 用户';
@@ -1365,7 +1340,6 @@ const saveSessionAsHtml = async () => {
       return marked.parse(markdownString);
     };
 
-    // 在 HTML 导出中单独添加系统提示词块
     if (currentSystemPrompt.value && currentSystemPrompt.value.trim()) {
       const sysTocText = '系统提示词';
       const sysDotClass = 'system-dot';
@@ -1503,17 +1477,11 @@ const saveSessionAsHtml = async () => {
               --timeline-dot-active: #64b5f6;
           }
         }
-        
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; background-color: var(--bg-color); color: var(--text-color); line-height: 1.6; }
-        
         .main-container { max-width: 900px; margin: 0 auto; background-color: var(--card-bg); border-radius: 12px; padding: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); position: relative; }
-        
-        /* 标题区 */
         .page-header { margin-bottom: 40px; border-bottom: 1px solid var(--border-color); padding-bottom: 20px; }
         .page-header h1 { margin: 0 0 10px 0; font-size: 24px; }
         .page-header p { margin: 0; color: #888; font-size: 13px; }
-
-        /* 时间轴大纲 (右侧悬浮) */
         .timeline-toc {
             position: fixed;
             top: 50%;
@@ -1525,13 +1493,10 @@ const saveSessionAsHtml = async () => {
             z-index: 100;
             max-height: 80vh;
             overflow-y: auto;
-            /* 隐藏滚动条但保留功能 */
             scrollbar-width: none; 
             padding: 10px;
         }
         .timeline-toc::-webkit-scrollbar { display: none; }
-
-        /* 时间轴的线 */
         .timeline-list {
             list-style: none;
             padding: 0;
@@ -1540,10 +1505,8 @@ const saveSessionAsHtml = async () => {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 12px; /* 点之间的间距 */
+            gap: 12px; 
         }
-        
-        /* 贯穿线 */
         .timeline-list::before {
             content: '';
             position: absolute;
@@ -1556,50 +1519,38 @@ const saveSessionAsHtml = async () => {
             z-index: -1;
             border-radius: 2px;
         }
-
         .timeline-item { position: relative; }
-
-        /* 圆点样式 */
         .timeline-dot {
             display: block;
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background-color: var(--card-bg); /* 中间镂空效果 */
+            background-color: var(--card-bg);
             border: 2px solid var(--timeline-dot-default);
             transition: all 0.2s ease;
             position: relative;
         }
-
-        /* 用户消息点：实心或高亮 */
         .timeline-dot.user-dot {
             background-color: var(--timeline-dot-active);
             border-color: var(--timeline-dot-active);
             width: 12px; 
             height: 12px;
         }
-        
-        /* AI消息点：保持默认 */
         .timeline-dot.ai-dot {
             border-color: var(--timeline-dot-default);
         }
-
-        /* 系统消息点 */
         .timeline-dot.system-dot {
             border-color: #795548;
             background-color: #795548;
         }
-
         .timeline-dot:hover {
             transform: scale(1.4);
             border-color: var(--accent-color);
             background-color: var(--accent-color);
         }
-
-        /* Tooltip (悬浮显示的文字) */
         .timeline-tooltip {
             position: absolute;
-            right: 25px; /* 点的左侧 */
+            right: 25px;
             top: 50%;
             transform: translateY(-50%);
             background-color: var(--accent-color);
@@ -1616,18 +1567,13 @@ const saveSessionAsHtml = async () => {
             text-overflow: ellipsis;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
-
         .timeline-dot:hover .timeline-tooltip {
             opacity: 1;
             transform: translateY(-50%) translateX(-5px);
         }
-
-        /* 消息块 */
         .message-wrapper { display: flex; flex-direction: column; margin-bottom: 30px; scroll-margin-top: 60px; max-width: 100%; }
         .align-right { align-items: flex-end; }
         .align-left { align-items: flex-start; }
-        
-        /* 头部信息 */
         .header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 12px; color: #888; }
         .user-header { flex-direction: row; }
         .ai-header { flex-direction: row; align-items: flex-start; }
@@ -1635,26 +1581,19 @@ const saveSessionAsHtml = async () => {
         .ai-meta { display: flex; flex-direction: column; line-height: 1.3; }
         .ai-name-row { display: flex; align-items: center; gap: 5px; }
         .voice-tag { opacity: 0.8; font-size: 11px; }
-        
-        /* 气泡本体 */
         .message-body { padding: 12px 16px; border-radius: 12px; word-break: break-word; overflow-wrap: break-word; max-width: 100%; }
         .user-body { background-color: var(--user-bg); border-bottom-right-radius: 2px; color: var(--text-color); max-width: 90%; }
         .ai-body { background-color: var(--ai-bg); border: 1px solid var(--border-color); border-top-left-radius: 2px; width: 100%; box-sizing: border-box; }
         .system-body { background-color: #fff3e0; color: #5d4037; border: 1px dashed #d7ccc8; width: 100%; text-align: center; }
-        
-        /* 工具调用 */
         .tool-calls-wrapper { width: 100%; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
         .tool-call-box { background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #666; display: flex; align-items: center; gap: 8px; }
         .tool-name { font-weight: bold; }
         .tool-result { opacity: 0.7; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
         img { max-width: 100%; border-radius: 8px; margin: 5px 0; }
         pre { background-color: #2d2d2d; color: #f8f8f2; padding: 1em; border-radius: 8px; overflow-x: auto; font-family: monospace; }
         blockquote { border-left: 4px solid #ccc; padding-left: 1em; margin: 1em 0; color: #666; background: rgba(0,0,0,0.03); }
-        
-        /* 移动端适配 */
         @media (max-width: 768px) {
-          .timeline-toc { display: none; } /* 移动端隐藏右侧时间轴 */
+          .timeline-toc { display: none; }
           .main-container { padding: 20px; width: 100%; box-sizing: border-box; border-radius: 0; box-shadow: none; background-color: transparent; }
           .message-body { max-width: 100%; }
           .user-body { max-width: 95%; }
@@ -1673,20 +1612,16 @@ const saveSessionAsHtml = async () => {
         ${cssStyles}
       </head>
       <body>
-        <!-- 悬浮时间轴导航 -->
         <nav class="timeline-toc">
             <ul class="timeline-list">
                 ${tocContent}
             </ul>
         </nav>
-
-        <!-- 主内容区 -->
         <div class="main-container">
             <header class="page-header">
                 <h1>${CODE.value}</h1>
                 <p>模型: ${modelMap.value[model.value] || 'N/A'} &bull; 导出时间: ${timestamp}</p>
             </header>
-            
             <div class="chat-container">
                 ${bodyContent}
             </div>
@@ -1815,13 +1750,11 @@ const handleSaveAction = async () => {
     saveOptions.push({ title: '保存到云端', description: '同步到 WebDAV 服务器，支持跨设备访问。', buttonType: 'success', action: saveSessionToCloud });
   }
 
-  // 标记 JSON 为默认选项 (isDefault: true)
   saveOptions.push({ title: '保存为 JSON', description: '保存为可恢复的会話文件，便于下次继续。', buttonType: 'primary', action: saveSessionAsJson, isDefault: true });
   saveOptions.push({ title: '保存为 Markdown', description: '导出为可读性更强的 .md 文件，适合分享。', buttonType: '', action: saveSessionAsMarkdown });
   saveOptions.push({ title: '保存为 HTML', description: '导出为带样式的网页文件，保留格式和图片。', buttonType: '', action: saveSessionAsHtml });
 
   const messageVNode = h('div', { class: 'save-options-list' }, saveOptions.map(opt => {
-    // 统一的触发逻辑
     const trigger = () => { ElMessageBox.close(); opt.action(); };
 
     return h('div', { class: 'save-option-item', onClick: trigger }, [
@@ -1831,9 +1764,7 @@ const handleSaveAction = async () => {
       h(ElButton, {
         type: opt.buttonType,
         plain: true,
-        // 如果是默认选项，添加特定 class 用于定位
         class: opt.isDefault ? 'default-save-target' : '',
-        // 显式绑定点击事件，确保聚焦后按 Enter 键生效
         onClick: (e) => { e.stopPropagation(); trigger(); }
       }, { default: () => '选择' })
     ]);
@@ -1849,7 +1780,6 @@ const handleSaveAction = async () => {
     showClose: false
   }).catch(() => { });
 
-  // 延迟执行聚焦，确保 DOM 已渲染
   setTimeout(() => {
     const targetBtn = document.querySelector('.default-save-target');
     if (targetBtn) {
@@ -1923,14 +1853,10 @@ const loadSession = async (jsonData) => {
       messageIdCounter.value = maxId + 1;
     }
 
-    // 恢复会话时分离系统提示词
     const systemMessageIndex = history.value.findIndex(m => m.role === 'system');
     if (systemMessageIndex !== -1) {
-      // 1. 提取提示词到 Header 状态
       currentSystemPrompt.value = history.value[systemMessageIndex].content;
 
-      // 2. 确保 chat_show 中也有对应的系统消息 (如果旧数据丢失了id需要补全)
-      // 如果 chat_show[systemMessageIndex] 不存在或 role 不对，则说明数据不一致，需要修复
       if (!chat_show.value[systemMessageIndex] || chat_show.value[systemMessageIndex].role !== 'system') {
         chat_show.value.unshift({
           role: "system",
@@ -1939,9 +1865,7 @@ const loadSession = async (jsonData) => {
         });
       }
 
-      // 撤销之前的 splice 操作，保留它在数组中！
     } else if (currentConfig.value.prompts[CODE.value]?.prompt) {
-      // 如果历史记录里没有，但配置里有，则插入
       currentSystemPrompt.value = currentConfig.value.prompts[CODE.value].prompt;
       history.value.unshift({ role: "system", content: currentSystemPrompt.value });
       chat_show.value.unshift({
@@ -2017,7 +1941,6 @@ const file2fileList = async (file, idx) => {
   if (isSessionFile) { chatInputRef.value?.focus({ cursor: 'end' }); return; }
 
   return new Promise((resolve, reject) => {
-    // 使用后端 API 检查文件类型
     if (!window.api.isFileTypeSupported(file.name)) {
       const errorMsg = `不支持的文件类型: ${file.name}`;
       showDismissibleMessage.warning(errorMsg);
@@ -2027,7 +1950,6 @@ const file2fileList = async (file, idx) => {
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      // 保持原逻辑：前端只负责读取 Base64 用于预览和后续发送
       fileList.value.push({
         uid: idx,
         name: file.name,
@@ -2061,8 +1983,6 @@ const sendFile = async () => {
 
   for (const currentFile of fileList.value) {
     try {
-      // 调用后端复用的解析逻辑
-      // currentFile 结构为 { name, url(Base64) }，正好符合 file.js 中 handler 的入参
       const processedContent = await window.api.parseFileObject({
         name: currentFile.name,
         url: currentFile.url
@@ -2072,7 +1992,6 @@ const sendFile = async () => {
         contentList.push(processedContent);
       }
     } catch (error) {
-      // 如果后端抛出不支持类型或其他解析错误
       if (error.message.includes('不支持的文件类型')) {
         showDismissibleMessage.warning(error.message);
       } else {
@@ -2086,12 +2005,10 @@ const sendFile = async () => {
 };
 
 async function applyMcpTools(show_none = true) {
-  // 1. 立即关闭弹窗并显示加载状态
   isMcpDialogVisible.value = false;
   isMcpLoading.value = true;
   await nextTick();
 
-  // 准备请求的服务器配置
   const activeServerConfigs = {};
   const serverIdsToLoad = [...sessionMcpServerIds.value];
   for (const id of serverIdsToLoad) {
@@ -2110,14 +2027,12 @@ async function applyMcpTools(show_none = true) {
   }
 
   try {
-    // 2. 直接调用后端的同步函数，它现在是幂等的且能处理中止
     const {
       openaiFormattedTools: newFormattedTools,
       successfulServerIds,
       failedServerIds
     } = await window.api.initializeMcpClient(activeServerConfigs);
 
-    // 3. 根据返回结果更新UI
     openaiFormattedTools.value = newFormattedTools;
     sessionMcpServerIds.value = successfulServerIds;
 
@@ -2161,37 +2076,30 @@ function selectAllMcpServers() {
 
 async function toggleMcpDialog() {
   if (!isMcpDialogVisible.value) {
-    // 只有在打开弹窗时才进行更新操作
     try {
-      // 1. 获取数据库中的最新配置
       const result = await window.api.getConfig();
 
       if (result && result.config && result.config.mcpServers) {
         const newMcpServers = result.config.mcpServers;
         const currentLocalMcpServers = currentConfig.value.mcpServers || {};
 
-        // 2. 关键步骤：保护当前 Session 正在使用的 MCP 服务
         sessionMcpServerIds.value.forEach(activeId => {
           if (!newMcpServers[activeId] && currentLocalMcpServers[activeId]) {
             newMcpServers[activeId] = currentLocalMcpServers[activeId];
           }
         });
 
-        // 3. 更新当前窗口的 MCP 配置
         currentConfig.value.mcpServers = newMcpServers;
       }
     } catch (error) {
       console.error("Auto refresh MCP config failed:", error);
-      // 即使更新失败，也不阻止弹窗打开
     }
 
-    // 重置临时选中状态为当前生效的状态
     tempSessionMcpServerIds.value = [...sessionMcpServerIds.value];
   }
   isMcpDialogVisible.value = !isMcpDialogVisible.value;
 }
 
-// 切换并保存MCP服务的持久化状态
 async function toggleMcpPersistence(serverId, isPersistent) {
   if (!currentConfig.value.mcpServers[serverId]) return;
 
@@ -2233,7 +2141,6 @@ const askAI = async (forceSend = false) => {
         history.value.push({ role: "user", content: contentForHistory });
         chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
 
-        // [修复-新增] 用户发送消息后，立即触发一次自动保存
         autoSaveSession();
 
       } else return;
@@ -2245,7 +2152,10 @@ const askAI = async (forceSend = false) => {
   loading.value = true;
   signalController.value = new AbortController();
   await nextTick();
-  scrollToBottom();
+  
+  // 开始回答时，强制锁定到底部
+  isSticky.value = true;
+  scrollToBottom('auto'); // 瞬间置底
 
   const currentPromptConfig = currentConfig.value.prompts[CODE.value];
   const isVoiceReply = !!selectedVoice.value;
@@ -2271,7 +2181,6 @@ const askAI = async (forceSend = false) => {
       // --- 为本次请求创建临时消息列表 ---
       let messagesForThisRequest = JSON.parse(JSON.stringify(history.value));
 
-      // 清除空的system
       messagesForThisRequest = messagesForThisRequest.filter(msg => {
         if (msg.role === 'system' && (!msg.content || msg.content.trim() === '')) {
           return false; // 过滤掉空系统提示词
@@ -2279,7 +2188,6 @@ const askAI = async (forceSend = false) => {
         return true;
       });
 
-      // 删除 null 字段
       messagesForThisRequest.forEach(msg => {
         // 1. 过滤掉标记为 isTranscript 的内容 (防止转录文本被发回给AI)
         if (Array.isArray(msg.content)) {
@@ -2302,25 +2210,19 @@ const askAI = async (forceSend = false) => {
 
         messagesForThisRequest.forEach(msg => {
           if (msg.role === 'user') {
-            // 情况1: content 已经被之前的清理逻辑删除了 (即原本是 null/undefined)
             if (msg.content === undefined || msg.content === null) {
               msg.content = timestamp;
             }
-            // 情况2: content 是字符串但为空
             else if (typeof msg.content === 'string') {
               if (msg.content.trim() === '') {
                 msg.content = timestamp;
               }
             }
-            // 情况3: content 是数组
             else if (Array.isArray(msg.content)) {
               if (msg.content.length === 0) {
-                // 如果数组被过滤空了，直接赋值为字符串时间戳
                 msg.content = timestamp;
               } else {
-                // 检查是否存在有效的文本节点
                 const hasText = msg.content.some(part => part.type === 'text' && part.text && part.text.trim() !== '');
-                // 如果没有有效文本（例如只有图片），则追加一个纯文本块
                 if (!hasText) {
                   msg.content.push({
                     type: "text",
@@ -2333,7 +2235,6 @@ const askAI = async (forceSend = false) => {
         });
       }
 
-      // --- 仅在临时列表中注入MCP提示词 ---
       if (openaiFormattedTools.value.length > 0) {
         const mcpSystemPrompt = `
 ## Tool Use Rules
@@ -2372,11 +2273,10 @@ Here are the rules you should always follow to solve your task:
 
       const payload = {
         model: model.value.split("|")[1],
-        messages: messagesForThisRequest, // 使用临时的、注入了提示词的消息列表
+        messages: messagesForThisRequest, 
         stream: useStream,
       };
 
-      // 应用其他参数
       if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
       if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
       if (openaiFormattedTools.value.length > 0) {
@@ -2390,7 +2290,6 @@ Here are the rules you should always follow to solve your task:
         payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
       }
 
-      // 为每个AI回合创建一个新的UI气泡
       const assistantMessageId = messageIdCounter.value++;
       chat_show.value.push({
         id: assistantMessageId,
@@ -2399,7 +2298,10 @@ Here are the rules you should always follow to solve your task:
         voiceName: selectedVoice.value, tool_calls: []
       });
       currentAssistantChatShowIndex = chat_show.value.length - 1;
-      scrollToBottom();
+      
+      // [修改] 创建新气泡时，如果 Sticky 为 true，MutationObserver 会自动处理滚动
+      // 这里不需要手动调用 scrollToBottom，除非是初始状态强制对齐
+      if (isAtBottom.value) scrollToBottom('auto');
 
       let responseMessage;
 
@@ -2409,7 +2311,7 @@ Here are the rules you should always follow to solve your task:
         let aggregatedReasoningContent = "";
         let aggregatedContent = "";
         let aggregatedToolCalls = [];
-        let aggregatedExtraContent = null; // 用于聚合所有额外内容
+        let aggregatedExtraContent = null; 
         let lastUpdateTime = Date.now();
 
         for await (const part of stream) {
@@ -2417,11 +2319,9 @@ Here are the rules you should always follow to solve your task:
 
           if (!delta) continue;
 
-          // 捕获并合并根级别的 extra_content (包含 thought_signature 等)
           if (delta.extra_content) {
             aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
           }
-          // 兼容性：如果 thought_signature 直接出现在根级
           if (delta.thought_signature) {
             aggregatedExtraContent = aggregatedExtraContent || {};
             aggregatedExtraContent.google = aggregatedExtraContent.google || {};
@@ -2436,7 +2336,7 @@ Here are the rules you should always follow to solve your task:
 
             if (Date.now() - lastUpdateTime > 100) {
               chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-              scrollToBottom();
+              // [修改] 移除了 scrollToBottom 调用 (MutationObserver 接管)
               lastUpdateTime = Date.now();
             }
           }
@@ -2448,7 +2348,7 @@ Here are the rules you should always follow to solve your task:
 
             if (Date.now() - lastUpdateTime > 100) {
               chat_show.value[currentAssistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
-              scrollToBottom();
+              // [修改] 移除了 scrollToBottom 调用 (MutationObserver 接管)
               lastUpdateTime = Date.now();
             }
           }
@@ -2464,9 +2364,7 @@ Here are the rules you should always follow to solve your task:
               if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
               if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
 
-              // 捕获工具调用级别的 extra_content
               if (toolCallChunk.extra_content) {
-                // 通常工具调用的 extra_content 是一次性发送的，直接赋值或合并
                 currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
               }
             }
@@ -2477,7 +2375,7 @@ Here are the rules you should always follow to solve your task:
           role: 'assistant',
           content: aggregatedContent || null,
           reasoning_content: aggregatedReasoningContent || null,
-          extra_content: aggregatedExtraContent // 将捕获到的 extra_content 附加到最终消息对象
+          extra_content: aggregatedExtraContent
         };
 
         if (aggregatedToolCalls.length > 0) {
@@ -2496,7 +2394,6 @@ Here are the rules you should always follow to solve your task:
         });
       }
 
-      // 将AI的回复同步到主 history 数组 (现在包含 extra_content/thought_signature)
       history.value.push(responseMessage);
 
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
@@ -2514,22 +2411,20 @@ Here are the rules you should always follow to solve your task:
           id: tc.id,
           name: tc.function.name,
           args: tc.function.arguments,
-          result: '等待批准...', // 初始状态显示
-          approvalStatus: isAutoApproveTools.value ? 'approved' : 'waiting' // 状态: waiting, approved, rejected, executing, finished
+          result: '等待批准...',
+          approvalStatus: isAutoApproveTools.value ? 'approved' : 'waiting'
         }));
 
         await nextTick();
-        scrollToBottom();
+        // [修改] 移除了 scrollToBottom
 
         const toolMessages = await Promise.all(
           responseMessage.tool_calls.map(async (toolCall) => {
             const uiToolCall = currentBubble.tool_calls.find(t => t.id === toolCall.id);
             let toolContent;
 
-            // --- 审批拦截逻辑 ---
             if (!isAutoApproveTools.value) {
               try {
-                // 挂起 Promise，等待用户点击按钮
                 const isApproved = await new Promise((resolve) => {
                   pendingToolApprovals.value.set(toolCall.id, resolve);
                 });
@@ -2547,11 +2442,9 @@ Here are the rules you should always follow to solve your task:
                   };
                 }
               } catch (e) {
-                // 防止意外中断
               }
             }
 
-            // 批准后，更新状态为执行中
             if (uiToolCall) {
               uiToolCall.approvalStatus = 'executing';
               uiToolCall.result = '执行中...';
@@ -2566,7 +2459,7 @@ Here are the rules you should always follow to solve your task:
 
               if (uiToolCall) {
                 uiToolCall.result = toolContent;
-                uiToolCall.approvalStatus = 'finished'; // 标记完成
+                uiToolCall.approvalStatus = 'finished';
               }
             } catch (e) {
               if (e.name === 'AbortError') {
@@ -2574,7 +2467,7 @@ Here are the rules you should always follow to solve your task:
                 if (uiToolCall) uiToolCall.approvalStatus = 'rejected';
               } else {
                 toolContent = `工具执行或参数解析错误: ${e.message}`;
-                if (uiToolCall) uiToolCall.approvalStatus = 'finished'; // 错误也算执行完成
+                if (uiToolCall) uiToolCall.approvalStatus = 'finished';
               }
               if (uiToolCall) uiToolCall.result = toolContent;
             } finally {
@@ -2584,13 +2477,11 @@ Here are the rules you should always follow to solve your task:
           })
         );
 
-        // 将工具调用的结果同步到主 history 数组
         history.value.push(...toolMessages);
       } else {
         if (isVoiceReply && responseMessage.audio) {
           currentBubble.content = currentBubble.content || [];
 
-          // 1. 添加转录文本 (Transcript)
           if (responseMessage.audio.transcript) {
             const rawTranscript = responseMessage.audio.transcript;
             currentBubble.content.push({
@@ -2600,7 +2491,6 @@ Here are the rules you should always follow to solve your task:
             });
           }
 
-          // 2. 添加音频数据
           currentBubble.content.push({
             type: "input_audio",
             input_audio: {
@@ -2609,9 +2499,9 @@ Here are the rules you should always follow to solve your task:
             }
           });
         }
-        break; // 退出循环
+        break;
       }
-    } // 循环结束
+    }
   } catch (error) {
     let errorDisplay = `发生错误: ${error.message || '未知错误'}`;
     if (error.name === 'AbortError') errorDisplay = "请求已取消";
@@ -2627,7 +2517,7 @@ Here are the rules you should always follow to solve your task:
     if (chat_show.value[errorBubbleIndex].reasoning_content && currentBubble.status === 'thinking') {
       chat_show.value[errorBubbleIndex].status = "error";
     }
-    // 1. 尝试获取已生成的文本内容
+    
     let existingText = "";
     if (currentBubble.content && Array.isArray(currentBubble.content)) {
       existingText = currentBubble.content
@@ -2639,24 +2529,15 @@ Here are the rules you should always follow to solve your task:
     }
 
     if (existingText && existingText.trim().length > 0) {
-      // 情况 A: AI 已经回复了部分内容，中途报错
-      // 使用引用块格式追加错误信息，使其与正文区分，保持美观
       const combinedText = `${existingText}\n\n> **Error**: ${errorDisplay}`;
-
-      // 更新 UI 显示
       currentBubble.content = [{ type: "text", text: combinedText }];
-
-      // 同步到历史记录 (确保保存会话时包含部分生成的内容)
       history.value.push({
         role: 'assistant',
         content: combinedText,
         reasoning_content: currentBubble.reasoning_content || null
       });
     } else {
-      // 情况 B: AI 尚未回复内容，直接报错
       currentBubble.content = [{ type: "text", text: `${errorDisplay}` }];
-
-      // 同步到历史记录
       history.value.push({
         role: 'assistant',
         content: `${errorDisplay}`,
@@ -2670,11 +2551,8 @@ Here are the rules you should always follow to solve your task:
     if (currentAssistantChatShowIndex > -1) {
       chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
     }
-    await nextTick();
-    scrollToBottom();
+    await nextTick();    
     chatInputRef.value?.focus({ cursor: 'end' });
-
-    // AI 回复结束或出错后，立即触发一次自动保存
     autoSaveSession();
   }
 };
@@ -2684,7 +2562,6 @@ const copyText = async (content, index) => { if (loading.value && index === chat
 const reaskAI = async () => {
   if (loading.value) return;
 
-  // 1. 找到历史记录中最后一个非工具消息的索引。这是用户可见的最后一条消息。
   const lastVisibleMessageIndexInHistory = history.value.findLastIndex(msg => msg.role !== 'tool');
 
   if (lastVisibleMessageIndexInHistory === -1) {
@@ -2695,11 +2572,7 @@ const reaskAI = async () => {
   const lastVisibleMessage = history.value[lastVisibleMessageIndexInHistory];
 
   if (lastVisibleMessage.role === 'assistant') {
-    // 规则: 如果最后一个可见消息是 AI 的回复（无论是简单回复还是工具调用发起者），
-    // 则从 history 数组中移除这个 AI 消息以及它之后的所有工具消息。
     const historyItemsToRemove = history.value.length - lastVisibleMessageIndexInHistory;
-
-    // 计算需要从 chat_show 数组中移除多少个可见项。
     const showItemsToRemove = history.value.slice(lastVisibleMessageIndexInHistory)
       .filter(m => m.role !== 'tool').length;
 
@@ -2709,15 +2582,11 @@ const reaskAI = async () => {
     }
 
   } else if (lastVisibleMessage.role === 'user') {
-    // 规则: 如果最后一个可见消息是用户的，不修改历史记录，直接重新请求。
-    // 此处无需任何操作。
   } else {
-    // 其他情况（如系统消息），不应触发重新提问。
     showDismissibleMessage.warning('无法从此消息类型重新提问。');
     return;
   }
 
-  // 3. 清理状态并发送新的AI请求
   collapsedMessages.value.clear();
   await nextTick();
   await askAI(true);
@@ -2736,12 +2605,9 @@ const deleteMessage = (index) => {
     return;
   }
 
-  // --- 1. 定位消息在 `history` 数组中的真实索引 ---
-  // `chat_show` 只包含可见消息，`history` 包含所有消息（包括隐藏的 'tool' 类型）
   let history_idx = -1;
   let show_counter = -1;
   for (let i = 0; i < history.value.length; i++) {
-    // 只有非 'tool' 消息才计入 `chat_show` 的索引
     if (history.value[i].role !== 'tool') {
       show_counter++;
     }
@@ -2757,42 +2623,28 @@ const deleteMessage = (index) => {
     return;
   }
 
-  // --- 2. 根据消息类型和上下文，确定要删除的 `history` 范围 ---
   const messageToDeleteInHistory = history.value[history_idx];
   let history_start_idx = history_idx;
   let history_end_idx = history_idx;
 
-  // 核心逻辑：判断被删除的消息是否是工具调用的发起者
   if (
     messageToDeleteInHistory.role === 'assistant' &&
     messageToDeleteInHistory.tool_calls &&
     messageToDeleteInHistory.tool_calls.length > 0
   ) {
-    // 如果是，则需要一并删除其后紧邻的所有 'tool' 消息
-    // 这形成了一个“命运共同体”：(发起调用的AI, tool, tool, ...)
     while (history.value[history_end_idx + 1]?.role === 'tool') {
       history_end_idx++;
     }
   }
-  // 对于其他所有情况（用户消息、简单的AI回复、总结性的AI回复），
-  // history_start_idx 和 history_end_idx 将保持相等，只删除单个消息。
-  // 这就正确地将总结性AI回复与它之前的工具调用链分离开来。
 
-  // --- 3. 计算并执行删除操作 ---
-
-  // 计算在 history 数组中需要删除的条目数量
   const history_delete_count = history_end_idx - history_start_idx + 1;
-
-  // 在 chat_show 数组中，只删除用户点击的那一条可见消息
   const show_delete_count = 1;
   const show_start_idx = index;
 
-  // 从 history 数组中删除
   if (history_delete_count > 0) {
     history.value.splice(history_start_idx, history_delete_count);
   }
 
-  // 从 chat_show 数组中删除
   if (show_delete_count > 0) {
     chat_show.value.splice(show_start_idx, show_delete_count);
   }
@@ -2816,27 +2668,19 @@ const clearHistory = () => {
     return;
   }
 
-  // 优先从当前配置中获取系统提示词
   const systemPromptFromConfig = currentConfig.value.prompts[CODE.value]?.prompt;
-
-  // 其次，检查当前会话历史中是否存在系统提示词
   const firstMessageInHistory = history.value.length > 0 ? history.value[0] : null;
   const systemPromptFromHistory = (firstMessageInHistory && firstMessageInHistory.role === 'system') ? firstMessageInHistory : null;
-
-  // 决定最终要保留的系统提示词（优先使用当前配置）
   const systemPromptToKeep = systemPromptFromConfig ? { role: "system", content: systemPromptFromConfig } : systemPromptFromHistory;
 
   if (systemPromptToKeep) {
-    // 如果有需要保留的系统提示词，则将历史记录重置为仅包含该提示词
     history.value = [systemPromptToKeep];
     chat_show.value = [{ ...systemPromptToKeep, id: messageIdCounter.value++ }];
   } else {
-    // 否则，完全清空历史记录
     history.value = [];
     chat_show.value = [];
   }
 
-  // 重置所有相关的UI状态
   collapsedMessages.value.clear();
   messageRefs.clear();
   focusedMessageIndex.value = null;
@@ -2894,7 +2738,6 @@ const handleSaveModel = async (modelToSave) => {
     const result = await window.api.saveSetting(`prompts.${CODE.value}.model`, modelToSave);
     changeModel_page.value = false;
     if (result && result.success) {
-      // 更新本地配置
       currentConfig.value.prompts[CODE.value].model = modelToSave;
       showDismissibleMessage.success(`模型已为快捷助手 "${CODE.value}" 保存成功！`);
     } else {
@@ -2905,25 +2748,20 @@ const handleSaveModel = async (modelToSave) => {
     showDismissibleMessage.error(`保存模型失败: ${error.message}`);
   }
 
-  changeModel_page.value = false; // 保存后关闭弹窗
+  changeModel_page.value = false; 
 };
 
 const handleGlobalImageError = (event) => {
   const img = event.target;
 
-  // Step 1: Check if the error is from an IMG tag inside our chat content
   if (!(img instanceof HTMLImageElement) || !img.closest('.markdown-wrapper')) {
     return;
   }
 
-  // Step 2: Prevent the browser's default broken image icon from appearing
   event.preventDefault();
 
-  // Step 3: The rest of the logic is to create and replace the image with our retry UI
-  // (This is similar to before, but now it's guaranteed to run)
   const originalSrc = img.src;
 
-  // Avoid replacing if it's already been replaced
   if (img.parentNode && img.parentNode.classList.contains('image-error-container')) {
     return;
   }
@@ -2949,9 +2787,7 @@ const handleGlobalImageError = (event) => {
   container.onclick = (e) => {
     e.stopPropagation();
     const newImg = document.createElement('img');
-    // Add timestamp to bypass cache
     newImg.src = `${originalSrc}?t=${new Date().getTime()}`;
-    // The global listener will automatically catch an error if this new image fails again.
     if (container.parentNode) {
       container.parentNode.replaceChild(newImg, container);
     }
@@ -2959,22 +2795,17 @@ const handleGlobalImageError = (event) => {
 };
 
 const handleGlobalKeyDown = (event) => {
-  // 检查是否按下了 Ctrl+S (Windows/Linux) 或 Cmd+S (macOS)
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-    // 阻止浏览器的默认保存页面行为
     event.preventDefault();
 
-    // 如果AI正在回复，则不允许保存，避免状态冲突
     if (loading.value) {
       showDismissibleMessage.warning('请等待 AI 回复完成后再保存');
       return;
     }
 
-    // 如果当前已经有其他弹窗，则不执行任何操作，避免弹窗重叠
     if (document.querySelector('.el-dialog, .el-message-box')) {
       return;
     }
-    // 调用已有的保存操作函数
     handleSaveAction();
   }
 };
@@ -3692,13 +3523,12 @@ html.dark .app-container {
   overflow: hidden;
 }
 
-/* 核心优化：滚动区域独立图层 */
 .chat-main {
   flex-grow: 1;
   padding: 0 10px;
   margin: 0;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  scroll-behavior: auto !important; 
   background-color: transparent !important;
   scrollbar-gutter: stable;
   will-change: scroll-position;
