@@ -170,6 +170,7 @@
     "selectPromptsPlaceholder": "选择快捷助手",
     "isAlwaysOnTopLabel": "窗口置顶",
     "autoCloseOnBlurLabel": "失焦关闭",
+    "autoSaveChatLabel": "自动保存聊天",
     "replaceModels": "替换模型",
     "replaceModelsDialog": {
       "title": "批量替换模型",
@@ -205,6 +206,7 @@
       "reasoningEffort": "设置模型思考过程的计算预算。更高的值可能会产生更详尽的回答，但会增加延迟和成本。",
       "isAlwaysOnTopTooltip": "启用以使窗口始终保持在最上层。",
       "autoCloseOnBlurTooltip": "启用以在独立窗口失去焦点时将其关闭。",
+      "autoSaveChatTooltip": "开启后，对话将每隔15秒自动保存到本地（需先在设置中配置本地对话路径）。",
       "defaultMcpServers": "设置后，在独立窗口打开此助手时将自动启用所选的MCP服务。"
     },
     "voiceLabel": "默认声音",

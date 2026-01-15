@@ -170,6 +170,7 @@
     "selectPromptsPlaceholder": "Choose prompts",
     "isAlwaysOnTopLabel": "Always on Top",
     "autoCloseOnBlurLabel": "Auto-close on Blur",
+    "autoSaveChatLabel": "Auto-save Chat",
     "replaceModels": "Replace Models",
     "replaceModelsDialog": {
       "title": "Bulk Replace Models",
@@ -205,6 +206,7 @@
       "reasoningEffort": "Sets the computational budget for the model's reasoning process. Higher values may yield more thorough answers but increase latency and cost.",
       "isAlwaysOnTopTooltip": "Enable to keep the window always on top of other windows.",
       "autoCloseOnBlurTooltip": "Enable to close the standalone window when it loses focus.",
+      "autoSaveChatTooltip": "When enabled, conversations will be automatically saved to local storage every 15 seconds (requires local chat path configured in settings).",
       "defaultMcpServers": "When set, the selected MCP services will be automatically enabled when this assistant is opened in a standalone window."
     },
     "voiceLabel": "Default Voice",

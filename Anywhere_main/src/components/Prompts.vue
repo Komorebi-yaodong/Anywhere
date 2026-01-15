@@ -97,6 +97,7 @@ const editingPrompt = reactive({
   backgroundImage: "",
   backgroundOpacity: 0.6,
   backgroundBlur: 0,
+  autoSaveChat: true,
 });
 
 const showIconEditDialog = ref(false);
@@ -459,6 +460,7 @@ function prepareAddPrompt() {
     backgroundImage: "",
     backgroundOpacity: 0.6,
     backgroundBlur: 0,
+    autoSaveChat: true,
   });
   showPromptEditDialog.value = true;
 }
@@ -504,6 +506,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     backgroundImage: p.backgroundImage || "",
     backgroundOpacity: p.backgroundOpacity ?? 0.6,
     backgroundBlur: p.backgroundBlur ?? 0,
+    autoSaveChat: p.autoSaveChat ?? true,
   });
   showPromptEditDialog.value = true;
 }
@@ -533,6 +536,7 @@ function savePrompt() {
       backgroundImage: editingPrompt.backgroundImage,
       backgroundOpacity: editingPrompt.backgroundOpacity,
       backgroundBlur: editingPrompt.backgroundBlur,
+      autoSaveChat: editingPrompt.autoSaveChat,
     };
 
     // 1. 更新或创建 prompts 对象中的条目
@@ -1062,6 +1066,15 @@ async function refreshPromptsConfig() {
                       </el-icon></el-tooltip>
                     <div class="spacer"></div>
                     <el-switch v-model="editingPrompt.autoCloseOnBlur" />
+                  </div>
+                  <div v-if="editingPrompt.showMode === 'window'" class="param-item">
+                    <span class="param-label">{{ t('prompts.autoSaveChatLabel') }}</span>
+                    <el-tooltip :content="t('prompts.tooltips.autoSaveChatTooltip')" placement="top"><el-icon
+                        class="tip-icon">
+                        <QuestionFilled />
+                      </el-icon></el-tooltip>
+                    <div class="spacer"></div>
+                    <el-switch v-model="editingPrompt.autoSaveChat" />
                   </div>
 
                   <div class="param-item voice-param">

@@ -47,6 +47,7 @@ const defaultConfig = {
         position_y: 0,
         autoCloseOnBlur: true,
         isAlwaysOnTop: true,
+        autoSaveChat: true,
       },
     },
     fastWindowPosition: { x: 0, y: 0 },
@@ -292,7 +293,8 @@ function checkConfig(config) {
       isDirectSend_normal: true, isDirectSend_file: false, ifTextNecessary: false,
       voice: '', reasoning_effort: "default", defaultMcpServers: [],
       window_width: 580, window_height: 740, position_x: 0, position_y: 0,
-      isAlwaysOnTop: true, autoCloseOnBlur: true, matchRegex: "", icon: ""
+      isAlwaysOnTop: true, autoCloseOnBlur: true, matchRegex: "", icon: "",
+      autoSaveChat: true
     };
 
     for (const key of Object.keys(config.prompts)) {

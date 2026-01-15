@@ -170,6 +170,7 @@
     "selectPromptsPlaceholder": "クイックアシスタントを選択",
     "isAlwaysOnTopLabel": "常に最前面に表示",
     "autoCloseOnBlurLabel": "フォーカスが外れたら閉じる",
+    "autoSaveChatLabel": "チャット自動保存",
     "replaceModels": "モデルを置換",
     "replaceModelsDialog": {
       "title": "モデルの一括置換",
@@ -205,6 +206,7 @@
       "reasoningEffort": "モデルの思考プロセスの計算予算を設定します。高い値はより詳細な回答をもたらす可能性がありますが、遅延とコストが増加します。",
       "isAlwaysOnTopTooltip": "ウィンドウを常に他のウィンドウより手前に表示します。",
       "autoCloseOnBlurTooltip": "独立したウィンドウがフォーカスを失ったときに自動的に閉じるようにします。",
+      "autoSaveChatTooltip": "オンにすると、チャットは15秒ごとにローカルに自動保存されます（設定でローカルチャットパスの設定が必要）。",
       "defaultMcpServers": "設定すると、このアシスタントをスタンドアロンウィンドウで開いたときに、選択したMCPサービスが自動的に有効になります。"
     },
     "voiceLabel": "デフォルト音声",
