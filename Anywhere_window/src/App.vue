@@ -1063,7 +1063,10 @@ const autoSaveSession = async () => {
       }
 
       if (namePrefix) {
-        defaultConversationName.value = `${namePrefix}-${CODE.value}`;
+        // 添加时间戳避免文件名重复覆盖，格式：YYYYMMDD-HHmmss
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+        defaultConversationName.value = `${namePrefix}-${CODE.value}-${timestamp}`;
       }
     }
   }
