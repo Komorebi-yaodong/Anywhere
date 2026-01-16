@@ -95,12 +95,16 @@ async function handleGlobalToggleChange(key, value) {
     currentConfig.value.isAlwaysOnTop_global = value;
   } else if (key === 'autoCloseOnBlur') {
     currentConfig.value.autoCloseOnBlur_global = value;
+  } else if (key === 'autoSaveChat') {
+    currentConfig.value.autoSaveChat_global = value;
   }
 
   // 2. 批量更新所有快捷助手的对应设置
   Object.keys(currentConfig.value.prompts).forEach(promptKey => {
     const prompt = currentConfig.value.prompts[promptKey];
     if (prompt) {
+      // 这里的 key 分别对应 prompts 对象中的属性名：
+      // 'isAlwaysOnTop', 'autoCloseOnBlur', 'autoSaveChat'
       prompt[key] = value;
     }
   });
@@ -115,7 +119,7 @@ async function exportConfig() {
   try {
     // 创建配置的深拷贝以进行修改，不影响当前应用的配置
     const configToExport = JSON.parse(JSON.stringify(currentConfig.value));
-    
+
     // 在导出前移除本地对话路径
     if (configToExport.webdav && configToExport.webdav.localChatPath) {
       delete configToExport.webdav.localChatPath;
@@ -185,13 +189,13 @@ function importConfig() {
 
 async function handleThemeChange(mode) {
   if (!currentConfig.value) return;
-  
+
   // 1. 保存用户选择的模式
   await saveSingleSetting('themeMode', mode);
-  
+
   // 2. 计算实际的布尔值
   let newIsDarkMode = currentConfig.value.isDarkMode;
-  
+
   if (mode === 'system') {
     // 检测系统当前主题
     newIsDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -200,7 +204,7 @@ async function handleThemeChange(mode) {
   } else {
     newIsDarkMode = false;
   }
-  
+
   // 3. 更新本地状态并保存布尔值（为了兼容旧逻辑和其他窗口）
   currentConfig.value.isDarkMode = newIsDarkMode;
   await saveSingleSetting('isDarkMode', newIsDarkMode);
@@ -560,12 +564,8 @@ async function selectLocalChatPath() {
               <span class="setting-option-label">{{ t('setting.darkMode.label') }}</span>
               <span class="setting-option-description">{{ t('setting.darkMode.description') }}</span>
             </div>
-            <el-select 
-              v-model="currentConfig.themeMode" 
-              @change="handleThemeChange" 
-              size="default" 
-              style="width: 120px;"
-            >
+            <el-select v-model="currentConfig.themeMode" @change="handleThemeChange" size="default"
+              style="width: 120px;">
               <el-option :label="t('setting.darkMode.system')" value="system"></el-option>
               <el-option :label="t('setting.darkMode.light')" value="light"></el-option>
               <el-option :label="t('setting.darkMode.dark')" value="dark"></el-option>
@@ -586,6 +586,14 @@ async function selectLocalChatPath() {
             </div>
             <el-switch v-model="currentConfig.autoCloseOnBlur_global"
               @change="(value) => handleGlobalToggleChange('autoCloseOnBlur', value)" />
+          </div>
+          <div class="setting-option-item">
+            <div class="setting-text-content">
+              <span class="setting-option-label">{{ t('setting.autoSaveChat_global.label') }}</span>
+              <span class="setting-option-description">{{ t('setting.autoSaveChat_global.description') }}</span>
+            </div>
+            <el-switch v-model="currentConfig.autoSaveChat_global"
+              @change="(value) => handleGlobalToggleChange('autoSaveChat', value)" />
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
@@ -653,7 +661,7 @@ async function selectLocalChatPath() {
             </div>
             <el-button @click="exportConfig" :icon="Download" size="default" plain>{{
               t('setting.dataManagement.exportButton')
-              }}</el-button>
+            }}</el-button>
           </div>
           <div class="setting-option-item">
             <div class="setting-text-content">
@@ -662,7 +670,7 @@ async function selectLocalChatPath() {
             </div>
             <el-button @click="importConfig" :icon="Upload" size="default" plain>{{
               t('setting.dataManagement.importButton')
-              }}</el-button>
+            }}</el-button>
           </div>
           <div class="setting-option-item no-border">
             <div class="setting-text-content">

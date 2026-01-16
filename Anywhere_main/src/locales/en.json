@@ -390,6 +390,10 @@
       "label": "Global Auto-close on Blur",
       "description": "Globally control whether all assistant windows close automatically on blur"
     },
+    "autoSaveChat_global": {
+      "label": "Global Auto-save Chat",
+      "description": "Globally control whether all assistants automatically save chats locally"
+    },
     "skipLineBreak": {
       "label": "Skip Line Breaks on Send",
       "description": "Enable to skip line breaks when selecting text."

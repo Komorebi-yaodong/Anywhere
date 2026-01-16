@@ -47,7 +47,7 @@ const defaultConfig = {
         position_y: 0,
         autoCloseOnBlur: true,
         isAlwaysOnTop: true,
-        autoSaveChat: true,
+        autoSaveChat: false,
       },
     },
     fastWindowPosition: { x: 0, y: 0 },
@@ -61,6 +61,7 @@ const defaultConfig = {
     fix_position: false,
     isAlwaysOnTop_global: true,
     autoCloseOnBlur_global: true,
+    autoSaveChat_global: false,
     zoom: 1,
     webdav: {
       url: "",
@@ -250,6 +251,7 @@ function checkConfig(config) {
   const rootDefaults = {
     isAlwaysOnTop_global: true,
     autoCloseOnBlur_global: true,
+    autoSaveChat_global: false,
     CtrlEnterToSend: false,
     showNotification: false,
     fix_position: false,
@@ -294,7 +296,7 @@ function checkConfig(config) {
       voice: '', reasoning_effort: "default", defaultMcpServers: [],
       window_width: 580, window_height: 740, position_x: 0, position_y: 0,
       isAlwaysOnTop: true, autoCloseOnBlur: true, matchRegex: "", icon: "",
-      autoSaveChat: true
+      autoSaveChat: false
     };
 
     for (const key of Object.keys(config.prompts)) {

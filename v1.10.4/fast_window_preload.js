@@ -64932,7 +64932,8 @@ var require_data = __commonJS({
             position_x: 0,
             position_y: 0,
             autoCloseOnBlur: true,
-            isAlwaysOnTop: true
+            isAlwaysOnTop: true,
+            autoSaveChat: false
           }
         },
         fastWindowPosition: { x: 0, y: 0 },
@@ -64946,6 +64947,7 @@ var require_data = __commonJS({
         fix_position: false,
         isAlwaysOnTop_global: true,
         autoCloseOnBlur_global: true,
+        autoSaveChat_global: false,
         zoom: 1,
         webdav: {
           url: "",
@@ -65108,6 +65110,7 @@ var require_data = __commonJS({
       const rootDefaults = {
         isAlwaysOnTop_global: true,
         autoCloseOnBlur_global: true,
+        autoSaveChat_global: false,
         CtrlEnterToSend: false,
         showNotification: false,
         fix_position: false,
@@ -65166,7 +65169,8 @@ var require_data = __commonJS({
           isAlwaysOnTop: true,
           autoCloseOnBlur: true,
           matchRegex: "",
-          icon: ""
+          icon: "",
+          autoSaveChat: false
         };
         for (const key of Object.keys(config.prompts)) {
           const p = config.prompts[key];

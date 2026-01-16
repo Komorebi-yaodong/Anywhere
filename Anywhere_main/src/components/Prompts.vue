@@ -97,7 +97,7 @@ const editingPrompt = reactive({
   backgroundImage: "",
   backgroundOpacity: 0.6,
   backgroundBlur: 0,
-  autoSaveChat: true,
+  autoSaveChat: false,
 });
 
 const showIconEditDialog = ref(false);
@@ -460,7 +460,7 @@ function prepareAddPrompt() {
     backgroundImage: "",
     backgroundOpacity: 0.6,
     backgroundBlur: 0,
-    autoSaveChat: true,
+    autoSaveChat: false,
   });
   showPromptEditDialog.value = true;
 }
@@ -506,7 +506,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     backgroundImage: p.backgroundImage || "",
     backgroundOpacity: p.backgroundOpacity ?? 0.6,
     backgroundBlur: p.backgroundBlur ?? 0,
-    autoSaveChat: p.autoSaveChat ?? true,
+    autoSaveChat: p.autoSaveChat ?? false,
   });
   showPromptEditDialog.value = true;
 }

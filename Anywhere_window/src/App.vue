@@ -1785,10 +1785,109 @@ const saveSessionAsJson = async () => {
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
 };
 
+// 重命名当前会话逻辑
+const handleRenameSession = async () => {
+  if (autoCloseOnBlur.value) handleTogglePin(); // 暂停失焦关闭，防止弹窗时窗口消失
+
+  const localPath = currentConfig.value.webdav?.localChatPath;
+  if (!localPath) {
+    showDismissibleMessage.error('请先在设置中配置本地对话路径');
+    return;
+  }
+  if (!defaultConversationName.value) {
+    showDismissibleMessage.warning('当前对话尚未保存，无法重命名');
+    return;
+  }
+
+  const oldBaseName = defaultConversationName.value;
+  const oldFilename = `${oldBaseName}.json`;
+  // 简单拼接路径，electron/node 环境下通常能正确处理
+  const oldFilePath = `${localPath}/${oldFilename}`;
+
+  try {
+    const { value: userInput } = await ElMessageBox.prompt(
+      '请输入新的会话名称',
+      '重命名对话',
+      {
+        inputValue: oldBaseName,
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        inputValidator: (val) => {
+            if (!val || !val.trim()) return '名称不能为空';
+            if (/[\\/:*?"<>|]/.test(val)) return '文件名包含非法字符';
+            return true;
+        },
+        customClass: 'filename-prompt-dialog', // 复用已有的弹窗样式
+      }
+    );
+
+    let newBaseName = (userInput || "").trim();
+    if (newBaseName.toLowerCase().endsWith('.json')) newBaseName = newBaseName.slice(0, -5);
+    
+    if (newBaseName === oldBaseName) return;
+
+    const newFilename = `${newBaseName}.json`;
+    const newFilePath = `${localPath}/${newFilename}`;
+
+    // 检查本地是否存在同名文件
+    const files = await window.api.listJsonFiles(localPath);
+    if (files.some(f => f.basename === newFilename)) {
+        showDismissibleMessage.error(`文件名 "${newFilename}" 已存在，操作取消`);
+        return;
+    }
+
+    // 执行本地重命名
+    await window.api.renameLocalFile(oldFilePath, newFilePath);
+    defaultConversationName.value = newBaseName;
+    showDismissibleMessage.success('本地重命名成功');
+
+    // 尝试同步重命名云端文件
+    const { url, username, password, data_path } = currentConfig.value.webdav || {};
+    if (url && data_path) {
+        try {
+            const client = createClient(url, { username, password });
+            const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
+            const oldRemotePath = `${remoteDir}/${oldFilename}`;
+            const newRemotePath = `${remoteDir}/${newFilename}`;
+
+            // 检查云端是否存在该文件
+            if (await client.exists(oldRemotePath)) {
+                 await ElMessageBox.confirm(
+                    '云端也存在同名文件，是否同步重命名？',
+                    '同步操作提示',
+                    { confirmButtonText: '是', cancelButtonText: '否', type: 'info' }
+                );
+                await client.moveFile(oldRemotePath, newRemotePath);
+                showDismissibleMessage.success('云端同步重命名成功');
+            }
+        } catch (e) {
+            if (e !== 'cancel' && e !== 'close') {
+               console.warn('Cloud rename skipped:', e);
+            }
+        }
+    }
+
+  } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+          showDismissibleMessage.error(`操作失败: ${error.message}`);
+      }
+  }
+};
+
 const handleSaveAction = async () => {
   if (autoCloseOnBlur.value) handleTogglePin();
   const isCloudEnabled = currentConfig.value.webdav?.url && currentConfig.value.webdav?.data_path;
   const saveOptions = [];
+
+  // 只有当已存在本地文件名（即已保存过）且配置了本地路径时，才显示重命名选项
+  if (currentConfig.value.webdav?.localChatPath && defaultConversationName.value) {
+      saveOptions.push({ 
+          title: '重命名对话', 
+          description: '修改当前对话名称，并同步修改本地文件（以及云端文件）。', 
+          buttonType: 'warning', 
+          action: handleRenameSession 
+      });
+  }
 
   if (isCloudEnabled) {
     saveOptions.push({ title: '保存到云端', description: '同步到 WebDAV 服务器，支持跨设备访问。', buttonType: 'success', action: saveSessionToCloud });
