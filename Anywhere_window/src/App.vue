@@ -1028,7 +1028,51 @@ onMounted(async () => {
 });
 
 const autoSaveSession = async () => {
-  if (loading.value || !currentConfig.value?.webdav?.localChatPath || !defaultConversationName.value) {
+  // 1. 检查基本条件
+  if (loading.value || !currentConfig.value?.webdav?.localChatPath) {
+    return;
+  }
+
+  // 2. 检查当前快捷助手是否开启自动保存
+  const promptConfig = currentConfig.value?.prompts?.[CODE.value];
+  if (!(promptConfig?.autoSaveChat ?? true)) {
+    return;
+  }
+
+  // 3. 如果没有对话名称，根据首条用户消息自动生成
+  if (!defaultConversationName.value && chat_show.value.length > 0) {
+    const firstUserMsg = chat_show.value.find(msg => msg.role === 'user');
+    if (firstUserMsg) {
+      let namePrefix = '';
+      const content = firstUserMsg.content;
+
+      if (Array.isArray(content)) {
+        const hasImage = content.some(p => p.type === 'image_url');
+        const hasFile = content.some(p => p.type === 'file');
+        const textPart = content.find(p => p.type === 'text');
+
+        if (hasImage) {
+          namePrefix = '图片';
+        } else if (hasFile) {
+          namePrefix = '文件';
+        } else if (textPart?.text) {
+          namePrefix = textPart.text.slice(0, 20).replace(/[\\/:*?"<>|\n\r]/g, '').trim();
+        }
+      } else if (typeof content === 'string') {
+        namePrefix = content.slice(0, 20).replace(/[\\/:*?"<>|\n\r]/g, '').trim();
+      }
+
+      if (namePrefix) {
+        // 添加时间戳避免文件名重复覆盖，格式：YYYYMMDD-HHmmss
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+        defaultConversationName.value = `${namePrefix}-${CODE.value}-${timestamp}`;
+      }
+    }
+  }
+
+  // 4. 如果仍然没有对话名称，则跳过保存
+  if (!defaultConversationName.value) {
     return;
   }
 
