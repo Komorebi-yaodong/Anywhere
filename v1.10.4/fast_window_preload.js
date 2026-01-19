@@ -64495,6 +64495,16 @@ var require_mcp_builtin = __commonJS({
         // Bash needs state
         tags: ["shell", "bash", "cmd"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Bash_Logo_Colored.svg"
+      },
+      "builtin_search": {
+        id: "builtin_search",
+        name: "Web Search",
+        description: "\u4F7F\u7528 DuckDuckGo \u8FDB\u884C\u514D\u8D39\u8054\u7F51\u641C\u7D22\uFF0C\u83B7\u53D6\u76F8\u5173\u7F51\u9875\u6807\u9898\u3001\u94FE\u63A5\u548C\u6458\u8981\u3002",
+        type: "builtin",
+        isActive: false,
+        isPersistent: false,
+        tags: ["search", "web", "internet"],
+        logoUrl: "https://upload.wikimedia.org/wikipedia/en/9/90/The_DuckDuckGo_Duck.png"
       }
     };
     var BUILTIN_TOOLS = {
@@ -64554,6 +64564,24 @@ var require_mcp_builtin = __commonJS({
               command: { type: "string", description: "The command to execute (e.g., 'ls -la', 'git status', 'npm install')." }
             },
             required: ["command"]
+          }
+        }
+      ],
+      "builtin_search": [
+        {
+          name: "web_search",
+          description: "Search the internet for a given query and return the top N results (title, link, snippet).",
+          inputSchema: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "The search keywords." },
+              count: { type: "integer", description: "Number of results to return (default 5, max 10)." },
+              language: {
+                type: "string",
+                description: "Preferred language/region code (e.g., 'zh-CN', 'en-US', 'jp'). Defaults to 'zh-CN' for Chinese results."
+              }
+            },
+            required: ["query"]
           }
         }
       ]
@@ -64862,6 +64890,85 @@ Content extraction is currently NOT supported for this file type.
 ${result2}`);
           });
         });
+      },
+      // Web Search Handler
+      web_search: async ({ query, count = 5, language = "zh-CN" }) => {
+        try {
+          const limit = Math.min(Math.max(parseInt(count) || 5, 1), 10);
+          const url = "https://html.duckduckgo.com/html/";
+          let ddgRegion = "cn-zh";
+          let acceptLang = "zh-CN,zh;q=0.9,en;q=0.8";
+          const langInput = (language || "").toLowerCase();
+          if (langInput.includes("en") || langInput.includes("us")) {
+            ddgRegion = "us-en";
+            acceptLang = "en-US,en;q=0.9";
+          } else if (langInput.includes("jp") || langInput.includes("ja")) {
+            ddgRegion = "jp-jp";
+            acceptLang = "ja-JP,ja;q=0.9,en;q=0.8";
+          } else if (langInput.includes("ru")) {
+            ddgRegion = "ru-ru";
+            acceptLang = "ru-RU,ru;q=0.9,en;q=0.8";
+          } else if (langInput === "all" || langInput === "world") {
+            ddgRegion = "wt-wt";
+            acceptLang = "en-US,en;q=0.9";
+          }
+          const headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": acceptLang,
+            // 动态语言头
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://html.duckduckgo.com",
+            "Referer": "https://html.duckduckgo.com/"
+          };
+          const body = new URLSearchParams();
+          body.append("q", query);
+          body.append("b", "");
+          body.append("kl", ddgRegion);
+          const response = await fetch(url, {
+            method: "POST",
+            headers,
+            body
+          });
+          if (!response.ok) throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+          const html = await response.text();
+          const results = [];
+          const titleLinkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+          const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+          const titles = [...html.matchAll(titleLinkRegex)];
+          const snippets = [...html.matchAll(snippetRegex)];
+          const decodeHtml = (str) => {
+            if (!str) return "";
+            return str.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/<b>/g, "").replace(/<\/b>/g, "").replace(/\s+/g, " ").trim();
+          };
+          for (let i = 0; i < titles.length && i < limit; i++) {
+            let link = titles[i][1];
+            const titleRaw = titles[i][2];
+            const snippetRaw = snippets[i] ? snippets[i][1] : "";
+            try {
+              if (link.includes("uddg=")) {
+                const urlObj = new URL(link, "https://html.duckduckgo.com");
+                const uddg = urlObj.searchParams.get("uddg");
+                if (uddg) link = decodeURIComponent(uddg);
+              }
+            } catch (e) {
+            }
+            results.push({
+              title: decodeHtml(titleRaw),
+              link,
+              snippet: decodeHtml(snippetRaw)
+            });
+          }
+          if (results.length === 0) {
+            if (ddgRegion === "cn-zh") {
+              return JSON.stringify({ message: "No results found in Chinese region. Try setting language='en' or 'all'.", query });
+            }
+            return JSON.stringify({ message: "No results found.", query });
+          }
+          return JSON.stringify(results, null, 2);
+        } catch (e) {
+          return `Search failed: ${e.message}`;
+        }
       }
     };
     function getBuiltinServers() {

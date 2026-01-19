@@ -40,7 +40,17 @@ const BUILTIN_SERVERS = {
         isPersistent: true, // Bash needs state
         tags: ["shell", "bash", "cmd"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Bash_Logo_Colored.svg"
-    }
+    },
+    "builtin_search": {
+        id: "builtin_search",
+        name: "Web Search",
+        description: "使用 DuckDuckGo 进行免费联网搜索，获取相关网页标题、链接和摘要。",
+        type: "builtin",
+        isActive: false,
+        isPersistent: false,
+        tags: ["search", "web", "internet"],
+        logoUrl: "https://upload.wikimedia.org/wikipedia/en/9/90/The_DuckDuckGo_Duck.png"
+    },
 };
 
 const BUILTIN_TOOLS = {
@@ -102,7 +112,25 @@ const BUILTIN_TOOLS = {
                 required: ["command"]
             }
         }
-    ]
+    ],
+    "builtin_search": [
+        {
+            name: "web_search",
+            description: "Search the internet for a given query and return the top N results (title, link, snippet).",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "The search keywords." },
+                    count: { type: "integer", description: "Number of results to return (default 5, max 10)." },
+                    language: { 
+                        type: "string", 
+                        description: "Preferred language/region code (e.g., 'zh-CN', 'en-US', 'jp'). Defaults to 'zh-CN' for Chinese results." 
+                    }
+                },
+                required: ["query"]
+            }
+        }
+    ],
 };
 
 // --- Helpers ---
@@ -443,6 +471,119 @@ const handlers = {
                 resolve(`[CWD: ${bashCwd}]\n${result}`);
             });
         });
+    },
+
+    // Web Search Handler
+    web_search: async ({ query, count = 5, language = 'zh-CN' }) => {
+        try {
+            const limit = Math.min(Math.max(parseInt(count) || 5, 1), 10);
+            const url = "https://html.duckduckgo.com/html/";
+            
+            // --- 1. 简单的语言/地区映射逻辑 ---
+            // DuckDuckGo 使用 'kl' 参数 (例如: cn-zh, us-en, wt-wt)
+            // 浏览器 Header 使用 'Accept-Language' (例如: zh-CN, en-US)
+            
+            let ddgRegion = 'cn-zh'; // 默认: 中国-中文
+            let acceptLang = 'zh-CN,zh;q=0.9,en;q=0.8'; // 默认 Header
+            
+            const langInput = (language || '').toLowerCase();
+
+            if (langInput.includes('en') || langInput.includes('us')) {
+                ddgRegion = 'us-en';
+                acceptLang = 'en-US,en;q=0.9';
+            } else if (langInput.includes('jp') || langInput.includes('ja')) {
+                ddgRegion = 'jp-jp';
+                acceptLang = 'ja-JP,ja;q=0.9,en;q=0.8';
+            } else if (langInput.includes('ru')) {
+                ddgRegion = 'ru-ru';
+                acceptLang = 'ru-RU,ru;q=0.9,en;q=0.8';
+            } else if (langInput === 'all' || langInput === 'world') {
+                ddgRegion = 'wt-wt'; // 全球
+                acceptLang = 'en-US,en;q=0.9';
+            }
+            // 默认为 zh-CN (无需 else，初始化已设置)
+
+            // --- 2. 构造请求 ---
+            const headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": acceptLang, // 动态语言头
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Origin": "https://html.duckduckgo.com",
+                "Referer": "https://html.duckduckgo.com/"
+            };
+
+            const body = new URLSearchParams();
+            body.append('q', query);
+            body.append('b', '');
+            body.append('kl', ddgRegion); // 动态地区参数
+
+            const response = await fetch(url, { 
+                method: 'POST',
+                headers: headers,
+                body: body
+            });
+
+            if (!response.ok) throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+            const html = await response.text();
+
+            const results = [];
+            
+            // --- 3. 解析逻辑 (保持鲁棒性) ---
+            const titleLinkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+            const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+
+            const titles = [...html.matchAll(titleLinkRegex)];
+            const snippets = [...html.matchAll(snippetRegex)];
+
+            const decodeHtml = (str) => {
+                if (!str) return "";
+                return str
+                    .replace(/&amp;/g, '&')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#39;/g, "'")
+                    .replace(/&lt;/g, "<")
+                    .replace(/&gt;/g, ">")
+                    .replace(/&nbsp;/g, " ")
+                    .replace(/<b>/g, "")
+                    .replace(/<\/b>/g, "")
+                    .replace(/\s+/g, " ")
+                    .trim();
+            };
+
+            for (let i = 0; i < titles.length && i < limit; i++) {
+                let link = titles[i][1];
+                const titleRaw = titles[i][2];
+                const snippetRaw = snippets[i] ? snippets[i][1] : "";
+
+                try {
+                    if (link.includes('uddg=')) {
+                        const urlObj = new URL(link, "https://html.duckduckgo.com");
+                        const uddg = urlObj.searchParams.get("uddg");
+                        if (uddg) link = decodeURIComponent(uddg);
+                    }
+                } catch(e) {}
+
+                results.push({
+                    title: decodeHtml(titleRaw),
+                    link: link,
+                    snippet: decodeHtml(snippetRaw)
+                });
+            }
+            
+            if (results.length === 0) {
+                // 如果是中文搜索无结果，可能是 DDG 的中文索引问题，提示用户尝试英文
+                if (ddgRegion === 'cn-zh') {
+                     return JSON.stringify({ message: "No results found in Chinese region. Try setting language='en' or 'all'.", query: query });
+                }
+                return JSON.stringify({ message: "No results found.", query: query });
+            }
+            
+            return JSON.stringify(results, null, 2);
+
+        } catch (e) {
+            return `Search failed: ${e.message}`;
+        }
     }
 };
 
