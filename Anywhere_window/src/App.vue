@@ -2609,7 +2609,7 @@ Here are the rules you should always follow to solve your task:
                 toolContent = "Error: Tool call was canceled by the user.";
                 if (uiToolCall) uiToolCall.approvalStatus = 'rejected';
               } else {
-                toolContent = `工具执行或参数解析错误: ${e.message}`;
+                toolContent = `{'result':'工具执行或参数解析错误: ${e.message}'}`;
                 if (uiToolCall) uiToolCall.approvalStatus = 'finished';
               }
               if (uiToolCall) uiToolCall.result = toolContent;

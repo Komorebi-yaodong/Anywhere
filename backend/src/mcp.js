@@ -295,6 +295,10 @@ async function invokeMcpTool(toolName, toolArgs, signal) {
     throw new Error(`Tool "${toolName}" not found or its server is not available.`);
   }
 
+  if (toolInfo.enabled === false) {
+      throw new Error(`Tool "${toolName}" has been disabled by user configuration.`);
+  }
+  
   // [拦截] 内置工具调用
   if (toolInfo.isBuiltin) {
       return await invokeBuiltinTool(toolName, toolArgs);
