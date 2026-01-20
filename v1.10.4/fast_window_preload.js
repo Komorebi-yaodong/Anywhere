@@ -64464,6 +64464,117 @@ var require_mcp_builtin = __commonJS({
     var { handleFilePath, parseFileObject } = require_file();
     var isWin = process.platform === "win32";
     var bashCwd = os.homedir();
+    function extractMetadata(html) {
+      const meta = {
+        title: "",
+        author: "",
+        description: "",
+        siteName: ""
+      };
+      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      if (titleMatch) meta.title = titleMatch[1].trim();
+      const getMetaContent = (propName) => {
+        const regex = new RegExp(`<meta\\s+(?:name|property)=["']${propName}["']\\s+content=["'](.*?)["']`, "i");
+        const match = html.match(regex);
+        return match ? match[1].trim() : null;
+      };
+      meta.title = getMetaContent("og:title") || getMetaContent("twitter:title") || meta.title;
+      meta.author = getMetaContent("author") || getMetaContent("article:author") || getMetaContent("og:site_name") || "Unknown Author";
+      meta.description = getMetaContent("description") || getMetaContent("og:description") || getMetaContent("twitter:description") || "";
+      meta.siteName = getMetaContent("og:site_name") || "";
+      return meta;
+    }
+    function convertHtmlToMarkdown(html) {
+      let text = html;
+      const articlePatterns = [
+        /<article[^>]*>([\s\S]*?)<\/article>/i,
+        /<div[^>]*id=["'](?:article_content|content_views|js_content|post-content)["'][^>]*>([\s\S]*?)<\/div>/i,
+        /<main[^>]*>([\s\S]*?)<\/main>/i
+      ];
+      for (const pattern of articlePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1].length > 500) {
+          text = match[1];
+          break;
+        }
+      }
+      text = text.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "");
+      text = text.replace(/<(script|style|svg|noscript|header|footer|nav|aside|iframe|form|button|textarea)[^>]*>[\s\S]*?<\/\1>/gi, "");
+      text = text.replace(/<div[^>]*(?:class|id)=["'][^"']*(?:sidebar|comment|recommend|advert|toolbar|operate|login|modal)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, "");
+      text = text.replace(/<!--[\s\S]*?-->/g, "");
+      text = text.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (match, level, content) => {
+        return `
+
+${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
+`;
+      });
+      text = text.replace(/<\/li>/gi, "\n");
+      text = text.replace(/<li[^>]*>/gi, "- ");
+      text = text.replace(/<\/(ul|ol)>/gi, "\n\n");
+      text = text.replace(/<\/(p|div|tr|table|article|section|blockquote)>/gi, "\n");
+      text = text.replace(/<br\s*\/?>/gi, "\n");
+      text = text.replace(/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*>/gi, (match, src, alt) => {
+        if (src.startsWith("data:image")) return "";
+        return `
+![${alt.trim()}](${src})
+`;
+      });
+      text = text.replace(/<img[^>]*src="([^"]*)"[^>]*>/gi, (match, src) => {
+        if (src.startsWith("data:image")) return "";
+        return `
+![](${src})
+`;
+      });
+      text = text.replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (match, href, content) => {
+        const cleanContent = content.replace(/<[^>]+>/g, "").trim();
+        if (!cleanContent || href.startsWith("javascript:") || href.startsWith("#")) return cleanContent;
+        return ` [${cleanContent}](${href}) `;
+      });
+      text = text.replace(/<(b|strong)[^>]*>([\s\S]*?)<\/\1>/gi, "**$2**");
+      text = text.replace(/<(code|pre)[^>]*>([\s\S]*?)<\/\1>/gi, "\n```\n$2\n```\n");
+      text = text.replace(/<[^>]+>/g, "");
+      const entities = { "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&copy;": "\xA9" };
+      text = text.replace(/&[a-z0-9]+;/gi, (match) => entities[match] || "");
+      const lines = text.split("\n").map((line) => line.trim());
+      const cleanLines = [];
+      const noiseKeywords = [
+        /^最新推荐/,
+        /^相关推荐/,
+        /^文章标签/,
+        /^版权声明/,
+        /阅读\s*\d/,
+        /点赞/,
+        /收藏/,
+        /分享/,
+        /举报/,
+        /打赏/,
+        /关注/,
+        /登录/,
+        /注册/,
+        /Copyright/,
+        /All rights reserved/,
+        /VIP/,
+        /立即使用/,
+        /福利倒计时/,
+        /扫一扫/,
+        /复制链接/
+      ];
+      for (let line of lines) {
+        if (!line) continue;
+        if (line.length < 2 && !line.match(/[a-zA-Z0-9]/)) continue;
+        let isNoise = false;
+        for (const regex of noiseKeywords) {
+          if (regex.test(line)) {
+            isNoise = true;
+            break;
+          }
+        }
+        if (isNoise) continue;
+        if (/^\[.{1,15}\]\(http.*\)$/.test(line)) continue;
+        cleanLines.push(line);
+      }
+      return cleanLines.join("\n\n");
+    }
     var BUILTIN_SERVERS = {
       "builtin_python": {
         id: "builtin_python",
@@ -64582,6 +64693,17 @@ var require_mcp_builtin = __commonJS({
               }
             },
             required: ["query"]
+          }
+        },
+        {
+          name: "fetch_page",
+          description: "Fetch the content of a specific URL and convert it to Markdown format. Use this to read articles, documentation, or search results in detail.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              url: { type: "string", description: "The URL of the webpage to fetch." }
+            },
+            required: ["url"]
           }
         }
       ]
@@ -64968,6 +65090,75 @@ ${result2}`);
           return JSON.stringify(results, null, 2);
         } catch (e) {
           return `Search failed: ${e.message}`;
+        }
+      },
+      // Fetch Page Handler
+      fetch_page: async ({ url }) => {
+        try {
+          if (!url || !url.startsWith("http")) {
+            return "Error: Invalid URL. Please provide a full URL starting with http:// or https://";
+          }
+          const headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Cache-Control": "max-age=0",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Referer": "https://www.google.com/"
+          };
+          const response = await fetch(url, { headers, redirect: "follow" });
+          if (response.status === 403 || response.status === 521) {
+            return `Failed to fetch page (Anti-bot protection ${response.status}). The site requires a real browser environment.`;
+          }
+          if (!response.ok) {
+            return `Failed to fetch page. Status: ${response.status} ${response.statusText}`;
+          }
+          const contentType = response.headers.get("content-type") || "";
+          const rawText = await response.text();
+          if (contentType.includes("application/json")) {
+            try {
+              return JSON.stringify(JSON.parse(rawText), null, 2);
+            } catch (e) {
+              return rawText;
+            }
+          }
+          const metadata = extractMetadata(rawText);
+          const markdownBody = convertHtmlToMarkdown(rawText);
+          if (!markdownBody || markdownBody.length < 50) {
+            return `Fetched URL: ${url}
+
+Title: ${metadata.title}
+
+[System]: Content seems empty. This might be a JavaScript-rendered page (SPA) which cannot be parsed by this tool.`;
+          }
+          let result2 = `URL: ${url}
+
+`;
+          if (metadata.title) result2 += `# ${metadata.title}
+
+`;
+          if (metadata.author) result2 += `**Author:** ${metadata.author}
+`;
+          if (metadata.description) result2 += `**Summary:** ${metadata.description}
+`;
+          result2 += `
+---
+
+${markdownBody}`;
+          const MAX_LENGTH = 15e3;
+          if (result2.length > MAX_LENGTH) {
+            return result2.substring(0, MAX_LENGTH) + `
+
+...[Content Truncated (${result2.length} chars total)]...`;
+          }
+          return result2;
+        } catch (e) {
+          return `Error fetching page: ${e.message}`;
         }
       }
     };
