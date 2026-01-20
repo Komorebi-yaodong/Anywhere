@@ -5,6 +5,7 @@ const { exec, spawn } = require('child_process');
 const { handleFilePath, parseFileObject } = require('./file.js');
 
 const isWin = process.platform === 'win32';
+const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform === 'darwin' ? 'macOS' : 'Linux');
 
 // --- Bash Session State ---
 let bashCwd = os.homedir();
@@ -174,21 +175,21 @@ const BUILTIN_SERVERS = {
     "builtin_bash": {
         id: "builtin_bash",
         name: "Shell Executor",
-        description: isWin ? "持久会话中执行 PowerShell 命令" : "持久会话中执行 Bash 命令",
+        description: isWin ? "执行 PowerShell 命令" : "执行 Bash 命令",
         type: "builtin",
         isActive: false,
-        isPersistent: true, // Bash needs state
+        isPersistent: false,
         tags: ["shell", "bash", "cmd"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Bash_Logo_Colored.svg"
     },
     "builtin_search": {
         id: "builtin_search",
         name: "Web Search",
-        description: "使用 DuckDuckGo 进行免费联网搜索，获取相关网页标题、链接和摘要。",
+        description: "使用 DuckDuckGo 进行免费联网搜索，获取相关网页标题、链接和摘要；抓取网页内容。",
         type: "builtin",
         isActive: false,
         isPersistent: false,
-        tags: ["search", "web", "internet"],
+        tags: ["search", "web", "fetch"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/en/9/90/The_DuckDuckGo_Duck.png"
     },
 };
@@ -243,11 +244,11 @@ const BUILTIN_TOOLS = {
     "builtin_bash": [
         {
             name: "execute_bash_command",
-            description: "Execute a shell command. Maintains current working directory state. Note: Long-running commands (like servers) will be terminated after 15 seconds to prevent blocking.",
+            description: `Execute a shell command on the current ${currentOS} system. Note: Long-running commands (like servers) will be terminated after 15 seconds to prevent blocking.`,
             inputSchema: {
                 type: "object",
                 properties: {
-                    command: { type: "string", description: "The command to execute (e.g., 'ls -la', 'git status', 'npm install')." }
+                    command: { type: "string", description: `The command to execute (e.g., 'ls -la', 'git status', 'npm install'). Current OS: ${currentOS}.` }
                 },
                 required: ["command"]
             }

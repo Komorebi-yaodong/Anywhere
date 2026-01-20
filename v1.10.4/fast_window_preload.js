@@ -64463,6 +64463,7 @@ var require_mcp_builtin = __commonJS({
     var { exec, spawn } = require("child_process");
     var { handleFilePath, parseFileObject } = require_file();
     var isWin = process.platform === "win32";
+    var currentOS = process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux";
     var bashCwd = os.homedir();
     function extractMetadata(html) {
       const meta = {
@@ -64599,22 +64600,21 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
       "builtin_bash": {
         id: "builtin_bash",
         name: "Shell Executor",
-        description: isWin ? "\u6301\u4E45\u4F1A\u8BDD\u4E2D\u6267\u884C PowerShell \u547D\u4EE4" : "\u6301\u4E45\u4F1A\u8BDD\u4E2D\u6267\u884C Bash \u547D\u4EE4",
+        description: isWin ? "\u6267\u884C PowerShell \u547D\u4EE4" : "\u6267\u884C Bash \u547D\u4EE4",
         type: "builtin",
         isActive: false,
         isPersistent: true,
-        // Bash needs state
         tags: ["shell", "bash", "cmd"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Bash_Logo_Colored.svg"
       },
       "builtin_search": {
         id: "builtin_search",
         name: "Web Search",
-        description: "\u4F7F\u7528 DuckDuckGo \u8FDB\u884C\u514D\u8D39\u8054\u7F51\u641C\u7D22\uFF0C\u83B7\u53D6\u76F8\u5173\u7F51\u9875\u6807\u9898\u3001\u94FE\u63A5\u548C\u6458\u8981\u3002",
+        description: "\u4F7F\u7528 DuckDuckGo \u8FDB\u884C\u514D\u8D39\u8054\u7F51\u641C\u7D22\uFF0C\u83B7\u53D6\u76F8\u5173\u7F51\u9875\u6807\u9898\u3001\u94FE\u63A5\u548C\u6458\u8981\uFF1B\u6293\u53D6\u7F51\u9875\u5185\u5BB9\u3002",
         type: "builtin",
         isActive: false,
         isPersistent: false,
-        tags: ["search", "web", "internet"],
+        tags: ["search", "web", "fetch"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/en/9/90/The_DuckDuckGo_Duck.png"
       }
     };
@@ -64668,11 +64668,11 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
       "builtin_bash": [
         {
           name: "execute_bash_command",
-          description: "Execute a shell command. Maintains current working directory state. Note: Long-running commands (like servers) will be terminated after 15 seconds to prevent blocking.",
+          description: `Execute a shell command on the current ${currentOS} system. Note: Long-running commands (like servers) will be terminated after 15 seconds to prevent blocking.`,
           inputSchema: {
             type: "object",
             properties: {
-              command: { type: "string", description: "The command to execute (e.g., 'ls -la', 'git status', 'npm install')." }
+              command: { type: "string", description: `The command to execute (e.g., 'ls -la', 'git status', 'npm install'). Current OS: ${currentOS}.` }
             },
             required: ["command"]
           }
