@@ -2261,6 +2261,14 @@ async function toggleMcpPersistence(serverId, isPersistent) {
   }
 }
 
+const getSystemTime = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const askAI = async (forceSend = false) => {
   if (loading.value) return;
   if (isMcpLoading.value) {
@@ -2381,7 +2389,7 @@ const askAI = async (forceSend = false) => {
       if (openaiFormattedTools.value.length > 0) {
         const mcpSystemPrompt = `
 ## Tool Use Rules
-Here are the rules you should always follow to solve your task:
+Today is ${getSystemTime()}. Here are the rules you should always follow to solve your task:
 1. Always use the right arguments for the tools. Never use variable names as the action arguments, use the value instead.
 2. Call a tool only when needed. If no tool call is needed, just answer the question directly.
 3. Never re-do a tool call that you previously did with the exact same parameters.
