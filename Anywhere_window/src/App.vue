@@ -2458,7 +2458,7 @@ Here are the rules you should always follow to solve your task:
         let lastUpdateTime = Date.now();
 
         for await (const part of stream) {
-          const delta = part.choices[0]?.delta;
+          const delta = part.choices?.[0]?.delta;
 
           if (!delta) continue;
 

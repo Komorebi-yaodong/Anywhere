@@ -64753,7 +64753,7 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
           }
         },
         {
-          name: "fetch_page",
+          name: "fetch_url",
           description: "Fetch the content of a specific URL and convert it to Markdown format. Use this to read articles, documentation, or search results in detail.",
           inputSchema: {
             type: "object",
@@ -65322,7 +65322,7 @@ ${result2}`);
         }
       },
       // Fetch Page Handler
-      fetch_page: async ({ url }) => {
+      fetch_url: async ({ url }) => {
         try {
           if (!url || !url.startsWith("http")) {
             return "Error: Invalid URL. Please provide a full URL starting with http:// or https://";
