@@ -298,6 +298,32 @@
     "persistent": {
       "label": "持久连接",
       "tooltip": "开启后将保持长连接，会占用总连接数（最多5个），适合部分无法断开的Stdio服务。"
+    },
+    "tabs": {
+      "tools": "启用工具",
+      "test": "调用测试"
+    },
+    "hints": {
+      "selectTools": "请勾选需要启用的工具"
+    },
+    "test": {
+      "selectTool": "选择工具:",
+      "selectToolPlaceholder": "请选择要测试的工具",
+      "run": "运行",
+      "cancel": "取消",
+      "noParams": "此工具无需参数",
+      "paramErrorJson": "参数 {key} 格式错误: 必须是有效的 JSON",
+      "paramErrorNumber": "参数 {key} 格式错误: 必须是数字",
+      "successNoContent": "执行成功，无返回内容。",
+      "executionError": "执行错误: ",
+      "systemError": "系统错误: ",
+      "opCancelled": "操作已取消",
+      "saveToolStateFailed": "保存工具状态失败",
+      "inputJsonPlaceholder": "请输入 JSON 格式的 {type}",
+      "inputPlaceholder": "请输入参数值",
+      "default": "默认",
+      "leaveEmpty": "留空使用默认值",
+      "response": "响应结果:"
     }
   },
   "providers": {

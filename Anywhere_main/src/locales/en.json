@@ -298,6 +298,32 @@
     "persistent": {
       "label": "Persistent Connection",
       "tooltip": "After enabling, a persistent connection will be maintained, which will occupy one slot of the total number of connections (up to 5). This is suitable for certain Stdio services that cannot be disconnected."
+    },
+    "tabs": {
+      "tools": "Enabled Tools",
+      "test": "Test Invocation"
+    },
+    "hints": {
+      "selectTools": "Please select tools to enable"
+    },
+    "test": {
+      "selectTool": "Select Tool:",
+      "selectToolPlaceholder": "Select a tool to test",
+      "run": "Run",
+      "cancel": "Cancel",
+      "noParams": "No parameters required",
+      "paramErrorJson": "Parameter {key} format error: Must be valid JSON",
+      "paramErrorNumber": "Parameter {key} format error: Must be a number",
+      "successNoContent": "Execution successful, no content returned.",
+      "executionError": "Execution Error: ",
+      "systemError": "System Error: ",
+      "opCancelled": "Operation cancelled",
+      "saveToolStateFailed": "Failed to save tool state",
+      "inputJsonPlaceholder": "Enter JSON formatted {type}",
+      "inputPlaceholder": "Enter parameter value",
+      "default": "Default",
+      "leaveEmpty": "Leave empty for default",
+      "response": "Response Result:"
     }
   },
   "providers": {

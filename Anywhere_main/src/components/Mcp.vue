@@ -2,8 +2,7 @@
 import { ref, reactive, computed, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox, ElScrollbar, ElAlert } from 'element-plus';
-import { Plus, Delete, Edit, CopyDocument, Tools, Search, Refresh, QuestionFilled, Link } from '@element-plus/icons-vue';
-
+import { Plus, Delete, Edit, CopyDocument, Tools, Search, Refresh, QuestionFilled, Link, CaretRight, CaretBottom } from '@element-plus/icons-vue';
 const { t } = useI18n();
 const currentConfig = inject('config');
 
@@ -14,7 +13,8 @@ const jsonEditorContent = ref('');
 const searchQuery = ref('');
 const advancedCollapse = ref([]);
 
-// [新增] 测试相关状态
+// 测试相关状态
+const activeTestTab = ref('list');
 const showTestResultDialog = ref(false);
 const currentTestingServer = ref(null); // 保存当前正在查看/测试的服务器引用
 const testResult = reactive({
@@ -23,8 +23,50 @@ const testResult = reactive({
     message: '',
     tools: [],
     serverName: '',
-    isCached: false // 标记是否为缓存数据
+    serverDescription: '',
+    isCached: false
 });
+const isTestAreaExpanded = ref(false);
+const currentTestToolName = ref('');
+const testFormData = ref({});
+const testRunning = ref(false);
+const testOutput = ref('');
+
+// 计算当前选中工具的 Schema
+const currentTestToolSchema = computed(() => {
+    if (!currentTestToolName.value) return [];
+    const tool = testResult.tools.find(t => t.name === currentTestToolName.value);
+    if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return [];
+
+    // 将 properties 对象转换为数组以便 v-for
+    return Object.entries(tool.inputSchema.properties).map(([key, schema]) => ({
+        key,
+        ...schema,
+        required: tool.inputSchema.required?.includes(key) || false
+    }));
+});
+
+// 切换测试工具时，重置表单
+const handleTestToolChange = (val) => {
+    testFormData.value = {};
+    testOutput.value = '';
+    if (!val) return;
+
+    // 初始化默认值
+    const tool = testResult.tools.find(t => t.name === val);
+    if (tool && tool.inputSchema && tool.inputSchema.properties) {
+        Object.entries(tool.inputSchema.properties).forEach(([key, schema]) => {
+            // 根据类型设置默认值
+            if (schema.type === 'boolean') {
+                testFormData.value[key] = false;
+            } else if (schema.type === 'array' || schema.type === 'object') {
+                testFormData.value[key] = ''; // 复杂类型用字符串输入，后续 parse
+            } else {
+                testFormData.value[key] = '';
+            }
+        });
+    }
+};
 
 const defaultServer = {
     id: null,
@@ -282,34 +324,166 @@ async function refreshMcpConfig() {
     }
 }
 
-// --- [核心修改] 连接测试与缓存逻辑 ---
+// 切换工具测试面板展开/折叠
+function toggleToolTest(index) {
+    if (!toolTestState.value[index]) {
+        toolTestState.value[index] = {
+            expanded: true,
+            argsJson: '{}', // 默认空JSON对象
+            running: false,
+            result: ''
+        };
+
+        // 尝试根据 schema 生成默认参数模板（可选优化）
+        const tool = testResult.tools[index];
+        if (tool && tool.inputSchema && tool.inputSchema.properties) {
+            const defaultArgs = {};
+            Object.keys(tool.inputSchema.properties).forEach(key => {
+                defaultArgs[key] = "";
+            });
+            toolTestState.value[index].argsJson = JSON.stringify(defaultArgs, null, 2);
+        }
+    } else {
+        toolTestState.value[index].expanded = !toolTestState.value[index].expanded;
+    }
+}
+
+// 运行工具测试
+async function runToolTest() {
+    if (!currentTestToolName.value) return;
+
+    testRunning.value = true;
+    testOutput.value = '';
+
+    try {
+        const args = {};
+        // 处理表单数据
+        for (const [key, value] of Object.entries(testFormData.value)) {
+            if (value === '' || value === null || value === undefined) continue;
+            const fieldSchema = currentTestToolSchema.value.find(f => f.key === key);
+            if (fieldSchema && (fieldSchema.type === 'object' || fieldSchema.type === 'array')) {
+                try {
+                    args[key] = JSON.parse(value);
+                } catch (e) {
+                    testOutput.value = t('mcp.test.paramErrorJson', { key });
+                    testRunning.value = false;
+                    return;
+                }
+            } else if (fieldSchema && (fieldSchema.type === 'number' || fieldSchema.type === 'integer')) {
+                const num = Number(value);
+                if (isNaN(num)) {
+                    testOutput.value = t('mcp.test.paramErrorNumber', { key });
+                    testRunning.value = false;
+                    return;
+                }
+                args[key] = num;
+            } else {
+                args[key] = value;
+            }
+        }
+
+        const server = currentTestingServer.value;
+        const configToTest = {
+            id: server.id,
+            name: server.name,
+            type: server.type,
+            command: server.command,
+            baseUrl: server.baseUrl,
+            env: typeof server.env === 'string' ? convertTextToObject(server.env) : server.env,
+            headers: typeof server.headers === 'string' ? convertTextToObject(server.headers) : server.headers,
+            args: Array.isArray(server.args) ? server.args : convertTextToLines(server.args)
+        };
+
+        const response = await window.api.testInvokeMcpTool(configToTest, currentTestToolName.value, args);
+
+        // 检查是否已被用户取消
+        if (!testRunning.value) return;
+
+        if (response.success) {
+            const rawResult = response.result;
+            if (typeof rawResult === 'string') {
+                testOutput.value = rawResult;
+            } else if (rawResult.content && Array.isArray(rawResult.content)) {
+                testOutput.value = rawResult.content.map(item => {
+                    if (item.type === 'text') return item.text;
+                    if (item.type === 'image') return `[Image: ${item.mimeType}]`;
+                    return JSON.stringify(item);
+                }).join('\n\n');
+            } else {
+                testOutput.value = JSON.stringify(rawResult, null, 2);
+            }
+            if (!testOutput.value) testOutput.value = t('mcp.test.successNoContent');
+        } else {
+            testOutput.value = t('mcp.test.executionError') + response.error;
+        }
+
+    } catch (err) {
+        if (!testRunning.value) return; // 忽略取消后的错误
+        testOutput.value = t('mcp.test.systemError') + err.message;
+    } finally {
+        if (testRunning.value) {
+            testRunning.value = false;
+        }
+    }
+}
+
+// 取消测试
+function cancelToolTest() {
+    testRunning.value = false;
+    // 由于后端 Promise 无法中断，这里做 UI 层面的“忽略结果”
+    ElMessage.info(t('mcp.test.opCancelled'));
+}
+
+// 更新工具缓存状态 (启用/禁用)
+async function updateToolCacheStatus() {
+    if (!currentTestingServer.value || !testResult.tools) return;
+
+    // 深拷贝以去除 Vue 响应式代理
+    const toolsToSave = JSON.parse(JSON.stringify(testResult.tools));
+
+    try {
+        await window.api.saveMcpToolCache(currentTestingServer.value.id, toolsToSave);
+        // 静默保存，不打扰用户
+    } catch (e) {
+        console.error("保存工具状态失败", e);
+        ElMessage.error(t('mcp.test.saveToolStateFailed'));
+    }
+}
 
 // 处理点击连接按钮
 async function handleTestClick(server) {
+    currentTestToolName.value = '';
+    testFormData.value = {};
+    testOutput.value = '';
+    activeTestTab.value = 'list';
     currentTestingServer.value = server;
     testResult.serverName = server.name;
+    testResult.serverDescription = server.description;
     testResult.loading = true;
-    showTestResultDialog.value = true; // 先打开弹窗，显示加载中
+    showTestResultDialog.value = true;
 
     try {
-        // 1. 尝试获取缓存
         const cache = await window.api.getMcpToolCache();
-
-        // 2. 检查该服务器是否有非空缓存
         if (cache && cache[server.id] && Array.isArray(cache[server.id]) && cache[server.id].length > 0) {
-            // [HIT] 使用缓存
-            testResult.tools = cache[server.id];
+            testResult.tools = cache[server.id].map(tool => ({
+                ...tool,
+                enabled: tool.enabled ?? true
+            }));
+
             testResult.success = true;
             testResult.isCached = true;
             testResult.message = '';
             testResult.loading = false;
+
+            if (testResult.tools.length > 0) {
+                currentTestToolName.value = testResult.tools[0].name;
+                handleTestToolChange(testResult.tools[0].name);
+            }
         } else {
-            // [MISS] 无缓存，执行真实连接测试
             await triggerConnectionTest(server);
         }
     } catch (error) {
-        // 如果读取缓存出错，也降级为真实测试
-        console.error("Read cache failed, fallback to live test", error);
+        console.error("Cache read failed", error);
         await triggerConnectionTest(server);
     }
 }
@@ -324,13 +498,13 @@ async function handleRefreshTest() {
 // 执行真实连接测试
 async function triggerConnectionTest(server) {
     testResult.loading = true;
-    testResult.isCached = false; // 标记为实时数据
+    testResult.isCached = false;
     testResult.success = false;
     testResult.message = '';
     testResult.tools = [];
+    currentTestToolName.value = '';
 
-    // 构造配置对象
-    const configToTest = {
+    const configToTest = { /* ... 构造配置 ... */
         id: server.id,
         name: server.name,
         type: server.type,
@@ -348,6 +522,10 @@ async function triggerConnectionTest(server) {
             testResult.success = true;
             testResult.tools = result.tools || [];
             ElMessage.success(t('mcp.alerts.testSuccess'));
+            if (testResult.tools.length > 0) {
+                currentTestToolName.value = testResult.tools[0].name;
+                handleTestToolChange(testResult.tools[0].name);
+            }
         } else {
             testResult.success = false;
             testResult.message = result.error;
@@ -429,8 +607,8 @@ async function triggerConnectionTest(server) {
                                         <el-button :icon="Link" text circle @click="handleTestClick(server)"
                                             class="action-btn-compact" />
                                     </el-tooltip>
-                                    <el-button v-if="server.type !== 'builtin'" :icon="Edit" text circle @click="prepareEditServer(server)"
-                                        class="action-btn-compact" />
+                                    <el-button v-if="server.type !== 'builtin'" :icon="Edit" text circle
+                                        @click="prepareEditServer(server)" class="action-btn-compact" />
                                     <el-button v-if="server.type !== 'builtin'" :icon="Delete" text circle type="danger"
                                         @click="deleteServer(server.id, server.name)" class="action-btn-compact" />
                                     <el-button :icon="CopyDocument" text circle @click="copyServerJson(server)"
@@ -573,10 +751,17 @@ async function triggerConnectionTest(server) {
         </el-dialog>
 
         <!-- 测试结果弹窗 -->
-        <el-dialog v-model="showTestResultDialog" width="600px" append-to-body class="test-result-dialog">
+        <el-dialog v-model="showTestResultDialog" width="650px" append-to-body class="test-result-dialog">
             <template #header>
                 <div class="test-dialog-header">
-                    <span class="dialog-title">{{ `连接测试: ${testResult.serverName}` }}</span>
+                    <div class="header-left">
+                        <span class="dialog-title">
+                            <el-tooltip v-if="testResult.serverDescription" :content="testResult.serverDescription"
+                                placement="bottom-start" popper-class="mcp-tooltip-width">
+                                {{ `${testResult.serverName}` }}
+                            </el-tooltip>
+                        </span>
+                    </div>
                     <el-button v-if="!testResult.loading" :icon="Refresh" circle size="small" @click="handleRefreshTest"
                         :title="t('mcp.refreshTooltip')" />
                 </div>
@@ -592,24 +777,129 @@ async function triggerConnectionTest(server) {
             <div v-else class="test-result-content">
                 <el-alert v-if="testResult.success && !testResult.isCached"
                     :title="t('mcp.connectionSuccess', { count: testResult.tools.length })" type="success" show-icon
-                    :closable="false" style="margin-bottom: 15px;" />
+                    style="margin-bottom: 10px; flex-shrink: 0;" />
+
                 <el-alert v-else-if="!testResult.success" :title="t('mcp.connectionFailed')"
                     :description="testResult.message" type="error" show-icon :closable="false"
-                    style="margin-bottom: 15px;" />
+                    style="margin-bottom: 15px; flex-shrink: 0;" />
 
-                <div v-if="testResult.success && testResult.tools.length > 0">
-                    <div class="tool-list-header">
-                        <span style="font-weight: bold; color: var(--text-secondary);">{{ t('mcp.toolList') }}</span>
-                        <el-tag v-if="testResult.isCached" type="info" size="small" effect="plain" round
-                            class="cached-tag">{{
-                                t('mcp.cached') }}</el-tag>
-                    </div>
-                    <el-scrollbar max-height="50vh" class="tools-list-scrollbar">
-                        <div v-for="tool in testResult.tools" :key="tool.name" class="tool-item">
-                            <div class="tool-name">{{ tool.name }}</div>
-                            <div class="tool-desc">{{ tool.description || t('mcp.noDescription') }}</div>
-                        </div>
-                    </el-scrollbar>
+                <div v-if="testResult.success && testResult.tools.length > 0" class="tabs-wrapper">
+
+                    <el-tabs v-model="activeTestTab" class="test-tabs">
+                        <!-- Tab 1: 启用工具列表 -->
+                        <el-tab-pane :label="t('mcp.tabs.tools')" name="list">
+                            <el-scrollbar max-height="32vh" class="tab-inner-scrollbar">
+                                <div class="tab-pane-content">
+                                    <div class="list-header">
+                                        <el-tag v-if="testResult.isCached" type="info" size="small" effect="plain" round
+                                            class="cached-tag">
+                                            {{ t('mcp.cached') }}
+                                        </el-tag>
+                                        <span class="hint-text">{{ t('mcp.hints.selectTools') }}</span>
+                                    </div>
+                                    <div class="tools-compact-list">
+                                        <div v-for="tool in testResult.tools" :key="tool.name"
+                                            class="tool-compact-item">
+                                            <el-switch v-model="tool.enabled" size="small"
+                                                @change="updateToolCacheStatus" />
+                                            <span class="tool-compact-name" :title="tool.name">{{ tool.name }}</span>
+                                            <el-tooltip :content="tool.description || t('mcp.noDescription')"
+                                                placement="top" :show-after="500" popper-class="mcp-tooltip-width">
+                                                <span class="tool-compact-desc">{{ tool.description ||
+                                                    t('mcp.noDescription')
+                                                    }}</span>
+                                            </el-tooltip>
+                                        </div>
+                                    </div>
+                                </div>
+                            </el-scrollbar>
+                        </el-tab-pane>
+
+                        <!-- Tab 2: 工具调用测试 -->
+                        <el-tab-pane :label="t('mcp.tabs.test')" name="test">
+                            <el-scrollbar max-height="32vh" class="tab-inner-scrollbar">
+                                <div class="tab-pane-content">
+                                    <div class="test-form-area no-border">
+                                        <!-- 工具选择 -->
+                                        <div class="test-form-row">
+                                            <span class="label">{{ t('mcp.test.selectTool') }}</span>
+                                            <el-select v-model="currentTestToolName"
+                                                :placeholder="t('mcp.test.selectToolPlaceholder')" filterable
+                                                @change="handleTestToolChange" style="flex: 1;">
+                                                <el-option v-for="tool in testResult.tools" :key="tool.name"
+                                                    :label="tool.name" :value="tool.name" />
+                                            </el-select>
+                                            <el-button v-if="testRunning" type="danger" plain @click="cancelToolTest">
+                                                {{ t('mcp.test.cancel') }}
+                                            </el-button>
+                                            <el-button v-else type="primary" @click="runToolTest"
+                                                :disabled="!currentTestToolName">
+                                                {{ t('mcp.test.run') }}
+                                            </el-button>
+                                        </div>
+
+                                        <!-- 动态参数表单 -->
+                                        <div v-if="currentTestToolName" class="dynamic-form-container">
+                                            <div v-if="currentTestToolSchema.length === 0" class="no-params-text">
+                                                {{ t('mcp.test.noParams') }}
+                                            </div>
+
+                                            <div v-else class="form-grid">
+                                                <div v-for="field in currentTestToolSchema" :key="field.key"
+                                                    class="dynamic-field">
+                                                    <div class="field-label">
+                                                        <span class="required-star" v-if="field.required">*</span>
+                                                        {{ field.key }}
+                                                        <el-tooltip v-if="field.description"
+                                                            :content="field.description" placement="top"
+                                                            popper-class="mcp-tooltip-width">
+                                                            <el-icon class="info-icon">
+                                                                <QuestionFilled />
+                                                            </el-icon>
+                                                        </el-tooltip>
+                                                    </div>
+
+                                                    <el-switch v-if="field.type === 'boolean'"
+                                                        v-model="testFormData[field.key]" />
+
+                                                    <el-input
+                                                        v-else-if="field.type === 'integer' || field.type === 'number'"
+                                                        v-model="testFormData[field.key]" type="number"
+                                                        :placeholder="field.default !== undefined ? `${t('mcp.test.default')}: ${field.default}` : t('mcp.test.leaveEmpty')"
+                                                        style="width: 100%;" />
+
+                                                    <el-input
+                                                        v-else-if="field.type === 'array' || field.type === 'object'"
+                                                        v-model="testFormData[field.key]" type="textarea" :rows="2"
+                                                        :placeholder="t('mcp.test.inputJsonPlaceholder', { type: field.type })"
+                                                        style="font-family: monospace;" />
+
+                                                    <el-select v-else-if="field.enum" v-model="testFormData[field.key]"
+                                                        :placeholder="t('mcp.test.selectPlaceholder')"
+                                                        style="width: 100%;" clearable>
+                                                        <el-option v-for="opt in field.enum" :key="opt" :label="opt"
+                                                            :value="opt" />
+                                                    </el-select>
+
+                                                    <el-input v-else v-model="testFormData[field.key]"
+                                                        :placeholder="field.description || t('mcp.test.inputPlaceholder')" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- 结果输出 -->
+                                        <div v-if="testOutput" class="test-output-box">
+                                            <div class="output-label">{{ t('mcp.test.response') }}</div>
+                                            <el-scrollbar max-height="200px" class="result-scrollbar">
+                                                <pre class="result-pre">{{ testOutput }}</pre>
+                                            </el-scrollbar>
+                                        </div>
+                                    </div>
+                                </div>
+                            </el-scrollbar>
+                        </el-tab-pane>
+                    </el-tabs>
+
                 </div>
                 <el-empty v-else-if="testResult.success" :description="t('mcp.noToolsProvided')" :image-size="60" />
             </div>
@@ -624,7 +914,21 @@ async function triggerConnectionTest(server) {
     </div>
 </template>
 
+<style>
+.mcp-tooltip-width {
+    max-width: 60vw;
+    line-height: 1.4;
+}
+
+/* 针对结果框内部的原生滚动条美化 */
+.result-content-static pre::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+</style>
+
 <style scoped>
+/* ================= 全局布局 ================= */
 .page-container {
     display: flex;
     flex-direction: column;
@@ -760,7 +1064,6 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     line-clamp: 2;
 }
 
-/* 底部布局调整 */
 .mcp-card-footer {
     display: flex;
     justify-content: space-between;
@@ -780,7 +1083,6 @@ html.dark .main-content-scrollbar :deep(.el-scrollbar__thumb:hover) {
     padding-top: 0px;
 }
 
-/* Header 中的持久化按钮样式 */
 .persistent-btn-header {
     color: var(--text-tertiary);
     padding: 4px;
@@ -995,12 +1297,19 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
     line-height: 1;
 }
 
-/* 测试弹窗相关样式 */
 .test-dialog-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     padding-right: 20px;
+}
+
+.header-left {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-right: 10px;
+    flex: 1;
 }
 
 .dialog-title {
@@ -1022,11 +1331,83 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
     animation-direction: reverse;
 }
 
-.tool-list-header {
-    margin: 10px 0 5px 0;
+/* 2. 测试内容主体容器 (Flex布局，限制高度) */
+.test-result-content {
     display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 3. Tabs 容器 */
+.tabs-wrapper {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-top: 0px;
+}
+
+/* 4. Element Tabs 样式重置 */
+.test-tabs {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.test-tabs :deep(.el-tabs__header) {
+    flex-shrink: 0;
+    margin-bottom: 0;
+    order: 0 !important;
+}
+
+.test-tabs :deep(.el-tabs__nav-wrap) {
+    padding: 0 10px;
+}
+
+/* 关键：el-tabs__content 必须有高度且禁止原生滚动 */
+.test-tabs :deep(.el-tabs__content) {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    /* 确保撑满 */
+    order: 1 !important;
+    padding: 0;
+    overflow: hidden !important;
+}
+
+/* Tab Pane 必须也是 100% 高度 */
+.test-tabs :deep(.el-tab-pane) {
+    height: 100%;
+    width: 100%;
+}
+
+/* 5. Tab 内部滚动条容器 */
+.tab-inner-scrollbar {
+    height: 100%;
+    width: 100%;
+}
+
+.tab-inner-scrollbar :deep(.el-scrollbar__view) {
+    padding: 15px 10px 20px 5px;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 6. Tab 内容布局 */
+.tab-pane-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+/* Tab 1: 工具列表 */
+.list-header {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
 }
 
 .cached-tag {
@@ -1035,31 +1416,146 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
     font-size: 11px;
 }
 
-.tools-list-scrollbar {
+.hint-text {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+.tools-compact-list {
     border: 1px solid var(--border-primary);
-    border-radius: var(--radius-md);
+    border-radius: 6px;
     background-color: var(--bg-primary);
 }
 
-.tool-item {
+.tool-compact-item {
+    display: flex;
+    align-items: center;
     padding: 8px 12px;
     border-bottom: 1px solid var(--border-primary);
+    gap: 10px;
 }
 
-.tool-item:last-child {
+.tool-compact-item:last-child {
     border-bottom: none;
 }
 
-.tool-item .tool-name {
-    font-weight: 600;
+.tool-compact-name {
+    font-weight: 500;
     color: var(--text-primary);
     font-size: 13px;
-    margin-bottom: 2px;
+    white-space: nowrap;
 }
 
-.tool-item .tool-desc {
+.tool-compact-desc {
     color: var(--text-secondary);
     font-size: 12px;
-    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+/* Tab 2: 测试表单 */
+.test-form-area.no-border {
+    border: none;
+    padding: 0;
+    background-color: transparent;
+    display: flex;
+    flex-direction: column;
+}
+
+.test-form-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-shrink: 0;
+}
+
+.test-form-row .label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.dynamic-form-container {
+    padding-right: 8px;
+    margin-bottom: 15px;
+}
+
+.no-params-text {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: 8px 0;
+    font-style: italic;
+    border: 1px dashed var(--border-primary);
+    /* 可选：加个虚线框表示这里是参数区 */
+    border-radius: 4px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.dynamic-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dynamic-field:has(textarea) {
+    grid-column: span 2;
+}
+
+.field-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+}
+
+.required-star {
+    color: #F56C6C;
+    margin-right: 2px;
+}
+
+.info-icon {
+    margin-left: 4px;
+    cursor: help;
+    font-size: 12px;
+}
+
+/* 结果输出框 */
+.test-output-box {
+    margin-top: 10px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-primary);
+    border-radius: 4px;
+    padding: 8px;
+    /* 不再限制最大高度，让其自然撑开页面从而触发外层滚动 */
+    display: flex;
+    flex-direction: column;
+}
+
+.output-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    flex-shrink: 0;
+}
+
+.result-content-static pre {
+    margin: 0;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text-primary);
+    max-height: 400px;
+    overflow-y: auto;
 }
 </style>

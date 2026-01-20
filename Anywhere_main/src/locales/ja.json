@@ -298,6 +298,32 @@
     "persistent": {
       "label": "永続接続",
       "tooltip": "有効化すると、長時間接続が維持され、総接続数（最大5件）のうちの1つを占有します。切断できない一部のStdioサービスに適しています。"
+    },
+    "tabs": {
+      "tools": "有効なツール",
+      "test": "呼び出しテスト"
+    },
+    "hints": {
+      "selectTools": "有効にするツールを選択してください"
+    },
+    "test": {
+      "selectTool": "ツール選択:",
+      "selectToolPlaceholder": "テストするツールを選択",
+      "run": "実行",
+      "cancel": "キャンセル",
+      "noParams": "このツールにはパラメータは不要です",
+      "paramErrorJson": "パラメータ {key} の形式エラー: 有効なJSONである必要があります",
+      "paramErrorNumber": "パラメータ {key} の形式エラー: 数字である必要があります",
+      "successNoContent": "実行成功、返却コンテンツなし。",
+      "executionError": "実行エラー: ",
+      "systemError": "システムエラー: ",
+      "opCancelled": "操作がキャンセルされました",
+      "saveToolStateFailed": "ツール状態の保存に失敗しました",
+      "inputJsonPlaceholder": "JSON形式の {type} を入力",
+      "inputPlaceholder": "パラメータ値を入力",
+      "default": "デフォルト",
+      "leaveEmpty": "空の場合はデフォルト値を使用",
+      "response": "応答結果:"
     }
   },
   "providers": {
