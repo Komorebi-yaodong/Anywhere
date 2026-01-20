@@ -64589,12 +64589,12 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
       },
       "builtin_filesystem": {
         id: "builtin_filesystem",
-        name: "File Reader",
-        description: "\u8BFB\u53D6\u672C\u5730\u6587\u4EF6\u6216\u8005\u8FDC\u7A0B\u6587\u4EF6\u3002\u652F\u6301\u6587\u672C\u3001Markdown\u3001\u4EE3\u7801\u3001Word (.docx)\u3001Excel (.xlsx/.csv) \u683C\u5F0F\u3002\u6CE8\u610F\uFF1APDF \u548C\u56FE\u7247\u7B49\u4E8C\u8FDB\u5236\u6587\u4EF6\u4E0D\u652F\u6301\u89E3\u6790\u3002",
+        name: "File Operations",
+        description: "\u5168\u80FD\u6587\u4EF6\u64CD\u4F5C\u5DE5\u5177\u3002\u652F\u6301 Glob \u6587\u4EF6\u5339\u914D\u3001Grep \u5185\u5BB9\u641C\u7D22\u3001\u4EE5\u53CA\u6587\u4EF6\u7684\u8BFB\u53D6\u3001\u7F16\u8F91\u548C\u5199\u5165\u3002\u652F\u6301\u672C\u5730\u6587\u4EF6\u53CA\u8FDC\u7A0BURL\u3002",
         type: "builtin",
         isActive: false,
         isPersistent: false,
-        tags: ["file", "read"],
+        tags: ["file", "fs", "read", "write", "edit", "search"],
         logoUrl: "https://cdn-icons-png.flaticon.com/512/2965/2965335.png"
       },
       "builtin_bash": {
@@ -64603,7 +64603,7 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
         description: isWin ? "\u6267\u884C PowerShell \u547D\u4EE4" : "\u6267\u884C Bash \u547D\u4EE4",
         type: "builtin",
         isActive: false,
-        isPersistent: true,
+        isPersistent: false,
         tags: ["shell", "bash", "cmd"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Bash_Logo_Colored.svg"
       },
@@ -64654,14 +64654,71 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
       ],
       "builtin_filesystem": [
         {
+          name: "glob_files",
+          description: "Fast file pattern matching to locate file paths. Use this to find files before reading them.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              pattern: { type: "string", description: "Glob pattern (e.g., 'src/**/*.ts' for recursive, '*.json' for current dir)." },
+              path: { type: "string", description: "Root directory to search. Defaults to current user home." }
+            },
+            required: ["pattern"]
+          }
+        },
+        {
+          name: "grep_search",
+          description: "Search for patterns in file contents using Regex.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              pattern: { type: "string", description: "Regex pattern to search for." },
+              path: { type: "string", description: "Root directory to search." },
+              glob: { type: "string", description: "Glob pattern to filter files (e.g., '**/*.js')." },
+              output_mode: {
+                type: "string",
+                enum: ["content", "files_with_matches", "count"],
+                description: "Output mode: 'content' (lines), 'files_with_matches' (paths only), 'count'."
+              },
+              multiline: { type: "boolean", description: "Enable multiline matching." }
+            },
+            required: ["pattern"]
+          }
+        },
+        {
           name: "read_file",
-          description: "Read content from a local file path or a remote file. Supports .txt, .md, .code, .docx, .xlsx. Returns parsed text for supported formats.",
+          description: "Read content from a local file path or a remote file. Supports text and code. For editing, read first.",
           inputSchema: {
             type: "object",
             properties: {
               file_path: { type: "string", description: "Absolute path to the local file OR a valid HTTP/HTTPS URL." }
             },
             required: ["file_path"]
+          }
+        },
+        {
+          name: "edit_file",
+          description: "Precise string replacement for modifying code or text files. YOU MUST READ THE FILE FIRST to ensure you have the exact 'old_string'.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              file_path: { type: "string", description: "Absolute path to the local file." },
+              old_string: { type: "string", description: "The EXACT text to be replaced. Must be unique in the file unless replace_all is true." },
+              new_string: { type: "string", description: "The new text to replace with." },
+              replace_all: { type: "boolean", description: "If true, replaces all occurrences. If false, fails if old_string is not unique." }
+            },
+            required: ["file_path", "old_string", "new_string"]
+          }
+        },
+        {
+          name: "write_file",
+          description: "Create a new file or completely overwrite an existing file.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              file_path: { type: "string", description: "Absolute path to the file." },
+              content: { type: "string", description: "Full content to write to the file." }
+            },
+            required: ["file_path", "content"]
           }
         }
       ],
@@ -64708,6 +64765,48 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
         }
       ]
     };
+    var resolvePath = (inputPath) => {
+      if (!inputPath) return os.homedir();
+      let p = inputPath.replace(/^["']|["']$/g, "");
+      if (p.startsWith("~")) {
+        p = path.join(os.homedir(), p.slice(1));
+      }
+      if (!path.isAbsolute(p)) {
+        p = path.join(os.homedir(), p);
+      }
+      return path.normalize(p);
+    };
+    var globToRegex = (glob) => {
+      if (!glob) return null;
+      let regex = glob.replace(/\\/g, "/").replace(/\*\*/g, "___DOUBLE_STAR___").replace(/\*/g, "___SINGLE_STAR___").replace(/\?/g, "___QUESTION___");
+      regex = regex.replace(/[\\^$|.+()\[\]{}]/g, "\\$&");
+      regex = regex.replace(/___DOUBLE_STAR___/g, ".*");
+      regex = regex.replace(/___SINGLE_STAR___/g, "[^/\\\\]*");
+      regex = regex.replace(/___QUESTION___/g, ".");
+      try {
+        return new RegExp(`^${regex}$`, "i");
+      } catch (e) {
+        console.error("Glob regex conversion failed:", e);
+        return /^__INVALID_GLOB__$/;
+      }
+    };
+    var normalizePath = (p) => p.split(path.sep).join("/");
+    async function* walkDir(dir, maxDepth = 20, currentDepth = 0) {
+      if (currentDepth > maxDepth) return;
+      try {
+        const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+        for (const dirent of dirents) {
+          const res = path.resolve(dir, dirent.name);
+          if (dirent.isDirectory()) {
+            if (["node_modules", ".git", ".idea", ".vscode", "dist", "build", "__pycache__"].includes(dirent.name)) continue;
+            yield* walkDir(res, maxDepth, currentDepth + 1);
+          } else {
+            yield res;
+          }
+        }
+      } catch (e) {
+      }
+    }
     var getExtensionFromContentType = (contentType) => {
       if (!contentType) return null;
       const type = contentType.split(";")[0].trim().toLowerCase();
@@ -64874,7 +64973,96 @@ ${output}`);
           });
         });
       },
-      // Filesystem (Local + URL)
+      // --- File Operations Handlers ---
+      // 1. Glob Files
+      glob_files: async ({ pattern, path: searchPath }) => {
+        try {
+          const rootDir = resolvePath(searchPath);
+          if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
+          if (!isPathSafe(rootDir)) return `[Security Block] Access restricted.`;
+          const results = [];
+          const regex = globToRegex(pattern);
+          if (!regex) return "Error: Invalid glob pattern.";
+          const MAX_RESULTS = 200;
+          const normalizedRoot = normalizePath(rootDir);
+          for await (const filePath of walkDir(rootDir)) {
+            const normalizedFilePath = normalizePath(filePath);
+            let relativePath = normalizedFilePath.replace(normalizedRoot, "");
+            if (relativePath.startsWith("/")) relativePath = relativePath.slice(1);
+            if (regex.test(relativePath) || regex.test(path.basename(filePath))) {
+              results.push(filePath);
+            }
+            if (results.length >= MAX_RESULTS) break;
+          }
+          if (results.length === 0) return "No files matched the pattern.";
+          return results.join("\n") + (results.length >= MAX_RESULTS ? `
+... (Limit reached: ${MAX_RESULTS})` : "");
+        } catch (e) {
+          return `Glob error: ${e.message}`;
+        }
+      },
+      // 2. Grep Search
+      grep_search: async ({ pattern, path: searchPath, glob, output_mode = "content", multiline = false }) => {
+        try {
+          const rootDir = resolvePath(searchPath);
+          if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
+          const regexFlags = multiline ? "gmi" : "gi";
+          let searchRegex;
+          try {
+            searchRegex = new RegExp(pattern, regexFlags);
+          } catch (e) {
+            return `Invalid Regex: ${e.message}`;
+          }
+          const globRegex = glob ? globToRegex(glob) : null;
+          const normalizedRoot = normalizePath(rootDir);
+          const results = [];
+          let matchCount = 0;
+          const MAX_SCANNED = 2e3;
+          let scanned = 0;
+          for await (const filePath of walkDir(rootDir)) {
+            if (scanned++ > MAX_SCANNED) break;
+            if (globRegex) {
+              const normalizedFilePath = normalizePath(filePath);
+              let relativePath = normalizedFilePath.replace(normalizedRoot, "");
+              if (relativePath.startsWith("/")) relativePath = relativePath.slice(1);
+              if (!globRegex.test(relativePath) && !globRegex.test(path.basename(filePath))) continue;
+            }
+            const ext = path.extname(filePath).toLowerCase();
+            if ([".png", ".jpg", ".jpeg", ".gif", ".pdf", ".exe", ".bin", ".zip", ".node", ".dll", ".db"].includes(ext)) continue;
+            try {
+              const stats = await fs.promises.stat(filePath);
+              if (stats.size > 1024 * 1024) continue;
+              const content = await fs.promises.readFile(filePath, "utf-8");
+              if (output_mode === "files_with_matches") {
+                if (searchRegex.test(content)) {
+                  results.push(filePath);
+                  searchRegex.lastIndex = 0;
+                }
+              } else {
+                const matches = [...content.matchAll(searchRegex)];
+                if (matches.length > 0) {
+                  matchCount += matches.length;
+                  if (output_mode === "count") continue;
+                  const lines = content.split(/\r?\n/);
+                  matches.forEach((m) => {
+                    const offset = m.index;
+                    const lineNum = content.substring(0, offset).split(/\r?\n/).length;
+                    const lineContent = lines[lineNum - 1].trim();
+                    results.push(`${filePath}:${lineNum}: ${lineContent.substring(0, 100)}`);
+                  });
+                }
+              }
+            } catch (readErr) {
+            }
+          }
+          if (output_mode === "count") return `Total matches: ${matchCount}`;
+          if (results.length === 0) return "No matches found.";
+          return results.join("\n");
+        } catch (e) {
+          return `Grep error: ${e.message}`;
+        }
+      },
+      // 3. Read File
       read_file: async ({ file_path }) => {
         try {
           let fileForHandler;
@@ -64903,17 +65091,17 @@ ${output}`);
               return `Network error: ${fetchErr.message}`;
             }
           } else {
-            file_path = file_path.replace(/^["']|["']$/g, "");
-            if (!isPathSafe(file_path)) {
-              return `[Security Block] Access to sensitive system file '${path.basename(file_path)}' is restricted.`;
+            const safePath = resolvePath(file_path);
+            if (!isPathSafe(safePath)) {
+              return `[Security Block] Access to sensitive system file '${path.basename(safePath)}' is restricted.`;
             }
-            if (!fs.existsSync(file_path)) return `Error: File not found at ${file_path}`;
-            const stats = await fs.promises.stat(file_path);
+            if (!fs.existsSync(safePath)) return `Error: File not found at ${safePath}`;
+            const stats = await fs.promises.stat(safePath);
             if (stats.size > 50 * 1024 * 1024) {
               return `Error: File is too large (${(stats.size / 1024 / 1024).toFixed(2)}MB). Max limit is 50MB.`;
             }
-            const fileObj = await handleFilePath(file_path);
-            if (!fileObj) return `Error: Unable to access or read file at ${file_path}`;
+            const fileObj = await handleFilePath(safePath);
+            if (!fileObj) return `Error: Unable to access or read file at ${safePath}`;
             const arrayBuffer = await fileObj.arrayBuffer();
             const base64String = Buffer.from(arrayBuffer).toString("base64");
             const dataUrl = `data:${fileObj.type || "application/octet-stream"};base64,${base64String}`;
@@ -64931,11 +65119,52 @@ ${output}`);
           } else {
             const typeInfo = result2.type === "image_url" ? "Image" : "Binary/PDF";
             return `[System] File '${fileForHandler.name}' detected as ${typeInfo}. 
-Content extraction is currently NOT supported for this file type. 
-(Binary data suppressed to protect context window).`;
+Content extraction is currently NOT supported via this tool for binary formats in this context.`;
           }
         } catch (e) {
           return `Error reading file: ${e.message}`;
+        }
+      },
+      // 4. Edit File
+      edit_file: async ({ file_path, old_string, new_string, replace_all = false }) => {
+        try {
+          const safePath = resolvePath(file_path);
+          if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
+          if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
+          let content = await fs.promises.readFile(safePath, "utf-8");
+          if (!content.includes(old_string)) {
+            return `Error: 'old_string' not found in file. Please ensure you read the file first and use the exact string.`;
+          }
+          if (!replace_all) {
+            const count = content.split(old_string).length - 1;
+            if (count > 1) {
+              return `Error: 'old_string' occurs ${count} times. Please set 'replace_all' to true if you intend to replace all, or provide a more unique context string.`;
+            }
+          }
+          if (replace_all) {
+            content = content.split(old_string).join(new_string);
+          } else {
+            content = content.replace(old_string, new_string);
+          }
+          await fs.promises.writeFile(safePath, content, "utf-8");
+          return `Successfully edited ${path.basename(safePath)}.`;
+        } catch (e) {
+          return `Edit failed: ${e.message}`;
+        }
+      },
+      // 5. Write File
+      write_file: async ({ file_path, content }) => {
+        try {
+          const safePath = resolvePath(file_path);
+          if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
+          const dir = path.dirname(safePath);
+          if (!fs.existsSync(dir)) {
+            await fs.promises.mkdir(dir, { recursive: true });
+          }
+          await fs.promises.writeFile(safePath, content, "utf-8");
+          return `Successfully wrote to ${safePath}`;
+        } catch (e) {
+          return `Write failed: ${e.message}`;
         }
       },
       // Bash / PowerShell
