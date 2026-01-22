@@ -2274,7 +2274,39 @@ const getSystemTime = () => {
   return `${year}-${month}-${day} (${weekDay})`;
 }
 
+const generateMcpSystemPrompt = () => {
+  return `
+## SYSTEM CONTEXT
+Current Time: **${getSystemTime()}**
+Platform：**${currentOS.value}**
 
+Always use this timestamp as your reference for "today", "now", "current", or relative dates (e.g., "yesterday", "next week").
+
+## Tool Use Rules
+Here are the rules you should always follow to solve your task:
+1. Always use the right arguments for the tools. Never use variable names as the action arguments, use the value instead.
+2. Call a tool only when needed. If no tool call is needed, just answer the question directly.
+3. Never re-do a tool call that you previously did with the exact same parameters.
+4. **Synthesis**: Must always synthesize the tool output into valuable, easily understandable information from the user's perspective.
+5.  **Strict Multimedia Formatting Norms**: In all circumstances, the display format for multimedia content (images, videos, audio) must comply with the following specifications, and **must not** be contained within code blocks (\`\`\`):
+    *   **Image (Markdown)**: \`![Content Description](Image Link)\`
+    *   **Video (HTML)**:
+        \`\`\`html
+        <video controls="" style="max-width: 80%; max-height: 400px; height: auto; width: auto; display: block;"><source src="Video Link URL" type="video/mp4">Your browser does not support video playback.</video>
+        \`\`\`
+    *   **Audio (HTML)**:
+        \`\`\`html
+        <audio class="chat-audio-player" controls="" preload="none">
+          <source id="Audio Format" src="Audio Link URL">
+        </audio>
+        \`\`\`
+6. **Language**: All Respond must be in the user's language
+7. **Security & Safety**: Tools must be executed securely, and the invocation of any commands that could lead to system damage, data loss, or sensitive privacy disclosure is strictly prohibited.
+    1.  **Comprehensive Risk Assessment**: Identify whether the operation involves sensitive data or irreversible data modification.
+    2.  **Mandatory Warning Prompts**: For any risky operation, clear and detailed warnings must be issued to the user before execution, explaining potential consequences (e.g., exposure of sensitive information, data loss).
+    3.  **Seek Explicit Confirmation**: Before executing irreversible or high-risk operations (e.g., deleting files, reading sensitive files), explicit secondary confirmation from the user must be required.
+`;
+};
 
 const askAI = async (forceSend = false) => {
   if (loading.value) return;
@@ -2393,45 +2425,17 @@ const askAI = async (forceSend = false) => {
         });
       }
 
+      // 准备 System Prompt 和 MCP 规则
+      let mcpSystemPromptStr = "";
       if (openaiFormattedTools.value.length > 0) {
-        const mcpSystemPrompt = `
-## SYSTEM CONTEXT
-Current Time: **${getSystemTime()}**
-Platform：**${currentOS.value}**
-
-Always use this timestamp as your reference for "today", "now", "current", or relative dates (e.g., "yesterday", "next week").
-
-## Tool Use Rules
-Here are the rules you should always follow to solve your task:
-1. Always use the right arguments for the tools. Never use variable names as the action arguments, use the value instead.
-2. Call a tool only when needed. If no tool call is needed, just answer the question directly.
-3. Never re-do a tool call that you previously did with the exact same parameters.
-4. **Synthesis**: Must always synthesize the tool output into valuable, easily understandable information from the user's perspective.
-5.  **Strict Multimedia Formatting Norms**: In all circumstances, the display format for multimedia content (images, videos, audio) must comply with the following specifications, and **must not** be contained within code blocks (\`\`\`):
-    *   **Image (Markdown)**: \`![Content Description](Image Link)\`
-    *   **Video (HTML)**:
-        \`\`\`html
-        <video controls="" style="max-width: 80%; max-height: 400px; height: auto; width: auto; display: block;"><source src="Video Link URL" type="video/mp4">Your browser does not support video playback.</video>
-        \`\`\`
-    *   **Audio (HTML)**:
-        \`\`\`html
-        <audio class="chat-audio-player" controls="" preload="none">
-          <source id="Audio Format" src="Audio Link URL">
-        </audio>
-        \`\`\`
-6. **Language**: All Respond must be in the user's language
-7. **Security & Safety**: Tools must be executed securely, and the invocation of any commands that could lead to system damage, data loss, or sensitive privacy disclosure is strictly prohibited.
-    1.  **Comprehensive Risk Assessment**: Identify whether the operation involves sensitive data or irreversible data modification.
-    2.  **Mandatory Warning Prompts**: For any risky operation, clear and detailed warnings must be issued to the user before execution, explaining potential consequences (e.g., exposure of sensitive information, data loss).
-    3.  **Seek Explicit Confirmation**: Before executing irreversible or high-risk operations (e.g., deleting files, reading sensitive files), explicit secondary confirmation from the user must be required.
-`;
+        mcpSystemPromptStr = generateMcpSystemPrompt();
         const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
         if (systemMessageIndex !== -1) {
           if (!messagesForThisRequest[systemMessageIndex].content.includes("## Tool Use Rules")) {
-            messagesForThisRequest[systemMessageIndex].content += mcpSystemPrompt;
+            messagesForThisRequest[systemMessageIndex].content += mcpSystemPromptStr;
           }
         } else {
-          messagesForThisRequest.unshift({ role: "system", content: mcpSystemPrompt });
+          messagesForThisRequest.unshift({ role: "system", content: mcpSystemPromptStr });
         }
       }
 
@@ -2443,6 +2447,7 @@ Here are the rules you should always follow to solve your task:
 
       if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
       if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
+      
       if (openaiFormattedTools.value.length > 0) {
         payload.tools = openaiFormattedTools.value;
         payload.tool_choice = "auto";
@@ -2618,11 +2623,69 @@ Here are the rules you should always follow to solve your task:
 
             try {
               const toolArgs = JSON.parse(toolCall.function.arguments);
-              const result = await window.api.invokeMcpTool(toolCall.function.name, toolArgs, controller.signal);
+              
+              // ===========================================
+              // [START] Sub-Agent 特殊处理 & 上下文注入
+              // ===========================================
+              let executionContext = null;
+              
+              if (toolCall.function.name === 'sub_agent') {
+                  const currentApiKey = api_key.value;
+                  const currentBaseUrl = base_url.value;
+                  const currentModelName = model.value.split('|')[1] || model.value;
+
+                  // 1. 获取全量工具列表 (排除 sub_agent 自身)
+                  const toolsContext = openaiFormattedTools.value
+                      .filter(t => t.function.name !== 'sub_agent');
+
+                  // 2. 定义实时更新回调 (用于前端展示 Sub-Agent 的思考过程)
+                  const onUpdateCallback = (logContent) => {
+                      if (uiToolCall) {
+                          // 在日志末尾添加动态标识
+                          uiToolCall.result = logContent + "\n\n[Sub-Agent 执行中...]";
+                      }
+                  };
+
+                  // 3. 组装上下文
+                  executionContext = {
+                      apiKey: currentApiKey,
+                      baseUrl: currentBaseUrl,
+                      model: currentModelName,
+                      tools: toolsContext,
+                      mcpSystemPrompt: mcpSystemPromptStr, // 同步主对话的 MCP 提示词
+                      onUpdate: onUpdateCallback           // 传入更新回调
+                  };
+              }
+              // ===========================================
+              // [END] Sub-Agent 特殊处理
+              // ===========================================
+
+              // 执行 MCP 工具
+              const result = await window.api.invokeMcpTool(
+                  toolCall.function.name, 
+                  toolArgs, 
+                  toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal, 
+                  executionContext 
+              );
+              
               toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
 
               if (uiToolCall) {
-                uiToolCall.result = toolContent;
+                // 如果是 Sub-Agent，合并日志和最终结果
+                if (toolCall.function.name === 'sub_agent') {
+                    const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Sub-Agent 执行中...]", "") : "";
+                    
+                    // 如果结果中不包含日志信息（即它只是纯答案），则格式化追加
+                    if (!currentLog.includes(toolContent)) {
+                         uiToolCall.result = `${currentLog}\n\n=== 最终结果 ===\n${toolContent}`;
+                    } else {
+                         // 如果 result 已经包含了日志 (取决于后端实现)，则直接使用
+                         uiToolCall.result = currentLog; 
+                    }
+                } else {
+                    uiToolCall.result = toolContent;
+                }
+                
                 uiToolCall.approvalStatus = 'finished';
               }
             } catch (e) {

@@ -95,7 +95,9 @@ window.api = {
             return await initializeMcpClient(activeServerConfigs, {}, saveMcpToolCache);
         }
     },
-    invokeMcpTool,
+    invokeMcpTool: async (toolName, toolArgs, signal, context = null) => {
+        return await invokeMcpTool(toolName, toolArgs, signal, context);
+    },
     closeMcpClient,
     isFileTypeSupported,
     parseFileObject,

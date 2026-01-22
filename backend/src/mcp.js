@@ -289,44 +289,57 @@ function buildOpenaiFormattedTools() {
 /**
  * 此时如果是非持久化连接，会再次创建临时连接来执行工具
  */
-async function invokeMcpTool(toolName, toolArgs, signal) {
+async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
   const toolInfo = fullToolInfoMap.get(toolName);
+  
   if (!toolInfo) {
-    throw new Error(`Tool "${toolName}" not found or its server is not available.`);
+      try {
+          const { invokeBuiltinTool } = require('./mcp_builtin.js');
+          return await invokeBuiltinTool(toolName, toolArgs, signal, context);
+      } catch (e) {
+          throw new Error(`Tool "${toolName}" not found.`);
+      }
   }
 
   if (toolInfo.enabled === false) {
-      throw new Error(`Tool "${toolName}" has been disabled by user configuration.`);
+      throw new Error(`Tool "${toolName}" has been disabled.`);
   }
   
-  // [拦截] 内置工具调用
+  // 2. 如果是注册过的内置工具，调用 invokeBuiltinTool 并传递 signal 和 context
   if (toolInfo.isBuiltin) {
-      return await invokeBuiltinTool(toolName, toolArgs);
+      const { invokeBuiltinTool } = require('./mcp_builtin.js');
+      return await invokeBuiltinTool(toolName, toolArgs, signal, context);
   }
 
+  // 3. 持久连接
   if (toolInfo.isPersistent && toolInfo.instance) {
     return await toolInfo.instance.invoke(toolArgs, { signal });
   }
 
+  // 4. 临时连接
   const serverConfig = toolInfo.serverConfig;
   if (!toolInfo.isPersistent && serverConfig) {
     let tempClient = null;
     const controller = new AbortController();
+    
+    // 连接外部传入的 signal
     if (signal) {
-      signal.addEventListener('abort', () => controller.abort());
+        if (signal.aborted) controller.abort();
+        signal.addEventListener('abort', () => controller.abort());
     }
+
     try {      
       const modifiedConfig = { ...serverConfig };
       modifiedConfig.transport = normalizeTransportType(modifiedConfig.transport);
       
-      // 创建临时客户端
       tempClient = new MultiServerMCPClient({ [serverConfig.id]: { id: serverConfig.id, ...modifiedConfig } }, { signal: controller.signal });
       const tools = await tempClient.getTools();
       const toolToCall = tools.find(t => t.name === toolName);
-      if (!toolToCall) throw new Error(`Tool "${toolName}" not found on server during invocation.`);
+      if (!toolToCall) throw new Error(`Tool "${toolName}" not found.`);
       return await toolToCall.invoke(toolArgs, { signal: controller.signal });
     } finally {
-      controller.abort();
+      // 如果没有外部 signal，我们需要负责清理；如果有，外部 signal 触发 abort 时 controller 也会 abort
+      if (!signal) controller.abort();
       if (tempClient) await tempClient.close();
     }
   }
@@ -338,43 +351,28 @@ async function invokeMcpTool(toolName, toolArgs, signal) {
  * 独立连接并执行工具
  * 用于在设置界面测试具体的工具调用
  */
-async function connectAndInvokeTool(id, config, toolName, toolArgs) {
+async function connectAndInvokeTool(id, config, toolName, toolArgs, context = null) {
   // [拦截] 内置类型直接调用
   if (config.transport === 'builtin' || config.type === 'builtin') {
       const { invokeBuiltinTool } = require('./mcp_builtin.js');
-      return await invokeBuiltinTool(toolName, toolArgs);
+      return await invokeBuiltinTool(toolName, toolArgs, null, context);
   }
-
+  
   let tempClient = null;
   const controller = new AbortController();
-  // 设置较长的超时时间用于工具执行 (60秒，有些工具可能很慢)
   const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
     const modifiedConfig = { ...config, transport: normalizeTransportType(config.transport) };
-    
-    // 创建客户端
     tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
-    
-    // 1. 获取所有工具 (LangChain Tool 格式)
     const tools = await tempClient.getTools();
-    
-    // 2. 查找目标工具
-    // 注意：MultiServerMCPClient 可能会给工具名加上前缀 (如 "serverid_toolname")
-    // 这里我们尝试精确匹配，或者匹配结尾（处理命名空间）
-    const targetTool = tools.find(t => 
-        t.name === toolName || 
-        t.name === `${id}_${toolName}`
-    );
+    const targetTool = tools.find(t => t.name === toolName || t.name === `${id}_${toolName}`);
 
     if (!targetTool) {
         throw new Error(`Tool '${toolName}' not found on server '${id}'. Available tools: ${tools.map(t => t.name).join(', ')}`);
     }
 
-    // 3. 调用工具
-    // LangChain tool.invoke 接受参数对象
     const result = await targetTool.invoke(toolArgs, { signal: controller.signal });
-    
     return result;
   } catch (error) {
     console.error(`[MCP] Error invoking tool ${toolName} on ${id}:`, error);
@@ -384,7 +382,6 @@ async function connectAndInvokeTool(id, config, toolName, toolArgs) {
     controller.abort();
     if (tempClient) {
       try {
-        // 某些版本的适配器可能没有 close 方法，或者 close 是异步的，加个容错
         if (typeof tempClient.close === 'function') {
             await tempClient.close();
         }

@@ -172,6 +172,16 @@ const BUILTIN_SERVERS = {
         tags: ["search", "web", "fetch"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/en/9/90/The_DuckDuckGo_Duck.png"
     },
+    "builtin_subagent": {
+        id: "builtin_subagent",
+        name: "Sub-Agent",
+        description: "一个能够自主规划的子智能体。主智能体需显式分配工具给它。",
+        type: "builtin",
+        isActive: false,
+        isPersistent: false,
+        tags: ["agent"],
+        logoUrl: "https://s2.loli.net/2026/01/22/tTsJjkpiOYAeGdy.png"
+    },
 };
 
 const BUILTIN_TOOLS = {
@@ -317,6 +327,36 @@ const BUILTIN_TOOLS = {
                     url: { type: "string", description: "The URL of the webpage to read." }
                 },
                 required: ["url"]
+            }
+        }
+    ],
+    "builtin_subagent": [
+        {
+            name: "sub_agent",
+            description: "Delegates a complex task to a Sub-Agent. You can assign specific tools, set the planning depth, and provide context. The Sub-Agent will autonomous plan and execute.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    task: { type: "string", description: "The detailed task description." },
+                    context: { type: "string", description: "Background info, previous conversation summary, code snippets, or user constraints. Do NOT leave empty if the task depends on previous messages." },
+                    tools: { 
+                        type: "array", 
+                        items: { type: "string" }, 
+                        description: "Optional. List of tool names to grant. If omitted, ALL available tools are granted." 
+                    },
+                    planning_level: {
+                        type: "string",
+                        enum: ["fast", "medium", "high", "custom"],
+                        description: "Complexity level: 'fast'(10 steps), 'medium'(20 steps, default), 'high'(30 steps), or 'custom'."
+                    },
+                    custom_steps: {
+                        type: "integer",
+                        minimum: 10,
+                        maximum: 100,
+                        description: "Only used if planning_level is 'custom'."
+                    }
+                },
+                required: ["task"] // tools 不再是必填
             }
         }
     ],
@@ -511,6 +551,161 @@ const isPathSafe = (targetPath) => {
     
     return !forbiddenPatterns.some(regex => regex.test(targetPath));
 };
+
+async function runSubAgent(args, globalContext, signal) {
+    const { task, context: userContext, tools: allowedToolNames, planning_level, custom_steps } = args;
+    const { apiKey, baseUrl, model, tools: allToolDefinitions, mcpSystemPrompt, onUpdate } = globalContext;
+
+    // --- 1. 工具权限控制 ---
+    // 如果 allowedToolNames 未定义或为空，默认允许所有工具（除了自己）
+    // 如果定义了，则严格筛选
+    let availableTools = [];
+    if (allowedToolNames && Array.isArray(allowedToolNames) && allowedToolNames.length > 0) {
+        const allowedSet = new Set(allowedToolNames);
+        availableTools = (allToolDefinitions || []).filter(t => 
+            allowedSet.has(t.function.name) && t.function.name !== 'sub_agent'
+        );
+    } else {
+        availableTools = (allToolDefinitions || []).filter(t => t.function.name !== 'sub_agent');
+    }
+
+    // --- 2. 步骤控制 ---
+    let MAX_STEPS = 20; // Default medium
+    if (planning_level === 'fast') MAX_STEPS = 10;
+    else if (planning_level === 'high') MAX_STEPS = 30;
+    else if (planning_level === 'custom' && custom_steps) MAX_STEPS = Math.min(100, Math.max(10, custom_steps));
+
+    // --- 3. 提示词构建 ---
+
+    // System Prompt: 身份、规则、环境
+    const systemInstruction = `You are a specialized Sub-Agent Worker.
+Your Role: Autonomous task executor.
+Strategy: Plan, execute tools, observe results, and iterate until the task is done.
+Output: When finished, output the final answer directly as text. Do NOT ask the user for clarification unless all tools fail.
+${mcpSystemPrompt ? '\n' + mcpSystemPrompt : ''}`;
+
+    // User Prompt: 具体任务、上下文、限制
+    const userInstruction = `## Current Assignment
+**Task**: ${task}
+
+**Context & Background**:
+${userContext || 'No additional context provided.'}
+
+**Execution Constraints**:
+- Maximum Steps: ${MAX_STEPS}
+- Please start by analyzing the task and available tools.`;
+
+    const messages = [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: userInstruction }
+    ];
+
+    let step = 0;
+    
+    // 用于记录完整过程的日志
+    const executionLog = [];
+    const log = (msg) => {
+        executionLog.push(msg);
+        // 实时回调给前端
+        if (onUpdate && typeof onUpdate === 'function') {
+            onUpdate(executionLog.join('\n'));
+        }
+    };
+
+    log(`[Sub-Agent] Started. Max steps: ${MAX_STEPS}. Tools: ${availableTools.map(t=>t.function.name).join(', ') || 'None'}`);
+
+    // 动态导入
+    const { invokeMcpTool } = require('./mcp.js'); 
+
+    while (step < MAX_STEPS) {
+        if (signal && signal.aborted) throw new Error("Sub-Agent execution aborted by user.");
+        step++;
+        
+        log(`\n--- Step ${step}/${MAX_STEPS} ---`);
+
+        try {
+            // 3.1 LLM 思考
+            const response = await fetch(`${baseUrl}/chat/completions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${Array.isArray(apiKey) ? apiKey[0] : apiKey.split(',')[0].trim()}`
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: messages,
+                    tools: availableTools.length > 0 ? availableTools : undefined,
+                    tool_choice: availableTools.length > 0 ? "auto" : undefined,
+                    stream: false
+                }),
+                signal: signal
+            });
+
+            if (!response.ok) {
+                const err = `API Call failed: ${response.status}`;
+                log(`[Error] ${err}`);
+                return `[Sub-Agent Error] ${err}`;
+            }
+
+            const data = await response.json();
+            const message = data.choices[0].message;
+            messages.push(message);
+
+            // 3.2 决策
+            if (message.content) {
+                log(`[Thought] ${message.content}`);
+            }
+
+            if (!message.tool_calls || message.tool_calls.length === 0) {
+                log(`[Result] Task Completed.`);
+                // 返回最终结果（包含过程日志以便追溯，或者只返回结果，这里选择只返回结果，过程在UI展示）
+                return message.content || "[Sub-Agent finished without content]";
+            }
+
+            // 3.3 执行工具
+            for (const toolCall of message.tool_calls) {
+                if (signal && signal.aborted) throw new Error("Sub-Agent execution aborted.");
+
+                const toolName = toolCall.function.name;
+                let toolArgsObj = {};
+                let toolResult = "";
+                
+                try {
+                    toolArgsObj = JSON.parse(toolCall.function.arguments);
+                    log(`[Action] Calling ${toolName}...`);
+                    
+                    // 执行
+                    const result = await invokeMcpTool(toolName, toolArgsObj, signal, null);
+                    
+                    if (typeof result === 'string') toolResult = result;
+                    else if (Array.isArray(result)) toolResult = result.map(i => i.text || JSON.stringify(i)).join('\n');
+                    else toolResult = JSON.stringify(result);
+
+                    log(`[Observation] Tool output length: ${toolResult.length} chars.`);
+
+                } catch (e) {
+                    if (e.name === 'AbortError') throw e;
+                    toolResult = `Error: ${e.message}`;
+                    log(`[Error] Tool execution failed: ${e.message}`);
+                }
+
+                messages.push({
+                    role: "tool",
+                    tool_call_id: toolCall.id,
+                    name: toolName,
+                    content: toolResult
+                });
+            }
+        } catch (e) {
+            if (e.name === 'AbortError') throw e;
+            log(`[Critical Error] ${e.message}`);
+            return `[Sub-Agent Error] ${e.message}`;
+        }
+    }
+
+    log(`[Stop] Reached maximum step limit.`);
+    return `[Sub-Agent] Reached max steps (${MAX_STEPS}). Final state returned.`;
+}
 
 // --- Execution Handlers ---
 const handlers = {
@@ -995,8 +1190,7 @@ const handlers = {
             return `Search failed: ${e.message}`;
         }
     },
-
-    // Fetch Page Handler
+    // Web Fetch Handler
     web_fetch: async ({ url }) => {
         try {
             if (!url || !url.startsWith('http')) {
@@ -1067,6 +1261,14 @@ const handlers = {
         } catch (e) {
             return `Error fetching page: ${e.message}`;
         }
+    },
+
+    // Sub Agent Handler
+    sub_agent: async (args, globalContext, signal) => {
+        if (!globalContext || !globalContext.apiKey) {
+            return "Error: Sub-Agent requires global context(should be in a chat session).";
+        }
+        return await runSubAgent(args, globalContext, signal);
     }
 };
 
@@ -1080,9 +1282,14 @@ function getBuiltinTools(serverId) {
     return BUILTIN_TOOLS[serverId] || [];
 }
 
-async function invokeBuiltinTool(toolName, args) {
+async function invokeBuiltinTool(toolName, args, signal = null, context = null) {
     if (handlers[toolName]) {
-        return await handlers[toolName](args);
+        // 如果是 sub_agent，它需要 context 和 signal
+        if (toolName === 'sub_agent') {
+            return await handlers[toolName](args, context, signal);
+        }
+        // 为了兼容性，我们只给 sub_agent 传 context
+        return await handlers[toolName](args); 
     }
     throw new Error(`Built-in tool '${toolName}' not found.`);
 }
