@@ -64738,7 +64738,7 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
       "builtin_search": [
         {
           name: "web_search",
-          description: "Search the internet for a given query and return the top N results (title, link, snippet).",
+          description: "Search the internet for a given query and return the top N results (title, link, snippet). CRITICAL: The snippets are short and often insufficient. For detailed information you should usually follow this tool with 'web_fetch' to read the full content. Constraint: After replying, 'Sources:' citation links must be included.",
           inputSchema: {
             type: "object",
             properties: {
@@ -64753,12 +64753,12 @@ ${"#".repeat(level)} ${content.replace(/<[^>]+>/g, "").trim()}
           }
         },
         {
-          name: "fetch_url",
-          description: "Fetch the content of a specific URL and convert it to Markdown format. Use this to read articles, documentation, or search results in detail.",
+          name: "web_fetch",
+          description: "Deeply read and parse the text content of a URL (converts HTML to Markdown). Use this to read the actual content of search results obtained to provide accurate, up-to-date, and detailed answers.",
           inputSchema: {
             type: "object",
             properties: {
-              url: { type: "string", description: "The URL of the webpage to fetch." }
+              url: { type: "string", description: "The URL of the webpage to read." }
             },
             required: ["url"]
           }
@@ -65322,7 +65322,7 @@ ${result2}`);
         }
       },
       // Fetch Page Handler
-      fetch_url: async ({ url }) => {
+      web_fetch: async ({ url }) => {
         try {
           if (!url || !url.startsWith("http")) {
             return "Error: Invalid URL. Please provide a full URL starting with http:// or https://";

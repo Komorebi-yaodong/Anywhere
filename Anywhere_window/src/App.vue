@@ -2263,11 +2263,18 @@ async function toggleMcpPersistence(serverId, isPersistent) {
 
 const getSystemTime = () => {
   const now = new Date();
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const weekDay = days[now.getDay()];
+  
+  return `${year}-${month}-${day} (${weekDay})`;
 }
+
+
 
 const askAI = async (forceSend = false) => {
   if (loading.value) return;
@@ -2388,8 +2395,14 @@ const askAI = async (forceSend = false) => {
 
       if (openaiFormattedTools.value.length > 0) {
         const mcpSystemPrompt = `
+## SYSTEM CONTEXT
+Current Time: **${getSystemTime()}**
+Platform：**${currentOS.value}**
+
+Always use this timestamp as your reference for "today", "now", "current", or relative dates (e.g., "yesterday", "next week").
+
 ## Tool Use Rules
-Today is ${getSystemTime()}. Here are the rules you should always follow to solve your task:
+Here are the rules you should always follow to solve your task:
 1. Always use the right arguments for the tools. Never use variable names as the action arguments, use the value instead.
 2. Call a tool only when needed. If no tool call is needed, just answer the question directly.
 3. Never re-do a tool call that you previously did with the exact same parameters.
