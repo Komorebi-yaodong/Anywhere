@@ -348,7 +348,7 @@ const BUILTIN_TOOLS = {
                     tools: { 
                         type: "array", 
                         items: { type: "string" }, 
-                        description: "Optional. List of tool names to grant. If omitted, ALL available tools are granted." 
+                        description: "List of tool names to grant. You MUST explicitly list the tools required for the task. If omitted or empty, the Sub-Agent will have NO tools." 
                     },
                     planning_level: {
                         type: "string",
@@ -362,7 +362,7 @@ const BUILTIN_TOOLS = {
                         description: "Only used if planning_level is 'custom'."
                     }
                 },
-                required: ["task"] // tools 不再是必填
+                required: ["task", "tools"] 
             }
         }
     ],
@@ -562,17 +562,16 @@ async function runSubAgent(args, globalContext, signal) {
     const { task, context: userContext, tools: allowedToolNames, planning_level, custom_steps } = args;
     const { apiKey, baseUrl, model, tools: allToolDefinitions, mcpSystemPrompt, onUpdate } = globalContext;
 
-    // --- 1. 工具权限控制 ---
-    // 如果 allowedToolNames 未定义或为空，默认允许所有工具（除了自己）
-    // 如果定义了，则严格筛选
+    // --- 1. 工具权限控制 (最小权限原则) ---
+    // 默认没有任何工具权限
     let availableTools = [];
+
+    // 只有当 allowedToolNames 被明确提供且为非空数组时，才进行筛选并授予权限
     if (allowedToolNames && Array.isArray(allowedToolNames) && allowedToolNames.length > 0) {
         const allowedSet = new Set(allowedToolNames);
         availableTools = (allToolDefinitions || []).filter(t => 
-            allowedSet.has(t.function.name) && t.function.name !== 'sub_agent'
+            allowedSet.has(t.function.name) && t.function.name !== 'sub_agent' // 排除自身，防止递归
         );
-    } else {
-        availableTools = (allToolDefinitions || []).filter(t => t.function.name !== 'sub_agent');
     }
 
     // --- 2. 步骤控制 ---
@@ -664,7 +663,7 @@ ${userContext || 'No additional context provided.'}
 
             if (!message.tool_calls || message.tool_calls.length === 0) {
                 log(`[Result] Task Completed.`);
-                // 返回最终结果（包含过程日志以便追溯，或者只返回结果，这里选择只返回结果，过程在UI展示）
+                // 返回最终结果
                 return message.content || "[Sub-Agent finished without content]";
             }
 
