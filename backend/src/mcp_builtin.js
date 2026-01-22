@@ -10,6 +10,8 @@ const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform =
 // --- Bash Session State ---
 let bashCwd = os.homedir();
 
+const MAX_READ = 512 * 1000; // 512k characters
+
 // 数据提取函数 (提取标题、作者、简介)
 function extractMetadata(html) {
     const meta = {
@@ -252,11 +254,13 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "read_file",
-            description: "Read content from a local file path or a remote file. Supports text and code. For editing, read first.",
+            description: "Read content from a local file path or a remote file. Supports text, code, and document parsing. For large files, use 'offset' and 'length' to read in chunks.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    file_path: { type: "string", description: "Absolute path to the local file OR a valid HTTP/HTTPS URL." }
+                    file_path: { type: "string", description: "Absolute path to the local file OR a valid HTTP/HTTPS URL." },
+                    offset: { type: "integer", description: "Optional. The character position to start reading from. Defaults to 0.", default: 0 },
+                    length: { type: "integer", description: `Optional. Number of characters to read. Defaults to ${MAX_READ}.`, default: MAX_READ }
                 },
                 required: ["file_path"]
             }
@@ -320,11 +324,13 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "web_fetch",
-            description: "Deeply read and parse the text content of a URL (converts HTML to Markdown). Use this to read the actual content of search results obtained to provide accurate, up-to-date, and detailed answers.",
+            description: "Deeply read and parse the text content of a URL (converts HTML to Markdown). Use this to read the actual content of search results. For long pages, use 'offset' and 'length' to read in chunks. Constraint: After replying, 'Sources:' citation links must be included.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    url: { type: "string", description: "The URL of the webpage to read." }
+                    url: { type: "string", description: "The URL of the webpage to read." },
+                    offset: { type: "integer", description: "Optional. The character position to start reading from. Defaults to 0.", default: 0 },
+                    length: { type: "integer", description: `Optional. Number of characters to read. Defaults to ${MAX_READ}.`, default: MAX_READ }
                 },
                 required: ["url"]
             }
@@ -873,8 +879,10 @@ const handlers = {
     },
 
     // 3. Read File
-    read_file: async ({ file_path }) => {
+    read_file: async ({ file_path, offset = 0, length = MAX_READ }) => {
         try {
+            const MAX_SINGLE_READ = MAX_READ;
+            const readLength = Math.min(length, MAX_SINGLE_READ);
             let fileForHandler;
 
             if (file_path.startsWith('http://') || file_path.startsWith('https://')) {
@@ -915,10 +923,10 @@ const handlers = {
                 
                 if (!fs.existsSync(safePath)) return `Error: File not found at ${safePath}`;
 
-                // 大文件检查 (限制 50MB)
                 const stats = await fs.promises.stat(safePath);
-                if (stats.size > 50 * 1024 * 1024) {
-                    return `Error: File is too large (${(stats.size / 1024 / 1024).toFixed(2)}MB). Max limit is 50MB.`;
+                // 仅针对非文本的复杂解析文件（如 PDF）限制原始大小（50MB），普通文本读取由下方的字符截断控制
+                if (stats.size > 200 * 1024 * 1024) {
+                    return `Error: File is too large for processing (>50MB).`;
                 }
 
                 const fileObj = await handleFilePath(safePath);
@@ -937,16 +945,37 @@ const handlers = {
             }
 
             const result = await parseFileObject(fileForHandler);
-
             if (!result) return "Error: Unsupported file type or parsing failed.";
 
+            let fullText = "";
             if (result.type === 'text' && result.text) {
-                return result.text;
-            } 
-            else {
+                fullText = result.text;
+            } else {
                 const typeInfo = result.type === 'image_url' ? 'Image' : 'Binary/PDF';
                 return `[System] File '${fileForHandler.name}' detected as ${typeInfo}. \nContent extraction is currently NOT supported via this tool for binary formats in this context.`;
             }
+
+            // --- 分页读取逻辑 ---
+            const totalChars = fullText.length;
+            const startPos = Math.max(0, offset);
+            const contentChunk = fullText.substring(startPos, startPos + readLength);
+            const remainingChars = totalChars - (startPos + contentChunk.length);
+
+            let output = contentChunk;
+
+            if (remainingChars > 0) {
+                const nextOffset = startPos + contentChunk.length;
+                output += `\n\n--- [SYSTEM NOTE: CONTENT TRUNCATED] ---\n`;
+                output += `Total characters in file: ${totalChars}\n`;
+                output += `Current chunk: ${startPos} to ${nextOffset}\n`;
+                output += `Remaining unread characters: ${remainingChars}\n`;
+                output += `To read more, call read_file with offset: ${nextOffset}\n`;
+                output += `---------------------------------------`;
+            } else if (startPos > 0) {
+                output += `\n\n--- [SYSTEM NOTE: END OF FILE REACHED] ---`;
+            }
+
+            return output;
 
         } catch (e) {
             return `Error reading file: ${e.message}`;
@@ -1191,11 +1220,14 @@ const handlers = {
         }
     },
     // Web Fetch Handler
-    web_fetch: async ({ url }) => {
+    web_fetch: async ({ url, offset = 0, length = MAX_READ }) => {
         try {
             if (!url || !url.startsWith('http')) {
                 return "Error: Invalid URL. Please provide a full URL starting with http:// or https://";
             }
+
+            const MAX_SINGLE_READ = MAX_READ;
+            const readLength = Math.min(length, MAX_SINGLE_READ);
 
             // 1. 更加逼真的浏览器指纹 Headers (模拟 Chrome)
             const headers = {
@@ -1214,7 +1246,6 @@ const handlers = {
 
             const response = await fetch(url, { headers, redirect: 'follow' });
             
-            // 处理常见的反爬状态码
             if (response.status === 403 || response.status === 521) {
                 return `Failed to fetch page (Anti-bot protection ${response.status}). The site requires a real browser environment.`;
             }
@@ -1226,34 +1257,46 @@ const handlers = {
             const contentType = response.headers.get('content-type') || '';
             const rawText = await response.text();
 
-            // 如果是 JSON，直接返回
+            let fullText = "";
             if (contentType.includes('application/json')) {
-                try { return JSON.stringify(JSON.parse(rawText), null, 2); } catch(e) { return rawText; }
+                try { 
+                    fullText = JSON.stringify(JSON.parse(rawText), null, 2); 
+                } catch(e) { 
+                    fullText = rawText; 
+                }
+            } else {
+                const metadata = extractMetadata(rawText);
+                const markdownBody = convertHtmlToMarkdown(rawText);
+
+                if (!markdownBody || markdownBody.length < 50) {
+                    return `Fetched URL: ${url}\n\nTitle: ${metadata.title}\n\n[System]: Content seems empty. This might be a JavaScript-rendered page (SPA) which cannot be parsed by this tool.`;
+                }
+
+                fullText = `URL: ${url}\n\n`;
+                if (metadata.title) fullText += `# ${metadata.title}\n\n`;
+                if (metadata.author) fullText += `**Author:** ${metadata.author}\n`;
+                if (metadata.description) fullText += `**Summary:** ${metadata.description}\n`;
+                fullText += `\n---\n\n${markdownBody}`;
             }
-            
-            // 1. 提取元数据 (标题、作者、简介)
-            const metadata = extractMetadata(rawText);
 
-            // 2. 转换正文 (清洗 HTML 并转 Markdown)
-            const markdownBody = convertHtmlToMarkdown(rawText);
+            // --- 分页逻辑 ---
+            const totalChars = fullText.length;
+            const startPos = Math.max(0, offset);
+            const contentChunk = fullText.substring(startPos, startPos + readLength);
+            const remainingChars = totalChars - (startPos + contentChunk.length);
 
-            // 3. 检查是否抓取失败 (如SPA页面)
-            if (!markdownBody || markdownBody.length < 50) {
-                return `Fetched URL: ${url}\n\nTitle: ${metadata.title}\n\n[System]: Content seems empty. This might be a JavaScript-rendered page (SPA) which cannot be parsed by this tool.`;
-            }
+            let result = contentChunk;
 
-            // 4. 组装最终输出 (结构化格式)
-            let result = `URL: ${url}\n\n`;
-            if (metadata.title) result += `# ${metadata.title}\n\n`;
-            if (metadata.author) result += `**Author:** ${metadata.author}\n`;
-            if (metadata.description) result += `**Summary:** ${metadata.description}\n`;
-            
-            result += `\n---\n\n${markdownBody}`;
-
-            // 5. 长度截断 (防止 AI 上下文溢出)
-            const MAX_LENGTH = 15000;
-            if (result.length > MAX_LENGTH) {
-                return result.substring(0, MAX_LENGTH) + `\n\n...[Content Truncated (${result.length} chars total)]...`;
+            if (remainingChars > 0) {
+                const nextOffset = startPos + contentChunk.length;
+                result += `\n\n--- [SYSTEM NOTE: CONTENT TRUNCATED] ---\n`;
+                result += `Total characters in parsed page: ${totalChars}\n`;
+                result += `Current chunk: ${startPos} to ${nextOffset}\n`;
+                result += `Remaining unread characters: ${remainingChars}\n`;
+                result += `To read more, call web_fetch with offset: ${nextOffset}\n`;
+                result += `---------------------------------------`;
+            } else if (startPos > 0) {
+                result += `\n\n--- [SYSTEM NOTE: END OF PAGE REACHED] ---`;
             }
 
             return result;

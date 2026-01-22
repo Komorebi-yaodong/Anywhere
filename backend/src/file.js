@@ -40,15 +40,15 @@ const parseExcel = async (base64Data) => {
 const fileHandlers = {
   text: {
     extensions: ['.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css','.csv', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.php', '.rb', '.rs', '.sh', '.sql', '.vue', '.tex', '.latex', '.bib', '.sty', '.yaml', '.yml', '.ini', '.bat', '.log', '.toml'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseTextFile(file.url)}\nfile end` })
+    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseTextFile(file.url)}\nfile end` })
   },
   docx: {
     extensions: ['.docx'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseWord(file.url)}\nfile end` })
+    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseWord(file.url)}\nfile end` })
   },
   excel: {
     extensions: ['.xlsx', '.xls'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:${await parseExcel(file.url)}\nfile end` })
+    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseExcel(file.url)}\nfile end` })
   },
   image: {
     extensions: ['.png', '.jpg', '.jpeg', '.webp'],
