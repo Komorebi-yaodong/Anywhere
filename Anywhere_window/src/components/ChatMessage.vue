@@ -25,6 +25,18 @@ const editInputRef = ref(null);
 const isEditing = ref(false);
 const editedContent = ref('');
 
+// 格式化工具参数为易读的 JSON 字符串
+const formatToolArgs = (argsString) => {
+  try {
+    const sanitized = sanitizeToolArgs(argsString);
+    const obj = JSON.parse(sanitized);
+    // 2 表示缩进空格数
+    return JSON.stringify(obj, null, 2);
+  } catch (e) {
+    return argsString;
+  }
+};
+
 const preprocessKatex = (text) => {
   if (!text) return '';
   let processedText = text;
@@ -360,7 +372,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                   <div class="tool-call-details">
                     <div class="tool-detail-section">
                       <strong>参数:</strong>
-                      <pre><code>{{ sanitizeToolArgs(toolCall.args) }}</code></pre>
+                      <pre><code>{{ formatToolArgs(toolCall.args) }}</code></pre>
                     </div>
                     <div class="tool-detail-section"
                       v-if="toolCall.result && toolCall.result !== '等待批准...' && toolCall.result !== '执行中...'">
@@ -1201,7 +1213,7 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
 
 .single-tool-wrapper {
   width: 100%;
-  max-width: calc(100vw - 130px);
+  max-width: 85vw;
   min-width: 250px;
   display: flex;
   flex-direction: column;
@@ -1361,6 +1373,8 @@ html.dark .stop-btn-wrapper {
       max-height: 150px;
       overflow: auto;
       font-size: 12px;
+      white-space: pre-wrap; 
+      word-break: break-all;
 
       code {
         font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
