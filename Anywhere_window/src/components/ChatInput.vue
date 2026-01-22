@@ -1,11 +1,7 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed, defineAsyncComponent } from 'vue';
-const AttachmentsFileCard = defineAsyncComponent(() =>
-    import('ant-design-x-vue').then(m => m.Attachments.FileCard)
-);
-
-import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
-import { Close, Check } from '@element-plus/icons-vue';
+import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon, ElTag } from 'element-plus';
+import { Close, Check, Document, Delete } from '@element-plus/icons-vue';
 
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
@@ -354,8 +350,24 @@ defineExpose({ focus, senderRef });
             <el-col :span="0" />
             <el-col :span="24">
                 <div class="file-card-container">
-                    <AttachmentsFileCard v-for="(file, index) in fileList" :key="index" :item="file"
-                        v-on:remove="() => onRemoveFile(index)" />
+                    <div v-for="(file, index) in fileList" :key="index" class="custom-file-card">
+                        <div class="file-icon">
+                            <el-icon :size="20"><Document /></el-icon>
+                        </div>
+                        <div class="file-info">
+                            <div class="file-name" :title="file.name">{{ file.name }}</div>
+                            <div class="file-size">{{ (file.size / 1024).toFixed(1) }} KB</div>
+                        </div>
+                        <div class="file-actions">
+                            <el-button 
+                                type="danger" 
+                                link 
+                                :icon="Delete" 
+                                size="small" 
+                                @click="onRemoveFile(index)" 
+                            />
+                        </div>
+                    </div>
                 </div>
             </el-col>
             <el-col :span="0" />
@@ -604,6 +616,7 @@ html.dark .drag-overlay {
     background-color: transparent;
 }
 
+/* --- 文件卡片容器样式 --- */
 .file-card-container {
     margin-bottom: 8px;
     display: flex;
@@ -616,57 +629,84 @@ html.dark .drag-overlay {
     max-height: 70px;
 }
 
-.file-card-container :deep(.ant-attachments-file-card-item) {
+/* 自定义文件卡片样式 */
+.custom-file-card {
     display: flex;
     align-items: center;
     background-color: var(--el-fill-color-light);
     border: 1px solid var(--el-border-color-light);
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 6px 10px;
+    margin-right: 0; /* gap已处理间距 */
+    min-width: 140px;
+    max-width: 220px;
+    height: 48px;
     box-sizing: border-box;
-    height: auto;
-    width: auto;
-    margin-right: 8px;
-    /* 替代 float，使用 flex 间距 */
+    transition: all 0.2s;
+    flex-shrink: 0;
 }
 
-.file-card-container :deep(.ant-attachment-list-card-type-overview) {
-    width: auto;
-    height: auto;
-    padding-right: 18px;
-    padding-top: 4px;
-    padding-bottom: 8px;
-    padding-left: 10px;
+.custom-file-card:hover {
+    border-color: var(--el-color-primary-light-5);
+    background-color: var(--el-fill-color);
+}
+
+.file-icon {
+    display: flex;
+    align-items: center;
     justify-content: center;
+    margin-right: 10px;
+    color: var(--el-text-color-secondary);
 }
 
-/* 3. 深色模式适配 */
-html.dark .file-card-container :deep(.ant-attachments-file-card-item) {
+.file-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    line-height: 1.2;
+    min-width: 0; /* 修复 flex 子项截断问题 */
+}
+
+.file-name {
+    font-size: 12px;
+    color: var(--el-text-color-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.file-size {
+    font-size: 10px;
+    color: var(--el-text-color-secondary);
+    margin-top: 2px;
+}
+
+.file-actions {
+    margin-left: 8px;
+    display: flex;
+    align-items: center;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.custom-file-card:hover .file-actions {
+    opacity: 1;
+}
+
+/* 深色模式下的文件卡片适配 */
+html.dark .custom-file-card {
     background-color: #2c2c2c;
     border-color: #4c4c4c;
 }
 
-/* 强制深色模式下所有文本变白 */
-html.dark .file-card-container :deep(.ant-typography),
-html.dark .file-card-container :deep(span),
-html.dark .file-card-container :deep(div) {
-    color: #e0e0e0 !important;
+html.dark .custom-file-card:hover {
+    background-color: #363636;
+    border-color: #5c5c5c;
 }
 
-/* 辅助文本（大小等）稍微暗一点 */
-html.dark .file-card-container :deep(.ant-typography-secondary) {
-    color: #a0a0a0 !important;
-}
-
-/* 删除按钮颜色适配 */
-html.dark .file-card-container :deep(.anticon-close) {
-    color: #a0a0a0 !important;
-}
-
-html.dark .file-card-container :deep(.anticon-close:hover) {
-    color: #ffffff !important;
-}
-
+/* 滚动条样式 */
 .file-card-container::-webkit-scrollbar {
     height: 6px;
 }
@@ -684,18 +724,15 @@ html.dark .file-card-container :deep(.anticon-close:hover) {
     background-color: var(--el-text-color-secondary);
 }
 
-
-.file-card-container :deep(.ant-attachments-file-card-item-image) {
-    width: 56px;
-    height: 56px;
-    padding-bottom: 100px;
+html.dark .file-card-container::-webkit-scrollbar-thumb {
+    background-color: #4c4c4c;
 }
 
-.file-card-container :deep(.ant-image-img) {
-    object-fit: cover;
+html.dark .file-card-container::-webkit-scrollbar-thumb:hover {
+    background-color: #6b6b6b;
 }
 
-/* Waveform Display Area Styles */
+/* --- Waveform Display Area Styles --- */
 .waveform-row {
     margin-bottom: 8px;
     transition: all 0.3s ease;
@@ -726,24 +763,16 @@ html.dark .file-card-container :deep(.anticon-close:hover) {
 }
 
 @keyframes pulse-text {
-    0% {
-        opacity: 0.7;
-    }
-
-    50% {
-        opacity: 1;
-    }
-
-    100% {
-        opacity: 0.7;
-    }
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
 }
 
 html.dark .waveform-display-area {
     background-color: var(--el-bg-color-input);
 }
 
-/* MODIFIED: Universal Option Selector Styles */
+/* --- Universal Option Selector Styles --- */
 .option-selector-row {
     margin-bottom: 8px;
 }
@@ -753,7 +782,6 @@ html.dark .waveform-display-area {
     border-radius: 12px;
     padding: 8px;
     max-height: 132px;
-    background-color: var(--el-bg-color-input);
 }
 
 html.dark .option-selector-wrapper {
@@ -775,12 +803,10 @@ html.dark .option-selector-wrapper {
     padding-right: 8px;
 }
 
-/* [新增] 新的选择器标签和分隔线样式 */
 .selector-label {
     font-size: 14px;
     color: var(--el-text-color);
     margin: 0 4px 0 8px;
-    /* Added left margin */
     white-space: nowrap;
 }
 
@@ -788,7 +814,6 @@ html.dark .option-selector-wrapper {
     height: 1.2em;
     border-left: 1px solid var(--el-border-color-lighter);
     margin: 0 4px;
-    /* Space around divider */
 }
 
 html.dark .el-divider--vertical {
@@ -801,7 +826,7 @@ html.dark .el-divider--vertical {
     display: flex;
 }
 
-/* Vertical Layout */
+/* --- Vertical Layout (Chat Input Area) --- */
 .chat-input-area-vertical {
     display: flex;
     flex-direction: column;
@@ -878,7 +903,6 @@ html.dark .chat-input-area-vertical {
 
 .chat-input-area-vertical .action-buttons-left .el-button:hover {
     color: var(--text-on-accent);
-    background-color: var(--bg-accent);
     background-color: var(--el-color-primary-light-8);
 }
 
@@ -886,8 +910,7 @@ html.dark .chat-input-area-vertical {
     color: var(--text-on-accent);
 }
 
-
-/* Common Styles */
+/* --- Common Styles --- */
 :deep(.el-textarea.is-disabled .el-textarea__inner) {
     cursor: default !important;
     background-color: transparent !important;
@@ -945,21 +968,6 @@ html.dark :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
     background-color: var(--el-color-primary-light-3);
 }
 
-/* Pulsing glow animation - This class is now only used for demonstration if needed */
-@keyframes pulse-glow {
-    0% {
-        box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0.4);
-    }
-
-    70% {
-        box-shadow: 0 0 0 8px rgba(var(--el-color-primary-rgb), 0);
-    }
-
-    100% {
-        box-shadow: 0 0 0 0 rgba(var(--el-color-primary-rgb), 0);
-    }
-}
-
 html.dark .el-button--danger.is-plain {
     color: #ffffff;
     background-color: var(--el-color-danger);
@@ -986,6 +994,7 @@ html.dark .el-button--success.is-plain:focus {
     color: #ffffff;
 }
 
+/* Cancel Button Animation */
 .cancel-button-animated {
     position: relative;
     display: inline-flex;
@@ -1015,7 +1024,6 @@ html.dark .el-button--success.is-plain:focus {
 
     animation: spin 1s linear infinite;
     pointer-events: none;
-    /* 确保点击事件穿透到按钮 */
     box-sizing: border-box;
 }
 
@@ -1029,12 +1037,7 @@ html.dark .cancel-spinner {
 }
 
 @keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 </style>

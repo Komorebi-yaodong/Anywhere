@@ -4,116 +4,104 @@ import shutil
 
 # 查找版本号最新的目录，版本号命名方式为`v%d.%d.%d`，例如 v1.0.0
 def moveDist():
-    # 获取当前目录下所有子目录
     dirs = [d for d in os.listdir('.') if os.path.isdir(d)]
-    # 过滤出以v开头的目录
     version_dirs = [d for d in dirs if re.match(r'^v\d+\.\d+\.\d+$', d)]
-    # 按版本号排序
     version_dirs.sort(key=lambda x: list(map(int, re.findall(r'\d+', x))))
-    # 获取最新版本号的目录
+    if not version_dirs:
+        print("未找到版本目录 (vX.X.X)")
+        exit(1)
     latest_version_dir = version_dirs[-1]
     return latest_version_dir
 
-# 删除指定目录下的 window 文件夹和 main 文件夹内的全部内容
-def deleteFiles(dir,delete_dir):
-    # 删除文件夹
+# 删除指定目录下的文件夹
+def deleteFiles(dir, delete_dir):
     window_dir = os.path.join(dir, delete_dir)
     if os.path.exists(window_dir):
         shutil.rmtree(window_dir)
 
+# 删除指定文件
 def deleteFile(dir, delete_file):
     file_path = os.path.join(dir, delete_file)
     if os.path.exists(file_path):
         os.remove(file_path)
 
-# 将指定目录下的dist文件夹内文件全部复制到指定目录下
-def moveDistFiles(dir, move_dir):
-    dist_dir = os.path.join(dir, 'dist')
-    if os.path.exists(dist_dir):
-        # 强制先创建目标目录（如果是文件则删除）
-        if os.path.exists(move_dir) and not os.path.isdir(move_dir):
-            os.remove(move_dir)  # 删除错误的文件
-        os.makedirs(move_dir, exist_ok=True)  # 确保是目录
+# 【新增】定义忽略规则：过滤 .map 文件、隐藏文件、node_modules 等
+def get_ignore_patterns(path, names):
+    ignored = []
+    for name in names:
+        # 过滤 Source Maps (.map)，这是减小体积的关键
+        if name.endswith('.map'):
+            ignored.append(name)
+        # 过滤系统隐藏文件 (.DS_Store 等) 和 git 目录
+        elif name.startswith('.') or name == '__pycache__':
+            ignored.append(name)
+        # 过滤 node_modules (双重保险)
+        elif name == 'node_modules':
+            ignored.append(name)
+        # 过滤日志文件
+        elif name.endswith('.log'):
+            ignored.append(name)
+    return ignored
 
-        for item in os.listdir(dist_dir):
-            item_path = os.path.join(dist_dir, item)
-            print("  >> ", item_path)
-            if os.path.isfile(item_path):
-                shutil.copy(item_path, move_dir)
-            elif os.path.isdir(item_path):
-                shutil.copytree(item_path, os.path.join(move_dir, item), dirs_exist_ok=True)
-            else:
-                print(f"未知类型文件: {item_path}")
-    else:
-        print(f"目录 {dist_dir} 不存在")
+# 通用的复制逻辑（合并了你原来的 moveDistFiles, movePublicFiles, moveFiles）
+# 增加了过滤逻辑
+def smart_copy(src_folder, target_folder):
+    if not os.path.exists(src_folder):
+        print(f"目录 {src_folder} 不存在")
+        return
 
-# 将指定目录下的文件全部复制到指定目录下
-def movePublicFiles(dir, move_dir):
-    public_dir = os.path.join(dir, 'public')
-    if os.path.exists(public_dir):
-        os.makedirs(move_dir, exist_ok=True)  # 确保是目录
-        for item in os.listdir(public_dir):
-            item_path = os.path.join(public_dir, item)
-            print("  >> ", item_path)
-            if os.path.isfile(item_path):
-                shutil.copy(item_path, move_dir)
-            elif os.path.isdir(item_path):
-                shutil.copytree(item_path, os.path.join(move_dir, item), dirs_exist_ok=True)
-            else:
-                print(f"未知类型文件: {item_path}")
-    else:
-        print(f"目录 {public_dir} 不存在")
+    # 强制先创建目标目录
+    if os.path.exists(target_folder) and not os.path.isdir(target_folder):
+        os.remove(target_folder)
+    os.makedirs(target_folder, exist_ok=True)
 
-# 将指定目录下的文件全部复制到指定目录下
-def moveFiles(dir, move_dir):
-    if os.path.exists(dir):
-        if os.path.exists(move_dir) and not os.path.isdir(move_dir):
-            os.remove(move_dir)  # 删除错误的文件
-        os.makedirs(move_dir, exist_ok=True)  # 确保是目录
-        for item in os.listdir(dir):
-            item_path = os.path.join(dir, item)
-            print("  >> ", item_path)
-            if os.path.isfile(item_path):
-                shutil.copy(item_path, move_dir)
-            elif os.path.isdir(item_path):
-                shutil.copytree(item_path, os.path.join(move_dir, item), dirs_exist_ok=True)
-            else:
-                print(f"未知类型文件: {item_path}")
-    else:
-        print(f"目录 {dir} 不存在")
-    
+    for item in os.listdir(src_folder):
+        # 应用过滤规则到顶层文件
+        if item.endswith('.map') or item.startswith('.') or item == 'node_modules' or item == '__pycache__':
+            continue
+
+        src_path = os.path.join(src_folder, item)
+        dst_path = os.path.join(target_folder, item)
+        
+        print(f"  >> {src_path}")
+        
+        if os.path.isfile(src_path):
+            shutil.copy(src_path, target_folder)
+        elif os.path.isdir(src_path):
+            # 关键：在递归复制文件夹时应用 ignore 规则
+            shutil.copytree(src_path, dst_path, dirs_exist_ok=True, ignore=get_ignore_patterns)
+        else:
+            print(f"未知类型文件: {src_path}")
 
 if __name__ == "__main__":
-    
     latest_version_dir = moveDist()
-    # input_makesure1 = input(f"删除 {latest_version_dir} 目录下的 main 文件夹？(y/n): ")
-    # if input_makesure1.lower() == 'y':
+    print(f"目标版本目录: {latest_version_dir}\n")
+
+    # 1. 处理 main (Anywhere_main/dist -> v1.0.0/main)
     deleteFiles(latest_version_dir, 'main')
-    print(f"已删除 {latest_version_dir} 目录下的 main 文件夹，正在更新dist文件夹至其中")
-    main_dir = os.path.join(latest_version_dir, 'main')
-    moveDistFiles("Anywhere_main", main_dir)
-    print("main 文件夹转移完成\n")
-    
+    print(f"正在更新 main 文件夹...")
+    main_target_dir = os.path.join(latest_version_dir, 'main')
+    smart_copy(os.path.join("Anywhere_main", "dist"), main_target_dir)
+    print("main 文件夹更新完成\n")
 
-    # input_makesure2 = input(f"删除 {latest_version_dir} 目录下的 window 文件夹？(y/n): ")
-    # if input_makesure2.lower() == 'y':
+    # 2. 处理 window (Anywhere_window/dist -> v1.0.0/window)
     deleteFiles(latest_version_dir, 'window')
-    print(f"已删除 {latest_version_dir} 目录下的 window 文件夹，正在更新dist文件夹至其中")
-    window_dir = os.path.join(latest_version_dir, 'window')
-    moveDistFiles("Anywhere_window", window_dir)
-    print("window 文件夹转移完成\n")
+    print(f"正在更新 window 文件夹...")
+    window_target_dir = os.path.join(latest_version_dir, 'window')
+    smart_copy(os.path.join("Anywhere_window", "dist"), window_target_dir)
+    print("window 文件夹更新完成\n")
 
-    # input_makesure3 = input(f"删除 {latest_version_dir} 目录下的 preload.js 和window_preload.js(y/n): ")
-    # if input_makesure3.lower() == 'y':
+    # 3. 处理 preload (backend/public -> v1.0.0/)
     deleteFile(latest_version_dir, 'preload.js')
     deleteFile(latest_version_dir, 'window_preload.js')
     deleteFile(latest_version_dir, 'fast_window_preload.js')
-    print(f"已删除 {latest_version_dir} 目录下的多种preload.js，正在更新preload文件至其中")
-    movePublicFiles("backend", latest_version_dir)
-    print("preload 相关文件转移完成")
+    print(f"正在更新 preload 相关文件...")
+    smart_copy(os.path.join("backend", "public"), latest_version_dir)
+    print("preload 相关文件更新完成\n")
 
+    # 4. 处理 fast_window (fast_window -> v1.0.0/fast_window)
     deleteFiles(latest_version_dir, 'fast_window')
-    print(f"已删除 {latest_version_dir} 目录下的 window 文件夹，正在更新fast_window文件夹至其中")
-    fast_window_dir = os.path.join(latest_version_dir, 'fast_window')
-    moveFiles("fast_window", fast_window_dir)
-    print("fast_window 相关文件转移完成")
+    print(f"正在更新 fast_window 文件夹...")
+    fast_window_target_dir = os.path.join(latest_version_dir, 'fast_window')
+    smart_copy("fast_window", fast_window_target_dir)
+    print("fast_window 相关文件更新完成")

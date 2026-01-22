@@ -4,68 +4,69 @@ const path = require('path');
 
 
 const parseWord = async (base64Data) => {
-  const mammoth = (await import('mammoth')).default;
-  const s = base64Data.split(',')[1]; 
-  if (!s) throw new Error("Invalid base64 data for Word file");
-  
-  const buffer = Buffer.from(s, 'base64');
-  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-  const r = await mammoth.convertToHtml({ buffer: buffer, arrayBuffer: arrayBuffer }); 
-  const d = document.createElement('div'); 
-  d.innerHTML = r.value;
-  return (d.textContent || d.innerText || "").replace(/\s+/g, ' ').trim();
+    const mammoth = (await import('mammoth')).default;
+    const s = base64Data.split(',')[1];
+    if (!s) throw new Error("Invalid base64 data for Word file");
+
+    const buffer = Buffer.from(s, 'base64');
+    const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    const r = await mammoth.convertToHtml({ buffer: buffer, arrayBuffer: arrayBuffer });
+    const d = document.createElement('div');
+    d.innerHTML = r.value;
+    return (d.textContent || d.innerText || "").replace(/\s+/g, ' ').trim();
 };
 
 const parseTextFile = async (base64Data) => {
-  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for text file");
-  return Buffer.from(s, 'base64').toString('utf-8');
+    const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for text file");
+    return Buffer.from(s, 'base64').toString('utf-8');
 };
 
 const parseExcel = async (base64Data) => {
-  const XLSX = await import('xlsx');
-  const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for Excel file");
-  const buffer = Buffer.from(s, 'base64');
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
-  
-  let fullTextContent = '';
-  workbook.SheetNames.forEach(sheetName => {
-    const worksheet = workbook.Sheets[sheetName];
-    const csvData = XLSX.utils.sheet_to_csv(worksheet);
-    fullTextContent += `--- Sheet: ${sheetName} ---\n${csvData}\n\n`;
-  });
-  return fullTextContent.trim();
+    //   const XLSX = await import('xlsx');
+    const XLSX = require('xlsx/dist/xlsx.mini.min.js');
+    const s = base64Data.split(',')[1]; if (!s) throw new Error("Invalid base64 data for Excel file");
+    const buffer = Buffer.from(s, 'base64');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+    let fullTextContent = '';
+    workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        const csvData = XLSX.utils.sheet_to_csv(worksheet);
+        fullTextContent += `--- Sheet: ${sheetName} ---\n${csvData}\n\n`;
+    });
+    return fullTextContent.trim();
 };
 
 // Centralized file handling configuration
 const fileHandlers = {
-  text: {
-    extensions: ['.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css','.csv', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.php', '.rb', '.rs', '.sh', '.sql', '.vue', '.tex', '.latex', '.bib', '.sty', '.yaml', '.yml', '.ini', '.bat', '.log', '.toml'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseTextFile(file.url)}\nfile end` })
-  },
-  docx: {
-    extensions: ['.docx'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseWord(file.url)}\nfile end` })
-  },
-  excel: {
-    extensions: ['.xlsx', '.xls'],
-    handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseExcel(file.url)}\nfile end` })
-  },
-  image: {
-    extensions: ['.png', '.jpg', '.jpeg', '.webp'],
-    handler: async (file) => ({ type: "image_url", image_url: { url: file.url } })
-  },
-  audio: {
-    extensions: ['.mp3', '.wav'],
-    handler: async (file) => {
-      const commaIndex = file.url.indexOf(',');
-      if (commaIndex > -1) return { type: "input_audio", input_audio: { data: file.url.substring(commaIndex + 1), format: file.name.split('.').pop().toLowerCase() } };
-      showDismissibleMessage.error(`音频文件 ${file.name} 格式不正确`); return null;
+    text: {
+        extensions: ['.txt', '.md', '.markdown', '.json', '.xml', '.html', '.css', '.csv', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.php', '.rb', '.rs', '.sh', '.sql', '.vue', '.tex', '.latex', '.bib', '.sty', '.yaml', '.yml', '.ini', '.bat', '.log', '.toml'],
+        handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseTextFile(file.url)}\nfile end` })
+    },
+    docx: {
+        extensions: ['.docx'],
+        handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseWord(file.url)}\nfile end` })
+    },
+    excel: {
+        extensions: ['.xlsx', '.xls'],
+        handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseExcel(file.url)}\nfile end` })
+    },
+    image: {
+        extensions: ['.png', '.jpg', '.jpeg', '.webp'],
+        handler: async (file) => ({ type: "image_url", image_url: { url: file.url } })
+    },
+    audio: {
+        extensions: ['.mp3', '.wav'],
+        handler: async (file) => {
+            const commaIndex = file.url.indexOf(',');
+            if (commaIndex > -1) return { type: "input_audio", input_audio: { data: file.url.substring(commaIndex + 1), format: file.name.split('.').pop().toLowerCase() } };
+            showDismissibleMessage.error(`音频文件 ${file.name} 格式不正确`); return null;
+        }
+    },
+    pdf: {
+        extensions: ['.pdf'],
+        handler: async (file) => ({ type: "file", file: { filename: file.name, file_data: file.url } })
     }
-  },
-  pdf: {
-    extensions: ['.pdf'],
-    handler: async (file) => ({ type: "file", file: { filename: file.name, file_data: file.url } })
-  }
 };
 
 const isFileTypeSupported = (fileName) => {
@@ -132,7 +133,7 @@ const extensionToMimeType = {
     '.html': 'text/html',
     '.css': 'text/css',
     '.csv': 'text/csv',
-    '.py': 'text/plain', 
+    '.py': 'text/plain',
     '.js': 'application/javascript',
     '.ts': 'application/typescript',
     '.java': 'text/x-java-source',
@@ -239,7 +240,7 @@ async function sendfileDirect(filePathList) {
             console.error(`处理文件出错: ${item.path}`, error);
             // 仅在非不支持类型错误时弹窗，避免骚扰
             if (!error.message.includes('不支持的文件类型')) {
-               utools.showNotification('处理文件出错:', item.path);
+                utools.showNotification('处理文件出错:', item.path);
             }
             return null;
         }
@@ -365,7 +366,7 @@ module.exports = {
     handleFilePath, // (文件路径=>文件对象)
     sendfileDirect, //（文件路径=>文件对象=>文件列表=>对话格式）
     saveFile,
-    
+
     selectDirectory,
     listJsonFiles,
     readLocalFile,
