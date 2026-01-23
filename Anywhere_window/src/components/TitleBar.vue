@@ -1,7 +1,7 @@
 <script setup>
-import { computed } from 'vue';
-import { ElTooltip, ElIcon } from 'element-plus';
-import { Download, FullScreen, Close, CloseBold, Minus } from '@element-plus/icons-vue';
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+import { ElTooltip, ElIcon, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus';
+import { Download, FullScreen, Close, CloseBold, Minus, Menu as MenuIcon, Check } from '@element-plus/icons-vue';
 
 const props = defineProps({
   favicon: String,
@@ -30,6 +30,22 @@ const displayConversationName = computed(() => {
 const isMac = computed(() => props.os === 'macos' || props.os === 'darwin');
 const isWin = computed(() => props.os === 'win');
 const isLinux = computed(() => !isMac.value && !isWin.value);
+
+// --- 响应式布局逻辑 ---
+const windowWidth = ref(window.innerWidth);
+const isNarrow = computed(() => windowWidth.value < 400); // 阈值：小于520px时折叠
+
+const handleResize = () => {
+  windowWidth.value = window.innerWidth;
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
+});
 </script>
 
 <template>
@@ -39,21 +55,18 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
     <div class="left-container">
       <!-- macOS 红绿灯 -->
       <div v-if="isMac" class="window-controls mac-traffic-lights no-drag">
-        <!-- 关闭 (使用 CloseBold 更粗) -->
         <div class="traffic-btn close" @click="emit('close')">
           <el-icon class="traffic-icon"><CloseBold /></el-icon>
         </div>
-        <!-- 最小化 -->
         <div class="traffic-btn minimize" @click="emit('minimize')">
           <el-icon class="traffic-icon icon-minus"><Minus /></el-icon>
         </div>
-        <!-- 最大化/全屏 -->
         <div class="traffic-btn maximize" @click="emit('maximize')">
           <el-icon class="traffic-icon icon-fullscreen"><FullScreen /></el-icon>
         </div>
       </div>
 
-      <!-- App 信息 -->
+      <!-- App 信息 (始终显示) -->
       <div class="app-info no-drag" @click="emit('save-window-size')" @dblclick.stop="emit('maximize')">
         <el-tooltip content="点击保存当前窗口大小与位置 / 双击全屏" placement="bottom" :show-after="500">
           <div class="app-info-inner">
@@ -63,10 +76,11 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
         </el-tooltip>
       </div>
 
-      <div class="divider-vertical"></div>
+      <!-- 分隔线 (仅在宽模式显示) -->
+      <div class="divider-vertical" v-if="!isNarrow"></div>
 
-      <!-- 对话名称 -->
-      <div class="conversation-info no-drag" @click="emit('save-session')" @dblclick.stop="emit('maximize')">
+      <!-- 对话名称 (仅在宽模式显示) -->
+      <div v-if="!isNarrow" class="conversation-info no-drag" @click="emit('save-session')" @dblclick.stop="emit('maximize')">
         <el-tooltip content="点击保存会话" placement="bottom" :show-after="500">
           <div class="conversation-inner">
             <span class="conversation-title">{{ displayConversationName }}</span>
@@ -78,8 +92,9 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
 
     <!-- 2. 右侧区域 -->
     <div class="right-container">
-      <!-- 功能开关组 -->
-      <div class="function-group no-drag">
+      
+      <!-- A. 宽屏模式：显示功能按钮组 -->
+      <div v-if="!isNarrow" class="function-group no-drag">
         <el-tooltip :content="autoCloseOnBlur ? '失焦自动关闭: 开' : '失焦自动关闭: 关'" placement="bottom" :show-after="500">
           <div class="func-btn" @click="emit('toggle-pin')" :class="{ 'active': !autoCloseOnBlur }">
              <svg v-if="!autoCloseOnBlur" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-9h-1V7c0-2.76-2.24-5-5-5S7 4.24 7 7v1H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 7c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v1H8.9V7z"/></svg>
@@ -93,6 +108,47 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
             <svg v-else viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M20,8 L20,5.5 C20,4.67157288 19.3284271,4 18.5,4 L5.5,4 C4.67157288,4 4,4.67157288 4,5.5 L4,8 L20,8 Z M20,9 L4,9 L4,18.5 C4,19.3284271 4.67157288,20 5.5,20 L18.5,20 C19.3284271,20 20,19.3284271 20,18.5 L20,9 Z M3,5.5 C3,4.11928813 4.11928813,3 5.5,3 L18.5,3 C19.8807119,3 21,4.11928813 21,5.5 L21,18.5 C21,19.8807119 19.8807119,21 18.5,21 L5.5,21 C4.11928813,21 3,19.8807119 3,18.5 L3,5.5 Z" /></svg>
           </div>
         </el-tooltip>
+      </div>
+
+      <!-- B. 窄屏模式：显示下拉菜单 -->
+      <div v-else class="function-group no-drag">
+        <el-dropdown trigger="click" placement="bottom-end" popper-class="title-bar-dropdown">
+          <div class="func-btn" title="更多选项">
+            <el-icon><MenuIcon /></el-icon>
+          </div>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <!-- 1. 保存/重命名会话 -->
+              <el-dropdown-item @click="emit('save-session')">
+                <el-icon><Download /></el-icon>
+                <div class="dropdown-text-col">
+                  <span>保存/重命名</span>
+                  <span class="dropdown-subtext">{{ displayConversationName }}</span>
+                </div>
+              </el-dropdown-item>
+              
+              <!-- 2. 失焦关闭开关 -->
+              <el-dropdown-item @click="emit('toggle-pin')">
+                <div class="dropdown-check-row">
+                  <div class="dropdown-text-col">
+                    <span>失焦自动关闭</span>
+                  </div>
+                  <el-icon v-if="autoCloseOnBlur" class="check-icon"><Check /></el-icon>
+                </div>
+              </el-dropdown-item>
+
+              <!-- 3. 置顶开关 -->
+              <el-dropdown-item @click="emit('toggle-always-on-top')">
+                <div class="dropdown-check-row">
+                  <div class="dropdown-text-col">
+                    <span>窗口置顶</span>
+                  </div>
+                  <el-icon v-if="isAlwaysOnTop" class="check-icon"><Check /></el-icon>
+                </div>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
 
       <div class="divider-vertical" v-if="isWin"></div>
@@ -125,6 +181,29 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
     </div>
   </div>
 </template>
+
+<style>
+/* 全局覆盖 Element Plus Dropdown 样式以适配主题 */
+.title-bar-dropdown {
+  --el-bg-color-overlay: var(--el-bg-color);
+  --el-border-color-light: var(--el-border-color);
+  --el-text-color-regular: var(--el-text-color-primary);
+}
+
+html.dark .title-bar-dropdown {
+  background-color: #2c2c2c !important;
+  border-color: #444 !important;
+}
+
+.title-bar-dropdown .el-dropdown-menu__item:hover {
+  background-color: var(--el-fill-color);
+  color: var(--el-color-primary);
+}
+
+html.dark .title-bar-dropdown .el-dropdown-menu__item:hover {
+  background-color: #444;
+}
+</style>
 
 <style scoped>
 .title-bar {
@@ -267,6 +346,34 @@ const isLinux = computed(() => !isMac.value && !isWin.value);
 
 .func-btn.active {
   color: var(--el-text-color-primary);
+  font-weight: bold;
+}
+
+/* 下拉菜单内部样式 */
+.dropdown-text-col {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.dropdown-subtext {
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-check-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-width: 120px;
+}
+
+.check-icon {
+  color: var(--el-color-primary);
   font-weight: bold;
 }
 

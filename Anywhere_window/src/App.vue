@@ -3059,7 +3059,10 @@ const handleGlobalImageError = (event) => {
 };
 
 const handleGlobalKeyDown = (event) => {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+  const isCtrl = event.ctrlKey || event.metaKey;
+
+  // 1. 保存功能 (Ctrl + S) - 保持原有逻辑
+  if (isCtrl && event.key.toLowerCase() === 's') {
     event.preventDefault();
 
     if (loading.value) {
@@ -3071,6 +3074,39 @@ const handleGlobalKeyDown = (event) => {
       return;
     }
     handleSaveAction();
+    return;
+  }
+
+  // 2. 缩放快捷键控制
+  if (isCtrl) {
+    // 重置缩放 (Ctrl + 0)
+    if (event.key === '0') {
+      event.preventDefault();
+      zoomLevel.value = 1;
+      showDismissibleMessage.info('缩放已重置 (100%)');
+      return;
+    }
+
+    // 放大 (Ctrl + = 或 Ctrl + +)
+    // 注意：在大多数键盘上，+ 号位于 = 键上，不按 Shift 时 key 为 '='
+    if (event.key === '=' || event.key === '+') {
+      event.preventDefault();
+      const newZoom = zoomLevel.value + 0.1;
+      // 限制最大缩放为 2.0，与鼠标滚轮逻辑保持一致
+      zoomLevel.value = Math.min(2.0, newZoom); 
+      showDismissibleMessage.info(`缩放: ${Math.round(zoomLevel.value * 100)}%`);
+      return;
+    }
+
+    // 缩小 (Ctrl + -)
+    if (event.key === '-') {
+      event.preventDefault();
+      const newZoom = zoomLevel.value - 0.1;
+      // 限制最小缩放为 0.5，与鼠标滚轮逻辑保持一致
+      zoomLevel.value = Math.max(0.5, newZoom);
+      showDismissibleMessage.info(`缩放: ${Math.round(zoomLevel.value * 100)}%`);
+      return;
+    }
   }
 };
 
