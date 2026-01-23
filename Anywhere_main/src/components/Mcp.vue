@@ -126,7 +126,10 @@ const filteredMcpServersList = computed(() => {
         (server.name && server.name.toLowerCase().includes(lowerCaseQuery)) ||
         (server.description && server.description.toLowerCase().includes(lowerCaseQuery)) ||
         (server.provider && server.provider.toLowerCase().includes(lowerCaseQuery)) ||
-        (server.tags && server.tags.some(tag => tag.toLowerCase().includes(lowerCaseQuery)))
+        (server.tags && server.tags.some(tag => tag.toLowerCase().includes(lowerCaseQuery))) ||
+        // 新增：支持按原始类型(如 'builtin')和显示名称(如 '内置')搜索
+        (server.type && server.type.toLowerCase().includes(lowerCaseQuery)) ||
+        (server.type && getDisplayTypeName(server.type).toLowerCase().includes(lowerCaseQuery))
     );
 });
 
