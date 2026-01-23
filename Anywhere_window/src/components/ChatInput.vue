@@ -16,7 +16,7 @@ const props = defineProps({
     layout: { type: String, default: 'horizontal' },
     isMcpActive: Boolean,
 });
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -138,7 +138,12 @@ const handleVoiceSelection = (value) => {
 };
 
 // --- File Handling ---
-const triggerFileUpload = () => fileInputRef.value?.click();
+const triggerFileUpload = () => {
+    emit('pick-file-start');
+    nextTick(() => {
+        fileInputRef.value?.click();
+    });
+};
 const handleFileChange = (event) => { const files = event.target.files; if (files.length) emit('upload', { file: files[0], fileList: Array.from(files) }); if (fileInputRef.value) fileInputRef.value.value = ''; };
 const preventDefaults = (e) => e.preventDefault();
 const handleDragEnter = (event) => { preventDefaults(event); dragCounter.value++; isDragging.value = true; };

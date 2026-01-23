@@ -45,7 +45,7 @@ showDismissibleMessage.warning = (message) => showDismissibleMessage({ message, 
 
 const handleMinimize = () => window.api.windowControl('minimize-window');
 const handleMaximize = () => window.api.windowControl('maximize-window');
-const handleCloseWindow = () => window.api.windowControl('close-window');
+const handleCloseWindow = () => closePage();
 
 const chatInputRef = ref(null);
 const lastSelectionStart = ref(null);
@@ -89,6 +89,7 @@ const favicon = ref("favicon.png");
 const CODE = ref("");
 
 const isInit = ref(false);
+const isFilePickerOpen = ref(false); // 标记文件选择器是否打开
 const basic_msg = ref({ os: "macos", code: "AI", type: "over", payload: "请简洁地介绍一下你自己" });
 const initialConfigData = JSON.parse(JSON.stringify(defaultConfig.config));
 if (isDarkInit) {
@@ -574,6 +575,9 @@ const handleWindowBlur = () => {
 };
 
 const handleWindowFocus = () => {
+  if (isFilePickerOpen.value) {
+    isFilePickerOpen.value = false;
+  }
   setTimeout(() => {
     if (systemPromptDialogVisible.value) {
       return;
@@ -791,7 +795,27 @@ const saveSystemPrompt = async () => {
   systemPromptDialogVisible.value = false;
 };
 
-const closePage = () => { window.close(); };
+const closePage = async () => {
+    // 1. 如果是为了打开文件选择器而失去焦点，拦截关闭
+    if (isFilePickerOpen.value) return;
+
+    // 条件：配置了本地存储路径 且 当前对话已有名称
+    if (currentConfig.value?.webdav?.localChatPath && defaultConversationName.value) {
+        try {
+            await autoSaveSession();
+        } catch (e) {
+            console.error("关闭时自动保存失败:", e);
+        }
+    }
+
+    // 3. 关闭窗口
+    // window.close();
+    window.api.windowControl('close-window');
+};
+
+const handlePickFileStart = () => {
+    isFilePickerOpen.value = true;
+};
 
 watch(zoomLevel, (newZoom) => {
   if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(newZoom);
@@ -1033,24 +1057,26 @@ onMounted(async () => {
 });
 
 const autoSaveSession = async () => {
-  // 1. 检查基本条件
   if (loading.value || !currentConfig.value?.webdav?.localChatPath) {
     return;
   }
 
-  // 2. 检查当前快捷助手是否开启自动保存
+  // 2. 获取当前快捷助手的配置
   const promptConfig = currentConfig.value?.prompts?.[CODE.value];
-  if (!(promptConfig?.autoSaveChat ?? true)) {
+  const isAutoSaveConfigEnabled = promptConfig?.autoSaveChat ?? true;
+
+  if (!defaultConversationName.value && !isAutoSaveConfigEnabled) {
     return;
   }
 
-  // 3. 如果没有对话名称，根据首条用户消息自动生成
+  // 自动命名逻辑：
   if (!defaultConversationName.value && chat_show.value.length > 0) {
     const firstUserMsg = chat_show.value.find(msg => msg.role === 'user');
     if (firstUserMsg) {
       let namePrefix = '';
       const content = firstUserMsg.content;
 
+      // 提取并清洗用户输入内容，作为文件名前缀
       if (Array.isArray(content)) {
         const hasImage = content.some(p => p.type === 'image_url');
         const hasFile = content.some(p => p.type === 'file');
@@ -1068,19 +1094,25 @@ const autoSaveSession = async () => {
       }
 
       if (namePrefix) {
-        // 添加时间戳避免文件名重复覆盖，格式：YYYYMMDD-HHmmss
+        // 清洗智能助手名称中的非法字符 (如 /, \, :, *, ?, ", <, >, |)
+        const safeCodeName = CODE.value.replace(/[\\/:*?"<>|]/g, '_');
+        
+        // 添加时间戳避免文件名重复覆盖
         const now = new Date();
         const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-        defaultConversationName.value = `${namePrefix}-${CODE.value}-${timestamp}`;
+        
+        // 组合文件名
+        defaultConversationName.value = `${namePrefix}-${safeCodeName}-${timestamp}`;
       }
     }
   }
 
-  // 4. 如果仍然没有对话名称，则跳过保存
+  // 5. 如果经过尝试后仍然没有对话名称（例如空对话），则不保存
   if (!defaultConversationName.value) {
     return;
   }
 
+  // 6. 执行写入操作
   try {
     const sessionData = getSessionDataAsObject();
     const jsonString = JSON.stringify(sessionData, null, 2);
@@ -3138,7 +3170,7 @@ const handleOpenSearch = () => {
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
           :is-mcp-active="isMcpActive" @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
           @remove-file="handleRemoveFile" @upload="handleUpload" @send-audio="handleSendAudio"
-          @open-mcp-dialog="handleOpenMcpDialog" />
+          @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart" />
       </div>
     </el-container>
   </main>
