@@ -60,6 +60,23 @@
       "forceDownload": "Force download this file from the cloud (overwrite)"
     },
     "confirmDelete": "Are you sure you want to permanently delete chat '{filename}'?",
+    "clean": {
+      "button": "Clean Old Chats",
+      "title": "Auto Clean Chats",
+      "timeRangeLabel": "Keep Time Range",
+      "customDaysLabel": "Custom Days",
+      "previewTitle": "Will delete {count} chats older than {days} days ({size})",
+      "noFilesFound": "No old chats found matching criteria",
+      "confirmBtn": "Confirm Clean",
+      "success": "Successfully cleaned {count} files",
+      "ranges": {
+        "3": "Older than 3 days",
+        "7": "Older than 7 days",
+        "30": "Older than 30 days",
+        "custom": "Custom"
+      },
+      "scopeTip": "Note: This action only deletes files in the current view ({view}) and will not sync delete files on the other side."
+    },
     "alerts": {
       "configError": "Failed to get configuration.",
       "pathNotFound": "Specified WebDAV data path not found.",

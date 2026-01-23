@@ -2,8 +2,8 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
-import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, ElProgress } from 'element-plus'
+import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, ElProgress, ElScrollbar } from 'element-plus'
 
 const { t } = useI18n();
 
@@ -27,6 +27,12 @@ const isSyncing = ref(false);
 const syncProgress = ref(0);
 const syncStatusText = ref('');
 const syncAbortController = ref(null);
+
+// --- 自动清理功能状态 ---
+const showCleanDialog = ref(false);
+const cleanDaysOption = ref(30); // 默认30天
+const cleanCustomDays = ref(60);
+const isCleaning = ref(false);
 
 // --- Computed Properties ---
 const getFileMap = (fileList) => new Map(fileList.map(f => [f.basename, f]));
@@ -393,6 +399,70 @@ async function forceSyncFile(basename, direction, signal) {
         singleFileSyncing.value[basename] = false;
     }
 }
+
+const computedFilesToClean = computed(() => {
+    const days = cleanDaysOption.value === -1 ? cleanCustomDays.value : cleanDaysOption.value;
+    if (!days || days < 1) return [];
+
+    // 计算截止时间戳
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    return currentFiles.value.filter(file => {
+        const fileDate = new Date(file.lastmod);
+        return fileDate < cutoffDate;
+    });
+});
+
+const totalCleanSize = computed(() => {
+    return computedFilesToClean.value.reduce((acc, file) => acc + (file.size || 0), 0);
+});
+
+function openCleanDialog() {
+    showCleanDialog.value = true;
+}
+
+async function executeAutoClean() {
+    const filesToDelete = computedFilesToClean.value;
+    if (filesToDelete.length === 0) return;
+
+    isCleaning.value = true;
+    try {
+        // 为了安全起见，批量清理仅删除当前视图的文件，不进行双向同步删除询问
+        // 直接复用底层的删除 API
+        const client = isWebdavConfigValid.value ? createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password }) : null;
+
+        // 并发处理
+        const tasks = filesToDelete.map(file => async () => {
+            if (activeView.value === 'local') {
+                await window.api.deleteLocalFile(file.path);
+            } else {
+                if (client) {
+                    await client.deleteFile(`${webdavConfig.value.data_path}/${file.basename}`);
+                }
+            }
+        });
+
+        // 简单的并发控制器
+        const batchSize = 5;
+        for (let i = 0; i < tasks.length; i += batchSize) {
+            const batch = tasks.slice(i, i + batchSize);
+            await Promise.all(batch.map(t => t()));
+        }
+
+        ElMessage.success(t('chats.clean.success', { count: filesToDelete.length }));
+        await refreshData();
+        showCleanDialog.value = false;
+        // 清空选择，防止残留
+        selectedFiles.value = [];
+
+    } catch (error) {
+        ElMessage.error(`清理失败: ${error.message}`);
+    } finally {
+        isCleaning.value = false;
+    }
+}
+
 </script>
 
 <template>
@@ -409,6 +479,9 @@ async function forceSyncFile(basename, direction, signal) {
                         <p v-html="t('chats.info.cloudDesc')"></p>
                     </div>
                 </el-popover>
+                <el-tooltip :content="t('chats.clean.button')" placement="bottom">
+                    <el-button :icon="Brush" circle @click="openCleanDialog" />
+                </el-tooltip>
             </div>
             <div class="sync-buttons-container">
                 <el-tooltip :content="t('chats.tooltips.uploadChanges', { count: uploadableCount })" placement="bottom">
@@ -428,7 +501,8 @@ async function forceSyncFile(basename, direction, signal) {
             <div class="view-selector">
                 <el-radio-group v-model="activeView" @change="currentPage = 1">
                     <el-radio-button value="local">{{ t('chats.view.local') }}</el-radio-button>
-                    <el-radio-button value="cloud" :disabled="!isWebdavConfigValid">{{ t('chats.view.cloud') }}</el-radio-button>
+                    <el-radio-button value="cloud" :disabled="!isWebdavConfigValid">{{ t('chats.view.cloud')
+                        }}</el-radio-button>
                 </el-radio-group>
             </div>
 
@@ -523,6 +597,49 @@ async function forceSyncFile(basename, direction, signal) {
         </div>
         <template #footer>
             <el-button @click="cancelSync">{{ t('common.cancel') }}</el-button>
+        </template>
+    </el-dialog>
+
+    <el-dialog v-model="showCleanDialog" :title="t('chats.clean.title')" width="500px" append-to-body>
+        <div class="clean-dialog-body">
+            <div class="clean-options">
+                <span class="label">{{ t('chats.clean.timeRangeLabel') }}:</span>
+                <el-select v-model="cleanDaysOption" style="width: 140px; margin-right: 10px;">
+                    <el-option :label="t('chats.clean.ranges.3')" :value="3" />
+                    <el-option :label="t('chats.clean.ranges.7')" :value="7" />
+                    <el-option :label="t('chats.clean.ranges.30')" :value="30" />
+                    <el-option :label="t('chats.clean.ranges.custom')" :value="-1" />
+                </el-select>
+                <el-input-number v-if="cleanDaysOption === -1" v-model="cleanCustomDays" :min="1" :max="3650"
+                    style="width: 120px;" controls-position="right" />
+            </div>
+
+            <div class="clean-preview">
+                <p v-if="computedFilesToClean.length > 0" class="preview-title">
+                    {{ t('chats.clean.previewTitle', {
+                        count: computedFilesToClean.length,
+                        days: cleanDaysOption === -1 ? cleanCustomDays : cleanDaysOption,
+                        size: formatBytes(totalCleanSize)
+                    }) }}
+                </p>
+                <p v-else class="preview-title text-gray">{{ t('chats.clean.noFilesFound') }}</p>
+
+                <el-scrollbar max-height="30vh" v-if="computedFilesToClean.length > 0" class="custom-clean-scrollbar">
+                    <ul class="file-preview-list">
+                        <li v-for="file in computedFilesToClean" :key="file.basename">
+                            <span class="fname">{{ file.basename }}</span>
+                            <span class="fdate">{{ formatDate(file.lastmod) }}</span>
+                        </li>
+                    </ul>
+                </el-scrollbar>
+            </div>
+        </div>
+        <template #footer>
+            <el-button @click="showCleanDialog = false">{{ t('common.cancel') }}</el-button>
+            <el-button type="danger" @click="executeAutoClean" :loading="isCleaning"
+                :disabled="computedFilesToClean.length === 0">
+                {{ t('chats.clean.confirmBtn') }}
+            </el-button>
         </template>
     </el-dialog>
 </template>
@@ -806,5 +923,87 @@ html.dark .sync-buttons-container :deep(.el-badge__content--primary) {
     border-radius: 4px;
     font-size: 0.9em;
     word-break: break-all;
+}
+
+.clean-options {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.clean-options .label {
+    margin-right: 10px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.clean-preview {
+    margin-top: 15px;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: 10px 10px 5px 10px;
+    background-color: var(--bg-tertiary);
+}
+
+.preview-title {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--el-color-danger);
+}
+
+.preview-title.text-gray {
+    color: var(--text-tertiary);
+}
+
+.file-preview-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.custom-clean-scrollbar {
+    width: 100%;
+}
+.custom-clean-scrollbar :deep(.el-scrollbar__view) {
+    display: block;
+}
+
+
+html.dark .custom-clean-scrollbar :deep(.el-scrollbar__thumb) {
+    background-color: var(--text-tertiary);
+    opacity: 0.5;
+}
+
+html.dark .custom-clean-scrollbar :deep(.el-scrollbar__thumb:hover) {
+    background-color: var(--text-secondary);
+    opacity: 0.8;
+}
+
+.file-preview-list li {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 4px 0;
+    border-bottom: 1px dashed var(--border-primary);
+    color: var(--text-secondary);
+}
+
+.file-preview-list li:last-child {
+    border-bottom: none;
+}
+
+.file-preview-list .fname {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 10px;
+}
+
+.file-preview-list .fdate {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+    margin-right: 12px;
 }
 </style>

@@ -60,6 +60,23 @@
       "forceDownload": "このファイルをクラウドから強制ダウンロード（上書き）"
     },
     "confirmDelete": "チャット '{filename}' を完全に削除してもよろしいですか？",
+    "clean": {
+      "button": "古い対話を整理",
+      "title": "対話の自動整理",
+      "timeRangeLabel": "保持期間を選択",
+      "customDaysLabel": "カスタム日数",
+      "previewTitle": "{days}日前の対話 {count} 件を削除します ({size})",
+      "noFilesFound": "条件に一致する古い対話は見つかりませんでした",
+      "confirmBtn": "整理を実行",
+      "success": "{count} 個のファイルを削除しました",
+      "ranges": {
+        "3": "3日以上前",
+        "7": "7日以上前",
+        "30": "30日以上前",
+        "custom": "カスタム"
+      },
+      "scopeTip": "注意：この操作は現在のビュー（{view}）のファイルのみを削除し、もう一方の端のファイルは同期削除しません。"
+    },
     "alerts": {
       "configError": "設定の取得に失敗しました。",
       "pathNotFound": "指定されたWebDAVデータパスが見つかりません。",

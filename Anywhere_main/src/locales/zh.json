@@ -60,6 +60,23 @@
       "forceDownload": "强制从云端下载此文件 (覆盖)"
     },
     "confirmDelete": "您确定要永久删除对话 '{filename}' 吗？",
+    "clean": {
+      "button": "清理旧对话",
+      "title": "自动清理对话",
+      "timeRangeLabel": "选择保留时间",
+      "customDaysLabel": "自定义天数",
+      "previewTitle": "将删除以下 {count} 个 {days} 天前的对话 ({size})",
+      "noFilesFound": "未发现符合条件的旧对话",
+      "confirmBtn": "确认清理",
+      "success": "成功清理 {count} 个文件",
+      "ranges": {
+        "3": "3天前",
+        "7": "7天前",
+        "30": "30天前",
+        "custom": "自定义"
+      },
+      "scopeTip": "注意：此操作仅删除当前视图（{view}）下的文件，不会同步删除另一端的文件。"
+    },
     "alerts": {
       "configError": "获取配置失败",
       "pathNotFound": "未找到指定的WebDAV数据路径",
@@ -288,7 +305,7 @@
       "refreshSuccess": "MCP 服务配置已刷新！",
       "configInvalid": "未能获取到有效的配置数据。",
       "refreshFailed": "刷新配置失败，请稍后重试。",
-      "testSuccess":"测试成功。",
+      "testSuccess": "测试成功。",
       "testFailed": "测试失败，请检查您的配置。"
     },
     "jsonDialog": {
