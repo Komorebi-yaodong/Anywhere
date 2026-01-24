@@ -3318,27 +3318,28 @@ const handleOpenSearch = () => {
                     ({{ getToolCounts(server.id).enabled }}/{{ getToolCounts(server.id).total }})
                   </span>
                 </span>
-
-                <!-- 持久连接按钮 (margin-left: auto 推到右侧) -->
-                <el-tooltip :content="server.isPersistent ? '持久连接已开启' : '持久连接已关闭'" placement="top">
-                  <el-button text circle :class="{ 'is-persistent-active': server.isPersistent }"
-                    @click.stop="toggleMcpPersistence(server.id, !server.isPersistent)" class="persistent-btn"
-                    style="margin-left: auto; margin-right: 4px;">
-                    <el-icon :size="16">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                      </svg>
-                    </el-icon>
-                  </el-button>
-                </el-tooltip>
-
-                <div class="mcp-server-tags">
-                  <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{
-                    getDisplayTypeName(server.type) }}</el-tag>
-                  <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
-                    tag
-                  }}</el-tag>
+                
+                <!-- 右侧分组：包含持久连接按钮和标签，统一靠右 -->
+                <div class="mcp-header-right-group">
+                  <el-tooltip :content="server.isPersistent ? '持久连接已开启' : '持久连接已关闭'" placement="top">
+                    <el-button text circle :class="{ 'is-persistent-active': server.isPersistent }"
+                      @click.stop="toggleMcpPersistence(server.id, !server.isPersistent)" class="persistent-btn">
+                      <el-icon :size="16">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                      </el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  
+                  <div class="mcp-server-tags">
+                    <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{
+                      getDisplayTypeName(server.type) }}</el-tag>
+                    <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
+                      tag
+                    }}</el-tag>
+                  </div>
                 </div>
               </div>
 
@@ -3734,6 +3735,14 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
   margin-bottom: 0px;
 }
 
+.mcp-header-right-group {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .mcp-server-icon {
   flex-shrink: 0;
   background-color: var(--el-fill-color-light);
@@ -4049,6 +4058,24 @@ html.dark .mcp-tools-panel {
 
 html.dark .mcp-tool-row {
   border-bottom-color: var(--el-border-color-lighter);
+}
+
+html.dark .mcp-tool-row .el-switch {
+  --el-switch-off-color: #181818;
+  --el-switch-border-color: #4C4D4F;
+}
+
+html.dark .mcp-tool-row .el-switch .el-switch__core .el-switch__action {
+  background-color: #E5EAF3; 
+}
+
+html.dark .mcp-tool-row .el-switch.is-checked .el-switch__core {
+  background-color: #E5EAF3;
+  border-color: #E5EAF3;
+}
+
+html.dark .mcp-tool-row .el-switch.is-checked .el-switch__core .el-switch__action {
+  background-color: #141414; 
 }
 
 html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner,
