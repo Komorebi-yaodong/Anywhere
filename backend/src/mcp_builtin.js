@@ -42,94 +42,121 @@ function extractMetadata(html) {
 }
 
 // HTML 转 Markdown 辅助函数
-function convertHtmlToMarkdown(html) {
+function convertHtmlToMarkdown(html, baseUrl = '') {
     let text = html;
 
-    // --- 1. 核心内容定位 ---
-    const articlePatterns = [
-        /<article[^>]*>([\s\S]*?)<\/article>/i,
-        /<div[^>]*id=["'](?:article_content|content_views|js_content|post-content)["'][^>]*>([\s\S]*?)<\/div>/i,
-        /<main[^>]*>([\s\S]*?)<\/main>/i
-    ];
+    // --- 1. SPA/SEO 增强：检查 <noscript> ---
+    // 很多单页应用(Linux.do, Discourse)会将正文放在 noscript 中供爬虫读取
+    // 如果 noscript 内容比当前 body 内容长很多，优先使用 noscript
+    const noscriptMatch = text.match(/<noscript[^>]*>([\s\S]*?)<\/noscript>/i);
+    const bodyMatch = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     
-    for (const pattern of articlePatterns) {
-        const match = text.match(pattern);
-        if (match && match[1].length > 500) { 
-            text = match[1];
-            break;
-        }
+    let bodyText = bodyMatch ? bodyMatch[1] : text;
+    if (noscriptMatch && noscriptMatch[1].length > bodyText.length) {
+        text = noscriptMatch[1];
+    } else {
+        text = bodyText;
     }
 
-    // --- 2. 移除无关标签 ---
-    text = text.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
-    text = text.replace(/<(script|style|svg|noscript|header|footer|nav|aside|iframe|form|button|textarea)[^>]*>[\s\S]*?<\/\1>/gi, '');
-    text = text.replace(/<div[^>]*(?:class|id)=["'][^"']*(?:sidebar|comment|recommend|advert|toolbar|operate|login|modal)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '');
+    // --- 2. 移除绝对无关的标签 ---
+    text = text.replace(/<(script|style|svg|noscript|iframe|form|button|input|select|option|textarea)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    
+    // --- 3. 移除 HTML5 语义化噪音标签 ---
+    text = text.replace(/<(nav|footer|aside)[^>]*>[\s\S]*?<\/\1>/gi, '');
 
-    // --- 3. 移除注释 ---
+    // --- 4. 基于类名/ID 的通用降噪 ---
+    const noiseKeywords = "sidebar|comment|recommend|advert|ads|menu|login|modal|popup|cookie|auth|related|footer|copyright";
+    const noiseRegex = new RegExp(`<div[^>]*(?:id|class)=["'][^"']*(${noiseKeywords})[^"']*["'][^>]*>[\\s\\S]*?<\\/div>`, 'gi');
+    text = text.replace(noiseRegex, ''); 
+    text = text.replace(noiseRegex, ''); 
+
+    // --- 5. 移除注释 ---
     text = text.replace(/<!--[\s\S]*?-->/g, '');
 
-    // --- 4. 元素转换 Markdown ---
+    // --- 6. 辅助函数：处理相对 URL ---
+    const resolveUrl = (relativeUrl) => {
+        if (!relativeUrl || !baseUrl) return relativeUrl;
+        if (relativeUrl.startsWith('http')) return relativeUrl;
+        if (relativeUrl.startsWith('data:')) return ''; 
+        try {
+            return new URL(relativeUrl, baseUrl).href;
+        } catch (e) {
+            return relativeUrl;
+        }
+    };
+
+    // --- 7. 元素转换 Markdown ---
     text = text.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (match, level, content) => {
-        return `\n\n${'#'.repeat(level)} ${content.replace(/<[^>]+>/g, '').trim()}\n`;
+        const cleanContent = content.replace(/<[^>]+>/g, '').trim();
+        return cleanContent ? `\n\n${'#'.repeat(level)} ${cleanContent}\n` : '';
     });
 
     text = text.replace(/<\/li>/gi, '\n');
     text = text.replace(/<li[^>]*>/gi, '- ');
     text = text.replace(/<\/(ul|ol)>/gi, '\n\n');
-    text = text.replace(/<\/(p|div|tr|table|article|section|blockquote)>/gi, '\n');
+    text = text.replace(/<\/(p|div|tr|table|article|section|blockquote|main)>/gi, '\n');
     text = text.replace(/<br\s*\/?>/gi, '\n');
 
     text = text.replace(/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*>/gi, (match, src, alt) => {
-        if (src.startsWith('data:image')) return ''; 
-        return `\n![${alt.trim()}](${src})\n`;
+        const fullUrl = resolveUrl(src);
+        return fullUrl ? `\n![${alt.trim()}](${fullUrl})\n` : '';
     });
     text = text.replace(/<img[^>]*src="([^"]*)"[^>]*>/gi, (match, src) => {
-        if (src.startsWith('data:image')) return ''; 
-        return `\n![](${src})\n`;
+        const fullUrl = resolveUrl(src);
+        return fullUrl ? `\n![](${fullUrl})\n` : '';
     });
 
     text = text.replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (match, href, content) => {
         const cleanContent = content.replace(/<[^>]+>/g, '').trim();
         if (!cleanContent || href.startsWith('javascript:') || href.startsWith('#')) return cleanContent;
-        return ` [${cleanContent}](${href}) `;
+        return ` [${cleanContent}](${resolveUrl(href)}) `;
     });
 
     text = text.replace(/<(b|strong)[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**');
-    text = text.replace(/<(code|pre)[^>]*>([\s\S]*?)<\/\1>/gi, '\n```\n$2\n```\n');
+    
+    // 代码块处理
+    text = text.replace(/<pre[^>]*>[\s\S]*?<code[^>]*>([\s\S]*?)<\/code>[\s\S]*?<\/pre>/gi, (match, code) => {
+        return `\n\`\`\`\n${code}\n\`\`\`\n`;
+    });
+    text = text.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, '\n```\n$1\n```\n');
+    text = text.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, ' `$1` ');
 
-    // --- 5. 移除剩余 HTML 标签 ---
+    // --- 8. 移除剩余 HTML 标签 ---
     text = text.replace(/<[^>]+>/g, '');
 
-    // --- 6. 实体解码 ---
-    const entities = { '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&copy;': '©' };
+    // --- 9. 实体解码 ---
+    const entities = { '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&copy;': '©', '&mdash;': '—' };
     text = text.replace(/&[a-z0-9]+;/gi, (match) => entities[match] || '');
 
-    // --- 7. 行级清洗 ---
+    // --- 10. 行级清洗与去重 ---
     const lines = text.split('\n').map(line => line.trim());
     const cleanLines = [];
     
-    const noiseKeywords = [
-        /^最新推荐/, /^相关推荐/, /^文章标签/, /^版权声明/, /阅读\s*\d/, /点赞/, /收藏/, /分享/, /举报/, 
-        /打赏/, /关注/, /登录/, /注册/, /Copyright/, /All rights reserved/, 
-        /VIP/, /立即使用/, /福利倒计时/, /扫一扫/, /复制链接/
-    ];
+    const lineNoiseRegex = /^(Sign in|Sign up|Log in|Register|Subscribe|Share|Follow us|Menu|Top|Home|About|Contact|Privacy|Terms)/i;
+
+    let blankLineCount = 0;
 
     for (let line of lines) {
-        if (!line) continue;
-        if (line.length < 2 && !line.match(/[a-zA-Z0-9]/)) continue;
-        
-        let isNoise = false;
-        for (const regex of noiseKeywords) {
-            if (regex.test(line)) { isNoise = true; break; }
+        if (!line) {
+            blankLineCount++;
+            if (blankLineCount < 2) cleanLines.push(''); 
+            continue;
         }
-        if (isNoise) continue;
+        blankLineCount = 0;
 
-        if (/^\[.{1,15}\]\(http.*\)$/.test(line)) continue;
+        // [新增] 过滤纯数字行 (解决代码块行号问题)
+        if (/^\d+$/.test(line)) continue;
+
+        // [新增] 过滤极短的纯符号行
+        if (line.length < 5 && !/[a-zA-Z0-9\u4e00-\u9fa5]/.test(line)) continue;
+
+        // 过滤导航类噪音
+        if (line.length < 20 && lineNoiseRegex.test(line)) continue;
 
         cleanLines.push(line);
     }
 
-    return cleanLines.join('\n\n'); 
+    return cleanLines.join('\n'); 
 }
 
 // --- Definitions ---
@@ -308,7 +335,7 @@ const BUILTIN_TOOLS = {
     "builtin_search": [
         {
             name: "web_search",
-            description: "Search the internet for a given query and return the top N results (title, link, snippet). CRITICAL: The snippets are short and often insufficient. For detailed information you should usually follow this tool with 'web_fetch' to read the full content. Constraint: After replying, 'Sources:' citation links must be included.",
+            description: "Search the internet for a given query. Returns snippets only. Constraint: After replying, 'Sources:' citation links must be included.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -316,7 +343,7 @@ const BUILTIN_TOOLS = {
                     count: { type: "integer", description: "Number of results to return (default 5, max 10)." },
                     language: { 
                         type: "string", 
-                        description: "Preferred language/region code (e.g., 'zh-CN', 'en-US', 'jp'). Defaults to 'zh-CN' for Chinese results." 
+                        description: "Preferred language/region code (e.g., 'zh-CN', 'en-US', 'jp'). Defaults to 'zh-CN'." 
                     }
                 },
                 required: ["query"]
@@ -324,7 +351,7 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "web_fetch",
-            description: "Deeply read and parse the text content of a URL (converts HTML to Markdown). Use this to read the actual content of search results. For long pages, use 'offset' and 'length' to read in chunks. Constraint: After replying, 'Sources:' citation links must be included.",
+            description: "Retrieve and parse the FULL text content of a specific URL. Use this when the user provides a URL or after getting a URL from search results. Capable of parsing complex pages like documentation, papers, and code repositories.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -1228,18 +1255,11 @@ const handlers = {
             const MAX_SINGLE_READ = MAX_READ;
             const readLength = Math.min(length, MAX_SINGLE_READ);
 
-            // 1. 更加逼真的浏览器指纹 Headers (模拟 Chrome)
+            // 1. 模拟常用浏览器 Header，防止被简单反爬拦截
             const headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-                "Cache-Control": "max-age=0",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
                 "Referer": "https://www.google.com/"
             };
 
@@ -1257,6 +1277,8 @@ const handlers = {
             const rawText = await response.text();
 
             let fullText = "";
+            
+            // 如果是 JSON 数据，直接格式化返回
             if (contentType.includes('application/json')) {
                 try { 
                     fullText = JSON.stringify(JSON.parse(rawText), null, 2); 
@@ -1264,21 +1286,24 @@ const handlers = {
                     fullText = rawText; 
                 }
             } else {
+                // 提取元数据
                 const metadata = extractMetadata(rawText);
-                const markdownBody = convertHtmlToMarkdown(rawText);
+                
+                // 传入 URL 以处理相对路径，并使用新的通用降噪逻辑
+                const markdownBody = convertHtmlToMarkdown(rawText, url);
 
                 if (!markdownBody || markdownBody.length < 50) {
-                    return `Fetched URL: ${url}\n\nTitle: ${metadata.title}\n\n[System]: Content seems empty. This might be a JavaScript-rendered page (SPA) which cannot be parsed by this tool.`;
+                    // 内容过短，可能是 SPA 网站（如 Bilibili），返回元数据告知 AI
+                    return `Fetched URL: ${url}\n\nTitle: ${metadata.title}\n\n[System Info]: The extracted content is very short. This website might be a Single Page Application (SPA) relying on JavaScript, which this tool cannot render. \nDescription: ${metadata.description}`;
                 }
 
                 fullText = `URL: ${url}\n\n`;
                 if (metadata.title) fullText += `# ${metadata.title}\n\n`;
-                if (metadata.author) fullText += `**Author:** ${metadata.author}\n`;
-                if (metadata.description) fullText += `**Summary:** ${metadata.description}\n`;
-                fullText += `\n---\n\n${markdownBody}`;
+                if (metadata.description) fullText += `> **Description:** ${metadata.description}\n\n`;
+                fullText += `---\n\n${markdownBody}`;
             }
 
-            // --- 分页逻辑 ---
+            // --- 分页读取逻辑 ---
             const totalChars = fullText.length;
             const startPos = Math.max(0, offset);
             const contentChunk = fullText.substring(startPos, startPos + readLength);
@@ -1289,11 +1314,8 @@ const handlers = {
             if (remainingChars > 0) {
                 const nextOffset = startPos + contentChunk.length;
                 result += `\n\n--- [SYSTEM NOTE: CONTENT TRUNCATED] ---\n`;
-                result += `Total characters in parsed page: ${totalChars}\n`;
-                result += `Current chunk: ${startPos} to ${nextOffset}\n`;
-                result += `Remaining unread characters: ${remainingChars}\n`;
-                result += `To read more, call web_fetch with offset: ${nextOffset}\n`;
-                result += `---------------------------------------`;
+                result += `Total characters: ${totalChars}. Current chunk: ${startPos}-${nextOffset}.\n`;
+                result += `Remaining: ${remainingChars}. Call 'web_fetch' with offset=${nextOffset} to read more.\n`;
             } else if (startPos > 0) {
                 result += `\n\n--- [SYSTEM NOTE: END OF PAGE REACHED] ---`;
             }
