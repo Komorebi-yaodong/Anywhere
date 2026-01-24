@@ -322,11 +322,16 @@ const BUILTIN_TOOLS = {
     "builtin_bash": [
         {
             name: "execute_bash_command",
-            description: `Execute a shell command on the current ${currentOS} system. Note: Long-running commands (like servers) will be terminated after 15 seconds to prevent blocking.`,
+            description: `Execute a shell command on the current ${currentOS} system. Note: Long-running commands (like servers) will be terminated after the timeout (default 15s) to prevent blocking.`,
             inputSchema: {
                 type: "object",
                 properties: {
-                    command: { type: "string", description: `The command to execute (e.g., 'ls -la', 'git status', 'npm install'). Current OS: ${currentOS}.` }
+                    command: { type: "string", description: `The command to execute (e.g., 'ls -la', 'git status', 'npm install'). Current OS: ${currentOS}.` },
+                    timeout: { 
+                        type: "integer", 
+                        description: "Optional. Timeout in milliseconds. Default is 15000 (15 seconds). Set higher (e.g., 300000 for 5 mins) for long-running tasks like installations.",
+                        default: 15000
+                    }
                 },
                 required: ["command"]
             }
@@ -1064,7 +1069,7 @@ const handlers = {
     },
 
     // Bash / PowerShell
-    execute_bash_command: async ({ command }) => {
+    execute_bash_command: async ({ command, timeout = 15000 }) => {
         return new Promise((resolve) => {
             const trimmedCmd = command.trim();
 
@@ -1101,11 +1106,14 @@ const handlers = {
                 }
             }
 
+            // 确保 timeout 是有效的正整数，如果未提供或无效则回退到 15000
+            const validTimeout = (typeof timeout === 'number' && timeout > 0) ? timeout : 15000;
+
             let shellOptions = {
                 cwd: bashCwd,
                 encoding: 'utf-8',
-                maxBuffer: 1024 * 1024 * 5,
-                timeout: 15000 
+                maxBuffer: 1024 * 1024 * 10, // 稍微调大一点 buffer 防止大量输出截断
+                timeout: validTimeout 
             };
 
             let finalCommand = command;
@@ -1128,7 +1136,7 @@ const handlers = {
                 
                 if (error) {
                     if (error.signal === 'SIGTERM') {
-                        result += `\n[System Note]: Command timed out after 15s and was terminated. This is expected for long-running processes (like servers). Output captured so far is shown above.`;
+                        result += `\n[System Note]: Command timed out after ${validTimeout / 1000}s and was terminated. This is expected for long-running processes. Output captured so far is shown above.`;
                     } else {
                         result += `\n[Error Code]: ${error.code}`;
                         if (error.message && !stderr) result += `\n[Message]: ${error.message}`;
