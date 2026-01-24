@@ -460,7 +460,7 @@ function prepareAddPrompt() {
     backgroundImage: "",
     backgroundOpacity: 0.6,
     backgroundBlur: 0,
-    autoSaveChat: false,
+    autoSaveChat: currentConfig.value.autoSaveChat_global ?? false,
   });
   showPromptEditDialog.value = true;
 }
