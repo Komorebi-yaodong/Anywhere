@@ -86,6 +86,7 @@ window.api = {
     savePromptWindowSettings,
     desktopCaptureSources: utools.desktopCaptureSources,
     copyImage: utools.copyImage,
+    getMcpToolCache,
     initializeMcpClient: async (activeServerConfigs) => {
         try {
             const cache = await getMcpToolCache();            
@@ -98,6 +99,7 @@ window.api = {
     invokeMcpTool: async (toolName, toolArgs, signal, context = null) => {
         return await invokeMcpTool(toolName, toolArgs, signal, context);
     },
+    saveMcpToolCache,
     closeMcpClient,
     isFileTypeSupported,
     parseFileObject,

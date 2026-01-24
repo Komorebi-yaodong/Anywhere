@@ -1,16 +1,14 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar, ElSwitch } from 'element-plus';
 import { createClient } from "webdav/web";
-import { QuestionFilled } from '@element-plus/icons-vue';
+import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight } from '@element-plus/icons-vue';
 
 import TitleBar from './components/TitleBar.vue';
 import ChatHeader from './components/ChatHeader.vue';
 const ChatMessage = defineAsyncComponent(() => import('./components/ChatMessage.vue'));
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
-
-import { DocumentCopy, Download, Search, Tools } from '@element-plus/icons-vue';
 
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -58,7 +56,7 @@ const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
 
 // [新增] 核心状态：是否粘滞在底部
-const isSticky = ref(true); 
+const isSticky = ref(true);
 let chatObserver = null;    // DOM 观察器实例
 
 let autoSaveInterval = null;
@@ -192,8 +190,8 @@ const imageViewerInitialIndex = ref(0);
 const toolCallControllers = ref(new Map());
 const tempSessionMcpServerIds = ref([]);
 
-const isAutoApproveTools = ref(true); 
-const pendingToolApprovals = ref(new Map()); 
+const isAutoApproveTools = ref(true);
+const pendingToolApprovals = ref(new Map());
 
 const handleToolApproval = (toolCallId, isApproved) => {
   const resolver = pendingToolApprovals.value.get(toolCallId);
@@ -224,11 +222,57 @@ const handleToggleAutoApprove = (val) => {
 };
 
 const isMcpDialogVisible = ref(false);
-const sessionMcpServerIds = ref([]); 
+const sessionMcpServerIds = ref([]);
 const openaiFormattedTools = ref([]);
 const mcpSearchQuery = ref('');
 const isMcpLoading = ref(false);
-const mcpFilter = ref('all'); 
+const mcpFilter = ref('all');
+const mcpToolCache = ref({});
+const expandedMcpServers = ref(new Set());
+
+const toggleMcpServerExpansion = (serverId) => {
+  if (expandedMcpServers.value.has(serverId)) {
+    expandedMcpServers.value.delete(serverId);
+  } else {
+    expandedMcpServers.value.add(serverId);
+  }
+};
+
+// 切换具体工具的启用状态
+const handleMcpToolStatusChange = async (serverId, toolName, enabled) => {
+  if (!mcpToolCache.value[serverId]) return;
+
+  // 更新本地视图状态
+  const tools = mcpToolCache.value[serverId];
+  const toolIndex = tools.findIndex(t => t.name === toolName);
+  if (toolIndex !== -1) {
+    tools[toolIndex].enabled = enabled;
+
+    // 深拷贝以去除 Vue 响应式代理，准备保存
+    const toolsToSave = JSON.parse(JSON.stringify(tools));
+    try {
+      // 调用 preload API 保存到数据库
+      await window.api.saveMcpToolCache(serverId, toolsToSave);
+      // 静默保存成功
+    } catch (e) {
+      console.error("Failed to save tool status:", e);
+      showDismissibleMessage.error("保存工具状态失败");
+      // 回滚状态
+      tools[toolIndex].enabled = !enabled;
+    }
+  }
+};
+
+const getToolCounts = (serverId) => {
+  const tools = mcpToolCache.value[serverId];
+  if (!tools || !Array.isArray(tools)) return null;
+
+  const total = tools.length;
+  // 默认 enabled 为 undefined 时也视为启用
+  const enabled = tools.filter(t => t.enabled !== false).length;
+
+  return { enabled, total };
+};
 
 const isMcpActive = computed(() => sessionMcpServerIds.value.length > 0);
 
@@ -294,7 +338,7 @@ const scrollToBottom = async (behavior = 'auto') => {
     isSticky.value = true;
     el.scrollTo({
       top: el.scrollHeight,
-      behavior: behavior 
+      behavior: behavior
     });
   }
 };
@@ -313,10 +357,10 @@ const forceScrollToBottom = () => {
   isAtBottom.value = true;
   showScrollToBottomButton.value = false;
   focusedMessageIndex.value = null;
-  
+
   // 点击按钮时，为了视觉反馈，可以使用平滑滚动
   scrollToBottom('smooth');
-  
+
   setTimeout(() => { isForcingScroll.value = false; }, 500);
 };
 
@@ -347,7 +391,7 @@ const findFocusedMessageIndex = () => {
 // [修改] 滚动监听：仅负责更新 isSticky 状态和 UI 按钮显示
 const handleScroll = (event) => {
   if (isForcingScroll.value) return;
-  
+
   const el = event.target;
   if (!el) return;
 
@@ -357,7 +401,7 @@ const handleScroll = (event) => {
 
   // 核心逻辑：用户只要向上滚动离开底部，就取消粘滞；一旦触底，重新激活粘滞
   const atBottom = distanceToBottom <= tolerance;
-  
+
   if (atBottom) {
     if (!isSticky.value) isSticky.value = true;
     if (!isAtBottom.value) isAtBottom.value = true;
@@ -796,25 +840,25 @@ const saveSystemPrompt = async () => {
 };
 
 const closePage = async () => {
-    // 1. 如果是为了打开文件选择器而失去焦点，拦截关闭
-    if (isFilePickerOpen.value) return;
+  // 1. 如果是为了打开文件选择器而失去焦点，拦截关闭
+  if (isFilePickerOpen.value) return;
 
-    // 条件：配置了本地存储路径 且 当前对话已有名称
-    if (currentConfig.value?.webdav?.localChatPath && defaultConversationName.value) {
-        try {
-            await autoSaveSession();
-        } catch (e) {
-            console.error("关闭时自动保存失败:", e);
-        }
+  // 条件：配置了本地存储路径 且 当前对话已有名称
+  if (currentConfig.value?.webdav?.localChatPath && defaultConversationName.value) {
+    try {
+      await autoSaveSession();
+    } catch (e) {
+      console.error("关闭时自动保存失败:", e);
     }
+  }
 
-    // 3. 关闭窗口
-    // window.close();
-    window.api.windowControl('close-window');
+  // 3. 关闭窗口
+  // window.close();
+  window.api.windowControl('close-window');
 };
 
 const handlePickFileStart = () => {
-    isFilePickerOpen.value = true;
+  isFilePickerOpen.value = true;
 };
 
 watch(zoomLevel, (newZoom) => {
@@ -847,7 +891,7 @@ onMounted(async () => {
 
   textSearchInstance = new TextSearchUI({
     scope: '.chat-main',
-    theme: currentConfig.value?.isDarkMode ? 'dark' : 'light' 
+    theme: currentConfig.value?.isDarkMode ? 'dark' : 'light'
   });
 
   window.addEventListener('wheel', handleWheel, { passive: false });
@@ -856,7 +900,7 @@ onMounted(async () => {
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) {
     chatMainElement.addEventListener('click', handleMarkdownImageClick);
-    
+
     chatObserver = new MutationObserver(() => {
       // 只要处于粘滞状态，任何 DOM 变化（文字生成、元素高度变化）
       // 都立即将 scrollTop 设为最大值。这在浏览器重绘前发生，因此视觉上是“内容上推”。
@@ -864,12 +908,12 @@ onMounted(async () => {
         chatMainElement.scrollTop = chatMainElement.scrollHeight;
       }
     });
-    
+
     // 监听子节点变化（新消息）和子树字符数据变化（打字机效果）
-    chatObserver.observe(chatMainElement, { 
-      childList: true, 
-      subtree: true, 
-      characterData: true 
+    chatObserver.observe(chatMainElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
     });
   }
 
@@ -1096,11 +1140,11 @@ const autoSaveSession = async () => {
       if (namePrefix) {
         // 清洗智能助手名称中的非法字符 (如 /, \, :, *, ?, ", <, >, |)
         const safeCodeName = CODE.value.replace(/[\\/:*?"<>|]/g, '_');
-        
+
         // 添加时间戳避免文件名重复覆盖
         const now = new Date();
         const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-        
+
         // 组合文件名
         defaultConversationName.value = `${namePrefix}-${safeCodeName}-${timestamp}`;
       }
@@ -1134,7 +1178,7 @@ onBeforeUnmount(async () => {
   await window.api.closeMcpClient();
   window.removeEventListener('error', handleGlobalImageError, true);
   window.removeEventListener('keydown', handleGlobalKeyDown);
-  
+
   if (chatObserver) {
     chatObserver.disconnect();
     chatObserver = null;
@@ -1276,7 +1320,7 @@ const saveSessionAsMarkdown = async () => {
   markdownContent += '---\n\n';
 
   for (const message of chat_show.value) {
-    if (message.role === 'system') continue; 
+    if (message.role === 'system') continue;
 
     if (message.role === 'user') {
       let userHeader = '### 👤 用户';
@@ -1850,9 +1894,9 @@ const handleRenameSession = async () => {
         confirmButtonText: '确认',
         cancelButtonText: '取消',
         inputValidator: (val) => {
-            if (!val || !val.trim()) return '名称不能为空';
-            if (/[\\/:*?"<>|]/.test(val)) return '文件名包含非法字符';
-            return true;
+          if (!val || !val.trim()) return '名称不能为空';
+          if (/[\\/:*?"<>|]/.test(val)) return '文件名包含非法字符';
+          return true;
         },
         customClass: 'filename-prompt-dialog', // 复用已有的弹窗样式
       }
@@ -1860,7 +1904,7 @@ const handleRenameSession = async () => {
 
     let newBaseName = (userInput || "").trim();
     if (newBaseName.toLowerCase().endsWith('.json')) newBaseName = newBaseName.slice(0, -5);
-    
+
     if (newBaseName === oldBaseName) return;
 
     const newFilename = `${newBaseName}.json`;
@@ -1869,8 +1913,8 @@ const handleRenameSession = async () => {
     // 检查本地是否存在同名文件
     const files = await window.api.listJsonFiles(localPath);
     if (files.some(f => f.basename === newFilename)) {
-        showDismissibleMessage.error(`文件名 "${newFilename}" 已存在，操作取消`);
-        return;
+      showDismissibleMessage.error(`文件名 "${newFilename}" 已存在，操作取消`);
+      return;
     }
 
     // 执行本地重命名
@@ -1881,33 +1925,33 @@ const handleRenameSession = async () => {
     // 尝试同步重命名云端文件
     const { url, username, password, data_path } = currentConfig.value.webdav || {};
     if (url && data_path) {
-        try {
-            const client = createClient(url, { username, password });
-            const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
-            const oldRemotePath = `${remoteDir}/${oldFilename}`;
-            const newRemotePath = `${remoteDir}/${newFilename}`;
+      try {
+        const client = createClient(url, { username, password });
+        const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
+        const oldRemotePath = `${remoteDir}/${oldFilename}`;
+        const newRemotePath = `${remoteDir}/${newFilename}`;
 
-            // 检查云端是否存在该文件
-            if (await client.exists(oldRemotePath)) {
-                 await ElMessageBox.confirm(
-                    '云端也存在同名文件，是否同步重命名？',
-                    '同步操作提示',
-                    { confirmButtonText: '是', cancelButtonText: '否', type: 'info' }
-                );
-                await client.moveFile(oldRemotePath, newRemotePath);
-                showDismissibleMessage.success('云端同步重命名成功');
-            }
-        } catch (e) {
-            if (e !== 'cancel' && e !== 'close') {
-               console.warn('Cloud rename skipped:', e);
-            }
+        // 检查云端是否存在该文件
+        if (await client.exists(oldRemotePath)) {
+          await ElMessageBox.confirm(
+            '云端也存在同名文件，是否同步重命名？',
+            '同步操作提示',
+            { confirmButtonText: '是', cancelButtonText: '否', type: 'info' }
+          );
+          await client.moveFile(oldRemotePath, newRemotePath);
+          showDismissibleMessage.success('云端同步重命名成功');
         }
+      } catch (e) {
+        if (e !== 'cancel' && e !== 'close') {
+          console.warn('Cloud rename skipped:', e);
+        }
+      }
     }
 
   } catch (error) {
-      if (error !== 'cancel' && error !== 'close') {
-          showDismissibleMessage.error(`操作失败: ${error.message}`);
-      }
+    if (error !== 'cancel' && error !== 'close') {
+      showDismissibleMessage.error(`操作失败: ${error.message}`);
+    }
   }
 };
 
@@ -1918,12 +1962,12 @@ const handleSaveAction = async () => {
 
   // 只有当已存在本地文件名（即已保存过）且配置了本地路径时，才显示重命名选项
   if (currentConfig.value.webdav?.localChatPath && defaultConversationName.value) {
-      saveOptions.push({ 
-          title: '重命名对话', 
-          description: '修改当前对话名称，并同步修改本地文件（以及云端文件）。', 
-          buttonType: 'warning', 
-          action: handleRenameSession 
-      });
+    saveOptions.push({
+      title: '重命名对话',
+      description: '修改当前对话名称，并同步修改本地文件（以及云端文件）。',
+      buttonType: 'warning',
+      action: handleRenameSession
+    });
   }
 
   if (isCloudEnabled) {
@@ -2271,6 +2315,8 @@ async function toggleMcpDialog() {
 
         currentConfig.value.mcpServers = newMcpServers;
       }
+      mcpToolCache.value = await window.api.getMcpToolCache() || {};
+
     } catch (error) {
       console.error("Auto refresh MCP config failed:", error);
     }
@@ -2307,7 +2353,7 @@ const getSystemTime = () => {
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const weekDay = days[now.getDay()];
-  
+
   return `${year}-${month}-${day} (${weekDay})`;
 }
 
@@ -2379,7 +2425,7 @@ const askAI = async (forceSend = false) => {
   loading.value = true;
   signalController.value = new AbortController();
   await nextTick();
-  
+
   // 开始回答时，强制锁定到底部
   isSticky.value = true;
   scrollToBottom('auto'); // 瞬间置底
@@ -2478,13 +2524,13 @@ const askAI = async (forceSend = false) => {
 
       const payload = {
         model: model.value.split("|")[1],
-        messages: messagesForThisRequest, 
+        messages: messagesForThisRequest,
         stream: useStream,
       };
 
       if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
       if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
-      
+
       if (openaiFormattedTools.value.length > 0) {
         payload.tools = openaiFormattedTools.value;
         payload.tool_choice = "auto";
@@ -2504,7 +2550,7 @@ const askAI = async (forceSend = false) => {
         voiceName: selectedVoice.value, tool_calls: []
       });
       currentAssistantChatShowIndex = chat_show.value.length - 1;
-      
+
       // [修改] 创建新气泡时，如果 Sticky 为 true，MutationObserver 会自动处理滚动
       // 这里不需要手动调用 scrollToBottom，除非是初始状态强制对齐
       if (isAtBottom.value) scrollToBottom('auto');
@@ -2517,7 +2563,7 @@ const askAI = async (forceSend = false) => {
         let aggregatedReasoningContent = "";
         let aggregatedContent = "";
         let aggregatedToolCalls = [];
-        let aggregatedExtraContent = null; 
+        let aggregatedExtraContent = null;
         let lastUpdateTime = Date.now();
 
         for await (const part of stream) {
@@ -2660,69 +2706,62 @@ const askAI = async (forceSend = false) => {
 
             try {
               const toolArgs = JSON.parse(toolCall.function.arguments);
-              
-              // ===========================================
-              // [START] Sub-Agent 特殊处理 & 上下文注入
-              // ===========================================
               let executionContext = null;
-              
+
               if (toolCall.function.name === 'sub_agent') {
-                  const currentApiKey = api_key.value;
-                  const currentBaseUrl = base_url.value;
-                  const currentModelName = model.value.split('|')[1] || model.value;
+                const currentApiKey = api_key.value;
+                const currentBaseUrl = base_url.value;
+                const currentModelName = model.value.split('|')[1] || model.value;
 
-                  // 1. 获取全量工具列表 (排除 sub_agent 自身)
-                  const toolsContext = openaiFormattedTools.value
-                      .filter(t => t.function.name !== 'sub_agent');
+                // 1. 获取全量工具列表 (排除 sub_agent 自身)
+                const toolsContext = openaiFormattedTools.value
+                  .filter(t => t.function.name !== 'sub_agent');
 
-                  // 2. 定义实时更新回调 (用于前端展示 Sub-Agent 的思考过程)
-                  const onUpdateCallback = (logContent) => {
-                      if (uiToolCall) {
-                          // 在日志末尾添加动态标识
-                          uiToolCall.result = logContent + "\n\n[Sub-Agent 执行中...]";
-                      }
-                  };
+                // 2. 定义实时更新回调 (用于前端展示 Sub-Agent 的思考过程)
+                const onUpdateCallback = (logContent) => {
+                  if (uiToolCall) {
+                    // 在日志末尾添加动态标识
+                    uiToolCall.result = logContent + "\n\n[Sub-Agent 执行中...]";
+                  }
+                };
 
-                  // 3. 组装上下文
-                  executionContext = {
-                      apiKey: currentApiKey,
-                      baseUrl: currentBaseUrl,
-                      model: currentModelName,
-                      tools: toolsContext,
-                      mcpSystemPrompt: mcpSystemPromptStr, // 同步主对话的 MCP 提示词
-                      onUpdate: onUpdateCallback           // 传入更新回调
-                  };
+                // 3. 组装上下文
+                executionContext = {
+                  apiKey: currentApiKey,
+                  baseUrl: currentBaseUrl,
+                  model: currentModelName,
+                  tools: toolsContext,
+                  mcpSystemPrompt: mcpSystemPromptStr, // 同步主对话的 MCP 提示词
+                  onUpdate: onUpdateCallback           // 传入更新回调
+                };
               }
-              // ===========================================
-              // [END] Sub-Agent 特殊处理
-              // ===========================================
 
               // 执行 MCP 工具
               const result = await window.api.invokeMcpTool(
-                  toolCall.function.name, 
-                  toolArgs, 
-                  toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal, 
-                  executionContext 
+                toolCall.function.name,
+                toolArgs,
+                toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal,
+                executionContext
               );
-              
+
               toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
 
               if (uiToolCall) {
                 // 如果是 Sub-Agent，合并日志和最终结果
                 if (toolCall.function.name === 'sub_agent') {
-                    const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Sub-Agent 执行中...]", "") : "";
-                    
-                    // 如果结果中不包含日志信息（即它只是纯答案），则格式化追加
-                    if (!currentLog.includes(toolContent)) {
-                         uiToolCall.result = `${currentLog}\n\n=== 最终结果 ===\n${toolContent}`;
-                    } else {
-                         // 如果 result 已经包含了日志 (取决于后端实现)，则直接使用
-                         uiToolCall.result = currentLog; 
-                    }
+                  const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Sub-Agent 执行中...]", "") : "";
+
+                  // 如果结果中不包含日志信息（即它只是纯答案），则格式化追加
+                  if (!currentLog.includes(toolContent)) {
+                    uiToolCall.result = `${currentLog}\n\n=== 最终结果 ===\n${toolContent}`;
+                  } else {
+                    // 如果 result 已经包含了日志 (取决于后端实现)，则直接使用
+                    uiToolCall.result = currentLog;
+                  }
                 } else {
-                    uiToolCall.result = toolContent;
+                  uiToolCall.result = toolContent;
                 }
-                
+
                 uiToolCall.approvalStatus = 'finished';
               }
             } catch (e) {
@@ -2781,7 +2820,7 @@ const askAI = async (forceSend = false) => {
     if (chat_show.value[errorBubbleIndex].reasoning_content && currentBubble.status === 'thinking') {
       chat_show.value[errorBubbleIndex].status = "error";
     }
-    
+
     let existingText = "";
     if (currentBubble.content && Array.isArray(currentBubble.content)) {
       existingText = currentBubble.content
@@ -2815,7 +2854,7 @@ const askAI = async (forceSend = false) => {
     if (currentAssistantChatShowIndex > -1) {
       chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
     }
-    await nextTick();    
+    await nextTick();
     chatInputRef.value?.focus({ cursor: 'end' });
     autoSaveSession();
   }
@@ -3012,7 +3051,7 @@ const handleSaveModel = async (modelToSave) => {
     showDismissibleMessage.error(`保存模型失败: ${error.message}`);
   }
 
-  changeModel_page.value = false; 
+  changeModel_page.value = false;
 };
 
 const handleGlobalImageError = (event) => {
@@ -3093,7 +3132,7 @@ const handleGlobalKeyDown = (event) => {
       event.preventDefault();
       const newZoom = zoomLevel.value + 0.1;
       // 限制最大缩放为 2.0，与鼠标滚轮逻辑保持一致
-      zoomLevel.value = Math.min(2.0, newZoom); 
+      zoomLevel.value = Math.min(2.0, newZoom);
       showDismissibleMessage.info(`缩放: ${Math.round(zoomLevel.value * 100)}%`);
       return;
     }
@@ -3257,40 +3296,81 @@ const handleOpenSearch = () => {
         </el-button-group>
       </div>
       <div class="mcp-server-list custom-scrollbar">
-        <div v-for="server in filteredMcpServers" :key="server.id" class="mcp-server-item"
-          :class="{ 'is-checked': tempSessionMcpServerIds.includes(server.id) }"
-          @click="toggleMcpServerSelection(server.id)">
-          <el-checkbox :model-value="tempSessionMcpServerIds.includes(server.id)" size="large"
-            @change="() => toggleMcpServerSelection(server.id)" @click.stop />
-          <div class="mcp-server-content">
-            <div class="mcp-server-header-row">
-              <el-avatar :src="server.logoUrl" shape="square" :size="20" class="mcp-server-icon">
-                <el-icon :size="12">
-                  <Tools />
-                </el-icon>
-              </el-avatar>
-              <span class="mcp-server-name">{{ server.name }}</span>
-              <el-tooltip :content="server.isPersistent ? '持久连接已开启' : '持久连接已关闭'" placement="top">
-                <el-button text circle :class="{ 'is-persistent-active': server.isPersistent }"
-                  @click.stop="toggleMcpPersistence(server.id, !server.isPersistent)" class="persistent-btn"
-                  style="margin-left: auto; margin-right: 8px;">
-                  <el-icon :size="16">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                    </svg>
+        <div v-for="server in filteredMcpServers" :key="server.id" class="mcp-server-item-wrapper">
+          <!-- 主卡片区域 -->
+          <div class="mcp-server-item" :class="{ 'is-checked': tempSessionMcpServerIds.includes(server.id) }"
+            @click="toggleMcpServerSelection(server.id)">
+
+            <div class="mcp-server-content">
+              <!-- 第一行：勾选框 | Logo | 名称 | 间隔 | 持久化 | 标签 -->
+              <div class="mcp-server-header-row">
+                <el-checkbox :model-value="tempSessionMcpServerIds.includes(server.id)" size="large"
+                  @change="() => toggleMcpServerSelection(server.id)" @click.stop class="header-checkbox" />
+
+                <el-avatar :src="server.logoUrl" shape="square" :size="20" class="mcp-server-icon">
+                  <el-icon :size="12">
+                    <Tools />
                   </el-icon>
-                </el-button>
-              </el-tooltip>
-              <div class="mcp-server-tags">
-                <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{
-                  getDisplayTypeName(server.type) }}</el-tag>
-                <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
-                  tag
-                }}</el-tag>
+                </el-avatar>
+                <span class="mcp-server-name">
+                  {{ server.name }}
+                  <span v-if="getToolCounts(server.id)" class="mcp-tool-count">
+                    ({{ getToolCounts(server.id).enabled }}/{{ getToolCounts(server.id).total }})
+                  </span>
+                </span>
+
+                <!-- 持久连接按钮 (margin-left: auto 推到右侧) -->
+                <el-tooltip :content="server.isPersistent ? '持久连接已开启' : '持久连接已关闭'" placement="top">
+                  <el-button text circle :class="{ 'is-persistent-active': server.isPersistent }"
+                    @click.stop="toggleMcpPersistence(server.id, !server.isPersistent)" class="persistent-btn"
+                    style="margin-left: auto; margin-right: 4px;">
+                    <el-icon :size="16">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                      </svg>
+                    </el-icon>
+                  </el-button>
+                </el-tooltip>
+
+                <div class="mcp-server-tags">
+                  <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{
+                    getDisplayTypeName(server.type) }}</el-tag>
+                  <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
+                    tag
+                  }}</el-tag>
+                </div>
+              </div>
+
+              <!-- 第二行：折叠按钮 | 描述 -->
+              <div class="mcp-server-body-row">
+                <div class="mcp-tools-toggle" @click.stop="toggleMcpServerExpansion(server.id)">
+                  <el-icon :class="{ 'is-expanded': expandedMcpServers.has(server.id) }">
+                    <CaretRight />
+                  </el-icon>
+                  <span>{{ expandedMcpServers.has(server.id) ? '收起' : '工具' }}</span>
+                </div>
+
+                <span v-if="server.description" class="mcp-server-description" @click.stop="toggleMcpServerExpansion(server.id)">{{ server.description }}</span>
               </div>
             </div>
-            <span v-if="server.description" class="mcp-server-description">{{ server.description }}</span>
+          </div>
+
+          <!-- 折叠的工具列表区域 (保持不变) -->
+          <div v-if="expandedMcpServers.has(server.id)" class="mcp-tools-panel" @click.stop>
+            <template v-if="mcpToolCache[server.id] && mcpToolCache[server.id].length > 0">
+              <div v-for="tool in mcpToolCache[server.id]" :key="tool.name" class="mcp-tool-row">
+                <el-switch :model-value="tool.enabled !== false" size="small"
+                  @change="(val) => handleMcpToolStatusChange(server.id, tool.name, val)" />
+                <div class="mcp-tool-info">
+                  <span class="mcp-tool-name">{{ tool.name }}</span>
+                  <span class="mcp-tool-desc" :title="tool.description">{{ tool.description || '暂无描述' }}</span>
+                </div>
+              </div>
+            </template>
+            <div v-else class="mcp-tools-empty">
+              工具未缓存，使用/测试后即可查看具体工具
+            </div>
           </div>
         </div>
       </div>
@@ -3651,7 +3731,7 @@ html.dark .system-prompt-full-content .el-textarea__inner::-webkit-scrollbar-thu
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 0px;
 }
 
 .mcp-server-icon {
@@ -3666,10 +3746,22 @@ html.dark .mcp-server-icon {
 }
 
 .mcp-server-name {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--el-text-color-primary);
-  min-width: 0;
-  flex-grow: 1;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-flex; 
+  align-items: center;
+}
+
+.mcp-tool-count {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-left: 6px;
+  font-weight: normal;
+  opacity: 0.8;
 }
 
 .mcp-server-tags {
@@ -3726,44 +3818,237 @@ html.dark .mcp-dialog-footer-search {
   padding: 5px;
 }
 
-.mcp-server-item {
+.mcp-server-item-wrapper {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 4px 10px 4px 10px;
+  flex-direction: column;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s, background-color 0.2s;
+  overflow: hidden;
+  transition: border-color 0.2s;
+  flex-shrink: 0;
+  min-height: min-content;
+  background-color: var(--el-bg-color);
 }
 
-.mcp-server-item:hover {
+.mcp-server-item-wrapper:hover {
+  border-color: var(--el-color-primary);
   background-color: var(--el-fill-color-light);
 }
 
+/* 主卡片区域 */
+.mcp-server-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0px 8px 4px 8px;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid transparent;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mcp-server-item-wrapper:hover .mcp-server-item {
+  background-color: transparent;
+}
+
 .mcp-server-item.is-checked {
-  border-color: var(--el-color-primary);
   background-color: var(--el-color-primary-light-9);
 }
 
-html.dark .mcp-server-item:hover {
+.mcp-server-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+/* 第一行：Header */
+.mcp-server-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.header-checkbox {
+  margin-right: 4px;
+}
+
+.mcp-server-name {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mcp-server-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* 第二行：Body (Toggle + Description) */
+.mcp-server-body-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 2px;
+  /* 微调以对齐上方视觉 */
+}
+
+/* 折叠按钮 */
+.mcp-tools-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  background-color: var(--el-fill-color-lighter);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.mcp-tools-toggle:hover {
+  color: var(--el-color-primary);
+  background-color: var(--el-fill-color);
+}
+
+.mcp-tools-toggle .el-icon {
+  transition: transform 0.2s;
+  font-size: 10px;
+}
+
+.mcp-tools-toggle .el-icon.is-expanded {
+  transform: rotate(90deg);
+}
+
+/* 描述文本 */
+.mcp-server-description {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+/* 工具列表面板 */
+.mcp-tools-panel {
+  background-color: var(--el-fill-color-lighter);
+  padding: 0px 8px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  font-size: 12px;
+  animation: expand-tools 0.2s ease-out;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.mcp-server-item-wrapper:has(.mcp-tools-panel) .mcp-server-item {
+  border-bottom-color: var(--el-border-color-lighter);
+}
+
+@keyframes expand-tools {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mcp-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px dashed var(--el-border-color-lighter);
+}
+
+.mcp-tool-row:last-child {
+  border-bottom: none;
+}
+
+.mcp-tool-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.4;
+}
+
+.mcp-tool-name {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+}
+
+.mcp-tool-desc {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.mcp-tools-empty {
+  color: var(--el-text-color-placeholder);
+  text-align: center;
+  padding: 15px 0;
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* 深色模式适配 */
+html.dark .mcp-server-item-wrapper {
+  border-color: var(--el-border-color-lighter);
+  background-color: var(--el-bg-color);
+}
+
+html.dark .mcp-server-item-wrapper:hover {
   background-color: var(--el-fill-color-darker);
+  border-color: var(--el-border-color);
 }
 
 html.dark .mcp-server-item.is-checked {
   background-color: var(--el-fill-color-dark);
 }
 
-.mcp-server-item .el-checkbox {
-  margin-top: 1px;
+html.dark .mcp-tools-toggle {
+  background-color: var(--el-fill-color-dark);
 }
 
-.mcp-server-content {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+html.dark .mcp-tools-toggle:hover {
+  background-color: var(--el-fill-color);
+}
+
+html.dark .mcp-server-item-wrapper:has(.mcp-tools-panel) .mcp-server-item {
+  border-bottom-color: var(--el-border-color-lighter);
+}
+
+html.dark .mcp-tools-panel {
+  background-color: var(--el-fill-color-dark);
+  border-top-color: var(--el-border-color-lighter);
+}
+
+html.dark .mcp-tool-row {
+  border-bottom-color: var(--el-border-color-lighter);
 }
 
 html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner,
@@ -3828,7 +4113,7 @@ html.dark .app-container {
   padding: 0 10px;
   margin: 0;
   overflow-y: auto;
-  scroll-behavior: auto !important; 
+  scroll-behavior: auto !important;
   background-color: transparent !important;
   scrollbar-gutter: stable;
   will-change: scroll-position;
