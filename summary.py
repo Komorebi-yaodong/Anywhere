@@ -11,6 +11,8 @@ README = "./README.md"
 PRELOAD = "./backend/src/"
 
 MAIN = [
+    "./Anywhere_main/package.json",
+    "./Anywhere_main/vite.config.js",
     "./Anywhere_main/index.html",
     "./Anywhere_main/src/components/",
     "./Anywhere_main/src/App.vue",
@@ -18,6 +20,8 @@ MAIN = [
 ]
 
 WINDOW = [
+    "./Anywhere_window/package.json",
+    "./Anywhere_window/vite.config.js",
     "./Anywhere_window/src/App.vue",
     "./Anywhere_window/src/components/",
     "./Anywhere_window/src/utils/",

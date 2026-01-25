@@ -39,8 +39,8 @@ importers:
         specifier: ^3.5.13
         version: 3.5.13(typescript@5.8.3)
       vue-element-plus-x:
-        specifier: ^1.3.98
-        version: 1.3.98(rollup@4.55.1)(vue@3.5.13(typescript@5.8.3))
+        specifier: ^1.3.7
+        version: 1.3.7(rollup@4.55.1)(vue@3.5.13(typescript@5.8.3))
       webdav:
         specifier: ^5.8.0
         version: 5.8.0
@@ -1020,8 +1020,8 @@ packages:
   charenc@0.0.2:
     resolution: {integrity: sha512-yrLQ/yVUFXkzg7EDQsPieE/53+0RlaWTs+wBrvW36cyilJ2SaDWfl4Yj7MtLTXleV9uEKefbAGUPv2/iWSooRA==}
 
-  chatarea@6.0.6:
-    resolution: {integrity: sha512-N1WOwWI8DsYq+tF83AkdkbK8bH7DxCjLagmZqPfyA5POzdQ15dPXPjJTiFYmk/0eqOEhsxsiEI/Ok3T0+BTzCQ==}
+  chatarea@5.9.3:
+    resolution: {integrity: sha512-rBOASntx4o5tzvylbgu1TAipA2U0G/OixxQpfYdQGsywpSYufExpzHPrq3+k16fEG9pGdm3AoBMmXU1zzs9Yng==}
 
   chevrotain-allstar@0.3.1:
     resolution: {integrity: sha512-b7g+y9A0v4mxCW1qUhf3BSVPg+/NvGErk/dOkrDaHA0nQIQGAtrOjlX//9OQtRlSCy+x9rfB5N8yC71lH1nvMw==}
@@ -1245,9 +1245,6 @@ packages:
   d3@7.9.0:
     resolution: {integrity: sha512-e1U46jVP+w7Iut8Jt8ri1YsPOvFpg46k+K8TpCb0P+zjCkjkPnV7WzfDJzMHy1LnA+wj5pLT1wjO901gLXeEhA==}
     engines: {node: '>=12'}
-
-  dagre-d3-es@7.0.11:
-    resolution: {integrity: sha512-tvlJLyQf834SylNKax8Wkzco/1ias1OPw8DcUMDE7oUIoSEW25riQVuiu/0OWEFqT0cxHT3Pa9/D82Jr47IONw==}
 
   dagre-d3-es@7.0.13:
     resolution: {integrity: sha512-efEhnxpSuwpYOKRm/L5KbqoZmNNukHa/Flty4Wp62JRvgH2ojwVgPgdYyr4twpieZnyRDdIH7PY2mopX26+j2Q==}
@@ -1746,9 +1743,6 @@ packages:
   memoize-one@6.0.0:
     resolution: {integrity: sha512-rkpe71W0N0c0Xz6QD0eJETuWAJGnJ9afsl1srmwPrI+yBCkge5EycXXbYRyvL29zZVUWQCY7InPRCv3GDXuZNw==}
 
-  mermaid@11.12.0:
-    resolution: {integrity: sha512-ZudVx73BwrMJfCFmSSJT84y6u5brEoV8DOItdHomNLz32uBjNrelm7mg95X7g+C6UoQH/W6mBLGDEDv73JdxBg==}
-
   mermaid@11.12.2:
     resolution: {integrity: sha512-n34QPDPEKmaeCG4WDMGy0OT6PSyxKCfy2pJgShP+Qow2KLrvWjclwbc3yXfSIf4BanqWEhQEpngWwNp/XhZt6w==}
 
@@ -2220,6 +2214,11 @@ packages:
     resolution: {integrity: sha512-5JRxVqC8I8NuOUjzBbvVJAKNM8qoVuH0O77h4WInc/qC2q5IreqKxYwgkga3PfA22OayK2ikceb/B26dztPl+Q==}
     engines: {node: '>=16'}
 
+  swrv@1.1.0:
+    resolution: {integrity: sha512-pjllRDr2s0iTwiE5Isvip51dZGR7GjLH1gCSVyE8bQnbAx6xackXsFdojau+1O5u98yHF5V73HQGOFxKUXO9gQ==}
+    peerDependencies:
+      vue: '>=3.2.26 < 4'
+
   tinyexec@1.0.1:
     resolution: {integrity: sha512-5uC6DDlmeqiOwCPmK9jMSdOuZTh8bU39Ys6yidB+UTt5hfZUPGAypSgFRiEp+jbi9qH40BLDvy85jIU88wKSqw==}
 
@@ -2459,8 +2458,8 @@ packages:
       '@vue/composition-api':
         optional: true
 
-  vue-element-plus-x@1.3.98:
-    resolution: {integrity: sha512-Mi8wvrsNRfHspzAY1Z4HkKYhfDdSm5/4vMNF82P+W81tbPb1jA2x/6KkldpyZrylRnuO6OBQz5s/Gtt0nzIf6w==}
+  vue-element-plus-x@1.3.7:
+    resolution: {integrity: sha512-Di3i1thbtn4YAg2nZCIJwaDHAq8VQA/TspXCJ8GPzBYdD9lioaYp/iy8sgEjLzKm4hViOmao/QS0WWH4snXaog==}
     peerDependencies:
       vue: ^3.5.17
 
@@ -3460,7 +3459,7 @@ snapshots:
 
   charenc@0.0.2: {}
 
-  chatarea@6.0.6: {}
+  chatarea@5.9.3: {}
 
   chevrotain-allstar@0.3.1(chevrotain@11.0.3):
     dependencies:
@@ -3720,11 +3719,6 @@ snapshots:
       d3-timer: 3.0.1
       d3-transition: 3.0.1(d3-selection@3.0.0)
       d3-zoom: 3.0.0
-
-  dagre-d3-es@7.0.11:
-    dependencies:
-      d3: 7.9.0
-      lodash-es: 4.17.21
 
   dagre-d3-es@7.0.13:
     dependencies:
@@ -4341,29 +4335,6 @@ snapshots:
       '@types/mdast': 4.0.4
 
   memoize-one@6.0.0: {}
-
-  mermaid@11.12.0:
-    dependencies:
-      '@braintree/sanitize-url': 7.1.1
-      '@iconify/utils': 3.1.0
-      '@mermaid-js/parser': 0.6.3
-      '@types/d3': 7.4.3
-      cytoscape: 3.32.0
-      cytoscape-cose-bilkent: 4.1.0(cytoscape@3.32.0)
-      cytoscape-fcose: 2.2.0(cytoscape@3.32.0)
-      d3: 7.9.0
-      d3-sankey: 0.12.3
-      dagre-d3-es: 7.0.11
-      dayjs: 1.11.19
-      dompurify: 3.2.6
-      katex: 0.16.22
-      khroma: 2.1.0
-      lodash-es: 4.17.21
-      marked: 16.4.2
-      roughjs: 4.6.6
-      stylis: 4.3.6
-      ts-dedent: 2.2.0
-      uuid: 11.1.0
 
   mermaid@11.12.2:
     dependencies:
@@ -5000,6 +4971,10 @@ snapshots:
     dependencies:
       copy-anything: 3.0.5
 
+  swrv@1.1.0(vue@3.5.13(typescript@5.8.3)):
+    dependencies:
+      vue: 3.5.13(typescript@5.8.3)
+
   tinyexec@1.0.1: {}
 
   tinyglobby@0.2.12:
@@ -5251,17 +5226,16 @@ snapshots:
     dependencies:
       vue: 3.5.13(typescript@5.8.3)
 
-  vue-element-plus-x@1.3.98(rollup@4.55.1)(vue@3.5.13(typescript@5.8.3)):
+  vue-element-plus-x@1.3.7(rollup@4.55.1)(vue@3.5.13(typescript@5.8.3)):
     dependencies:
       '@element-plus/icons-vue': 2.3.1(vue@3.5.13(typescript@5.8.3))
       '@shikijs/transformers': 3.9.2
       '@vueuse/core': 13.7.0(vue@3.5.13(typescript@5.8.3))
-      chatarea: 6.0.6
+      chatarea: 5.9.3
       deepmerge: 4.3.1
       dompurify: 3.2.6
       github-markdown-css: 5.8.1
       highlight.js: 11.11.1
-      mermaid: 11.12.0
       prismjs: 1.30.0
       property-information: 7.1.0
       radash: 12.1.1
@@ -5275,6 +5249,7 @@ snapshots:
       remark-rehype: 11.1.2
       rollup-plugin-visualizer: 6.0.3(rollup@4.55.1)
       shiki: 3.9.2
+      swrv: 1.1.0(vue@3.5.13(typescript@5.8.3))
       ts-md5: 2.0.1
       typescript-api-pro: 0.0.6
       unified: 11.0.5
