@@ -756,17 +756,32 @@ async function triggerConnectionTest(server) {
         <!-- 测试结果弹窗 -->
         <el-dialog v-model="showTestResultDialog" width="650px" append-to-body class="test-result-dialog">
             <template #header>
-                <div class="test-dialog-header">
+                <div class="test-dialog-header" style="align-items: center;">
                     <div class="header-left">
                         <span class="dialog-title">
                             <el-tooltip v-if="testResult.serverDescription" :content="testResult.serverDescription"
                                 placement="bottom-start" popper-class="mcp-tooltip-width">
                                 {{ `${testResult.serverName}` }}
                             </el-tooltip>
+                            <span v-else>{{ testResult.serverName }}</span>
                         </span>
                     </div>
-                    <el-button v-if="!testResult.loading" :icon="Refresh" circle size="small" @click="handleRefreshTest"
-                        :title="t('mcp.refreshTooltip')" />
+                    
+                    <!-- 中间/右侧：Tab 切换与刷新按钮组合 -->
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <!-- 只有连接成功且有工具时才显示 Tab 切换 -->
+                        <el-radio-group 
+                            v-if="testResult.success && testResult.tools.length > 0 && !testResult.loading" 
+                            v-model="activeTestTab" 
+                            size="small"
+                        >
+                            <el-radio-button value="list">{{ t('mcp.tabs.tools') }}</el-radio-button>
+                            <el-radio-button value="test">{{ t('mcp.tabs.test') }}</el-radio-button>
+                        </el-radio-group>
+
+                        <el-button v-if="!testResult.loading" :icon="Refresh" circle size="small" @click="handleRefreshTest"
+                            :title="t('mcp.refreshTooltip')" />
+                    </div>
                 </div>
             </template>
 
@@ -791,7 +806,7 @@ async function triggerConnectionTest(server) {
                     <el-tabs v-model="activeTestTab" class="test-tabs">
                         <!-- Tab 1: 启用工具列表 -->
                         <el-tab-pane :label="t('mcp.tabs.tools')" name="list">
-                            <el-scrollbar max-height="32vh" class="tab-inner-scrollbar">
+                            <el-scrollbar max-height="50vh" class="tab-inner-scrollbar">
                                 <div class="tab-pane-content">
                                     <div class="list-header">
                                         <el-tag v-if="testResult.isCached" type="info" size="small" effect="plain" round
@@ -820,7 +835,7 @@ async function triggerConnectionTest(server) {
 
                         <!-- Tab 2: 工具调用测试 -->
                         <el-tab-pane :label="t('mcp.tabs.test')" name="test">
-                            <el-scrollbar max-height="32vh" class="tab-inner-scrollbar">
+                            <el-scrollbar max-height="50vh" class="tab-inner-scrollbar">
                                 <div class="tab-pane-content">
                                     <div class="test-form-area no-border">
                                         <!-- 工具选择 -->
@@ -1343,11 +1358,7 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
 
 /* 3. Tabs 容器 */
 .tabs-wrapper {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    margin-top: 0px;
+    margin-top: 0 !important;
 }
 
 /* 4. Element Tabs 样式重置 */
@@ -1358,24 +1369,21 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
 }
 
 .test-tabs :deep(.el-tabs__header) {
-    flex-shrink: 0;
-    margin-bottom: 0;
-    order: 0 !important;
+    display: none !important;
 }
 
 .test-tabs :deep(.el-tabs__nav-wrap) {
     padding: 0 10px;
 }
 
-/* 关键：el-tabs__content 必须有高度且禁止原生滚动 */
+.test-result-dialog :deep(.el-dialog__header) {
+    padding-bottom: 10px !important;
+    border-bottom: 1px solid var(--border-primary);
+    margin-right: 0 !important;
+}
+
 .test-tabs :deep(.el-tabs__content) {
-    flex: 1;
-    min-height: 0;
     height: 100%;
-    /* 确保撑满 */
-    order: 1 !important;
-    padding: 0;
-    overflow: hidden !important;
 }
 
 /* Tab Pane 必须也是 100% 高度 */
@@ -1402,6 +1410,7 @@ html.dark .advanced-collapse :deep(.el-collapse-item__wrap) {
     display: flex;
     flex-direction: column;
     flex: 1;
+    padding: 4px 12px 4px 4px;
 }
 
 /* Tab 1: 工具列表 */

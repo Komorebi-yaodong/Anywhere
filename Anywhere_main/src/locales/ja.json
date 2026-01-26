@@ -342,6 +342,7 @@
       "opCancelled": "操作がキャンセルされました",
       "saveToolStateFailed": "ツール状態の保存に失敗しました",
       "inputJsonPlaceholder": "JSON形式の {type} を入力",
+      "selectPlaceholder": "選択してください",
       "inputPlaceholder": "パラメータ値を入力",
       "default": "デフォルト",
       "leaveEmpty": "空の場合はデフォルト値を使用",
@@ -382,7 +383,7 @@
       "allowedTools": "許可ツール",
       "toolsHint": "未入力の場合はツールの制限なし",
       "toolsPlaceholder": "ツール名をカンマ区切りで入力 (例: read_file, grep_search)",
-      "instructions": "詳細指令 (SKILL.md)",
+      "instructions": "詳細指令",
       "instructionPlaceholder": "詳細なプロンプト指令を入力..."
     },
     "tooltips": {
@@ -627,6 +628,8 @@
     "deleteSuccess": "削除に成功しました。",
     "deleteFailed": "削除に失敗しました。",
     "deleteSuccessMultiple": "選択したファイルを削除しました。",
-    "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました。"
+    "deleteFailedMultiple": "選択したファイルの削除中にエラーが発生しました。",
+    "saveSuccess": "保存しました",
+    "saveFailed": "保存に失敗しました"
   }
 }

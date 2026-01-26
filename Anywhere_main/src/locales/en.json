@@ -342,6 +342,7 @@
       "opCancelled": "Operation cancelled",
       "saveToolStateFailed": "Failed to save tool state",
       "inputJsonPlaceholder": "Enter JSON formatted {type}",
+      "selectPlaceholder": "Select option",
       "inputPlaceholder": "Enter parameter value",
       "default": "Default",
       "leaveEmpty": "Leave empty for default",
@@ -382,7 +383,7 @@
       "allowedTools": "Allowed Tools",
       "toolsHint": "Leave blank for no tool restrictions",
       "toolsPlaceholder": "Enter tool names, separated by commas (e.g., read_file, grep_search)",
-      "instructions": "Instructions (SKILL.md)",
+      "instructions": "Instructions",
       "instructionPlaceholder": "Enter detailed prompts instructions..."
     },
     "tooltips": {
@@ -627,6 +628,8 @@
     "deleteSuccess": "Deleted successfully.",
     "deleteFailed": "Deletion failed.",
     "deleteSuccessMultiple": "Selected files deleted successfully.",
-    "deleteFailedMultiple": "Error deleting selected files."
+    "deleteFailedMultiple": "Error deleting selected files.",
+    "saveSuccess": "Saved successfully",
+    "saveFailed": "Save failed"
   }
 }

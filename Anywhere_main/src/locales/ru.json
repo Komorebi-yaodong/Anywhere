@@ -342,6 +342,7 @@
       "opCancelled": "Операция отменена",
       "saveToolStateFailed": "Не удалось сохранить состояние",
       "inputJsonPlaceholder": "Введите {type} в формате JSON",
+      "selectPlaceholder": "Выберите",
       "inputPlaceholder": "Введите значение",
       "default": "По умолч.",
       "leaveEmpty": "Оставьте пустым для значения по умолчанию",
@@ -382,7 +383,7 @@
       "allowedTools": "Доступные инструменты",
       "toolsHint": "Оставьте пустым для использования всех инструментов",
       "toolsPlaceholder": "Имена инструментов через запятую (например: read_file, grep_search)",
-      "instructions": "Инструкции (SKILL.md)",
+      "instructions": "Инструкции",
       "instructionPlaceholder": "Введите подробные инструкции..."
     },
     "tooltips": {
@@ -627,6 +628,8 @@
     "deleteSuccess": "Успешно удалено.",
     "deleteFailed": "Ошибка удаления.",
     "deleteSuccessMultiple": "Выбранные файлы успешно удалены.",
-    "deleteFailedMultiple": "Ошибка при удалении выбранных файлов."
+    "deleteFailedMultiple": "Ошибка при удалении выбранных файлов.",
+    "saveSuccess": "Успешно сохранено",
+    "saveFailed": "Ошибка сохранения"
   }
 }

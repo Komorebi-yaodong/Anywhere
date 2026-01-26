@@ -342,6 +342,7 @@
       "opCancelled": "操作已取消",
       "saveToolStateFailed": "保存工具状态失败",
       "inputJsonPlaceholder": "请输入 JSON 格式的 {type}",
+      "selectPlaceholder": "请选择",
       "inputPlaceholder": "请输入参数值",
       "default": "默认",
       "leaveEmpty": "留空使用默认值",
@@ -382,7 +383,7 @@
       "allowedTools": "允许工具",
       "toolsHint": "留空则不限制使用的工具",
       "toolsPlaceholder": "输入工具名称，以逗号分隔 (例如: read_file, grep_search)",
-      "instructions": "详细指令 (SKILL.md)",
+      "instructions": "详细指令",
       "instructionPlaceholder": "输入详细的 Prompt 指令..."
     },
     "tooltips": {
@@ -627,6 +628,8 @@
     "deleteSuccess": "删除成功",
     "deleteFailed": "删除失败",
     "deleteSuccessMultiple": "选中的文件已成功删除",
-    "deleteFailedMultiple": "删除选中的文件时出错"
+    "deleteFailedMultiple": "删除选中的文件时出错",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败"
   }
 }
