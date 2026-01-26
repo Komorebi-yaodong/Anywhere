@@ -32,6 +32,8 @@ const editingSkill = reactive({
   absolutePath: ''
 });
 
+const pendingImportPath = ref(''); 
+
 // 弹窗拖拽状态
 const isDialogDragOver = ref(false);
 
@@ -88,6 +90,7 @@ async function refreshSkills() {
 function prepareAddSkill() {
   isNewSkill.value = true;
   activeEditTab.value = 'info';
+  pendingImportPath.value = ''; 
   Object.assign(editingSkill, {
     id: '',
     name: '',
@@ -201,10 +204,29 @@ async function saveEditDialog() {
   }
 
   try {
+    // 只要有 pendingImportPath，无论是新建还是编辑，都执行文件夹拷贝
+    if (pendingImportPath.value) {
+        const targetDir = window.api.pathJoin(skillPath.value, dirName);
+        if (!isNewSkill.value) {
+             // 只有当 ID (文件夹名) 没变时，才需要清空当前目录。
+             // 如果 ID 变了，相当于新目录，不需要清空。
+             if (dirName === editingSkill.id) {
+                 await window.api.deleteSkill(skillPath.value, dirName);
+             }
+        }
+        
+        // 执行全量拷贝
+        await window.api.copyLocalPath(pendingImportPath.value, targetDir);
+    }
+
+    // 保存 SKILL.md (覆盖拷贝过来的旧配置，以当前 UI 编辑的内容为准)
     const success = await saveSkillContent(dirName, metadata, editingSkill.instructions);
+    
     if (success) {
       ElMessage.success(t('common.saveSuccess'));
       showEditDialog.value = false;
+      // 导入完成后重置 pendingImportPath
+      pendingImportPath.value = ''; 
       refreshSkills();
     } else {
       throw new Error('Save returned false');
@@ -313,43 +335,87 @@ async function onDialogDrop(e) {
   if (!item.path) return;
 
   try {
+    // 优先判断是否为 Skill 包（包含 SKILL.md 的文件夹 或 单个 SKILL.md）
+    // 这种判断优先级高于 Tab 判断，从而实现“文件管理页面也能拖拽替换整个 Skill”
+    
+    let isSkillPackage = false;
+    let importContent = '';
+    let importPath = '';
+
+    // 情况 A: 直接拖入 SKILL.md 文件
     if (item.name.toLowerCase() === 'skill.md') {
-      const content = await window.api.readLocalFile(item.path);
-      const { metadata, body } = parseFrontmatterSimple(content);
-
-      if (metadata.name) editingSkill.name = metadata.name;
-      if (metadata.description) editingSkill.description = metadata.description;
-      if (metadata['allowed-tools']) {
-        const tools = metadata['allowed-tools'];
-        editingSkill.allowedTools = Array.isArray(tools) ? tools.join(', ') : tools;
-      }
-      editingSkill.instructions = body.trim();
-      ElMessage.success(t('skills.alerts.readSuccess'));
+        importContent = await window.api.readLocalFile(item.path);
+        isSkillPackage = true;
     }
+    // 情况 B: 拖入文件夹 (尝试查找内部的 SKILL.md)
     else {
-      const skillMdPath = window.api.pathJoin(item.path, 'SKILL.md');
-      let content = '';
-      try {
-        content = await window.api.readLocalFile(skillMdPath);
-      } catch (err) {
-        ElMessage.warning(t('skills.alerts.noSkillMd'));
-        editingSkill.name = item.name;
-        return;
-      }
-
-      const { metadata, body } = parseFrontmatterSimple(content);
-      editingSkill.name = metadata.name || item.name;
-      editingSkill.description = metadata.description || '';
-      if (metadata['allowed-tools']) {
-        const tools = metadata['allowed-tools'];
-        editingSkill.allowedTools = Array.isArray(tools) ? tools.join(', ') : tools;
-      }
-      editingSkill.instructions = body.trim();
-      ElMessage.success(t('skills.alerts.parseSuccess'));
+        const skillMdPath = window.api.pathJoin(item.path, 'SKILL.md');
+        try {
+            importContent = await window.api.readLocalFile(skillMdPath);
+            importPath = item.path; // 记录文件夹路径
+            isSkillPackage = true;
+        } catch (err) {
+            // 不是 Skill 包，忽略
+            isSkillPackage = false;
+        }
     }
+
+    // 逻辑分支 1：如果是 Skill 包，执行导入/替换逻辑
+    if (isSkillPackage) {
+        // 记录待导入路径 (如果是文件夹)
+        if (importPath) {
+            pendingImportPath.value = importPath;
+        }
+        
+        const { metadata, body } = parseFrontmatterSimple(importContent);
+        applyImportedMetadata(metadata, body);
+        
+        // 如果是新 Skill 且没名字，用文件夹名
+        if (!editingSkill.name && !metadata.name) editingSkill.name = item.name;
+
+        // 提示信息
+        const actionText = activeEditTab.value === 'files' ? " (已准备替换当前 Skill)" : " (检测到完整 Skill 包)";
+        ElMessage.success(t('skills.alerts.parseSuccess') + actionText + "，请点击保存以应用");
+        
+        // 如果在文件管理页拖入 Skill 包，为了让用户看到元数据变化，可以自动切回 Info tab
+        // activeEditTab.value = 'info'; 
+        return;
+    }
+
+    // 逻辑分支 2：如果不是 Skill 包，且在“文件管理”Tab，则视为普通文件上传
+    if (activeEditTab.value === 'files') {
+        if (!isNewSkill.value) {
+            handleBatchUpload(files);
+        } else {
+            ElMessage.warning(t('skills.alerts.saveFirstHint') || "请先保存 Skill 后再上传文件");
+        }
+        return;
+    }
+
+    // 逻辑分支 3：不是 Skill 包，且在“基本信息”Tab，报错
+    ElMessage.warning(t('skills.alerts.noSkillMd'));
+    // 仅在新建时尝试回填名字，编辑时不覆盖
+    if (isNewSkill.value) {
+        editingSkill.name = item.name;
+    }
+
   } catch (err) {
     ElMessage.error(t('skills.alerts.parseFailed') + ': ' + err.message);
   }
+}
+
+// 辅助函数：应用解析出的元数据
+function applyImportedMetadata(metadata, body) {
+  if (metadata.name) editingSkill.name = metadata.name;
+  if (metadata.description) editingSkill.description = metadata.description;
+  if (metadata['allowed-tools']) {
+    const tools = metadata['allowed-tools'];
+    editingSkill.allowedTools = Array.isArray(tools) ? tools.join(', ') : tools;
+  }
+  // 兼容布尔值和字符串的 context 配置
+  if (metadata.context === 'fork') editingSkill.forkMode = true;
+  
+  editingSkill.instructions = body.trim();
 }
 
 function deleteSkillFile(fileNode) {

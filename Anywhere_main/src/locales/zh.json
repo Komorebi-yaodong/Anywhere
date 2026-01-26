@@ -370,7 +370,7 @@
       "files": "文件管理"
     },
     "dialog": {
-      "dragHint": "拖拽 SKILL.md 可快速填入",
+      "dragHint": "拖拽 SKILL文件夹 可快速填入",
       "dropHint": "释放以解析 Skill 文件"
     },
     "form": {

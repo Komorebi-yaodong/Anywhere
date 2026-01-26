@@ -69,6 +69,17 @@ function getDirectoryStructure(dirPath, relativeRoot = '') {
     } catch (e) {
         console.error(`Error reading directory ${dirPath}:`, e);
     }
+
+    // 排序逻辑：目录在前，文件在后；同类型按名称排序
+    result.sort((a, b) => {
+        // 如果类型相同，按名称排序
+        if (a.type === b.type) {
+            return a.name.localeCompare(b.name);
+        }
+        // 如果类型不同，目录(directory)排在文件(file)前面
+        return a.type === 'directory' ? -1 : 1;
+    });
+
     return result;
 }
 

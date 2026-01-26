@@ -370,7 +370,7 @@
       "files": "ファイル管理"
     },
     "dialog": {
-      "dragHint": "SKILL.mdをドラッグして自動入力",
+      "dragHint": "SKILLフォルダーをドラッグして自動入力",
       "dropHint": "ドロップして解析"
     },
     "form": {

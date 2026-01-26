@@ -370,7 +370,7 @@
       "files": "Files"
     },
     "dialog": {
-      "dragHint": "Drag SKILL.md here to auto-fill",
+      "dragHint": "Drag SKILL folder here to auto-fill",
       "dropHint": "Drop to parse Skill file"
     },
     "form": {
