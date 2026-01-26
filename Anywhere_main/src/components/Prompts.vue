@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, inject, watch, nextTick } from 'vue';
+import { ref, reactive, computed, inject, watch, nextTick, onMounted } from 'vue';
 import { Plus, Delete, Close, ChatLineRound, UploadFilled, Position, QuestionFilled, Switch, Refresh, Edit, Download } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
@@ -9,7 +9,31 @@ const { t } = useI18n();
 const currentConfig = inject('config');
 const activeTabName = ref('__ALL_PROMPTS__');
 const searchQueries = reactive({});
-const tabsContainerRef = ref(null); // 确保 ref 已定义
+const tabsContainerRef = ref(null);
+const availableSkills = ref([]);
+
+const fetchAvailableSkills = async () => {
+  // 确保 config 已加载且有 skillPath
+  if (currentConfig.value && currentConfig.value.skillPath) {
+    try {
+      const skills = await window.api.listSkills(currentConfig.value.skillPath);
+      // 过滤出未禁用的 Skill，并按名称排序
+      availableSkills.value = skills
+        .filter(s => !s.disabled)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch (e) {
+      console.error("Failed to fetch skills:", e);
+      availableSkills.value = [];
+    }
+  } else {
+    availableSkills.value = [];
+  }
+};
+
+// 在组件挂载时获取一次
+onMounted(() => {
+  fetchAvailableSkills();
+});
 
 const openPromptWindow = (promptKey) => {
   window.api.coderedirect(promptKey);
@@ -89,6 +113,7 @@ const editingPrompt = reactive({
   voice: '',
   reasoning_effort: "default",
   defaultMcpServers: [],
+  defaultSkills: [],
   window_width: 540,
   window_height: 700,
   isAlwaysOnTop: true,
@@ -446,12 +471,14 @@ function areAllPromptsInTagEnabled(tagName) {
 }
 
 function prepareAddPrompt() {
+  fetchAvailableSkills(); // [新增] 打开前刷新 Skill 列表
   isNewPrompt.value = true;
   Object.assign(editingPrompt, {
     originalKey: null, key: "", type: "general", prompt: "", showMode: "window", model: "",
     enable: true, selectedTag: [], icon: "", stream: true, isTemperature: false, temperature: 0.7,
     isDirectSend_file: false, isDirectSend_normal: true, ifTextNecessary: false,
     voice: '', reasoning_effort: "default", defaultMcpServers: [],
+    defaultSkills: [],
     window_width: 540, window_height: 700,
     position_x: 0, position_y: 0,
     isAlwaysOnTop: currentConfig.value.isAlwaysOnTop_global,
@@ -466,10 +493,10 @@ function prepareAddPrompt() {
 }
 
 async function prepareEditPrompt(promptKey, currentTagName = null) {
+  fetchAvailableSkills(); // [新增] 打开前刷新 Skill 列表
   isNewPrompt.value = false;
 
   try {
-    // [MODIFIED] 使用 await 等待异步的 getConfig
     const latestConfigData = await window.api.getConfig();
     if (latestConfigData && latestConfigData.config) {
       currentConfig.value = latestConfigData.config;
@@ -500,6 +527,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     isDirectSend_normal: p.isDirectSend_normal ?? true, ifTextNecessary: p.ifTextNecessary ?? false,
     voice: p.voice ?? '', reasoning_effort: p.reasoning_effort ?? "default",
     defaultMcpServers: p.defaultMcpServers ?? [],
+    defaultSkills: p.defaultSkills || [],
     window_width: p.window_width ?? 540, window_height: p.window_height ?? 700,
     isAlwaysOnTop: p.isAlwaysOnTop ?? true, autoCloseOnBlur: p.autoCloseOnBlur ?? true,
     matchRegex: p.matchRegex || "",
@@ -530,6 +558,7 @@ function savePrompt() {
       isDirectSend_normal: editingPrompt.isDirectSend_normal, ifTextNecessary: editingPrompt.ifTextNecessary,
       voice: editingPrompt.voice, reasoning_effort: editingPrompt.reasoning_effort,
       defaultMcpServers: editingPrompt.defaultMcpServers,
+      defaultSkills: editingPrompt.defaultSkills,
       window_width: editingPrompt.window_width, window_height: editingPrompt.window_height,
       isAlwaysOnTop: editingPrompt.isAlwaysOnTop, autoCloseOnBlur: editingPrompt.autoCloseOnBlur,
       matchRegex: editingPrompt.matchRegex,
@@ -1101,6 +1130,20 @@ async function refreshPromptsConfig() {
                       style="width: 100%;">
                       <el-option v-for="server in availableMcpServers" :key="server.value" :label="server.label"
                         :value="server.value" />
+                    </el-select>
+                  </div>
+                  <div v-if="editingPrompt.showMode === 'window'" class="param-item">
+                    <span class="param-label">{{ t('prompts.defaultSkillsLabel') }}</span>
+                    <el-tooltip :content="t('prompts.tooltips.defaultSkills')" placement="top"><el-icon
+                        class="tip-icon">
+                        <QuestionFilled />
+                      </el-icon></el-tooltip>
+                    <div class="spacer"></div>
+                    <el-select v-model="editingPrompt.defaultSkills" multiple filterable clearable
+                      :reserve-keyword="false" :placeholder="t('prompts.defaultSkillsPlaceholder')"
+                      style="width: 100%;">
+                      <el-option v-for="skill in availableSkills" :key="skill.name" :label="skill.name"
+                        :value="skill.name" />
                     </el-select>
                   </div>
                   <div v-if="editingPrompt.showMode === 'window'" class="param-item"

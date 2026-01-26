@@ -41,6 +41,7 @@ const defaultConfig = {
         voice: null,
         reasoning_effort: "default",
         defaultMcpServers: [],
+        defaultSkills: [],
         window_width: 580,
         window_height: 740,
         position_x: 0,
@@ -52,6 +53,7 @@ const defaultConfig = {
     },
     fastWindowPosition: { x: 0, y: 0 },
     mcpServers: {},
+    skillPath: "",
     language: "zh",
     tags: {},
     skipLineBreak: false,
@@ -211,7 +213,7 @@ async function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  const CURRENT_VERSION = "1.9.13";
+  const CURRENT_VERSION = "1.11.17";
 
   // --- 1. 版本检查与旧数据迁移 ---
   if (config.version !== CURRENT_VERSION) {
@@ -287,13 +289,18 @@ function checkConfig(config) {
     }
   }
 
+  if (config.skillPath === undefined) {
+      config.skillPath = "";
+      flag = true;
+  }
+
   // --- 4. Prompts (快捷助手) 检查 ---
   if (config.prompts) {
     const promptDefaults = {
       enable: true, stream: true, showMode: 'window', type: "general",
       isTemperature: false, temperature: 0.7,
       isDirectSend_normal: true, isDirectSend_file: false, ifTextNecessary: false,
-      voice: '', reasoning_effort: "default", defaultMcpServers: [],
+      voice: '', reasoning_effort: "default", defaultMcpServers: [], defaultSkills: [],
       window_width: 580, window_height: 740, position_x: 0, position_y: 0,
       isAlwaysOnTop: true, autoCloseOnBlur: true, matchRegex: "", icon: "",
       autoSaveChat: false

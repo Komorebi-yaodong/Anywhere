@@ -1,7 +1,6 @@
 const { ipcRenderer } = require('electron');
 
 const {
-  
     getRandomItem,
 } = require('./input.js');
 
@@ -36,6 +35,15 @@ const {
   invokeMcpTool,
   closeMcpClient,
 } = require('./mcp.js');
+
+const {
+    listSkills,
+    getSkillDetails,
+    generateSkillToolDefinition,
+    resolveSkillInvocation,
+    saveSkill,
+    deleteSkill
+} = require('./skill.js');
 
 const channel = "window";
 let senderId = null; // [新增] 用于存储当前窗口的唯一ID
@@ -135,4 +143,40 @@ window.api = {
         // 异步执行，不阻塞 UI
         cacheBackgroundImage(url).catch(e => console.error(e));
     },
+
+    // Skill 相关 API
+    listSkills: async (path) => {
+        try {
+            return listSkills(path);
+        } catch (e) {
+            console.error("listSkills error:", e);
+            return [];
+        }
+    },
+    getSkillDetails: async (rootPath, id) => {
+        return getSkillDetails(rootPath, id);
+    },
+    saveSkill: async (rootPath, id, content) => {
+        return saveSkill(rootPath, id, content);
+    },
+    deleteSkill: async (rootPath, id) => {
+        return deleteSkill(rootPath, id);
+    },
+    // 生成 Skill Tool 定义
+    getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
+        try {
+            const allSkills = listSkills(rootPath);
+            const activeSkills = allSkills.filter(s => enabledSkillNames.includes(s.name));
+            if (activeSkills.length === 0) return null;
+            return generateSkillToolDefinition(activeSkills);
+        } catch (e) {
+            return null;
+        }
+    },
+    // 执行 Skill
+    resolveSkillInvocation: async (rootPath, skillName, args) => {
+        return resolveSkillInvocation(rootPath, skillName, args);
+    },
+    // 暴露 path.join 
+    pathJoin: (...args) => require('path').join(...args),
 };

@@ -125,6 +125,11 @@ async function exportConfig() {
       delete configToExport.webdav.localChatPath;
     }
 
+    // 在导出前移除 Skill 路径 (不同设备路径不同)
+    if (configToExport.skillPath !== undefined) {
+      delete configToExport.skillPath;
+    }
+
     const jsonString = JSON.stringify(configToExport, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -153,6 +158,8 @@ function importConfig() {
         try {
           // 在导入新配置前，先保存当前的本地对话路径
           const currentLocalChatPath = currentConfig.value.webdav?.localChatPath;
+          // 保存当前的 Skill 路径
+          const currentSkillPath = currentConfig.value.skillPath;
 
           const importedData = JSON.parse(e.target.result);
           if (typeof importedData !== 'object' || importedData === null) {
@@ -165,6 +172,11 @@ function importConfig() {
               importedData.webdav = {}; // 确保 webdav 对象存在
             }
             importedData.webdav.localChatPath = currentLocalChatPath;
+          }
+
+          // 将保存的 Skill 路径写回
+          if (currentSkillPath) {
+            importedData.skillPath = currentSkillPath;
           }
 
           if (window.api && window.api.updateConfig) {
@@ -293,7 +305,6 @@ async function backupToWebdav() {
   try {
     await ElMessageBox({
       title: t('setting.webdav.backup.confirmTitle'),
-      // 修改处：增加容器 Flex 居中样式，增加 P 标签文字居中，限制 Input 宽度
       message: () => h('div', { style: 'display: flex; flex-direction: column; align-items: center; width: 100%;' }, [
         h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--text-secondary); text-align: center; width: 100%;' }, t('setting.webdav.backup.confirmMessage')),
         h(ElInput, {
@@ -332,10 +343,14 @@ async function backupToWebdav() {
               await client.createDirectory(remoteDir, { recursive: true });
             }
 
-            //在备份前移除本地对话路径
+            // 在备份前移除本地路径
             const configToBackup = JSON.parse(JSON.stringify(currentConfig.value));
             if (configToBackup.webdav && configToBackup.webdav.localChatPath) {
               delete configToBackup.webdav.localChatPath;
+            }
+            // [新增] 在备份前移除 Skill 路径
+            if (configToBackup.skillPath !== undefined) {
+              delete configToBackup.skillPath;
             }
 
             const jsonString = JSON.stringify(configToBackup, null, 2);
@@ -430,6 +445,8 @@ async function restoreFromWebdav(file) {
 
     // 在恢复前保存当前的本地对话路径
     const currentLocalChatPath = currentConfig.value.webdav?.localChatPath;
+    // 保存当前的 Skill 路径
+    const currentSkillPath = currentConfig.value.skillPath;
 
     const { url, username, password, path } = currentConfig.value.webdav;
     const client = createClient(url, { username, password });
@@ -448,6 +465,10 @@ async function restoreFromWebdav(file) {
         importedData.webdav = {};
       }
       importedData.webdav.localChatPath = currentLocalChatPath;
+    }
+
+    if (currentSkillPath) {
+      importedData.skillPath = currentSkillPath;
     }
 
     if (window.api && window.api.updateConfig) {

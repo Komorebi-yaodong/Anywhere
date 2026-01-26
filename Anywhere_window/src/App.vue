@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
 import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar, ElSwitch } from 'element-plus';
 import { createClient } from "webdav/web";
-import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight } from '@element-plus/icons-vue';
+import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning } from '@element-plus/icons-vue';
 
 import TitleBar from './components/TitleBar.vue';
 import ChatHeader from './components/ChatHeader.vue';
@@ -319,6 +319,98 @@ const filteredMcpServers = computed(() => {
   }
   return servers;
 });
+
+const isSkillDialogVisible = ref(false);
+const sessionSkillIds = ref([]);
+const tempSessionSkillIds = ref([]); // 弹窗内的临时选择状态
+const allSkillsList = ref([]);
+const skillSearchQuery = ref('');
+const skillFilter = ref('all'); // [修复] 新增筛选状态
+
+const filteredSkillsList = computed(() => {
+  let list = allSkillsList.value;
+
+  // 1. 状态筛选
+  if (skillFilter.value === 'selected') {
+    list = list.filter(s => tempSessionSkillIds.value.includes(s.name));
+  } else if (skillFilter.value === 'unselected') {
+    list = list.filter(s => !tempSessionSkillIds.value.includes(s.name));
+  }
+
+  // 2. 搜索筛选
+  if (skillSearchQuery.value) {
+    const query = skillSearchQuery.value.toLowerCase();
+    list = list.filter(s =>
+      s.name.toLowerCase().includes(query) ||
+      (s.description && s.description.toLowerCase().includes(query))
+    );
+  }
+  return list;
+});
+
+const selectAllSkills = () => {
+  const visibleNames = filteredSkillsList.value.map(s => s.name);
+  const newSet = new Set([...tempSessionSkillIds.value, ...visibleNames]);
+  tempSessionSkillIds.value = Array.from(newSet);
+};
+
+const clearSkills = () => {
+  tempSessionSkillIds.value = [];
+};
+
+const toggleSkillDialog = async () => {
+  if (!isSkillDialogVisible.value) {
+    tempSessionSkillIds.value = [...sessionSkillIds.value];
+    skillFilter.value = 'all';      // 重置筛选
+    skillSearchQuery.value = '';    // 重置搜索
+
+    if (currentConfig.value.skillPath) {
+      try {
+        const skills = await window.api.listSkills(currentConfig.value.skillPath);
+        allSkillsList.value = skills.filter(s => !s.disabled).sort((a, b) => a.name.localeCompare(b.name));
+      } catch (e) {
+        console.error("Fetch skills failed:", e);
+      }
+    }
+  }
+  isSkillDialogVisible.value = !isSkillDialogVisible.value;
+};
+
+const toggleSkillSelection = (skillName) => {
+  const idx = tempSessionSkillIds.value.indexOf(skillName);
+  if (idx === -1) {
+    tempSessionSkillIds.value.push(skillName);
+  } else {
+    tempSessionSkillIds.value.splice(idx, 1);
+  }
+};
+
+const handleSkillSelectionConfirm = async () => {
+  sessionSkillIds.value = [...tempSessionSkillIds.value];
+  isSkillDialogVisible.value = false;
+
+  if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
+    const builtinIds = Object.entries(currentConfig.value.mcpServers)
+      .filter(([, server]) => server.type === 'builtin')
+      .map(([id]) => id);
+
+    let changed = false;
+    builtinIds.forEach(id => {
+      if (!sessionMcpServerIds.value.includes(id)) {
+        sessionMcpServerIds.value.push(id);
+        changed = true;
+      }
+      if (!tempSessionMcpServerIds.value.includes(id)) {
+        tempSessionMcpServerIds.value.push(id);
+      }
+    });
+
+    if (changed) {
+      showDismissibleMessage.success('已自动启用内置 MCP 服务以支持 Skill');
+      await applyMcpTools(false);
+    }
+  }
+};
 
 const isViewingLastMessage = computed(() => {
   if (focusedMessageIndex.value === null) return false;
@@ -1052,10 +1144,27 @@ onMounted(async () => {
       window.addEventListener('blur', closePage);
     }
 
-    const defaultMcpServers = currentPromptConfig.defaultMcpServers;
-    if (Array.isArray(defaultMcpServers) && defaultMcpServers.length > 0) {
-      sessionMcpServerIds.value = [...defaultMcpServers];
-      tempSessionMcpServerIds.value = [...defaultMcpServers];
+    // --- MCP 加载逻辑 (修改版) ---
+    const defaultMcpServers = currentPromptConfig.defaultMcpServers || [];
+    let mcpServersToLoad = [...defaultMcpServers];
+
+    // 如果存在 Skill，强制合并内置 MCP 服务
+    if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
+      const builtinIds = Object.entries(currentConfig.value.mcpServers)
+        .filter(([, server]) => server.type === 'builtin')
+        .map(([id]) => id);
+      // 去重合并
+      mcpServersToLoad = [...new Set([...mcpServersToLoad, ...builtinIds])];
+    }
+
+    if (mcpServersToLoad.length > 0) {
+      // 过滤出有效的 ID
+      const validIds = mcpServersToLoad.filter(id =>
+        currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
+      );
+
+      sessionMcpServerIds.value = [...validIds];
+      tempSessionMcpServerIds.value = [...validIds];
       await applyMcpTools(false);
     }
 
@@ -1226,7 +1335,9 @@ const getSessionDataAsObject = () => {
     anywhere_history: true, CODE: CODE.value, basic_msg: basic_msg.value, isInit: isInit.value,
     autoCloseOnBlur: autoCloseOnBlur.value, model: model.value,
     currentPromptConfig: currentPromptConfig, history: history.value, chat_show: chat_show.value, selectedVoice: selectedVoice.value,
-    activeMcpServerIds: sessionMcpServerIds.value || [], isAutoApproveTools: isAutoApproveTools.value
+    activeMcpServerIds: sessionMcpServerIds.value || [],
+    activeSkillIds: sessionSkillIds.value || [],
+    isAutoApproveTools: isAutoApproveTools.value
   };
 }
 const saveSessionToCloud = async () => {
@@ -2123,6 +2234,13 @@ const loadSession = async (jsonData) => {
       mcpServersToLoad = jsonData.currentPromptConfig?.defaultMcpServers || [];
     }
 
+    if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
+      const builtinIds = Object.entries(currentConfig.value.mcpServers)
+        .filter(([, server]) => server.type === 'builtin')
+        .map(([id]) => id);
+      mcpServersToLoad = [...new Set([...mcpServersToLoad, ...builtinIds])];
+    }
+
     const validMcpServerIds = mcpServersToLoad.filter(id =>
       currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
     );
@@ -2398,7 +2516,7 @@ const askAI = async (forceSend = false) => {
     return;
   }
 
-  // --- 1. 处理用户输入 ---
+  // --- 1. 处理用户输入 (保持不变) ---
   if (!forceSend) {
     let file_content = await sendFile();
     const promptText = prompt.value.trim();
@@ -2426,9 +2544,8 @@ const askAI = async (forceSend = false) => {
   signalController.value = new AbortController();
   await nextTick();
 
-  // 开始回答时，强制锁定到底部
   isSticky.value = true;
-  scrollToBottom('auto'); // 瞬间置底
+  scrollToBottom('auto');
 
   const currentPromptConfig = currentConfig.value.prompts[CODE.value];
   const isVoiceReply = !!selectedVoice.value;
@@ -2456,20 +2573,16 @@ const askAI = async (forceSend = false) => {
 
       messagesForThisRequest = messagesForThisRequest.filter(msg => {
         if (msg.role === 'system' && (!msg.content || msg.content.trim() === '')) {
-          return false; // 过滤掉空系统提示词
+          return false;
         }
         return true;
       });
 
       messagesForThisRequest.forEach(msg => {
-        // 1. 过滤掉标记为 isTranscript 的内容 (防止转录文本被发回给AI)
         if (Array.isArray(msg.content)) {
           msg.content = msg.content.filter(part => !part.isTranscript);
-          // 如果过滤后数组为空，重置为 null (也就是该消息没有实质内容)
           if (msg.content.length === 0) msg.content = null;
         }
-
-        // 2. 清理 null 字段 (防止 API 报错)
         ['content', 'reasoning_content', 'extra_content'].forEach(key => {
           if (msg[key] === null) {
             delete msg[key];
@@ -2510,7 +2623,7 @@ const askAI = async (forceSend = false) => {
 
       // 准备 System Prompt 和 MCP 规则
       let mcpSystemPromptStr = "";
-      if (openaiFormattedTools.value.length > 0) {
+      if (openaiFormattedTools.value.length > 0 || sessionSkillIds.value.length > 0) {
         mcpSystemPromptStr = generateMcpSystemPrompt();
         const systemMessageIndex = messagesForThisRequest.findIndex(m => m.role === 'system');
         if (systemMessageIndex !== -1) {
@@ -2531,10 +2644,26 @@ const askAI = async (forceSend = false) => {
       if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
       if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
 
-      if (openaiFormattedTools.value.length > 0) {
-        payload.tools = openaiFormattedTools.value;
+      // --- 构建工具列表 (MCP + Skill) ---
+      let activeTools = [...openaiFormattedTools.value];
+
+      // [新增] 注入 Skill 工具定义
+      if (sessionSkillIds.value.length > 0 && currentConfig.value.skillPath) {
+        try {
+          const skillToolDef = await window.api.getSkillToolDefinition(currentConfig.value.skillPath, sessionSkillIds.value);
+          if (skillToolDef) {
+            activeTools.push(skillToolDef);
+          }
+        } catch (e) {
+          console.error("Failed to generate skill tool definition:", e);
+        }
+      }
+
+      if (activeTools.length > 0) {
+        payload.tools = activeTools;
         payload.tool_choice = "auto";
       }
+
       if (isVoiceReply) {
         payload.stream = false;
         useStream = false;
@@ -2551,8 +2680,6 @@ const askAI = async (forceSend = false) => {
       });
       currentAssistantChatShowIndex = chat_show.value.length - 1;
 
-      // 创建新气泡时，如果 Sticky 为 true，MutationObserver 会自动处理滚动
-      // 这里不需要手动调用 scrollToBottom，除非是初始状态强制对齐
       if (isAtBottom.value) scrollToBottom('auto');
 
       let responseMessage;
@@ -2588,7 +2715,6 @@ const askAI = async (forceSend = false) => {
 
             if (Date.now() - lastUpdateTime > 100) {
               chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-              // 移除了 scrollToBottom 调用 (MutationObserver 接管)
               lastUpdateTime = Date.now();
             }
           }
@@ -2600,7 +2726,6 @@ const askAI = async (forceSend = false) => {
 
             if (Date.now() - lastUpdateTime > 100) {
               chat_show.value[currentAssistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
-              // 移除了 scrollToBottom 调用 (MutationObserver 接管)
               lastUpdateTime = Date.now();
             }
           }
@@ -2668,7 +2793,6 @@ const askAI = async (forceSend = false) => {
         }));
 
         await nextTick();
-        // 移除了 scrollToBottom
 
         const toolMessages = await Promise.all(
           responseMessage.tool_calls.map(async (toolCall) => {
@@ -2706,64 +2830,76 @@ const askAI = async (forceSend = false) => {
 
             try {
               const toolArgs = JSON.parse(toolCall.function.arguments);
-              let executionContext = null;
 
-              if (toolCall.function.name === 'sub_agent') {
-                const currentApiKey = api_key.value;
-                const currentBaseUrl = base_url.value;
-                const currentModelName = model.value.split('|')[1] || model.value;
+              // 区分 Skill 调用和普通 MCP 调用
+              if (toolCall.function.name === 'Skill') {
+                // 调用 Skill
+                if (uiToolCall) uiToolCall.result = `Reading skill: ${toolArgs.skill}...`;
 
-                // 1. 获取全量工具列表 (排除 sub_agent 自身)
-                const toolsContext = openaiFormattedTools.value
-                  .filter(t => t.function.name !== 'sub_agent');
+                toolContent = await window.api.resolveSkillInvocation(
+                  currentConfig.value.skillPath,
+                  toolArgs.skill,
+                  toolArgs.args
+                );
 
-                // 2. 定义实时更新回调 (用于前端展示 Sub-Agent 的思考过程)
-                const onUpdateCallback = (logContent) => {
-                  if (uiToolCall) {
-                    // 在日志末尾添加动态标识
-                    uiToolCall.result = logContent + "\n\n[Sub-Agent 执行中...]";
-                  }
-                };
+                if (uiToolCall) uiToolCall.result = `[Skill Instructions Loaded]\n${toolContent}`;
 
-                // 3. 组装上下文
-                executionContext = {
-                  apiKey: currentApiKey,
-                  baseUrl: currentBaseUrl,
-                  model: currentModelName,
-                  tools: toolsContext,
-                  mcpSystemPrompt: mcpSystemPromptStr, // 同步主对话的 MCP 提示词
-                  onUpdate: onUpdateCallback           // 传入更新回调
-                };
-              }
+              } else {
+                // 原有 MCP 调用逻辑
+                let executionContext = null;
 
-              // 执行 MCP 工具
-              const result = await window.api.invokeMcpTool(
-                toolCall.function.name,
-                toolArgs,
-                toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal,
-                executionContext
-              );
-
-              toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
-
-              if (uiToolCall) {
-                // 如果是 Sub-Agent，合并日志和最终结果
                 if (toolCall.function.name === 'sub_agent') {
-                  const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Sub-Agent 执行中...]", "") : "";
+                  const currentApiKey = api_key.value;
+                  const currentBaseUrl = base_url.value;
+                  const currentModelName = model.value.split('|')[1] || model.value;
 
-                  // 如果结果中不包含日志信息（即它只是纯答案），则格式化追加
-                  if (!currentLog.includes(toolContent)) {
-                    uiToolCall.result = `${currentLog}\n\n=== 最终结果 ===\n${toolContent}`;
-                  } else {
-                    // 如果 result 已经包含了日志 (取决于后端实现)，则直接使用
-                    uiToolCall.result = currentLog;
-                  }
-                } else {
-                  uiToolCall.result = toolContent;
+                  // 1. 获取全量工具列表 (排除 sub_agent 自身)
+                  const toolsContext = activeTools.filter(t => t.function.name !== 'sub_agent');
+
+                  // 2. 定义实时更新回调
+                  const onUpdateCallback = (logContent) => {
+                    if (uiToolCall) {
+                      uiToolCall.result = logContent + "\n\n[Sub-Agent 执行中...]";
+                    }
+                  };
+
+                  // 3. 组装上下文
+                  executionContext = {
+                    apiKey: currentApiKey,
+                    baseUrl: currentBaseUrl,
+                    model: currentModelName,
+                    tools: toolsContext,
+                    mcpSystemPrompt: mcpSystemPromptStr,
+                    onUpdate: onUpdateCallback
+                  };
                 }
 
-                uiToolCall.approvalStatus = 'finished';
+                // 执行 MCP 工具
+                const result = await window.api.invokeMcpTool(
+                  toolCall.function.name,
+                  toolArgs,
+                  toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal,
+                  executionContext
+                );
+
+                toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
+
+                if (uiToolCall) {
+                  if (toolCall.function.name === 'sub_agent') {
+                    const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Sub-Agent 执行中...]", "") : "";
+                    if (!currentLog.includes(toolContent)) {
+                      uiToolCall.result = `${currentLog}\n\n=== 最终结果 ===\n${toolContent}`;
+                    } else {
+                      uiToolCall.result = currentLog;
+                    }
+                  } else {
+                    uiToolCall.result = toolContent;
+                  }
+                }
               }
+
+              if (uiToolCall) uiToolCall.approvalStatus = 'finished';
+
             } catch (e) {
               if (e.name === 'AbortError') {
                 toolContent = "Error: Tool call was canceled by the user.";
@@ -3008,9 +3144,9 @@ async function handleQuickMcpToggle(serverId) {
   } else {
     sessionMcpServerIds.value.splice(index, 1);
   }
-  
+
   tempSessionMcpServerIds.value = [...sessionMcpServerIds.value];
-  
+
   await applyMcpTools(false);
 }
 
@@ -3256,14 +3392,11 @@ const handleOpenSearch = () => {
         <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
           v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
-          :is-mcp-active="isMcpActive" 
-          :all-mcp-servers="availableMcpServers" 
-          :active-mcp-ids="sessionMcpServerIds"
-          @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
-          @remove-file="handleRemoveFile" @upload="handleUpload" @send-audio="handleSendAudio"
-          @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart" 
-          @toggle-mcp="handleQuickMcpToggle"
-          />
+          :is-mcp-active="isMcpActive" :all-mcp-servers="availableMcpServers" :active-mcp-ids="sessionMcpServerIds"
+          :active-skill-ids="sessionSkillIds" @submit="handleSubmit" @cancel="handleCancel"
+          @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
+          @send-audio="handleSendAudio" @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart"
+          @toggle-mcp="handleQuickMcpToggle" @open-skill-dialog="toggleSkillDialog" />
       </div>
     </el-container>
   </main>
@@ -3336,7 +3469,7 @@ const handleOpenSearch = () => {
                     ({{ getToolCounts(server.id).enabled }}/{{ getToolCounts(server.id).total }})
                   </span>
                 </span>
-                
+
                 <!-- 右侧分组：包含持久连接按钮和标签，统一靠右 -->
                 <div class="mcp-header-right-group">
                   <el-tooltip :content="server.isPersistent ? '持久连接已开启' : '持久连接已关闭'" placement="top">
@@ -3350,13 +3483,14 @@ const handleOpenSearch = () => {
                       </el-icon>
                     </el-button>
                   </el-tooltip>
-                  
+
                   <div class="mcp-server-tags">
                     <el-tag v-if="server.type" type="info" size="small" effect="plain" round>{{
                       getDisplayTypeName(server.type) }}</el-tag>
-                    <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain" round>{{
-                      tag
-                    }}</el-tag>
+                    <el-tag v-for="tag in (server.tags || []).slice(0, 2)" :key="tag" size="small" effect="plain"
+                      round>{{
+                        tag
+                      }}</el-tag>
                   </div>
                 </div>
               </div>
@@ -3370,7 +3504,8 @@ const handleOpenSearch = () => {
                   <span>{{ expandedMcpServers.has(server.id) ? '收起' : '工具' }}</span>
                 </div>
 
-                <span v-if="server.description" class="mcp-server-description" @click.stop="toggleMcpServerExpansion(server.id)">{{ server.description }}</span>
+                <span v-if="server.description" class="mcp-server-description"
+                  @click.stop="toggleMcpServerExpansion(server.id)">{{ server.description }}</span>
               </div>
             </div>
           </div>
@@ -3418,6 +3553,82 @@ const handleOpenSearch = () => {
           <el-button type="primary"
             @click="sessionMcpServerIds = [...tempSessionMcpServerIds]; applyMcpTools();">应用</el-button>
         </div>
+      </div>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="isSkillDialogVisible" width="80%" custom-class="mcp-dialog no-header-dialog" :show-close="false">
+    <template #header>
+      <div style="display: none;"></div>
+    </template>
+    
+    <div class="mcp-dialog-content">
+      <!-- 顶部工具栏 -->
+      <div class="mcp-dialog-toolbar">
+        <el-button-group>
+          <el-button :type="skillFilter === 'all' ? 'primary' : ''" @click="skillFilter = 'all'">全部</el-button>
+          <el-button :type="skillFilter === 'selected' ? 'primary' : ''" @click="skillFilter = 'selected'">已选</el-button>
+          <el-button :type="skillFilter === 'unselected' ? 'primary' : ''" @click="skillFilter = 'unselected'">未选</el-button>
+        </el-button-group>
+        <el-button-group>
+          <el-button @click="selectAllSkills">全选</el-button>
+          <el-button @click="clearSkills">清空</el-button>
+        </el-button-group>
+      </div>
+      
+      <!-- 列表区域 -->
+      <div class="mcp-server-list custom-scrollbar">
+        <div v-if="filteredSkillsList.length === 0" style="padding: 20px; text-align: center; color: var(--el-text-color-placeholder);">
+          暂无匹配的技能
+        </div>
+        <div v-else v-for="skill in filteredSkillsList" :key="skill.name" class="mcp-server-item-wrapper">
+          <div class="mcp-server-item" :class="{ 'is-checked': tempSessionSkillIds.includes(skill.name) }"
+            @click="toggleSkillSelection(skill.name)">
+            
+            <!-- 单行布局结构 -->
+            <div class="skill-single-row">
+              <el-checkbox :model-value="tempSessionSkillIds.includes(skill.name)" size="large"
+                @change="() => toggleSkillSelection(skill.name)" @click.stop class="header-checkbox" />
+              
+              <el-avatar shape="square" :size="20" class="mcp-server-icon" style="background:transparent; color: var(--el-text-color-primary); flex-shrink: 0;">
+                 <el-icon :size="16"><Collection /></el-icon>
+              </el-avatar>
+
+              <span class="mcp-server-name skill-name-fixed">{{ skill.name }}</span>
+              
+              <!-- 描述显示在同一行 -->
+              <span class="skill-desc-inline" :title="skill.description">{{ skill.description }}</span>
+              
+              <!-- 标签靠右 -->
+              <div class="mcp-header-right-group">
+                 <el-tag v-if="skill.context === 'fork'" type="warning" size="small" effect="plain" round>Sub-Agent</el-tag>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部搜索框 -->
+      <div class="mcp-dialog-footer-search">
+        <el-input v-model="skillSearchQuery" placeholder="搜索技能名称或描述..." :prefix-icon="Search" clearable />
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="mcp-dialog-footer">
+        <div class="footer-left-controls">
+           <!-- 状态计数 -->
+           <span class="mcp-limit-hint" v-if="tempSessionSkillIds.length > 0" style="margin-right: 15px; font-weight: bold; color: var(--el-color-primary);">
+              已选 {{ tempSessionSkillIds.length }} 个技能
+           </span>
+           <!-- Warning 提示 -->
+           <span class="mcp-limit-hint warning" style="display: inline-flex; align-items: center; opacity: 0.8;">
+              <el-icon style="margin-right: 4px;"><Warning /></el-icon>
+              Skill 依赖内置 MCP 服务，请勿禁用
+           </span>
+        </div>
+        <el-button type="primary" @click="handleSkillSelectionConfirm">确定</el-button>
       </div>
     </template>
   </el-dialog>
@@ -3777,7 +3988,7 @@ html.dark .mcp-server-icon {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: inline-flex; 
+  display: inline-flex;
   align-items: center;
 }
 
@@ -3798,8 +4009,8 @@ html.dark .mcp-server-icon {
 }
 
 .mcp-server-tags .el-tag {
-  padding-top:0px;
-  padding-bottom:2px;
+  padding-top: 0px;
+  padding-bottom: 2px;
   padding-left: 8px;
   padding-right: 8px;
 
@@ -4083,7 +4294,7 @@ html.dark .mcp-tool-row .el-switch {
 }
 
 html.dark .mcp-tool-row .el-switch .el-switch__core .el-switch__action {
-  background-color: #E5EAF3; 
+  background-color: #E5EAF3;
 }
 
 html.dark .mcp-tool-row .el-switch.is-checked .el-switch__core {
@@ -4092,7 +4303,7 @@ html.dark .mcp-tool-row .el-switch.is-checked .el-switch__core {
 }
 
 html.dark .mcp-tool-row .el-switch.is-checked .el-switch__core .el-switch__action {
-  background-color: #141414; 
+  background-color: #141414;
 }
 
 html.dark .mcp-server-list .el-checkbox__input.is-checked .el-checkbox__inner,
@@ -4481,12 +4692,13 @@ html.dark .app-container.has-bg :deep(.waveform-display-area) {
 
 .app-container.has-bg :deep(.option-selector-wrapper .el-scrollbar__view) {
   /* 确保滚动内容区域背景透明，继承父级 */
-  background-color: transparent !important; 
+  background-color: transparent !important;
 }
 
 .app-container.has-bg :deep(.recording-status-text) {
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
+
 html.dark .app-container.has-bg :deep(.recording-status-text) {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
@@ -4605,5 +4817,34 @@ html.dark .app-container.has-bg :deep(.tool-collapse .el-collapse-item__wrap) {
 html.dark .app-container.has-bg :deep(.tool-call-details .tool-detail-section pre) {
   background-color: rgba(0, 0, 0, 0.5) !important;
   border-color: rgba(255, 255, 255, 0.05);
+}
+
+.skill-single-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  padding: 4px 10px 0px 0px;
+}
+
+.skill-name-fixed {
+  flex-shrink: 0;
+  font-weight: 600;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-desc-inline {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1; /* 自动占据中间剩余空间 */
+  min-width: 0;
+  opacity: 0.8;
+  margin-top: 1px;
 }
 </style>

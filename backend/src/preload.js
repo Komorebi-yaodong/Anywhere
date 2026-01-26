@@ -31,6 +31,7 @@ const {
   setFileMtime,
   isFileTypeSupported,
   parseFileObject,
+  copyLocalPath,
 } = require('./file.js');
 
 const {
@@ -45,6 +46,15 @@ const {
   connectAndFetchTools,
   connectAndInvokeTool,
 } = require('./mcp.js');
+
+const {
+    listSkills,
+    getSkillDetails,
+    generateSkillToolDefinition,
+    resolveSkillInvocation,
+    saveSkill,
+    deleteSkill
+} = require('./skill.js');
 
 window.api = {
   getConfig,
@@ -145,6 +155,52 @@ window.api = {
   closeMcpClient,
   isFileTypeSupported,
   parseFileObject,
+  copyLocalPath: async (src, dest) => {
+      try {
+          await copyLocalPath(src, dest);
+          return true;
+      } catch (e) {
+          console.error("Copy failed:", e);
+          throw e;
+      }
+  },
+
+  // Skill 相关 API
+  listSkills: async (path) => {
+      try {
+          return listSkills(path);
+      } catch (e) {
+          console.error("listSkills error:", e);
+          return [];
+      }
+  },
+  getSkillDetails: async (rootPath, id) => {
+      return getSkillDetails(rootPath, id);
+  },
+  saveSkill: async (rootPath, id, content) => {
+      return saveSkill(rootPath, id, content);
+  },
+  deleteSkill: async (rootPath, id) => {
+      return deleteSkill(rootPath, id);
+  },
+  // 生成 Skill Tool 定义 (供前端构建请求参数时使用)
+  getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
+      try {
+          const allSkills = listSkills(rootPath);
+          // 过滤出已启用且存在的 Skills
+          const activeSkills = allSkills.filter(s => enabledSkillNames.includes(s.name));
+          if (activeSkills.length === 0) return null;
+          return generateSkillToolDefinition(activeSkills);
+      } catch (e) {
+          return null;
+      }
+  },
+  // 执行 Skill (AI 调用 tool 时使用)
+  resolveSkillInvocation: async (rootPath, skillName, args) => {
+      return resolveSkillInvocation(rootPath, skillName, args);
+  },
+  // 暴露 path.join 给前端创建新 Skill 文件夹用
+  pathJoin: (...args) => require('path').join(...args),
 };
 
 const commandHandlers = {

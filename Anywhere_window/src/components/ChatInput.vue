@@ -1,7 +1,7 @@
 <script setup>
-import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed, defineAsyncComponent } from 'vue';
-import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon, ElTag } from 'element-plus';
-import { Close, Check, Document, Delete, Tools } from '@element-plus/icons-vue'; // 引入 Tools
+import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
+import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
+import { Close, Check, Document, Delete, Collection } from '@element-plus/icons-vue'; // 引入 Tools
 
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
@@ -15,12 +15,12 @@ const props = defineProps({
     voiceList: { type: Array, default: () => [] },
     layout: { type: String, default: 'horizontal' },
     isMcpActive: Boolean,
-    // 接收 MCP 数据
     allMcpServers: { type: Array, default: () => [] },
-    activeMcpIds: { type: Array, default: () => [] }
+    activeMcpIds: { type: Array, default: () => [] },
+    activeSkillIds: { type: Array, default: () => [] } 
 });
 // 增加 toggle-mcp 事件
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'open-skill-dialog']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -697,6 +697,15 @@ defineExpose({ focus, senderRef });
                                                 d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5">
                                             </path>
                                         </svg>
+                                    </el-icon>
+                                </el-button>
+                            </el-tooltip>
+                            <el-tooltip content="Skill 技能库">
+                                <el-button size="default" circle :disabled="isRecording"
+                                    :class="{ 'is-active-special': activeSkillIds && activeSkillIds.length > 0 }" 
+                                    @click="$emit('open-skill-dialog')">
+                                    <el-icon :size="18">
+                                        <Collection />
                                     </el-icon>
                                 </el-button>
                             </el-tooltip>

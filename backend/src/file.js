@@ -362,6 +362,16 @@ async function setFileMtime(filePath, mtime) {
     return await fs.utimes(filePath, date, date);
 }
 
+/**
+ * 递归复制文件或目录
+ * @param {string} srcPath 源路径
+ * @param {string} destPath 目标路径
+ */
+async function copyLocalPath(srcPath, destPath) {
+    // fs.cp 是 Node v16.7.0+ 引入的，支持递归
+    return await fs.cp(srcPath, destPath, { recursive: true });
+}
+
 module.exports = {
     handleFilePath, // (文件路径=>文件对象)
     sendfileDirect, //（文件路径=>文件对象=>文件列表=>对话格式）
@@ -376,4 +386,5 @@ module.exports = {
     setFileMtime,
     isFileTypeSupported,
     parseFileObject,
+    copyLocalPath,
 };

@@ -5,8 +5,10 @@ import Prompts from './components/Prompts.vue'
 import Mcp from './components/Mcp.vue' // 引入新组件
 import Setting from './components/Setting.vue'
 import Providers from './components/Providers.vue'
+import Skills from './components/Skills.vue'
+
 import { useI18n } from 'vue-i18n'
-import { ChatDotRound, MagicStick, Cloudy, Setting as SettingIcon } from '@element-plus/icons-vue' // 移除 Server
+import { ChatDotRound, MagicStick, Cloudy, Setting as SettingIcon, Collection } from '@element-plus/icons-vue' // 移除 Server
 
 const { t, locale } = useI18n()
 const tab = ref(0);
@@ -14,7 +16,7 @@ const header_text = ref(t('app.header.chats'));
 
 const config = ref(null);
 
-// [MODIFIED] 将 config provide 给所有子组件
+//将 config provide 给所有子组件
 provide('config', config);
 
 // This watcher is now very effective because of the CSS variables and shared state.
@@ -142,8 +144,9 @@ function updateHeaderText() {
     0: 'app.header.chats',
     1: 'app.header.prompts',
     2: 'app.header.mcp',
-    3: 'app.header.providers',
-    4: 'app.header.settings'
+    3: 'app.header.skills',
+    4: 'app.header.providers',
+    5: 'app.header.settings'
   };
   header_text.value = t(tabMap[tab.value]);
 }
@@ -210,9 +213,18 @@ watch(locale, () => {
               </el-button>
             </el-tooltip>
 
-            <!-- 4. Providers (云服务商) -->
-            <el-tooltip :content="t('app.tabs.providers')" placement="bottom">
+            <!-- 4. Skills -->
+            <el-tooltip :content="t('app.tabs.skills')" placement="bottom">
               <el-button class="tab-button" text @click="changeTab(3)" :class="{ 'active-tab': tab === 3 }">
+                <el-icon :size="20">
+                  <Collection />
+                </el-icon>
+              </el-button>
+            </el-tooltip>
+
+            <!-- 5. Providers (云服务商) -->
+            <el-tooltip :content="t('app.tabs.providers')" placement="bottom">
+              <el-button class="tab-button" text @click="changeTab(4)" :class="{ 'active-tab': tab === 4 }">
                 <el-icon :size="20">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -222,9 +234,9 @@ watch(locale, () => {
               </el-button>
             </el-tooltip>
 
-            <!-- 5. Settings (设置) -->
+            <!-- 6. Settings (设置) -->
             <el-tooltip :content="t('app.tabs.settings')" placement="bottom">
-              <el-button class="tab-button" text @click="changeTab(4)" :class="{ 'active-tab': tab === 4 }">
+              <el-button class="tab-button" text @click="changeTab(5)" :class="{ 'active-tab': tab === 5 }">
                 <el-icon :size="18">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -245,8 +257,9 @@ watch(locale, () => {
       <Chats v-if="tab === 0" key="chats" />
       <Prompts v-if="tab === 1" key="prompts" />
       <Mcp v-if="tab === 2" key="mcp" />
-      <Providers v-if="tab === 3" key="providers" />
-      <Setting v-if="tab === 4" key="settings" />
+      <Skills v-if="tab === 3" key="skills" />
+      <Providers v-if="tab === 4" key="providers" />
+      <Setting v-if="tab === 5" key="settings" />
     </el-main>
   </el-container>
 </template>

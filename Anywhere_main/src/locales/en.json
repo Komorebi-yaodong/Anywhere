@@ -4,6 +4,7 @@
       "chats": "Chats 💬",
       "prompts": "Agent Prompts 🚀",
       "mcp": "MCP Servers 🔧",
+      "skills": "Skills 📚",
       "providers": "Providers ☁️",
       "settings": "Settings ⚙️"
     },
@@ -11,6 +12,7 @@
       "chats": "Chat History",
       "prompts": "Agent Prompts",
       "mcp": "MCP Servers",
+      "skills": "Skills",
       "providers": "Providers",
       "settings": "Settings"
     }
@@ -224,7 +226,8 @@
       "isAlwaysOnTopTooltip": "Enable to keep the window always on top of other windows.",
       "autoCloseOnBlurTooltip": "Enable to close the standalone window when it loses focus.",
       "autoSaveChatTooltip": "When enabled, conversations will be automatically saved to local storage every 15 seconds (requires local chat path configured in settings).",
-      "defaultMcpServers": "When set, the selected MCP services will be automatically enabled when this assistant is opened in a standalone window."
+      "defaultMcpServers": "When set, the selected MCP services will be automatically enabled when this assistant is opened in a standalone window.",
+      "defaultSkills": "When set, these skills will be automatically visible to AI when this assistant is opened in a standalone window."
     },
     "voiceLabel": "Default Voice",
     "voicePlaceholder": "Select a voice or disable",
@@ -240,7 +243,9 @@
       "high": "High"
     },
     "defaultMcpServersLabel": "MCP",
-    "defaultMcpServersPlaceholder": "Select default MCP services for this assistant"
+    "defaultMcpServersPlaceholder": "Select default MCP services for this assistant",
+    "defaultSkillsLabel": "Skills",
+    "defaultSkillsPlaceholder": "Select default skills for this assistant"
   },
   "mcp": {
     "title": "MCP Servers",
@@ -341,6 +346,72 @@
       "default": "Default",
       "leaveEmpty": "Leave empty for default",
       "response": "Response Result:"
+    }
+  },
+  "skills": {
+    "pathNotSet": "Skill storage path not configured",
+    "setPathBtn": "Select Directory",
+    "searchPlaceholder": "Search skill name or description...",
+    "noSkills": "No skills found in this directory",
+    "addTitle": "Add New Skill",
+    "editTitle": "Edit Skill",
+    "uploadFile": "Upload File",
+    "uploadFolder": "Upload Folder",
+    "tags": {
+      "subAgent": "Sub-Agent",
+      "tools": "Tools"
+    },
+    "status": {
+      "disabled": "Disabled"
+    },
+    "tabs": {
+      "info": "Basic Info",
+      "files": "Files"
+    },
+    "dialog": {
+      "dragHint": "Drag SKILL.md here to auto-fill",
+      "dropHint": "Drop to parse Skill file"
+    },
+    "form": {
+      "name": "Skill Name",
+      "namePlaceholder": "Enter skill name (e.g., git-commit)",
+      "enabled": "Enabled",
+      "forkMode": "Sub-Agent Mode",
+      "description": "Description",
+      "descPlaceholder": "Briefly describe what this skill does...",
+      "allowedTools": "Allowed Tools",
+      "toolsHint": "Leave blank for no tool restrictions",
+      "toolsPlaceholder": "Enter tool names, separated by commas (e.g., read_file, grep_search)",
+      "instructions": "Instructions (SKILL.md)",
+      "instructionPlaceholder": "Enter detailed prompts instructions..."
+    },
+    "tooltips": {
+      "forkOn": "Enable Sub-Agent Mode",
+      "forkOff": "Disable Sub-Agent Mode",
+      "refresh": "Refresh List",
+      "forkMode": "When enabled, AI will spawn an isolated sub-agent to execute this skill with its own context."
+    },
+    "filesTab": {
+      "hint": "Files here are stored in the skill directory and can be read by AI during execution.",
+      "empty": "No files yet",
+      "uploading": "Uploading files..."
+    },
+    "alerts": {
+      "listFailed": "Failed to list skills",
+      "loadFailed": "Failed to load skill details",
+      "nameRequired": "Skill name is required",
+      "deleteConfirm": "Are you sure you want to delete skill \"{name}\"? This will permanently delete its directory.",
+      "deleteFileConfirm": "Are you sure you want to delete file \"{name}\"?",
+      "uploadSuccess": "Upload successful",
+      "uploadFailed": "Upload failed",
+      "readSuccess": "Successfully read skill.md content",
+      "parseSuccess": "Successfully parsed new skill",
+      "parseFailed": "Parse failed",
+      "noSkillMd": "SKILL.md not found, using folder name",
+      "statusUpdateFailed": "Status update failed",
+      "forkUpdateFailed": "Mode update failed",
+      "forkOn": "Sub-Agent mode enabled",
+      "forkOff": "Sub-Agent mode disabled"
     }
   },
   "providers": {
