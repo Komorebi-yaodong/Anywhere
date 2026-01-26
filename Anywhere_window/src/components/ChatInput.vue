@@ -98,9 +98,8 @@ const filteredMcpList = computed(() => {
 
 // 监听 prompt 变化以触发快捷选择
 watch(prompt, (newVal) => {
-    if (newVal.startsWith('/')) {
-        // 提取 / 后的内容，不允许空格（输入空格视为结束命令输入）
-        const match = newVal.match(/^\/([^ \n\r]*)$/);
+    if (newVal.startsWith('@')) {
+        const match = newVal.match(/^@([^ \n\r]*)$/);
         if (match) {
             mcpFilterKeyword.value = match[1];
             showMcpQuickSelect.value = true;
@@ -472,6 +471,7 @@ const getDisplayTypeName = (type) => {
 };
 
 defineExpose({ focus, senderRef });
+
 </script>
 
 <template>
@@ -617,7 +617,7 @@ defineExpose({ focus, senderRef });
 
                     <div class="input-wrapper">
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
-                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容，“\\”选择MCP'"
+                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容，“@”选择MCP'"
                             :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleKeyDown"
                             :disabled="isRecording" />
                     </div>
@@ -636,7 +636,8 @@ defineExpose({ focus, senderRef });
                                             <path
                                                 d="M6 12a1 1 0 0 0-1 1v1a2 2 0 0 0 2 2h2a1 1 0 0 1 1 1v2.9a2 2 0 1 0 4 0V17a1 1 0 0 1 1-1h2a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1">
                                             </path>
-                                        </svg> </el-icon>
+                                        </svg>
+                                    </el-icon>
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip content="添加附件">
@@ -878,7 +879,7 @@ html.dark .app-container.has-bg .mcp-quick-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px;
+    padding: 4px 8px 4px 8px;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s ease; /* 增加平滑过渡 */
