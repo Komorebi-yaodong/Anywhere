@@ -1,7 +1,7 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed, defineAsyncComponent } from 'vue';
 import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon, ElTag } from 'element-plus';
-import { Close, Check, Document, Delete } from '@element-plus/icons-vue';
+import { Close, Check, Document, Delete, Tools } from '@element-plus/icons-vue'; // 引入 Tools
 
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
@@ -15,8 +15,12 @@ const props = defineProps({
     voiceList: { type: Array, default: () => [] },
     layout: { type: String, default: 'horizontal' },
     isMcpActive: Boolean,
+    // 接收 MCP 数据
+    allMcpServers: { type: Array, default: () => [] },
+    activeMcpIds: { type: Array, default: () => [] }
 });
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start']);
+// 增加 toggle-mcp 事件
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -25,6 +29,11 @@ const waveformCanvasContainer = ref(null);
 const isDragging = ref(false);
 const dragCounter = ref(0);
 const isRecording = ref(false);
+
+// --- MCP Quick Select State ---
+const showMcpQuickSelect = ref(false);
+const mcpFilterKeyword = ref('');
+const mcpHighlightIndex = ref(0);
 
 // --- Refs for closing popups ---
 const reasoningSelectorRef = ref(null);
@@ -56,6 +65,54 @@ const reasoningTooltipContent = computed(() => {
     return `思考预算: ${map[tempReasoningEffort.value] || '默认'}`;
 });
 
+// 过滤后的 MCP 列表逻辑
+const filteredMcpList = computed(() => {
+    if (!showMcpQuickSelect.value) return [];
+    const keyword = mcpFilterKeyword.value.toLowerCase();
+    
+    let list = props.allMcpServers.filter(server => {
+        // 1. 匹配名称 (包含匹配)
+        const nameMatch = server.name && server.name.toLowerCase().includes(keyword);
+        
+        // 2. 匹配标签
+        const tagMatch = server.tags && server.tags.some(tag => tag.toLowerCase().includes(keyword));
+
+        // 3. 匹配类型 (原始类型 + 中文显示名)
+        const typeRaw = (server.type || '').toLowerCase();
+        let typeDisplay = '';
+        
+        // 简单的类型映射逻辑
+        if (typeRaw === 'builtin') typeDisplay = '内置';
+        else if (typeRaw === 'stdio') typeDisplay = 'stdio';
+        else if (typeRaw === 'sse') typeDisplay = 'sse';
+        else if (typeRaw.includes('http')) typeDisplay = '可流式 http';
+
+        const typeMatch = typeRaw.includes(keyword) || typeDisplay.includes(keyword);
+
+        return nameMatch || tagMatch || typeMatch;
+    });
+
+    // 限制显示 10 个
+    return list.slice(0, 10);
+});
+
+// 监听 prompt 变化以触发快捷选择
+watch(prompt, (newVal) => {
+    if (newVal.startsWith('/')) {
+        // 提取 / 后的内容，不允许空格（输入空格视为结束命令输入）
+        const match = newVal.match(/^\/([^ \n\r]*)$/);
+        if (match) {
+            mcpFilterKeyword.value = match[1];
+            showMcpQuickSelect.value = true;
+            mcpHighlightIndex.value = 0; // 重置高亮
+        } else {
+            showMcpQuickSelect.value = false;
+        }
+    } else {
+        showMcpQuickSelect.value = false;
+    }
+});
+
 // --- Helper function ---
 const insertNewline = () => {
     const textarea = senderRef.value?.$refs.textarea;
@@ -73,13 +130,65 @@ const insertNewline = () => {
 // --- Event Handlers ---
 const handleKeyDown = (event) => {
     if (event.isComposing) return;
+
+    // [MCP 快捷选择键盘逻辑]
+    if (showMcpQuickSelect.value && filteredMcpList.value.length > 0) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation(); // 阻止冒泡，防止关闭整个窗口
+            showMcpQuickSelect.value = false;
+            return;
+        }
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            mcpHighlightIndex.value = (mcpHighlightIndex.value - 1 + filteredMcpList.value.length) % filteredMcpList.value.length;
+            // 确保视图滚动跟随
+            nextTick(() => {
+                const activeItem = document.querySelector('.mcp-quick-item.highlighted');
+                if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
+            });
+            return;
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            mcpHighlightIndex.value = (mcpHighlightIndex.value + 1) % filteredMcpList.value.length;
+            nextTick(() => {
+                const activeItem = document.querySelector('.mcp-quick-item.highlighted');
+                if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
+            });
+            return;
+        }
+        if (event.key === 'Enter') {
+            // 如果列表显示中，回车为选择，不是发送
+            event.preventDefault();
+            const server = filteredMcpList.value[mcpHighlightIndex.value];
+            if (server) {
+                handleToggleMcp(server.id);
+            }
+            return;
+        }
+        // 数字键 0-9 选择
+        if (/^[0-9]$/.test(event.key)) {
+            event.preventDefault();
+            const idx = parseInt(event.key);
+            if (idx < filteredMcpList.value.length) {
+                handleToggleMcp(filteredMcpList.value[idx].id);
+            }
+            return;
+        }
+    }
+
+    // 原有的录音快捷键逻辑
     if (isRecording.value) {
         if (!((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c')) {
             event.preventDefault();
         }
         return;
     }
+
+    // 原有的回车发送逻辑
     if (event.key !== 'Enter') return;
+    
     const isCtrlOrMetaPressed = event.ctrlKey || event.metaKey;
     if (!props.ctrlEnterToSend) {
         if (isCtrlOrMetaPressed) {
@@ -96,6 +205,16 @@ const handleKeyDown = (event) => {
         }
     }
 };
+
+const handleToggleMcp = (serverId) => {
+    emit('toggle-mcp', serverId);
+    showMcpQuickSelect.value = false; prompt.value = '';
+};
+
+const handleMcpClick = (server) => {
+    handleToggleMcp(server.id);
+};
+
 const onSubmit = () => { if (props.loading) return; emit('submit'); };
 const onCancel = () => emit('cancel');
 const onClearHistory = () => emit('clear-history');
@@ -170,7 +289,6 @@ const startRecordingFromSource = async (sourceType) => {
 
     try {
         if (sourceType === 'microphone') {
-            // 动态导入 Recorder 及其插件
             const RecorderLib = await import('recorder-core');
             const Recorder = RecorderLib.default;
             await import('recorder-core/src/extensions/waveview.js');
@@ -340,6 +458,19 @@ const focus = (options = {}) => {
     });
 };
 
+const getDisplayTypeName = (type) => {
+    if (!type) return '';
+    const streamableHttpRegex = /^streamable[\s_-]?http$/i;
+    const lowerType = type.toLowerCase();
+    
+    if (lowerType === 'builtin') return '内置';
+    if (streamableHttpRegex.test(lowerType) || lowerType === 'http') return 'HTTP'; // 简化显示
+    if (lowerType === 'sse') return 'SSE';
+    if (lowerType === 'stdio') return 'Stdio';
+    
+    return type;
+};
+
 defineExpose({ focus, senderRef });
 </script>
 
@@ -351,6 +482,7 @@ defineExpose({ focus, senderRef });
     </div>
 
     <el-footer class="input-footer">
+        <!-- 文件列表 -->
         <el-row v-if="fileList.length > 0 && !isRecording">
             <el-col :span="0" />
             <el-col :span="24">
@@ -378,6 +510,7 @@ defineExpose({ focus, senderRef });
             <el-col :span="0" />
         </el-row>
 
+        <!-- 录音波形 -->
         <el-row v-show="isRecording" class="waveform-row">
             <el-col :span="0" />
             <el-col :span="24">
@@ -390,6 +523,7 @@ defineExpose({ focus, senderRef });
             <el-col :span="0" />
         </el-row>
 
+        <!-- 选项弹出层 -->
         <el-row v-if="isAudioSourceSelectorVisible" class="option-selector-row">
             <el-col :span="0" />
             <el-col :span="24">
@@ -451,9 +585,39 @@ defineExpose({ focus, senderRef });
             <el-col :span="0" />
             <el-col :span="24">
                 <div class="chat-input-area-vertical">
+                    <div v-if="showMcpQuickSelect && filteredMcpList.length > 0" class="mcp-quick-select">
+                        <!-- 顶部提示栏 -->
+                        <div class="mcp-quick-header">
+                            <span class="header-title">MCP快捷选择</span>
+                            <span class="header-hint">Esc 取消 <span class="divider">|</span> ⇅ 选择 <span class="divider">|</span> Enter/数字键 确认</span>
+                        </div>
+                        
+                        <!-- 滚动列表区域 -->
+                        <div class="mcp-quick-list-scroll">
+                            <div v-for="(server, idx) in filteredMcpList" :key="server.id" 
+                                class="mcp-quick-item" 
+                                :class="{ 'highlighted': idx === mcpHighlightIndex, 'active': activeMcpIds.includes(server.id) }"
+                                @mousedown.prevent="handleMcpClick(server)">
+                                <div class="mcp-item-left">
+                                    <span class="mcp-index-badge">{{ idx }}</span>
+                                    <span class="mcp-name">{{ server.name }}</span>
+                                    <div class="mcp-tags">
+                                        <!-- 显式显示类型标签 -->
+                                        <span v-if="server.type" class="mcp-tag type-tag">{{ getDisplayTypeName(server.type) }}</span>
+                                        <!-- 原有的用户标签 -->
+                                        <span v-for="tag in (server.tags || []).slice(0,2)" :key="tag" class="mcp-tag">{{ tag }}</span>
+                                    </div>
+                                </div>
+                                <div class="mcp-item-right">
+                                    <el-icon v-if="activeMcpIds.includes(server.id)" class="active-icon"><Check /></el-icon>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="input-wrapper">
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
-                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容'"
+                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容，“\\”选择MCP'"
                             :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleKeyDown"
                             :disabled="isRecording" />
                     </div>
@@ -621,7 +785,268 @@ html.dark .drag-overlay {
     background-color: transparent;
 }
 
-/* --- 文件卡片容器样式 --- */
+/* --- MCP Quick Select Styles --- */
+.mcp-quick-select {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    width: 100%;
+    /* 容器本身不滚动，改为 flex 布局以固定 Header */
+    display: flex;
+    flex-direction: column;
+    background-color: var(--el-bg-color-overlay);
+    border: 1px solid var(--el-border-color-light);
+    border-radius: 8px;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    margin-bottom: 8px;
+    padding: 0; /* padding 移到内部元素 */
+    overflow: hidden; /* 防止圆角溢出 */
+}
+
+/* 顶部提示栏样式 */
+.mcp-quick-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: var(--el-fill-color-light);
+    border-bottom: 1px solid var(--el-border-color-lighter);
+    flex-shrink: 0;
+}
+
+.header-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+}
+
+.header-hint {
+    font-size: 11px;
+    color: var(--el-text-color-secondary);
+    font-family: monospace; /* 等宽字体让快捷键更好看 */
+}
+
+.header-hint .divider {
+    color: var(--el-border-color);
+    margin: 0 4px;
+}
+
+/* 滚动列表区域 */
+.mcp-quick-list-scroll {
+    max-height: 260px; /* 列表内容的最大高度 */
+    overflow-y: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* 滚动条 */
+.mcp-quick-list-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+.mcp-quick-list-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--el-border-color);
+    border-radius: 3px;
+}
+
+.app-container.has-bg .mcp-quick-select {
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.app-container.has-bg .mcp-quick-header {
+    background-color: rgba(0, 0, 0, 0.03);
+    border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+
+html.dark .app-container.has-bg .mcp-quick-select {
+    background-color: rgba(30, 30, 30, 0.85);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .app-container.has-bg .mcp-quick-header {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+
+.mcp-quick-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease; /* 增加平滑过渡 */
+    border: 1px solid transparent; /* 预留边框位置防止跳动 */
+}
+
+/* 1. 默认状态：悬浮 (Hover) & 键盘高亮 (Highlighted) */
+.mcp-quick-item:hover, 
+.mcp-quick-item.highlighted {
+    background-color: var(--el-fill-color);
+}
+
+/* 2. 激活状态 (Active - 已勾选) */
+.mcp-quick-item.active {
+    background-color: var(--el-color-primary-light-9);
+    border-color: var(--el-color-primary-light-8);
+}
+
+.mcp-quick-item.active .mcp-name {
+    color: var(--el-color-primary); /* 激活时名称变为主色 */
+    font-weight: 600;
+}
+
+/* 3. 激活 + 悬浮/高亮 (叠加状态) */
+.mcp-quick-item.active:hover, 
+.mcp-quick-item.active.highlighted {
+    background-color: var(--el-color-primary-light-8);
+}
+
+/* --- 深色模式适配 (Dark Mode) --- */
+html.dark .mcp-quick-item.active {
+    background-color: rgba(64, 158, 255, 0.15); /* 使用透明主色，避免 light-9 在暗色下太亮 */
+    border-color: rgba(64, 158, 255, 0.2);
+}
+
+html.dark .mcp-quick-item.active:hover, 
+html.dark .mcp-quick-item.active.highlighted {
+    background-color: rgba(64, 158, 255, 0.25);
+}
+
+/* 1. 悬浮/高亮 */
+.app-container.has-bg .mcp-quick-item:hover, 
+.app-container.has-bg .mcp-quick-item.highlighted {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+html.dark .app-container.has-bg .mcp-quick-item:hover, 
+html.dark .app-container.has-bg .mcp-quick-item.highlighted {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 2. 激活状态 */
+.app-container.has-bg .mcp-quick-item.active {
+    /* 浅色背景下：淡淡的蓝色玻璃感 */
+    background-color: rgba(64, 158, 255, 0.15);
+    border-color: rgba(64, 158, 255, 0.2);
+}
+
+html.dark .app-container.has-bg .mcp-quick-item.active {
+    /* 深色背景下：稍亮的蓝色玻璃感 */
+    background-color: rgba(64, 158, 255, 0.25);
+    border-color: rgba(64, 158, 255, 0.3);
+}
+
+/* 3. 激活 + 悬浮/高亮 */
+.app-container.has-bg .mcp-quick-item.active:hover, 
+.app-container.has-bg .mcp-quick-item.active.highlighted {
+    background-color: rgba(64, 158, 255, 0.25);
+}
+
+html.dark .app-container.has-bg .mcp-quick-item.active:hover, 
+html.dark .app-container.has-bg .mcp-quick-item.active.highlighted {
+    background-color: rgba(64, 158, 255, 0.35);
+}
+
+.mcp-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.mcp-index-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    background-color: var(--el-fill-color-dark); /* 浅色模式默认 */
+    color: var(--el-text-color-secondary);
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 4px 0px 4px;
+    transition: all 0.15s;
+}
+
+.mcp-quick-item.active .mcp-index-badge {
+    background-color: var(--el-color-primary);
+    color: #ffffff;
+}
+
+html.dark .mcp-index-badge {
+    background-color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+html.dark .mcp-quick-item:hover .mcp-index-badge,
+html.dark .mcp-quick-item.highlighted .mcp-index-badge {
+    background-color: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+}
+html.dark .mcp-quick-item.active .mcp-index-badge {
+    background-color: var(--el-color-primary);
+    color: #1a1a1a; 
+}
+
+.mcp-name {
+    font-weight: 500;
+    color: var(--el-text-color-primary);
+    white-space: nowrap;
+}
+
+.mcp-tags {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.mcp-tag {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background-color: var(--el-color-info-light-9);
+    color: var(--el-color-info);
+    height: 18px;
+    line-height: 16px;
+    box-sizing: border-box;
+}
+
+/* 类型标签特殊样式 */
+.mcp-tag.type-tag {
+    background-color: var(--el-color-primary-light-9);
+    color: var(--el-color-primary);
+    font-weight: 600;
+    padding-bottom: 0px;
+    padding-top:2px;
+}
+
+html.dark .mcp-tag.type-tag {
+    background-color: var(--el-color-primary-light-8); 
+    color: var(--el-color-primary-dark-2);
+}
+
+.mcp-item-right {
+    margin-left: 8px;
+    width: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.active-icon {
+    color: var(--el-color-primary);
+    font-weight: bold;
+}
+
+/* --- 文件卡片容器样式 (原有) --- */
 .file-card-container {
     margin-bottom: 8px;
     display: flex;
@@ -839,6 +1264,7 @@ html.dark .el-divider--vertical {
     border-radius: 12px;
     padding: 10px 12px;
     border: 1px solid #E4E7ED;
+    position: relative; /* 确保绝对定位的 mcp 列表相对此定位 */
 }
 
 html.dark .chat-input-area-vertical {

@@ -55,7 +55,7 @@ const isForcingScroll = ref(false);
 const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
 
-// [新增] 核心状态：是否粘滞在底部
+// 核心状态：是否粘滞在底部
 const isSticky = ref(true);
 let chatObserver = null;    // DOM 观察器实例
 
@@ -329,7 +329,7 @@ const nextButtonTooltip = computed(() => {
   return isViewingLastMessage.value ? '滚动到底部' : '查看下一条消息';
 });
 
-// [修改] 滚动到底部函数
+// 滚动到底部函数
 const scrollToBottom = async (behavior = 'auto') => {
   await nextTick();
   const el = chatContainerRef.value?.$el;
@@ -350,7 +350,7 @@ const scrollToTop = () => {
   }
 };
 
-// [修改] 强制滚动（点击按钮时）
+// 强制滚动（点击按钮时）
 const forceScrollToBottom = () => {
   isForcingScroll.value = true;
   isSticky.value = true; // 强制激活粘滞
@@ -388,7 +388,7 @@ const findFocusedMessageIndex = () => {
   if (closestIndex !== -1) focusedMessageIndex.value = closestIndex;
 };
 
-// [修改] 滚动监听：仅负责更新 isSticky 状态和 UI 按钮显示
+// 滚动监听：仅负责更新 isSticky 状态和 UI 按钮显示
 const handleScroll = (event) => {
   if (isForcingScroll.value) return;
 
@@ -2551,7 +2551,7 @@ const askAI = async (forceSend = false) => {
       });
       currentAssistantChatShowIndex = chat_show.value.length - 1;
 
-      // [修改] 创建新气泡时，如果 Sticky 为 true，MutationObserver 会自动处理滚动
+      // 创建新气泡时，如果 Sticky 为 true，MutationObserver 会自动处理滚动
       // 这里不需要手动调用 scrollToBottom，除非是初始状态强制对齐
       if (isAtBottom.value) scrollToBottom('auto');
 
@@ -2588,7 +2588,7 @@ const askAI = async (forceSend = false) => {
 
             if (Date.now() - lastUpdateTime > 100) {
               chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-              // [修改] 移除了 scrollToBottom 调用 (MutationObserver 接管)
+              // 移除了 scrollToBottom 调用 (MutationObserver 接管)
               lastUpdateTime = Date.now();
             }
           }
@@ -2600,7 +2600,7 @@ const askAI = async (forceSend = false) => {
 
             if (Date.now() - lastUpdateTime > 100) {
               chat_show.value[currentAssistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
-              // [修改] 移除了 scrollToBottom 调用 (MutationObserver 接管)
+              // 移除了 scrollToBottom 调用 (MutationObserver 接管)
               lastUpdateTime = Date.now();
             }
           }
@@ -2668,7 +2668,7 @@ const askAI = async (forceSend = false) => {
         }));
 
         await nextTick();
-        // [修改] 移除了 scrollToBottom
+        // 移除了 scrollToBottom
 
         const toolMessages = await Promise.all(
           responseMessage.tool_calls.map(async (toolCall) => {
@@ -3001,6 +3001,19 @@ function toggleMcpServerSelection(serverId) {
   }
 }
 
+async function handleQuickMcpToggle(serverId) {
+  const index = sessionMcpServerIds.value.indexOf(serverId);
+  if (index === -1) {
+    sessionMcpServerIds.value.push(serverId);
+  } else {
+    sessionMcpServerIds.value.splice(index, 1);
+  }
+  
+  tempSessionMcpServerIds.value = [...sessionMcpServerIds.value];
+  
+  await applyMcpTools(false);
+}
+
 const focusOnInput = () => {
   setTimeout(() => {
     chatInputRef.value?.focus({ cursor: 'end' });
@@ -3243,9 +3256,14 @@ const handleOpenSearch = () => {
         <ChatInput ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
           v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
-          :is-mcp-active="isMcpActive" @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
+          :is-mcp-active="isMcpActive" 
+          :all-mcp-servers="availableMcpServers" 
+          :active-mcp-ids="sessionMcpServerIds"
+          @submit="handleSubmit" @cancel="handleCancel" @clear-history="handleClearHistory"
           @remove-file="handleRemoveFile" @upload="handleUpload" @send-audio="handleSendAudio"
-          @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart" />
+          @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart" 
+          @toggle-mcp="handleQuickMcpToggle"
+          />
       </div>
     </el-container>
   </main>
@@ -3433,12 +3451,10 @@ body {
 html.dark {
   /* 深色模式变量强制覆盖 */
   --el-bg-color: #212121 !important;
-  /* 修复窗口背景色 */
   --el-bg-color-userbubble: #2F2F2F;
   --el-fill-color: #424242 !important;
   --el-fill-color-light: #2c2e33 !important;
   --el-bg-color-input: #303030 !important;
-  /* 修复输入框背景色 */
   --el-fill-color-blank: #212121 !important;
 
   --text-primary: #ECECF1 !important;
@@ -3781,6 +3797,14 @@ html.dark .mcp-server-icon {
   margin-left: auto;
 }
 
+.mcp-server-tags .el-tag {
+  padding-top:0px;
+  padding-bottom:2px;
+  padding-left: 8px;
+  padding-right: 8px;
+
+}
+
 .mcp-server-description {
   font-size: 12px;
   color: var(--el-text-color-secondary);
@@ -3892,13 +3916,6 @@ html.dark .mcp-dialog-footer-search {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.mcp-server-tags {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 4px;
-  flex-shrink: 0;
 }
 
 /* 第二行：Body (Toggle + Description) */
@@ -4317,7 +4334,6 @@ html.dark .persistent-btn:hover {
   background-repeat: no-repeat;
   pointer-events: none;
   will-change: transform, opacity;
-  /* [修改] 增加 opacity 优化 */
   transform: translateZ(0);
 
   /* 核心优化：默认透明，且具有过渡效果 */
@@ -4445,6 +4461,34 @@ html.dark .app-container.has-bg :deep(.el-message-box) {
 html.dark .app-container.has-bg :deep(.el-dialog .el-textarea__inner),
 html.dark .app-container.has-bg :deep(.el-dialog .el-input__wrapper) {
   background-color: rgba(20, 20, 20, 0.45) !important;
+}
+
+.app-container.has-bg :deep(.option-selector-wrapper),
+.app-container.has-bg :deep(.waveform-display-area) {
+  background-color: rgba(255, 255, 255, 0.45) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+html.dark .app-container.has-bg :deep(.option-selector-wrapper),
+html.dark .app-container.has-bg :deep(.waveform-display-area) {
+  background-color: rgba(30, 30, 30, 0.45) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.app-container.has-bg :deep(.option-selector-wrapper .el-scrollbar__view) {
+  /* 确保滚动内容区域背景透明，继承父级 */
+  background-color: transparent !important; 
+}
+
+.app-container.has-bg :deep(.recording-status-text) {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+html.dark .app-container.has-bg :deep(.recording-status-text) {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 /* 模型选择药丸 */
