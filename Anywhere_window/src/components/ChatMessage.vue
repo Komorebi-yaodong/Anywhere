@@ -201,14 +201,15 @@ const renderedMarkdownContent = computed(() => {
   });
 
   // 全局将 &gt; 恢复为 >
-  // DOMPurify 会将 Markdown 的引用符号 ">" 转义为 "&gt;"，导致无法渲染为引用块。
-  // 这里将其还原。由于我们不还原 &lt; (<)，所以不会引入 XSS 风险（无法构造 <script> 标签）。
   sanitizedPart = sanitizedPart.replace(/&gt;/g, '>');
 
   // 3. 恢复受保护的内容（代码块等）
-  const finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
+  let finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
     return protectedMap.get(placeholder) || placeholder;
   });
+
+  // 匹配 <table...> 标签并包裹 div，利用正则确保只匹配实际的标签
+  finalContent = finalContent.replace(/<table/g, '<div class="table-scroll-wrapper"><table').replace(/<\/table>/g, '</table></div>');
 
   if (!finalContent && props.message.role === 'assistant') return ' ';
   return finalContent || ' ';
@@ -671,6 +672,31 @@ html.dark .chat-message .ai-bubble {
     }
   }
 
+  :deep(.table-scroll-wrapper) {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 1em;
+    border-radius: 6px;
+
+    /* 移动滚动条样式到容器上 */
+    &::-webkit-scrollbar {
+      height: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background-color: var(--el-text-color-disabled);
+      border-radius: 3px;
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background-color: var(--el-text-color-secondary);
+    }
+  }
+
   html.dark & :deep(.chat-audio-player) {
     accent-color: var(--text-primary);
 
@@ -814,13 +840,12 @@ html.dark .chat-message .ai-bubble {
     }
 
     :deep(table) {
-      display: block;
-      overflow-x: auto;
+      display: table;
       width: 100%;
       max-width: 100%;
       border-spacing: 0;
       border-collapse: collapse;
-      margin-bottom: 1em;
+      margin-bottom: 0;
 
       /* 优化表格滚动条样式 */
       &::-webkit-scrollbar {
@@ -902,9 +927,11 @@ html.dark .chat-message .ai-bubble {
         .el-tabs__nav {
           background-color: #2c2e33;
         }
+
         .el-tabs__item.is-active {
           color: #202123 !important;
         }
+
         .el-tabs__item:hover {
           color: #202123 !important;
         }
@@ -1373,7 +1400,7 @@ html.dark .stop-btn-wrapper {
       max-height: 150px;
       overflow: auto;
       font-size: 12px;
-      white-space: pre-wrap; 
+      white-space: pre-wrap;
       word-break: break-all;
 
       code {

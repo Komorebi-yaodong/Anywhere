@@ -1075,14 +1075,14 @@ const handlers = {
 
             // [新增] 高危命令简单拦截
             const dangerousPatterns = [
-                /^rm\s+(-rf|-r|-f)\s+\/$/i, // rm -rf /
+                /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i, // rm -rf / (防止误删根目录)
                 />\s*\/dev\/sd/i,     // 写入设备
-                /mkfs/i, 
-                /dd\s+/i,
-                /wget\s+/i,           // 防止下载木马
-                /curl\s+.*\|\s*sh/i,  // 管道执行网络脚本
-                /chmod\s+777/i,
-                /cat\s+.*id_rsa/i     // 读取私钥
+                /\bmkfs\b/i,          // mkfs 格式化
+                /\bdd\s+/i,           // dd (使用单词边界，修复 pnpm add 误判)
+                /\bwget\s+/i,         // wget 下载
+                /\bcurl\s+.*\|\s*sh/i,// curl | sh 管道执行
+                /\bchmod\s+777/i,     // chmod 777
+                /\bcat\s+.*id_rsa/i   // 读取私钥
             ];
             
             if (dangerousPatterns.some(p => p.test(trimmedCmd))) {
