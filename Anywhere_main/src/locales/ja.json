@@ -6,7 +6,8 @@
       "mcp": "MCPサーバー 🔧",
       "skills": "スキル 📚",
       "providers": "サービスプロバイダー ☁️",
-      "settings": "設定 ⚙️"
+      "settings": "設定 ⚙️",
+      "help": "利用ガイド"
     },
     "tabs": {
       "chats": "過去の対話",
@@ -15,6 +16,20 @@
       "skills": "スキル",
       "providers": "サービスプロバイダー",
       "settings": "設定"
+    }
+  },
+  "doc": {
+    "title": "Anywhere 利用ガイド",
+    "loading": "ドキュメントを読み込み中...",
+    "loadFailed": "ドキュメントの読み込みに失敗しました。ネットワーク接続を確認してください。",
+    "checkNetwork": "GitHubまたはそのミラーサイトにアクセスできることを確認してください。",
+    "titles": {
+      "ai": "クイックアシスタント",
+      "chat": "過去の対話",
+      "mcp": "MCPサーバー",
+      "skill": "スキル",
+      "provider": "サービスプロバイダー",
+      "setting": "設定"
     }
   },
   "chats": {

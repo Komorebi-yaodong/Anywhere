@@ -6,7 +6,8 @@
       "mcp": "MCP Servers 🔧",
       "skills": "Skills 📚",
       "providers": "Providers ☁️",
-      "settings": "Settings ⚙️"
+      "settings": "Settings ⚙️",
+      "help": "User Guide"
     },
     "tabs": {
       "chats": "Chat History",
@@ -15,6 +16,20 @@
       "skills": "Skills",
       "providers": "Providers",
       "settings": "Settings"
+    }
+  },
+  "doc": {
+    "title": "Anywhere User Guide",
+    "loading": "Loading documentation...",
+    "loadFailed": "Failed to load documentation. Please check your network connection.",
+    "checkNetwork": "Please ensure you can access GitHub or its mirrors.",
+    "titles": {
+      "ai": "Agent Prompts",
+      "chat": "Chat History",
+      "mcp": "MCP Servers",
+      "skill": "Skill Library",
+      "provider": "Providers",
+      "setting": "Settings"
     }
   },
   "chats": {

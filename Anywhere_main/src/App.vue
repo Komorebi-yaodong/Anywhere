@@ -1,14 +1,16 @@
 <script setup>
-import { ref, watch, onMounted, provide, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted, provide, onBeforeUnmount, computed } from 'vue'
 import Chats from './components/Chats.vue'
 import Prompts from './components/Prompts.vue'
-import Mcp from './components/Mcp.vue' // 引入新组件
+import Mcp from './components/Mcp.vue'
 import Setting from './components/Setting.vue'
 import Providers from './components/Providers.vue'
 import Skills from './components/Skills.vue'
 
 import { useI18n } from 'vue-i18n'
-import { ChatDotRound, MagicStick, Cloudy, Setting as SettingIcon, Collection } from '@element-plus/icons-vue' // 移除 Server
+import { Collection, Bell, Document } from '@element-plus/icons-vue'
+import { marked } from 'marked';
+import { ElBadge } from 'element-plus'; // 确保引入 ElBadge
 
 const { t, locale } = useI18n()
 const tab = ref(0);
@@ -27,7 +29,7 @@ watch(() => config.value?.isDarkMode, (isDark) => {
   } else {
     document.documentElement.classList.remove('dark');
   }
-}, { deep: true }); // [MODIFIED] deep watch might be more robust here
+}, { deep: true });
 
 const handleGlobalEsc = (e) => {
   if (e.key === 'Escape') {
@@ -55,7 +57,6 @@ const handleGlobalEsc = (e) => {
       e.stopPropagation();
 
       // A. 尝试点击右上角的关闭(X)按钮
-      // 同时支持 Dialog 和 MessageBox 的关闭按钮类名
       const headerBtn = topOverlay.querySelector('.el-dialog__headerbtn, .el-message-box__headerbtn');
       if (headerBtn) {
         headerBtn.click();
@@ -63,7 +64,6 @@ const handleGlobalEsc = (e) => {
       }
 
       // B. 尝试点击底部的取消/关闭按钮
-      // 同时支持 Dialog Footer 和 MessageBox Buttons 容器
       const footer = topOverlay.querySelector('.el-dialog__footer, .el-message-box__btns');
       if (footer) {
         // 特殊处理 Setting.vue 中备份管理的布局 (关闭按钮在 .footer-right)
@@ -98,7 +98,186 @@ const handleSystemThemeChange = (e) => {
   }
 };
 
+const showDocDialog = ref(false);
+const docLoading = ref(false);
+const currentDocContent = ref('');
+const activeDocIndex = ref('0');
+
+// 文档列表配置，增加 i18nKey 用于动态标题，lastUpdated 动态获取
+const docList = ref([
+  { i18nKey: 'doc.titles.chat', file: 'chat_doc.md', lastUpdated: null },
+  { i18nKey: 'doc.titles.ai', file: 'ai_doc.md', lastUpdated: null },
+  { i18nKey: 'doc.titles.mcp', file: 'mcp_doc.md', lastUpdated: null },
+  { i18nKey: 'doc.titles.skill', file: 'skill_doc.md', lastUpdated: null },
+  { i18nKey: 'doc.titles.provider', file: 'provider_doc.md', lastUpdated: null },
+  { i18nKey: 'doc.titles.setting', file: 'setting_doc.md', lastUpdated: null }
+]);
+
+// 阅读状态管理
+const readStatusKey = 'anywhere_doc_last_read';
+const docReadMap = ref({});
+
+// 初始化读取状态
+const loadReadStatus = () => {
+  try {
+    const stored = localStorage.getItem(readStatusKey);
+    docReadMap.value = stored ? JSON.parse(stored) : {};
+  } catch (e) {
+    docReadMap.value = {};
+  }
+};
+
+// 预取所有文档的元数据（更新时间）
+const fetchAllDocsMetadata = async () => {
+  // 使用镜像代理
+  const baseUrl = 'https://raw.githubusercontent.com/Komorebi-yaodong/Anywhere/main/docs/';
+  // 正则匹配：**文档更新时间：2026年1月28日**
+  const dateRegex = /\*\*文档更新时间：(\d{4})年(\d{1,2})月(\d{1,2})日\*\*/;
+
+  const promises = docList.value.map(async (doc) => {
+    try {
+      const response = await fetch(`${baseUrl}${doc.file}`);
+      if (!response.ok) return;
+      const text = await response.text();
+      
+      const match = text.match(dateRegex);
+      if (match) {
+        // 转换为兼容格式 YYYY/MM/DD 00:00:00
+        const year = match[1];
+        const month = match[2];
+        const day = match[3];
+        // 假设更新时间为当天的开始，确保只要用户在当天任意时刻阅读过，updatedTime(00:00) <= readTime(XX:XX) 就会不显示红点
+        doc.lastUpdated = `${year}/${month}/${day} 00:00:00`;
+      }
+    } catch (e) {
+      console.warn(`Failed to fetch metadata for ${doc.file}`, e);
+    }
+  });
+
+  await Promise.all(promises);
+};
+
+// 检查是否有更新
+const checkDocHasUpdate = (index) => {
+  const doc = docList.value[index];
+  if (!doc || !doc.lastUpdated) return false;
+  
+  const lastRead = docReadMap.value[doc.file];
+  // 如果从未读过，或者更新时间晚于阅读时间，显示红点
+  if (!lastRead) return true;
+  
+  // Date比较
+  const updateTime = new Date(doc.lastUpdated).getTime();
+  const readTime = new Date(lastRead).getTime();
+  
+  return updateTime > readTime;
+};
+
+// 检查是否有任意文档更新（用于铃铛图标）
+const hasAnyUpdate = computed(() => {
+  return docList.value.some((_, index) => checkDocHasUpdate(index));
+});
+
+// 标记文档为已读
+const markDocAsRead = (filename) => {
+  // 通过解构赋值替换对象，确保 Vue 强制触发响应式更新
+  const newMap = { ...docReadMap.value };
+  newMap[filename] = new Date().toISOString();
+  docReadMap.value = newMap;
+  
+  localStorage.setItem(readStatusKey, JSON.stringify(newMap));
+};
+
+const fetchAndParseDoc = async (filename) => {
+  // 标记当前文档为已读
+  markDocAsRead(filename);
+
+  docLoading.value = true;
+  try {
+    // 使用 GitHub 镜像代理地址
+    const baseUrl = 'https://raw.githubusercontent.com/Komorebi-yaodong/Anywhere/main/docs/';
+    const response = await fetch(`${baseUrl}${filename}`);
+    if (!response.ok) throw new Error('Network response was not ok');
+    
+    let text = await response.text();
+
+    // 图片路径修正逻辑 (同样使用镜像)
+    const imgBaseUrl = 'https://raw.githubusercontent.com/Komorebi-yaodong/Anywhere/main/image/';
+    
+    // 替换 Windows 风格反斜杠路径 (..\image\) 和 Unix 风格路径 (../image/)
+    text = text.replace(/!\[(.*?)\]\((\.\.[\\/])?image[\\/](.*?)\)/g, (match, alt, prefix, filename) => {
+        // 对文件名进行 encodeURI 处理，防止中文乱码
+        return `![${alt}](${imgBaseUrl}${encodeURIComponent(filename)})`;
+    });
+
+    currentDocContent.value = marked.parse(text);
+  } catch (error) {
+    console.error('Failed to load doc:', error);
+    currentDocContent.value = `<h3>${t('doc.loadFailed')}</h3><p>${t('doc.checkNetwork')}</p>`;
+  } finally {
+    docLoading.value = false;
+  }
+};
+
+// 监听文档切换
+watch(activeDocIndex, (newIndex) => {
+  const doc = docList.value[newIndex];
+  if (doc) {
+    fetchAndParseDoc(doc.file);
+  }
+});
+
+// 打开弹窗时加载第一个文档，并更新阅读状态
+const openHelpDialog = () => {
+  loadReadStatus(); // 读取本地存储状态
+  showDocDialog.value = true;
+  
+  const index = parseInt(activeDocIndex.value) || 0;
+  const targetDoc = docList.value[index];
+  
+  if (targetDoc) {
+    // 无论是首次打开还是切换，都重新加载（可能内容有变）并标记已读
+    fetchAndParseDoc(targetDoc.file);
+  }
+};
+
+const handleDocLinks = (event) => {
+  const target = event.target.closest('a');
+  if (!target) return;
+
+  // 阻止默认跳转（防止在当前窗口打开导致页面白屏）
+  event.preventDefault();
+  
+  const href = target.getAttribute('href');
+  if (!href) return;
+
+  // 1. 处理 HTTP/HTTPS 外部链接 -> 调用系统浏览器打开
+  if (href.startsWith('http://') || href.startsWith('https://')) {
+    if (window.utools && window.utools.shellOpenExternal) {
+      window.utools.shellOpenExternal(href);
+    } else {
+      window.open(href, '_blank'); // 兜底方案
+    }
+    return;
+  }
+
+  // 2. 处理文档间跳转 (例如: ./mcp_doc.md) -> 切换左侧菜单
+  if (href.endsWith('.md')) {
+    // 提取文件名 (兼容 ./xxx.md 或 xxx.md)
+    const filename = href.split(/[/\\]/).pop();
+    const targetIndex = docList.value.findIndex(doc => doc.file === filename);
+    
+    if (targetIndex !== -1) {
+      activeDocIndex.value = String(targetIndex);
+    }
+  }
+};
+
 onMounted(async () => {
+  loadReadStatus(); // 初始化时读取一次
+  // 异步获取文档更新时间，获取后会自动更新UI红点
+  fetchAllDocsMetadata();
+
   window.addEventListener('keydown', handleGlobalEsc, true);
   mediaQuery.addEventListener('change', handleSystemThemeChange);
   try {
@@ -160,7 +339,17 @@ watch(locale, () => {
   <el-container class="common-layout">
     <el-header>
       <el-row :gutter="0" class="header-row" align="middle">
-        <el-col :span="6" class="blank-col"></el-col>
+        <!-- 左侧：帮助文档按钮 -->
+        <el-col :span="6" class="left-actions-col">
+          <el-tooltip :content="t('app.header.help') || '使用指南'" placement="bottom">
+            <el-button class="tab-button" text @click="openHelpDialog">
+              <el-badge :is-dot="hasAnyUpdate" class="bell-badge">
+                <el-icon :size="20"><Bell /></el-icon>
+              </el-badge>
+            </el-button>
+          </el-tooltip>
+        </el-col>
+        
         <el-col :span="12" class="header-title-col">
           <el-text class="header-title-text">{{ header_text }}</el-text>
         </el-col>
@@ -261,6 +450,29 @@ watch(locale, () => {
       <Providers v-if="tab === 4" key="providers" />
       <Setting v-if="tab === 5" key="settings" />
     </el-main>
+
+    <!-- 帮助文档弹窗 -->
+    <el-dialog v-model="showDocDialog" :title="t('doc.title')" width="80%" :lock-scroll="false" class="doc-dialog">
+      <div class="doc-container">
+        <div class="doc-sidebar">
+          <el-menu :default-active="activeDocIndex" @select="(index) => activeDocIndex = index" class="doc-menu">
+            <el-menu-item v-for="(doc, index) in docList" :key="index" :index="String(index)">
+              <el-icon><Document /></el-icon>
+              <span class="menu-item-text">
+                {{ t(doc.i18nKey) }}
+                <!-- 文档具体红点 -->
+                <span v-if="checkDocHasUpdate(index)" class="doc-update-dot"></span>
+              </span>
+            </el-menu-item>
+          </el-menu>
+        </div>
+        <div class="doc-content" v-loading="docLoading" :element-loading-text="t('doc.loading')">
+          <el-scrollbar height="60vh">
+            <div class="markdown-body" v-html="currentDocContent" @click="handleDocLinks"></div>
+          </el-scrollbar>
+        </div>
+      </div>
+    </el-dialog>
   </el-container>
 </template>
 
@@ -350,5 +562,217 @@ watch(locale, () => {
 
 .blank-col {
   min-width: 32px;
+}
+
+.left-actions-col {
+  display: flex;
+  align-items: center;
+  padding-left: 20px;
+}
+
+/* 修复双重 Border 问题：移除上边框，仅保留其他三边 */
+.doc-container {
+  display: flex;
+  height: 60vh;
+  border: 1px solid var(--border-primary);
+  border-top: none; /* 关键修复 */
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+  overflow: hidden;
+}
+
+/* 铃铛徽章样式微调 */
+.bell-badge :deep(.el-badge__content.is-fixed.is-dot) {
+  right: 2px;
+  top: 2px;
+}
+
+.doc-sidebar {
+  width: 150px;
+  border-right: 1px solid var(--border-primary);
+  background-color: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.doc-menu {
+  border-right: none;
+  background-color: transparent;
+}
+
+.doc-menu :deep(.el-menu-item) {
+  height: 40px;
+  line-height: 40px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.doc-menu :deep(.el-menu-item:hover) {
+  background-color: var(--bg-tertiary);
+}
+
+.doc-menu :deep(.el-menu-item.is-active) {
+  color: var(--text-accent);
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+  border-right: 2px solid var(--text-accent);
+}
+
+/* 侧边栏菜单项布局：文字与红点分离 */
+.menu-item-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* 文档更新红点样式 */
+.doc-update-dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--el-color-danger);
+  border-radius: 50%;
+  margin-left: 8px;
+  display: inline-block;
+}
+
+.doc-content {
+  flex: 1;
+  background-color: var(--bg-primary);
+  padding: 0;
+  overflow: hidden;
+}
+
+.markdown-body {
+  padding: 0px 40px;
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-size: 15px; /* 稍微调大字号更易阅读 */
+  line-height: 1.75; /* 增加行高，增加呼吸感 */
+  -webkit-font-smoothing: antialiased; /* 让字体在 Mac 上更清晰 */
+}
+
+/* 标题样式优化 */
+.markdown-body :deep(h1), 
+.markdown-body :deep(h2) {
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 0.4em;
+  margin-top: 1.5em;
+  margin-bottom: 1em;
+  color: var(--text-primary);
+  font-weight: 700; /* 强制加粗 */
+  letter-spacing: -0.01em; /* 标题字间距微调 */
+  line-height: 1.3;
+}
+
+.markdown-body :deep(h3), 
+.markdown-body :deep(h4) {
+  margin-top: 1.4em;
+  margin-bottom: 0.8em;
+  color: var(--text-primary);
+  font-weight: 600; /* 强制加粗 */
+  line-height: 1.4;
+}
+
+/* 正文段落 */
+.markdown-body :deep(p) {
+  margin-bottom: 1.2em;
+  text-align: justify; /* 两端对齐，使大段文字更整齐 */
+}
+
+/* 列表优化 */
+.markdown-body :deep(ul), 
+.markdown-body :deep(ol) {
+  padding-left: 24px;
+  margin-bottom: 1.2em;
+}
+
+.markdown-body :deep(li) {
+  margin-bottom: 0.4em; /* 列表项之间增加一点间距 */
+}
+
+/* 粗体优化 */
+.markdown-body :deep(strong),
+.markdown-body :deep(b) {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* 行内代码块优化 */
+.markdown-body :deep(code) {
+  background-color: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  /* 等宽字体栈 */
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.85em;
+  color: var(--el-color-primary); /* 使用主题色，让代码更显眼 */
+  margin: 0 2px;
+}
+
+/* 多行代码块 */
+.markdown-body :deep(pre) {
+  background-color: var(--bg-tertiary);
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 1.2em;
+  line-height: 1.5;
+  border: 1px solid var(--border-primary);
+}
+
+.markdown-body :deep(pre code) {
+  background-color: transparent;
+  padding: 0;
+  color: var(--text-primary);
+  margin: 0;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* 引用块优化 */
+.markdown-body :deep(blockquote) {
+  margin: 1.2em 0;
+  padding: 8px 16px;
+  color: var(--text-secondary);
+  border-left: 4px solid var(--el-color-primary); /* 使用主题色作为边框 */
+  background-color: var(--bg-tertiary); /* 改用浅色背景而不是纯灰 */
+  border-radius: 0 4px 4px 0;
+}
+
+.markdown-body :deep(blockquote p) {
+  margin-bottom: 0; /* 引用块内的段落去掉底部间距 */
+}
+
+/* 图片优化 */
+.markdown-body :deep(img) {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 12px 0;
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); /* 增加轻微阴影 */
+  display: block; /* 防止图片底部有空隙 */
+}
+
+/* 链接优化 */
+.markdown-body :deep(a) {
+  color: var(--el-color-primary);
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+  cursor: pointer;
+}
+.markdown-body :deep(a:hover) {
+  border-bottom-color: var(--el-color-primary); /* 悬浮时显示下划线效果 */
+}
+
+/* 弹窗样式微调 */
+:deep(.doc-dialog .el-dialog__body) {
+  padding: 0 !important;
+}
+:deep(.doc-dialog .el-dialog__header) {
+  padding: 5px 15px 15px 15px !important;
+  margin-right: 0;
+  border-bottom: 1px solid var(--border-primary);
 }
 </style>
