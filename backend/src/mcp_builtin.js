@@ -166,7 +166,7 @@ const BUILTIN_SERVERS = {
         name: "Python Executor",
         description: "自动检测环境，执行本地 Python 脚本。",
         type: "builtin",
-        isActive: false,
+        isActive: true,
         isPersistent: false,
         tags: ["python", "code"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/commons/c/c3/Python-logo-notext.svg"
@@ -176,7 +176,7 @@ const BUILTIN_SERVERS = {
         name: "File Operations",
         description: "全能文件操作工具。支持 Glob 文件匹配、Grep 内容搜索、以及文件的读取、编辑和写入。支持本地文件及远程URL。",
         type: "builtin",
-        isActive: false,
+        isActive: true,
         isPersistent: false,
         tags: ["file", "fs", "read", "write", "edit", "search"],
         logoUrl: "https://cdn-icons-png.flaticon.com/512/2965/2965335.png"
@@ -186,7 +186,7 @@ const BUILTIN_SERVERS = {
         name: "Shell Executor",
         description: isWin ? "执行 PowerShell 命令" : "执行 Bash 命令",
         type: "builtin",
-        isActive: false,
+        isActive: true,
         isPersistent: false,
         tags: ["shell", "bash", "cmd"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Bash_Logo_Colored.svg"
@@ -196,7 +196,7 @@ const BUILTIN_SERVERS = {
         name: "Web Search",
         description: "使用 DuckDuckGo 进行免费联网搜索，获取相关网页标题、链接和摘要；抓取网页内容。",
         type: "builtin",
-        isActive: false,
+        isActive: true,
         isPersistent: false,
         tags: ["search", "web", "fetch"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/en/9/90/The_DuckDuckGo_Duck.png"
@@ -206,7 +206,7 @@ const BUILTIN_SERVERS = {
         name: "Sub-Agent",
         description: "一个能够自主规划的子智能体。主智能体需显式分配工具给它。",
         type: "builtin",
-        isActive: false,
+        isActive: true,
         isPersistent: false,
         tags: ["agent"],
         logoUrl: "https://s2.loli.net/2026/01/22/tTsJjkpiOYAeGdy.png"
@@ -450,15 +450,18 @@ const globToRegex = (glob) => {
 const normalizePath = (p) => p.split(path.sep).join('/');
 
 // 递归文件遍历器
-async function* walkDir(dir, maxDepth = 20, currentDepth = 0) {
+async function* walkDir(dir, maxDepth = 20, currentDepth = 0, signal = null) {
+    if (signal && signal.aborted) return; // 响应中断
     if (currentDepth > maxDepth) return;
     try {
         const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
         for (const dirent of dirents) {
+            if (signal && signal.aborted) return; // 循环中响应中断
+            
             const res = path.resolve(dir, dirent.name);
             if (dirent.isDirectory()) {
-                if (['node_modules', '.git', '.idea', '.vscode', 'dist', 'build', '__pycache__'].includes(dirent.name)) continue;
-                yield* walkDir(res, maxDepth, currentDepth + 1);
+                if (['node_modules', '.git', '.idea', '.vscode', 'dist', 'build', '__pycache__', '$RECYCLE.BIN', 'System Volume Information'].includes(dirent.name)) continue;
+                yield* walkDir(res, maxDepth, currentDepth + 1, signal);
             } else {
                 yield res;
             }
@@ -529,7 +532,7 @@ const findAllPythonPaths = () => {
     });
 };
 
-const runPythonScript = (code, interpreter) => {
+const runPythonScript = (code, interpreter, signal = null) => {
     return new Promise(async (resolve, reject) => {
         let pythonPath = interpreter;
         if (!pythonPath) {
@@ -550,6 +553,15 @@ const runPythonScript = (code, interpreter) => {
         
         const child = spawn(pythonPath, [tempFile], { env });
 
+        // 监听中断信号
+        if (signal) {
+            signal.addEventListener('abort', () => {
+                child.kill(); // 杀死子进程
+                fs.unlink(tempFile, () => { }); // 清理临时文件
+                resolve("Operation aborted by user.");
+            });
+        }
+
         let output = "";
         let errorOutput = "";
 
@@ -558,6 +570,7 @@ const runPythonScript = (code, interpreter) => {
 
         child.on('close', (code) => {
             fs.unlink(tempFile, () => { }); // Cleanup
+            if (signal && signal.aborted) return; // 如果已中断，忽略 close 事件
             if (code === 0) {
                 resolve(output || "Execution completed with no output.");
             } else {
@@ -808,15 +821,13 @@ const handlers = {
         const paths = await findAllPythonPaths();
         return JSON.stringify(paths, null, 2);
     },
-    run_python_code: async ({ code, interpreter }) => {
-        return await runPythonScript(code, interpreter);
+    run_python_code: async ({ code, interpreter }, context, signal) => {
+        return await runPythonScript(code, interpreter, signal);
     },
-    run_python_file: async ({ file_path, working_directory, interpreter, args = [] }) => {
+    run_python_file: async ({ file_path, working_directory, interpreter, args = [] }, context, signal) => {
         return new Promise(async (resolve, reject) => {
             const cleanPath = file_path.replace(/^["']|["']$/g, '');
-            if (!fs.existsSync(cleanPath)) {
-                return resolve(`Error: Python file not found at ${cleanPath}`);
-            }
+            if (!fs.existsSync(cleanPath)) return resolve(`Error: Python file not found at ${cleanPath}`);
 
             let pythonPath = interpreter;
             if (!pythonPath) {
@@ -825,15 +836,21 @@ const handlers = {
             }
 
             const cwd = working_directory ? working_directory.replace(/^["']|["']$/g, '') : path.dirname(cleanPath);
-            if (!fs.existsSync(cwd)) {
-                 return resolve(`Error: Working directory not found at ${cwd}`);
-            }
+            if (!fs.existsSync(cwd)) return resolve(`Error: Working directory not found at ${cwd}`);
 
             const scriptArgs = Array.isArray(args) ? args : [args];
             const spawnArgs = [cleanPath, ...scriptArgs];
             const env = { ...process.env, PYTHONIOENCODING: 'utf-8' };
 
             const child = spawn(pythonPath, spawnArgs, { cwd, env });
+
+            // 中断处理
+            if (signal) {
+                signal.addEventListener('abort', () => {
+                    child.kill();
+                    resolve('Execution aborted by user.');
+                });
+            }
 
             let output = "";
             let errorOutput = "";
@@ -842,6 +859,7 @@ const handlers = {
             child.stderr.on('data', (data) => { errorOutput += data.toString(); });
 
             child.on('close', (code) => {
+                if (signal && signal.aborted) return;
                 const header = `[Executed: ${path.basename(cleanPath)}]\n[CWD: ${cwd}]\n-------------------\n`;
                 if (code === 0) {
                     resolve(header + (output || "Execution completed with no output."));
@@ -859,23 +877,53 @@ const handlers = {
     // --- File Operations Handlers ---
 
     // 1. Glob Files
-    glob_files: async ({ pattern, path: searchPath }) => {
+    glob_files: async ({ pattern, path: searchPath }, context, signal) => {
         try {
-            const rootDir = resolvePath(searchPath);
+            let rootDir = "";
+            let globPattern = pattern;
+
+            // 检测是否以盘符开头 (Win) 或 / 开头 (Unix)，且 searchPath 未指定或为默认
+            const isAbsolutePath = path.isAbsolute(pattern) || /^[a-zA-Z]:[\\/]/.test(pattern);
+            
+            if (isAbsolutePath) {
+                const magicIndex = pattern.search(/[*?\[{]/);
+                if (magicIndex > -1) {
+                    const basePath = pattern.substring(0, magicIndex);
+                    const lastSep = Math.max(basePath.lastIndexOf('/'), basePath.lastIndexOf('\\'));
+                    
+                    if (lastSep > -1) {
+                        rootDir = basePath.substring(0, lastSep + 1); // 包含分隔符
+                        globPattern = pattern.substring(lastSep + 1); // 剩余部分作为 pattern
+                        
+                        if (!searchPath || searchPath === '~' || searchPath === os.homedir()) {
+                            searchPath = rootDir;
+                        } else {
+                            globPattern = pattern.replace(normalizePath(resolvePath(searchPath)), '').replace(/^[\\/]/, '');
+                        }
+                    }
+                }
+            }
+            // -----------------------------------------------------------
+
+            rootDir = resolvePath(searchPath);
             if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
             if (!isPathSafe(rootDir)) return `[Security Block] Access restricted.`;
 
             const results = [];
-            const regex = globToRegex(pattern);
+            // 如果 globPattern 为空（完全被提取为路径），默认匹配所有
+            const regex = globToRegex(globPattern || "**/*");
             if (!regex) return "Error: Invalid glob pattern.";
 
-            const MAX_RESULTS = 200; 
+            const MAX_RESULTS = 5000; 
             const normalizedRoot = normalizePath(rootDir);
 
-            for await (const filePath of walkDir(rootDir)) {
+            // 传递 signal 给 walkDir
+            for await (const filePath of walkDir(rootDir, 20, 0, signal)) {
+                if (signal && signal.aborted) throw new Error("Operation aborted by user.");
+
                 const normalizedFilePath = normalizePath(filePath);
                 
-                // 计算相对路径：例如 "src/main.ts"
+                // 计算相对路径
                 let relativePath = normalizedFilePath.replace(normalizedRoot, '');
                 if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
 
@@ -886,7 +934,7 @@ const handlers = {
                 if (results.length >= MAX_RESULTS) break;
             }
 
-            if (results.length === 0) return "No files matched the pattern.";
+            if (results.length === 0) return `No files matched in ${rootDir}.`;
             return results.join('\n') + (results.length >= MAX_RESULTS ? `\n... (Limit reached: ${MAX_RESULTS})` : '');
         } catch (e) {
             return `Glob error: ${e.message}`;
@@ -894,7 +942,7 @@ const handlers = {
     },
 
     // 2. Grep Search
-    grep_search: async ({ pattern, path: searchPath, glob, output_mode = 'content', multiline = false }) => {
+    grep_search: async ({ pattern, path: searchPath, glob, output_mode = 'content', multiline = false }, context, signal) => {
         try {
             const rootDir = resolvePath(searchPath);
             if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
@@ -910,11 +958,16 @@ const handlers = {
             
             const results = [];
             let matchCount = 0;
-            const MAX_SCANNED = 2000; 
+            const MAX_SCANNED = 5000; // 限制扫描文件数防止卡死
             let scanned = 0;
 
-            for await (const filePath of walkDir(rootDir)) {
-                if (scanned++ > MAX_SCANNED) break;
+            // 传递 signal 给 walkDir
+            for await (const filePath of walkDir(rootDir, 20, 0, signal)) {
+                if (signal && signal.aborted) throw new Error("Operation aborted by user."); // 响应中断
+                if (scanned++ > MAX_SCANNED) {
+                    results.push(`\n[System] Scan limit reached (${MAX_SCANNED} files). Please narrow down your search path.`);
+                    break;
+                }
 
                 // Glob 过滤
                 if (globRegex) {
@@ -931,9 +984,9 @@ const handlers = {
 
                 try {
                     const stats = await fs.promises.stat(filePath);
-                    if (stats.size > 1024 * 1024) continue; 
+                    if (stats.size > 1024 * 1024) continue; // 跳过大文件
 
-                    const content = await fs.promises.readFile(filePath, 'utf-8');
+                    const content = await fs.promises.readFile(filePath, { encoding: 'utf-8', signal }); // [修改] 传递 signal
                     
                     if (output_mode === 'files_with_matches') {
                         if (searchRegex.test(content)) {
@@ -967,7 +1020,7 @@ const handlers = {
     },
 
     // 3. Read File
-    read_file: async ({ file_path, offset = 0, length = MAX_READ }) => {
+    read_file: async ({ file_path, offset = 0, length = MAX_READ }, context, signal) => {
         try {
             const MAX_SINGLE_READ = MAX_READ;
             const readLength = Math.min(length, MAX_SINGLE_READ);
@@ -976,11 +1029,12 @@ const handlers = {
             if (file_path.startsWith('http://') || file_path.startsWith('https://')) {
                 // 处理 URL
                 try {
-                    const response = await fetch(file_path);
+                    // [修改] 传递 signal
+                    const response = await fetch(file_path, { signal });
                     if (!response.ok) {
                         return `Error fetching URL: ${response.status} ${response.statusText}`;
                     }
-
+                    // ... (后续逻辑保持不变)
                     const arrayBuffer = await response.arrayBuffer();
                     const buffer = Buffer.from(arrayBuffer);
                     const base64String = buffer.toString('base64');
@@ -1011,23 +1065,26 @@ const handlers = {
                 
                 if (!fs.existsSync(safePath)) return `Error: File not found at ${safePath}`;
 
+                // 传递 signal 给 readFile (Node v14.17+ 支持)
+                const fileBuffer = await fs.promises.readFile(safePath, { signal });
                 const stats = await fs.promises.stat(safePath);
-                // 仅针对非文本的复杂解析文件（如 PDF）限制原始大小（50MB），普通文本读取由下方的字符截断控制
+
                 if (stats.size > 200 * 1024 * 1024) {
-                    return `Error: File is too large for processing (>50MB).`;
+                    return `Error: File is too large for processing (>200MB).`;
                 }
 
-                const fileObj = await handleFilePath(safePath);
-                if (!fileObj) return `Error: Unable to access or read file at ${safePath}`;
-
-                const arrayBuffer = await fileObj.arrayBuffer();
-                const base64String = Buffer.from(arrayBuffer).toString('base64');
-                const dataUrl = `data:${fileObj.type || 'application/octet-stream'};base64,${base64String}`;
+                // 构造 File 对象逻辑简化，避免依赖前端对象
+                // 这里直接用 buffer 处理
+                const base64String = fileBuffer.toString('base64');
+                const ext = path.extname(safePath).toLowerCase();
+                // 简单的 mime 推断
+                const mime = {'.png':'image/png','.jpg':'image/jpeg','.pdf':'application/pdf'}[ext] || 'application/octet-stream';
+                const dataUrl = `data:${mime};base64,${base64String}`;
                 
                 fileForHandler = {
-                    name: fileObj.name,
-                    size: fileObj.size,
-                    type: fileObj.type,
+                    name: path.basename(safePath),
+                    size: stats.size,
+                    type: mime,
                     url: dataUrl 
                 };
             }
@@ -1126,7 +1183,7 @@ const handlers = {
     },
 
     // Bash / PowerShell
-    execute_bash_command: async ({ command, timeout = 15000 }) => {
+    execute_bash_command: async ({ command, timeout = 15000 }, context, signal) => {
         return new Promise((resolve) => {
             const trimmedCmd = command.trim();
 
@@ -1149,7 +1206,6 @@ const handlers = {
             if (trimmedCmd.startsWith('cd ')) {
                 let targetDir = trimmedCmd.substring(3).trim();
                 targetDir = targetDir.replace(/^["']|["']$/g, '');
-                
                 try {
                     const newPath = path.resolve(bashCwd, targetDir);
                     if (fs.existsSync(newPath) && fs.statSync(newPath).isDirectory()) {
@@ -1163,13 +1219,12 @@ const handlers = {
                 }
             }
 
-            // 确保 timeout 是有效的正整数，如果未提供或无效则回退到 15000
             const validTimeout = (typeof timeout === 'number' && timeout > 0) ? timeout : 15000;
 
             let shellOptions = {
                 cwd: bashCwd,
                 encoding: 'utf-8',
-                maxBuffer: 1024 * 1024 * 10, // 稍微调大一点 buffer 防止大量输出截断
+                maxBuffer: 1024 * 1024 * 10,
                 timeout: validTimeout 
             };
 
@@ -1185,7 +1240,8 @@ const handlers = {
                 shellOptions.shell = shellToUse;
             }
 
-            exec(finalCommand, shellOptions, (error, stdout, stderr) => {
+            // 保存子进程引用
+            const child = exec(finalCommand, shellOptions, (error, stdout, stderr) => {
                 let result = "";
                 
                 if (stdout) result += stdout;
@@ -1193,7 +1249,9 @@ const handlers = {
                 
                 if (error) {
                     if (error.signal === 'SIGTERM') {
-                        result += `\n[System Note]: Command timed out after ${validTimeout / 1000}s and was terminated. This is expected for long-running processes. Output captured so far is shown above.`;
+                        result += `\n[System Note]: Command timed out after ${validTimeout / 1000}s and was terminated.`;
+                    } else if (error.killed) {
+                        result += `\n[System Note]: Command was aborted by user.`;
                     } else {
                         result += `\n[Error Code]: ${error.code}`;
                         if (error.message && !stderr) result += `\n[Message]: ${error.message}`;
@@ -1203,20 +1261,26 @@ const handlers = {
                 if (!result.trim()) result = "Command executed successfully (no output).";
                 resolve(`[CWD: ${bashCwd}]\n${result}`);
             });
+
+            // 响应中断信号
+            if (signal) {
+                signal.addEventListener('abort', () => {
+                    child.kill(); // 杀死子进程
+                });
+            }
         });
     },
 
     // Web Search Handler
-    web_search: async ({ query, count = 5, language = 'zh-CN' }) => {
+    web_search: async ({ query, count = 5, language = 'zh-CN' }, context, signal) => {
         try {
             const limit = Math.min(Math.max(parseInt(count) || 5, 1), 10);
             const url = "https://html.duckduckgo.com/html/";
             
-            let ddgRegion = 'cn-zh'; // 默认: 中国-中文
-            let acceptLang = 'zh-CN,zh;q=0.9,en;q=0.8'; // 默认 Header
+            let ddgRegion = 'cn-zh';
+            let acceptLang = 'zh-CN,zh;q=0.9,en;q=0.8';
             
             const langInput = (language || '').toLowerCase();
-
             if (langInput.includes('en') || langInput.includes('us')) {
                 ddgRegion = 'us-en';
                 acceptLang = 'en-US,en;q=0.9';
@@ -1227,14 +1291,14 @@ const handlers = {
                 ddgRegion = 'ru-ru';
                 acceptLang = 'ru-RU,ru;q=0.9,en;q=0.8';
             } else if (langInput === 'all' || langInput === 'world') {
-                ddgRegion = 'wt-wt'; // 全球
+                ddgRegion = 'wt-wt';
                 acceptLang = 'en-US,en;q=0.9';
             }
 
             const headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language": acceptLang, // 动态语言头
+                "Accept-Language": acceptLang,
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Origin": "https://html.duckduckgo.com",
                 "Referer": "https://html.duckduckgo.com/"
@@ -1243,45 +1307,35 @@ const handlers = {
             const body = new URLSearchParams();
             body.append('q', query);
             body.append('b', '');
-            body.append('kl', ddgRegion); // 动态地区参数
+            body.append('kl', ddgRegion);
 
+            // 传递 signal
             const response = await fetch(url, { 
                 method: 'POST',
                 headers: headers,
-                body: body
+                body: body,
+                signal: signal
             });
 
             if (!response.ok) throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
             const html = await response.text();
-
-            const results = [];
             
+            const results = [];
             const titleLinkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
             const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-
             const titles = [...html.matchAll(titleLinkRegex)];
             const snippets = [...html.matchAll(snippetRegex)];
-
             const decodeHtml = (str) => {
                 if (!str) return "";
                 return str
-                    .replace(/&amp;/g, '&')
-                    .replace(/&quot;/g, '"')
-                    .replace(/&#39;/g, "'")
-                    .replace(/&lt;/g, "<")
-                    .replace(/&gt;/g, ">")
-                    .replace(/&nbsp;/g, " ")
-                    .replace(/<b>/g, "")
-                    .replace(/<\/b>/g, "")
-                    .replace(/\s+/g, " ")
-                    .trim();
+                    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+                    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ")
+                    .replace(/<b>/g, "").replace(/<\/b>/g, "").replace(/\s+/g, " ").trim();
             };
-
             for (let i = 0; i < titles.length && i < limit; i++) {
                 let link = titles[i][1];
                 const titleRaw = titles[i][2];
                 const snippetRaw = snippets[i] ? snippets[i][1] : "";
-
                 try {
                     if (link.includes('uddg=')) {
                         const urlObj = new URL(link, "https://html.duckduckgo.com");
@@ -1289,25 +1343,81 @@ const handlers = {
                         if (uddg) link = decodeURIComponent(uddg);
                     }
                 } catch(e) {}
-
                 results.push({
                     title: decodeHtml(titleRaw),
                     link: link,
                     snippet: decodeHtml(snippetRaw)
                 });
             }
-            
             if (results.length === 0) {
-                if (ddgRegion === 'cn-zh') {
-                     return JSON.stringify({ message: "No results found in Chinese region. Try setting language='en' or 'all'.", query: query });
-                }
+                if (ddgRegion === 'cn-zh') return JSON.stringify({ message: "No results found in Chinese region. Try setting language='en' or 'all'.", query: query });
                 return JSON.stringify({ message: "No results found.", query: query });
             }
-            
             return JSON.stringify(results, null, 2);
 
         } catch (e) {
             return `Search failed: ${e.message}`;
+        }
+    },
+
+    // Web Fetch Handler
+    web_fetch: async ({ url, offset = 0, length = MAX_READ }, context, signal) => {
+        try {
+            if (!url || !url.startsWith('http')) {
+                return "Error: Invalid URL. Please provide a full URL starting with http:// or https://";
+            }
+
+            const MAX_SINGLE_READ = MAX_READ;
+            const readLength = Math.min(length, MAX_SINGLE_READ);
+
+            const headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Referer": "https://www.google.com/"
+            };
+
+            const response = await fetch(url, { headers, redirect: 'follow', signal });
+            
+            if (response.status === 403 || response.status === 521) {
+                return `Failed to fetch page (Anti-bot protection ${response.status}).`;
+            }
+            if (!response.ok) {
+                return `Failed to fetch page. Status: ${response.status} ${response.statusText}`;
+            }
+            const contentType = response.headers.get('content-type') || '';
+            const rawText = await response.text();
+            let fullText = "";
+            if (contentType.includes('application/json')) {
+                try { fullText = JSON.stringify(JSON.parse(rawText), null, 2); } catch(e) { fullText = rawText; }
+            } else {
+                const metadata = extractMetadata(rawText);
+                const markdownBody = convertHtmlToMarkdown(rawText, url);
+                if (!markdownBody || markdownBody.length < 50) {
+                    return `Fetched URL: ${url}\n\nTitle: ${metadata.title}\n\n[System Info]: The extracted content is very short.`;
+                }
+                fullText = `URL: ${url}\n\n`;
+                if (metadata.title) fullText += `# ${metadata.title}\n\n`;
+                if (metadata.description) fullText += `> **Description:** ${metadata.description}\n\n`;
+                fullText += `---\n\n${markdownBody}`;
+            }
+            const totalChars = fullText.length;
+            const startPos = Math.max(0, offset);
+            const contentChunk = fullText.substring(startPos, startPos + readLength);
+            const remainingChars = totalChars - (startPos + contentChunk.length);
+            let result = contentChunk;
+            if (remainingChars > 0) {
+                const nextOffset = startPos + contentChunk.length;
+                result += `\n\n--- [SYSTEM NOTE: CONTENT TRUNCATED] ---\n`;
+                result += `Total characters: ${totalChars}. Current chunk: ${startPos}-${nextOffset}.\n`;
+                result += `Remaining: ${remainingChars}. Call 'web_fetch' with offset=${nextOffset} to read more.\n`;
+            } else if (startPos > 0) {
+                result += `\n\n--- [SYSTEM NOTE: END OF PAGE REACHED] ---`;
+            }
+            return result;
+
+        } catch (e) {
+            return `Error fetching page: ${e.message}`;
         }
     },
     // Web Fetch Handler
@@ -1413,12 +1523,7 @@ function getBuiltinTools(serverId) {
 
 async function invokeBuiltinTool(toolName, args, signal = null, context = null) {
     if (handlers[toolName]) {
-        // 如果是 sub_agent，它需要 context 和 signal
-        if (toolName === 'sub_agent') {
-            return await handlers[toolName](args, context, signal);
-        }
-        // 为了兼容性，我们只给 sub_agent 传 context
-        return await handlers[toolName](args); 
+        return await handlers[toolName](args, context, signal);
     }
     throw new Error(`Built-in tool '${toolName}' not found.`);
 }

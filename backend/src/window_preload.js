@@ -172,7 +172,7 @@ window.api = {
             const allSkills = listSkills(rootPath);
             const activeSkills = allSkills.filter(s => enabledSkillNames.includes(s.name));
             if (activeSkills.length === 0) return null;
-            return generateSkillToolDefinition(activeSkills);
+            return generateSkillToolDefinition(activeSkills, rootPath);
         } catch (e) {
             return null;
         }

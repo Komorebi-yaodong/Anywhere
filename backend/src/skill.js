@@ -178,7 +178,7 @@ function getSkillDetails(skillRootPath, skillId) {
  * 生成 Skill Tool 的 OpenAI Definition
  * @param {Array} skills 可用的 skills 列表
  */
-function generateSkillToolDefinition(skills) {
+function generateSkillToolDefinition(skills, rootPath) {
     const availableSkillsText = skills
         .filter(s => !s.disabled)
         .map(s => {
@@ -187,12 +187,12 @@ function generateSkillToolDefinition(skills) {
         })
         .join('\n');
 
-    return {
-        type: "function",
-        function: {
-            name: "Skill",
-            description: `Execute a skill within the main conversation
+    let desc = `Execute a skill within the main conversation\n`;
+    if (rootPath) {
+        desc += `Current Skills Library Path: "${rootPath}"\n`;
+    }
 
+    desc += `
 When users ask you to perform tasks, check if any of the available skills below can help complete the task more effectively. Skills provide specialized capabilities and domain knowledge.
 
 When users ask you to run a "slash command" or reference "/<something>" (e.g., "/commit", "/review-pr"), they are referring to a skill. Use this tool to invoke the corresponding skill.
@@ -220,7 +220,13 @@ Important:
 
 Available skills:
 ${availableSkillsText}
-`,
+`;
+
+    return {
+        type: "function",
+        function: {
+            name: "Skill",
+            description: desc,
             parameters: {
                 type: "object",
                 properties: {

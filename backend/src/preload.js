@@ -193,7 +193,7 @@ window.api = {
           // 过滤出已启用且存在的 Skills
           const activeSkills = allSkills.filter(s => enabledSkillNames.includes(s.name));
           if (activeSkills.length === 0) return null;
-          return generateSkillToolDefinition(activeSkills);
+          return generateSkillToolDefinition(activeSkills, rootPath);
       } catch (e) {
           return null;
       }
