@@ -206,12 +206,15 @@ window.api = {
         // 2. 检查是否为 Fork 请求
         if (result && result.__isForkRequest && result.subAgentArgs) {
             if (!globalContext) {
-                return "Error: Sub-Agent skill requires execution context (API Key, etc).";
+                // 错误信息也统一包装为 JSON 字符串
+                return JSON.stringify([{
+                    type: "text",
+                    text: "Error: Sub-Agent skill requires execution context (API Key, etc)."
+                }], null, 2);
             }
             
             // 3. 自动调用内置的 sub_agent 工具
-            // 注意：我们需要将 Sub-Agent 的日志回调透传回去，或者让 sub_agent 处理
-            // invokeBuiltinTool(toolName, args, signal, context)
+            // 注意：invokeBuiltinTool 已经修复为返回序列化的 JSON 字符串，直接透传即可
             return await invokeBuiltinTool(
                 'sub_agent', 
                 result.subAgentArgs, 
@@ -220,8 +223,12 @@ window.api = {
             );
         }
 
-        // 3. 普通模式，直接返回文本
-        return result;
+        // 3. 普通模式，将文本结果包装为标准 MCP JSON 格式字符串
+        // 这样前端收到后能统一解析为 content 数组，而不是纯文本
+        return JSON.stringify([{
+            type: "text",
+            text: result
+        }], null, 2);
     },
   // 暴露 path.join 给前端创建新 Skill 文件夹用
   pathJoin: (...args) => require('path').join(...args),

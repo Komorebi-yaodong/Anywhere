@@ -1442,7 +1442,13 @@ function getBuiltinTools(serverId) {
 
 async function invokeBuiltinTool(toolName, args, signal = null, context = null) {
     if (handlers[toolName]) {
-        return await handlers[toolName](args, context, signal);
+        const result = await handlers[toolName](args, context, signal);
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        
+        return JSON.stringify([{
+            type: "text",
+            text: text
+        }], null, 2);
     }
     throw new Error(`Built-in tool '${toolName}' not found.`);
 }
