@@ -32,6 +32,9 @@ Copy_WINDOW = [
     "./Fast_window/",
 ]
 
+DOCUMENTS = [
+    "./docs/"
+]
 
 # 获取文件文本
 def read_text(file_path,iscode = True):
@@ -78,6 +81,13 @@ def get_summary():
         else:
             fast_window_text += read_text(file)
     
+    docs = ""
+    for file in DOCUMENTS:
+        if os.path.isdir(file):
+            docs += get_text_from_dir(file)
+        else:
+            docs += read_text(file)
+    
     text = [
         "以下是Utools插件的开发文档",
         utools_doc,
@@ -91,6 +101,8 @@ def get_summary():
         window_text,
         "以下是其他窗口的前端代码，在./Fast_window/目录下，是独立窗口文件，其预加载文件为fast_window_preload.js",
         fast_window_text,
+        "以下是相关说明文档，在./docs/目录下",
+        docs,
         "不论你进行如何修改，一定保证不会破坏已有的功能，前端修改一定要保持相同的主题风格，并保证节省开发者工作量的原则，请给出完整的函数代码并告诉我在哪里进行覆盖，直接告诉我在哪里进行怎样的修改就好了，不用给出全部文件代码\n\n"
     ]
 
