@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
 import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar, ElSwitch } from 'element-plus';
 import { createClient } from "webdav/web";
-import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning } from '@element-plus/icons-vue';
+import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning, Cpu } from '@element-plus/icons-vue';
 
 import TitleBar from './components/TitleBar.vue';
 import ChatHeader from './components/ChatHeader.vue';
@@ -361,19 +361,43 @@ const clearSkills = () => {
 const toggleSkillDialog = async () => {
   if (!isSkillDialogVisible.value) {
     tempSessionSkillIds.value = [...sessionSkillIds.value];
-    skillFilter.value = 'all';      // 重置筛选
-    skillSearchQuery.value = '';    // 重置搜索
+    skillFilter.value = 'all';
+    skillSearchQuery.value = '';
 
-    if (currentConfig.value.skillPath) {
-      try {
-        const skills = await window.api.listSkills(currentConfig.value.skillPath);
-        allSkillsList.value = skills.filter(s => !s.disabled).sort((a, b) => a.name.localeCompare(b.name));
-      } catch (e) {
-        console.error("Fetch skills failed:", e);
+    if (currentConfig.value?.skillPath || (window.api?.getConfig && (await window.api.getConfig())?.config?.skillPath)) {
+      // 重新获取 config 以防路径变更
+      const cfg = (await window.api.getConfig()).config;
+      const path = cfg.skillPath;
+
+      if (path) {
+        try {
+          const skills = await window.api.listSkills(path);
+          // 过滤并排序
+          allSkillsList.value = skills.filter(s => !s.disabled).sort((a, b) => a.name.localeCompare(b.name));
+        } catch (e) {
+          console.error("Fetch skills failed:", e);
+          ElMessage.error("刷新技能列表失败");
+        }
       }
     }
   }
   isSkillDialogVisible.value = !isSkillDialogVisible.value;
+};
+
+const handleSkillForkToggle = async (skill) => {
+  const newForkState = skill.context !== 'fork';
+  try {
+    const configData = await window.api.getConfig();
+    const path = configData.config.skillPath;
+
+    await window.api.toggleSkillForkMode(path, skill.id, newForkState);
+
+    // 更新本地状态
+    skill.context = newForkState ? 'fork' : 'normal';
+    ElMessage.success(newForkState ? '已开启 Sub-Agent 模式' : '已关闭 Sub-Agent 模式');
+  } catch (e) {
+    ElMessage.error('模式切换失败: ' + e.message);
+  }
 };
 
 const toggleSkillSelection = (skillName) => {
@@ -3649,8 +3673,15 @@ const handleOpenSearch = () => {
 
               <!-- 标签靠右 -->
               <div class="mcp-header-right-group">
-                <el-tag v-if="skill.context === 'fork'" type="warning" size="small" effect="plain"
-                  round>Sub-Agent</el-tag>
+                <!-- Sub-Agent 切换按钮 -->
+                <el-tooltip :content="skill.context === 'fork' ? 'Sub-Agent 模式已开启' : 'Sub-Agent 模式已关闭'" placement="top">
+                  <div class="subagent-toggle-btn-small" :class="{ 'is-active': skill.context === 'fork' }"
+                    @click.stop="handleSkillForkToggle(skill)">
+                    <el-icon :size="14">
+                      <Cpu />
+                    </el-icon>
+                  </div>
+                </el-tooltip>
               </div>
             </div>
 
@@ -4899,5 +4930,34 @@ html.dark .app-container.has-bg :deep(.tool-call-details .tool-detail-section pr
   min-width: 0;
   opacity: 0.8;
   margin-top: 1px;
+}
+
+.subagent-toggle-btn-small {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--el-text-color-secondary);
+  transition: all 0.2s;
+  background-color: transparent;
+  margin-left: 8px;
+}
+
+.subagent-toggle-btn-small:hover {
+  background-color: var(--el-fill-color-dark);
+  color: var(--el-text-color-primary);
+}
+
+.subagent-toggle-btn-small.is-active {
+  color: #E6A23C;
+  background-color: rgba(230, 162, 60, 0.15);
+}
+
+/* 确保深色模式下样式正常 */
+html.dark .subagent-toggle-btn-small:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 </style>

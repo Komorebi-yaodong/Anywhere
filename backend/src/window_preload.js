@@ -166,6 +166,43 @@ window.api = {
     deleteSkill: async (rootPath, id) => {
         return deleteSkill(rootPath, id);
     },
+    toggleSkillForkMode: async (rootPath, skillId, enableFork) => {
+        try {
+            const details = getSkillDetails(rootPath, skillId);
+            const meta = details.metadata;
+            const body = details.content;
+
+            // 更新元数据
+            if (enableFork) {
+                meta['context'] = 'fork';
+            } else {
+                delete meta['context'];
+            }
+
+            // 重建文件内容 (简易 YAML 构建，保持与 Skills.vue 逻辑一致)
+            const lines = ['---'];
+            if (meta.name) lines.push(`name: ${meta.name}`);
+            if (meta.description) lines.push(`description: ${meta.description}`);
+            if (meta['disable-model-invocation'] === true) lines.push('disable-model-invocation: true');
+            if (meta.context === 'fork') lines.push('context: fork');
+
+            if (meta['allowed-tools']) {
+                let tools = meta['allowed-tools'];
+                if (typeof tools === 'string') lines.push(`allowed-tools: [${tools}]`);
+                else if (Array.isArray(tools)) lines.push(`allowed-tools: [${tools.join(', ')}]`);
+            }
+
+            lines.push('---');
+            lines.push('');
+            lines.push(body || '');
+
+            const content = lines.join('\n');
+            return saveSkill(rootPath, skillId, content);
+        } catch (e) {
+            console.error("Toggle Fork Mode Error:", e);
+            throw e;
+        }
+    },
     // 生成 Skill Tool 定义
     getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
         try {
