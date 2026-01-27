@@ -31,6 +31,10 @@ const {
 } = require('./file.js');
 
 const { 
+  invokeBuiltinTool,
+} = require('./mcp_builtin.js');
+
+const { 
   initializeMcpClient, 
   invokeMcpTool,
   closeMcpClient,
@@ -174,8 +178,29 @@ window.api = {
         }
     },
     // 执行 Skill
-    resolveSkillInvocation: async (rootPath, skillName, args) => {
-        return resolveSkillInvocation(rootPath, skillName, args);
+    resolveSkillInvocation: async (rootPath, skillName, toolArgs, globalContext = null, signal = null) => {
+        // 1. 获取 Skill 解析结果
+        const result = resolveSkillInvocation(rootPath, skillName, toolArgs);
+
+        // 2. 检查是否为 Fork 请求
+        if (result && result.__isForkRequest && result.subAgentArgs) {
+            if (!globalContext) {
+                return "Error: Sub-Agent skill requires execution context (API Key, etc).";
+            }
+            
+            // 3. 自动调用内置的 sub_agent 工具
+            // 注意：我们需要将 Sub-Agent 的日志回调透传回去，或者让 sub_agent 处理
+            // invokeBuiltinTool(toolName, args, signal, context)
+            return await invokeBuiltinTool(
+                'sub_agent', 
+                result.subAgentArgs, 
+                signal, 
+                globalContext
+            );
+        }
+
+        // 3. 普通模式，直接返回文本
+        return result;
     },
     // 暴露 path.join 
     pathJoin: (...args) => require('path').join(...args),

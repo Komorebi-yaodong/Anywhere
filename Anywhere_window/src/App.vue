@@ -325,7 +325,7 @@ const sessionSkillIds = ref([]);
 const tempSessionSkillIds = ref([]); // 弹窗内的临时选择状态
 const allSkillsList = ref([]);
 const skillSearchQuery = ref('');
-const skillFilter = ref('all'); // [修复] 新增筛选状态
+const skillFilter = ref('all'); // 新增筛选状态
 
 const filteredSkillsList = computed(() => {
   let list = allSkillsList.value;
@@ -1144,7 +1144,7 @@ onMounted(async () => {
       window.addEventListener('blur', closePage);
     }
 
-    // --- MCP 加载逻辑 (修改版) ---
+    // --- MCP 加载逻辑 ---
     const defaultMcpServers = currentPromptConfig.defaultMcpServers || [];
     let mcpServersToLoad = [...defaultMcpServers];
 
@@ -2834,15 +2834,57 @@ const askAI = async (forceSend = false) => {
               // 区分 Skill 调用和普通 MCP 调用
               if (toolCall.function.name === 'Skill') {
                 // 调用 Skill
-                if (uiToolCall) uiToolCall.result = `Reading skill: ${toolArgs.skill}...`;
+                if (uiToolCall) uiToolCall.result = `Activating skill: ${toolArgs.skill}...`;
 
+                // 1. 构建上下文 (复用 sub_agent 的逻辑)
+                // 注意：需要确保 activeTools 变量在当前作用域可用 (askAI 函数内部已有)
+                let executionContext = null;
+                const currentApiKey = api_key.value;
+                const currentBaseUrl = base_url.value;
+                const currentModelName = model.value.split('|')[1] || model.value;
+
+                // 定义实时日志回调
+                const onUpdateCallback = (logContent) => {
+                  if (uiToolCall) {
+                    uiToolCall.result = logContent + "\n\n[Skill (Sub-Agent) Running...]";
+                  }
+                };
+
+                executionContext = {
+                  apiKey: currentApiKey,
+                  baseUrl: currentBaseUrl,
+                  model: currentModelName,
+                  // 传入所有可用工具，Skill 内部会根据配置进行过滤
+                  tools: activeTools.filter(t => t.function.name !== 'sub_agent'),
+                  mcpSystemPrompt: mcpSystemPromptStr, // 确保 mcpSystemPromptStr 变量在作用域内
+                  onUpdate: onUpdateCallback
+                };
+
+                // 2. 调用 API，传入完整参数对象和上下文
+                // toolArgs 现在是完整的 JSON 对象 (包含 args, context, planning_level 等)
                 toolContent = await window.api.resolveSkillInvocation(
                   currentConfig.value.skillPath,
                   toolArgs.skill,
-                  toolArgs.args
+                  toolArgs, // 传入整个对象
+                  executionContext,
+                  toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal
                 );
 
-                if (uiToolCall) uiToolCall.result = `[Skill Instructions Loaded]\n${toolContent}`;
+                // 3. 处理结果显示
+                if (uiToolCall) {
+                  // 检查返回内容是否包含特定标记，判断是普通指令还是子智能体结果
+                  if (toolContent.includes("[Sub-Agent]")) {
+                    const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Skill (Sub-Agent) Running...]", "") : "";
+                    // 避免重复追加
+                    if (!currentLog.includes(toolContent)) {
+                      uiToolCall.result = `${currentLog}\n\n=== Skill Execution Result ===\n${toolContent}`;
+                    } else {
+                      uiToolCall.result = currentLog;
+                    }
+                  } else {
+                    uiToolCall.result = `[Skill Instructions Loaded]\n${toolContent}`;
+                  }
+                }
 
               } else {
                 // 原有 MCP 调用逻辑
@@ -3561,47 +3603,54 @@ const handleOpenSearch = () => {
     <template #header>
       <div style="display: none;"></div>
     </template>
-    
+
     <div class="mcp-dialog-content">
       <!-- 顶部工具栏 -->
       <div class="mcp-dialog-toolbar">
         <el-button-group>
           <el-button :type="skillFilter === 'all' ? 'primary' : ''" @click="skillFilter = 'all'">全部</el-button>
-          <el-button :type="skillFilter === 'selected' ? 'primary' : ''" @click="skillFilter = 'selected'">已选</el-button>
-          <el-button :type="skillFilter === 'unselected' ? 'primary' : ''" @click="skillFilter = 'unselected'">未选</el-button>
+          <el-button :type="skillFilter === 'selected' ? 'primary' : ''"
+            @click="skillFilter = 'selected'">已选</el-button>
+          <el-button :type="skillFilter === 'unselected' ? 'primary' : ''"
+            @click="skillFilter = 'unselected'">未选</el-button>
         </el-button-group>
         <el-button-group>
           <el-button @click="selectAllSkills">全选</el-button>
           <el-button @click="clearSkills">清空</el-button>
         </el-button-group>
       </div>
-      
+
       <!-- 列表区域 -->
       <div class="mcp-server-list custom-scrollbar">
-        <div v-if="filteredSkillsList.length === 0" style="padding: 20px; text-align: center; color: var(--el-text-color-placeholder);">
+        <div v-if="filteredSkillsList.length === 0"
+          style="padding: 20px; text-align: center; color: var(--el-text-color-placeholder);">
           暂无匹配的技能
         </div>
         <div v-else v-for="skill in filteredSkillsList" :key="skill.name" class="mcp-server-item-wrapper">
           <div class="mcp-server-item" :class="{ 'is-checked': tempSessionSkillIds.includes(skill.name) }"
             @click="toggleSkillSelection(skill.name)">
-            
+
             <!-- 单行布局结构 -->
             <div class="skill-single-row">
               <el-checkbox :model-value="tempSessionSkillIds.includes(skill.name)" size="large"
                 @change="() => toggleSkillSelection(skill.name)" @click.stop class="header-checkbox" />
-              
-              <el-avatar shape="square" :size="20" class="mcp-server-icon" style="background:transparent; color: var(--el-text-color-primary); flex-shrink: 0;">
-                 <el-icon :size="16"><Collection /></el-icon>
+
+              <el-avatar shape="square" :size="20" class="mcp-server-icon"
+                style="background:transparent; color: var(--el-text-color-primary); flex-shrink: 0;">
+                <el-icon :size="16">
+                  <Collection />
+                </el-icon>
               </el-avatar>
 
               <span class="mcp-server-name skill-name-fixed">{{ skill.name }}</span>
-              
+
               <!-- 描述显示在同一行 -->
               <span class="skill-desc-inline" :title="skill.description">{{ skill.description }}</span>
-              
+
               <!-- 标签靠右 -->
               <div class="mcp-header-right-group">
-                 <el-tag v-if="skill.context === 'fork'" type="warning" size="small" effect="plain" round>Sub-Agent</el-tag>
+                <el-tag v-if="skill.context === 'fork'" type="warning" size="small" effect="plain"
+                  round>Sub-Agent</el-tag>
               </div>
             </div>
 
@@ -3618,15 +3667,18 @@ const handleOpenSearch = () => {
     <template #footer>
       <div class="mcp-dialog-footer">
         <div class="footer-left-controls">
-           <!-- 状态计数 -->
-           <span class="mcp-limit-hint" v-if="tempSessionSkillIds.length > 0" style="margin-right: 15px; font-weight: bold; color: var(--el-color-primary);">
-              已选 {{ tempSessionSkillIds.length }} 个技能
-           </span>
-           <!-- Warning 提示 -->
-           <span class="mcp-limit-hint warning" style="display: inline-flex; align-items: center; opacity: 0.8;">
-              <el-icon style="margin-right: 4px;"><Warning /></el-icon>
-              Skill 依赖内置 MCP 服务，请勿禁用
-           </span>
+          <!-- 状态计数 -->
+          <span class="mcp-limit-hint" v-if="tempSessionSkillIds.length > 0"
+            style="margin-right: 15px; font-weight: bold; color: var(--el-color-primary);">
+            已选 {{ tempSessionSkillIds.length }} 个技能
+          </span>
+          <!-- Warning 提示 -->
+          <span class="mcp-limit-hint warning" style="display: inline-flex; align-items: center; opacity: 0.8;">
+            <el-icon style="margin-right: 4px;">
+              <Warning />
+            </el-icon>
+            Skill 依赖内置 MCP 服务，请勿禁用
+          </span>
         </div>
         <el-button type="primary" @click="handleSkillSelectionConfirm">确定</el-button>
       </div>
@@ -4842,7 +4894,8 @@ html.dark .app-container.has-bg :deep(.tool-call-details .tool-detail-section pr
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1; /* 自动占据中间剩余空间 */
+  flex: 1;
+  /* 自动占据中间剩余空间 */
   min-width: 0;
   opacity: 0.8;
   margin-top: 1px;

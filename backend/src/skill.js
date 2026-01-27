@@ -2,6 +2,27 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+const { getBuiltinServers, getBuiltinTools } = require('./mcp_builtin.js');
+
+/**
+ * 获取所有内置工具的名称列表
+ */
+function getAllBuiltinToolNames() {
+    const servers = getBuiltinServers();
+    let allToolNames = [];
+    // 遍历所有内置服务 ID
+    for (const serverId in servers) {
+        // 获取该服务下的所有工具
+        const tools = getBuiltinTools(serverId);
+        if (tools && Array.isArray(tools)) {
+            allToolNames.push(...tools.map(t => t.name));
+        }
+    }
+    // 过滤掉 'sub_agent' 自身，防止子智能体无限递归调用子智能体（除非显式指定）
+    // 当然，如果你希望允许嵌套，可以去掉这个过滤
+    return allToolNames.filter(name => name !== 'sub_agent');
+}
+
 // 解析 Frontmatter (简单的 YAML 解析，不需要额外依赖)
 function parseFrontmatter(content) {
     const regex = /^---\s*[\r\n]+([\s\S]*?)[\r\n]+---\s*([\s\S]*)$/;
@@ -159,8 +180,11 @@ function getSkillDetails(skillRootPath, skillId) {
  */
 function generateSkillToolDefinition(skills) {
     const availableSkillsText = skills
-        .filter(s => !s.disabled) // 过滤掉禁用的
-        .map(s => `- ${s.name}: ${s.description}`)
+        .filter(s => !s.disabled)
+        .map(s => {
+            const modeTag = s.context === 'fork' ? '[Sub-Agent]' : '[Direct]';
+            return `- ${s.name} ${modeTag}: ${s.description}`;
+        })
         .join('\n');
 
     return {
@@ -177,6 +201,10 @@ Example:
   User: "run /commit"
   Assistant: [Calls Skill tool with skill: "commit"]
 
+MODES:
+1. Direct Mode: Returns instructions for YOU to follow.
+2. Sub-Agent Mode (Fork): If a skill requires a sub-agent (usually complex tasks), this tool will automatically trigger the sub-agent. You must provide 'task' and 'context' to guide it.
+
 How to invoke:
 - Use this tool with the skill name and optional arguments
 - Examples:
@@ -189,7 +217,6 @@ Important:
 - This is a BLOCKING REQUIREMENT: invoke the relevant Skill tool BEFORE generating any other response about the task
 - Only use skills listed in "Available skills" below
 - Do not invoke a skill that is already running
-- Do not use this tool for built-in CLI commands (like /help, /clear, etc.)
 
 Available skills:
 ${availableSkillsText}
@@ -198,13 +225,31 @@ ${availableSkillsText}
                 type: "object",
                 properties: {
                     skill: {
-                        description: "The skill name.",
+                        description: "The name of the skill to execute.",
                         type: "string",
                         enum: skills.map(s => s.name)
                     },
                     args: {
-                        description: "Optional arguments for the skill",
+                        description: "The Input Variables for the skill template. Use this to fill placeholders like '$ARGUMENTS' or '$1' in the skill file. Examples: a git commit message, a file path, or a jira ticket ID. If the skill description implies a specific input format (e.g. 'Usage: /skill [url]'), put that input here.",
                         type: "string"
+                    },
+                    task: {
+                        description: "The Specific Instruction for the Sub-Agent. Use this to describe WHAT you want the Sub-Agent to actually DO with this skill. (e.g., 'Use this skill to refactor the login page', 'Follow this skill to deploy to prod'). Required for Sub-Agent mode.",
+                        type: "string"
+                    },
+                    context: {
+                        description: "Optional context/background information for the Sub-Agent (e.g. 'The user is on Windows', 'Previous code analysis results').",
+                        type: "string"
+                    },
+                    tools: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Optional. Explicitly specify tool names to grant to the Sub-Agent. Defaults to all builtin tools if omitted."
+                    },
+                    planning_level: {
+                        type: "string",
+                        enum: ["fast", "medium", "high"],
+                        description: "Complexity level for Sub-Agent. Defaults to 'medium'."
                     }
                 },
                 required: ["skill"],
@@ -215,11 +260,11 @@ ${availableSkillsText}
 }
 
 /**
- * 处理 Skill 调用，返回给 AI 的 Prompt
+ * 处理 Skill 调用，返回给 AI 的 Prompt 或 Sub-Agent 配置
  */
-function resolveSkillInvocation(skillRootPath, skillName, args) {
+function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
     const skills = listSkills(skillRootPath);
-    const targetSkill = skills.find(s => s.name === skillName); // 按 name 查找，而不是 id
+    const targetSkill = skills.find(s => s.name === skillName);
 
     if (!targetSkill) {
         return `Error: Skill "${skillName}" not found.`;
@@ -228,42 +273,34 @@ function resolveSkillInvocation(skillRootPath, skillName, args) {
     const details = getSkillDetails(skillRootPath, targetSkill.id);
     let instructions = details.content;
 
-    // 替换变量 $ARGUMENTS
-    const argsString = args || '';
+    // 提取参数
+    const argsInput = (typeof toolArgsObj === 'object') ? (toolArgsObj.args || '') : (toolArgsObj || '');
+    const taskInput = (typeof toolArgsObj === 'object') ? (toolArgsObj.task || '') : '';
+    
+    // --- 处理 args 替换逻辑 ---
+    // 1. 如果模板中有 $ARGUMENTS，进行替换
     if (instructions.includes('$ARGUMENTS')) {
-        instructions = instructions.replace(/\$ARGUMENTS/g, argsString);
-    } else if (argsString) {
-        instructions += `\n\nARGUMENTS: ${argsString}`;
+        instructions = instructions.replace(/\$ARGUMENTS/g, argsInput);
+    } 
+    // 2. [新增] 如果模板中没有占位符，但 AI 传了 args，则按官方文档规范追加到末尾
+    else if (argsInput) {
+        instructions += `\n\n### Input Arguments\n${argsInput}`;
     }
 
-    // 替换 ${CLAUDE_SESSION_ID} (模拟)
+    // 替换 ${CLAUDE_SESSION_ID}
     const sessionId = Date.now().toString(36);
     instructions = instructions.replace(/\$\{CLAUDE_SESSION_ID\}/g, sessionId);
 
-    // 构建上下文
-    let response = `## Skill Activated: ${targetSkill.name}\n\n`;
-    response += `### Instructions\n${instructions}\n\n`;
-    
-    // 如果有 allowed-tools 限制
-    if (targetSkill.allowedTools) {
-        response += `### Tool Restrictions\nYou are only allowed to use the following tool types: ${Array.isArray(targetSkill.allowedTools) ? targetSkill.allowedTools.join(', ') : targetSkill.allowedTools}\n\n`;
-    }
-
-    // 如果是 fork 模式
-    if (targetSkill.context === 'fork') {
-        response += `### Execution Context: Sub-Agent Required\n`;
-        response += `This skill requires running in an isolated sub-agent context. \n`;
-        response += `PLEASE INVOKE THE 'sub_agent' TOOL IMMEDIATELY using the instructions above as the 'task'.\n`;
-    }
-
-    // 附带目录结构信息，方便 AI 引用 assets
+    // --- 生成目录资产信息 (剔除 SKILL.md) ---
+    let assetsInfo = "";
     if (details.files.length > 0) {
-        response += `### Skill Directory Assets\n`;
-        response += `The following files are available in the skill directory (${details.absolutePath}):\n`;
+        assetsInfo += `\n\n### Skill Directory Assets\n`;
+        assetsInfo += `The following files are available in the skill directory (${details.absolutePath}):\n`;
         
         function renderFiles(files, indent = '') {
             let str = '';
             for (const f of files) {
+                if (f.name.toLowerCase() === 'skill.md') continue;
                 str += `${indent}- ${f.name} (${f.type})\n`;
                 if (f.children) {
                     str += renderFiles(f.children, indent + '  ');
@@ -271,8 +308,75 @@ function resolveSkillInvocation(skillRootPath, skillName, args) {
             }
             return str;
         }
-        response += renderFiles(details.files);
-        response += `\nNote: You can read these files if referenced in the instructions.\n`;
+        
+        const fileTreeStr = renderFiles(details.files);
+        if (fileTreeStr.trim()) {
+            assetsInfo += fileTreeStr;
+            assetsInfo += `\nNote: You can read these files using 'read_file' tool if referenced in the instructions.\n`;
+            assetsInfo += `(Note: 'SKILL.md' contains the instructions you are currently reading, so it is hidden from this list.)\n`;
+        }
+    }
+
+    // --- 分支逻辑 ---
+
+    // 1. Fork 模式 (子智能体)
+    if (targetSkill.context === 'fork') {
+        // 构建 Full Task
+        let fullTask = `Execute Skill: ${targetSkill.name}\n\n`;
+        if (targetSkill.description) {
+            fullTask += `### Description\n${targetSkill.description}\n\n`;
+        }
+        // SOP 中已经包含了替换过 args 的内容
+        fullTask += `### Standard Operating Procedures (SOP)\n${instructions}`;
+        
+        // 注入目录信息
+        fullTask += assetsInfo;
+
+        // 拼接具体的 Task 指令
+        if (taskInput) {
+            fullTask += `\n\n### Current Task Request\n${taskInput}`;
+        }
+
+        // 确定允许的工具
+        // 优先级: AI请求指定 > SKILL.md配置 > 默认全量内置
+        let toolsToUse = [];
+        if (toolArgsObj.tools && Array.isArray(toolArgsObj.tools) && toolArgsObj.tools.length > 0) {
+            toolsToUse = toolArgsObj.tools;
+        } else if (targetSkill.allowedTools) {
+             toolsToUse = Array.isArray(targetSkill.allowedTools) 
+                ? targetSkill.allowedTools 
+                : targetSkill.allowedTools.split(',').map(t=>t.trim());
+        } else {
+            toolsToUse = getAllBuiltinToolNames();
+        }
+
+        // 返回特殊对象，标识需要启动子智能体
+        return {
+            __isForkRequest: true,
+            subAgentArgs: {
+                task: fullTask,
+                context: (toolArgsObj.context || "No additional context."),
+                tools: toolsToUse,
+                planning_level: toolArgsObj.planning_level || 'medium',
+                custom_steps: toolArgsObj.custom_steps
+            }
+        };
+    }
+
+    // 2. 普通模式 (直接返回 Prompt)
+    let response = `## Skill Activated: ${targetSkill.name}\n\n`;
+    response += `### Instructions\n${instructions}\n\n`;
+    
+    if (targetSkill.allowedTools) {
+        const toolsStr = Array.isArray(targetSkill.allowedTools) ? targetSkill.allowedTools.join(', ') : targetSkill.allowedTools;
+        response += `### Tool Restrictions\nYou are requested to only use the following tools: ${toolsStr}\n\n`;
+    }
+
+    response += assetsInfo;
+
+    // [新增] 普通模式下也把 AI 的具体指令带上，作为上下文补充
+    if (taskInput) {
+        response += `\n\n### Current Task Request\n${taskInput}`;
     }
 
     return response;
