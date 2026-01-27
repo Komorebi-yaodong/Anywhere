@@ -217,6 +217,7 @@ Important:
 - This is a BLOCKING REQUIREMENT: invoke the relevant Skill tool BEFORE generating any other response about the task
 - Only use skills listed in "Available skills" below
 - Do not invoke a skill that is already running
+- Only the skills listed below are available， do not make assumptions about other skills.
 
 Available skills:
 ${availableSkillsText}
