@@ -322,13 +322,29 @@ const startRecordingFromSource = async (sourceType) => {
             const sources = await window.api.desktopCaptureSources({ types: ['screen', 'window'] });
             if (!sources || sources.length === 0) throw new Error('未找到可用的系统音频源');
 
+            // 1. 获取包含视频和音频的原始流 (系统限制必须请求视频才能拿音频)
             audioStream = await navigator.mediaDevices.getUserMedia({
                 audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } },
                 video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sources[0].id } },
             });
 
+            // 2. 从流中分离出音频轨道
+            const audioTrack = audioStream.getAudioTracks()[0];
+            if (!audioTrack) {
+                // 如果用户在选择窗口时未勾选“分享音频”，这里会获取不到音频轨道
+                // 立即停止流并报错
+                audioStream.getTracks().forEach(t => t.stop());
+                audioStream = null;
+                throw new Error('未检测到系统音频，请务必在屏幕分享窗口中勾选“分享音频”');
+            }
+
+            // 3. 创建一个仅包含音频的新流供录制器使用
+            const audioOnlyStream = new MediaStream([audioTrack]);
+
             audioChunks = [];
-            mediaRecorder = new MediaRecorder(audioStream);
+            // 4. 使用仅音频流初始化录制器
+            // 注意：audioStream 变量仍保持原始混合流引用，以便 stopRecordingAndCleanup 能正确关闭屏幕分享状态
+            mediaRecorder = new MediaRecorder(audioOnlyStream);
 
             mediaRecorder.ondataavailable = (event) => audioChunks.push(event.data);
             mediaRecorder.onstop = () => {
@@ -336,7 +352,7 @@ const startRecordingFromSource = async (sourceType) => {
                     stopRecordingAndCleanup();
                     return;
                 }
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' }); // 浏览器通常输出webm/opus，但保留原逻辑兼容性
                 const now = new Date();
                 const timestamp = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
                 const audioFile = new File([audioBlob], `audio-${timestamp}.wav`, { type: 'audio/wav' });
