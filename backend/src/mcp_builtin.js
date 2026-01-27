@@ -741,7 +741,64 @@ ${userContext || 'No additional context provided.'}
     }
 
     log(`[Stop] Reached maximum step limit.`);
-    return `[Sub-Agent] Reached max steps (${MAX_STEPS}). Final state returned.`;
+    
+    // 定义静态兜底报告生成逻辑 (以防最后一次 LLM 调用失败)
+    const generateStaticReport = () => {
+        let report = `[Sub-Agent Warning] Execution stopped because the maximum step limit (${MAX_STEPS}) was reached.\n\n`;
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage) {
+            report += `### Last State\n`;
+            if (lastMessage.role === 'tool') {
+                 report += `Tool '${lastMessage.name}' output: ${lastMessage.content.slice(0, 500)}...\n`;
+            } else if (lastMessage.content) {
+                 report += `Assistant thought: ${lastMessage.content}\n`;
+            }
+        }
+        report += `\n### Execution Log Summary\n`;
+        const recentLogs = executionLog.slice(-5).join('\n');
+        report += recentLogs;
+        return report;
+    };
+
+    // 达到步数限制后，让 AI 总结当前进展
+    try {
+        log(`[System] Requesting status summary from Sub-Agent...`);
+        messages.push({
+            role: 'user',
+            content: "SYSTEM ALERT: You have reached the maximum number of steps allowed. Please provide a concise summary of:\n1. What has been successfully completed.\n2. What is the current status/obstacles.\n3. What specific actions remain to be done.\nDo not use any tools, just answer with text."
+        });
+
+        const summaryResponse = await fetch(`${baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${Array.isArray(apiKey) ? apiKey[0] : apiKey.split(',')[0].trim()}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: messages,
+                tools: availableTools.length > 0 ? availableTools : undefined,
+                tool_choice: availableTools.length > 0 ? "auto" : undefined,
+                stream: false
+            }),
+            signal: signal
+        });
+
+        if (summaryResponse.ok) {
+            const data = await summaryResponse.json();
+            const summaryContent = data.choices[0].message.content;
+            if (summaryContent) {
+                return `[Sub-Agent Timeout Summary]\n${summaryContent}\n\n(System Note: The sub-agent stopped because the step limit of ${MAX_STEPS} was reached. You may need to ask the user to increase 'planning_level' or guide the sub-agent to continue from this state.)`;
+            }
+        } else {
+            log(`[Error] Summary API call failed: ${summaryResponse.status}`);
+        }
+    } catch (e) {
+        log(`[Error] Failed to generate summary: ${e.message}`);
+    }
+
+    // 如果总结失败，返回静态报告
+    return generateStaticReport() + `\n\n[Instruction for Main Agent]: Please check the conversation context or files to see if the task was partially completed.`;
 }
 
 // --- Execution Handlers ---
