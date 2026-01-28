@@ -144,10 +144,10 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
         }
         blankLineCount = 0;
 
-        // [新增] 过滤纯数字行 (解决代码块行号问题)
+        // 过滤纯数字行 (解决代码块行号问题)
         if (/^\d+$/.test(line)) continue;
 
-        // [新增] 过滤极短的纯符号行
+        // 过滤极短的纯符号行
         if (line.length < 5 && !/[a-zA-Z0-9\u4e00-\u9fa5]/.test(line)) continue;
 
         // 过滤导航类噪音
@@ -1187,7 +1187,7 @@ const handlers = {
         return new Promise((resolve) => {
             const trimmedCmd = command.trim();
 
-            // [新增] 高危命令简单拦截
+            // 高危命令简单拦截 (保持原有逻辑)
             const dangerousPatterns = [
                 /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i, // rm -rf / (防止误删根目录)
                 />\s*\/dev\/sd/i,     // 写入设备
@@ -1221,9 +1221,10 @@ const handlers = {
 
             const validTimeout = (typeof timeout === 'number' && timeout > 0) ? timeout : 15000;
 
+            // [修改] encoding 设置为 buffer，手动处理解码以支持多语言
             let shellOptions = {
                 cwd: bashCwd,
-                encoding: 'utf-8',
+                encoding: 'buffer', 
                 maxBuffer: 1024 * 1024 * 10,
                 timeout: validTimeout 
             };
@@ -1233,7 +1234,17 @@ const handlers = {
 
             if (isWin) {
                 shellToUse = 'powershell.exe';
-                finalCommand = `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ${command}`;
+                // Windows 编码配置
+                // 1. [Console]::OutputEncoding: 确保 Node.js 拿到的 stdout 是 UTF-8
+                // 2. $OutputEncoding: 确保管道符 | 传递的是 UTF-8
+                // 3. $PSDefaultParameterValues: 确保 >> (Out-File/Add-Content) 写入文件时使用 UTF-8 (无BOM)，解决截图中的 NUL 问题
+                const preamble = `
+                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+                    $OutputEncoding = [System.Text.Encoding]::UTF8;
+                    $PSDefaultParameterValues['*:Encoding'] = 'utf8';
+                `.replace(/\s+/g, ' '); 
+                
+                finalCommand = `${preamble} ${command}`;
                 shellOptions.shell = shellToUse;
             } else {
                 shellToUse = '/bin/bash';
@@ -1242,10 +1253,24 @@ const handlers = {
 
             // 保存子进程引用
             const child = exec(finalCommand, shellOptions, (error, stdout, stderr) => {
+                // 解码辅助函数
+                const decodeBuffer = (buf) => {
+                    if (!buf || buf.length === 0) return "";
+                    try {
+                        // 优先尝试 UTF-8 解码
+                        return new TextDecoder('utf-8').decode(buf);
+                    } catch (e) {
+                        // 兜底直接转字符串
+                        return buf.toString();
+                    }
+                };
+
                 let result = "";
+                const outStr = decodeBuffer(stdout);
+                const errStr = decodeBuffer(stderr);
                 
-                if (stdout) result += stdout;
-                if (stderr) result += `\n[Stderr]: ${stderr}`;
+                if (outStr) result += outStr;
+                if (errStr) result += `\n[Stderr]: ${errStr}`;
                 
                 if (error) {
                     if (error.signal === 'SIGTERM') {
@@ -1254,7 +1279,7 @@ const handlers = {
                         result += `\n[System Note]: Command was aborted by user.`;
                     } else {
                         result += `\n[Error Code]: ${error.code}`;
-                        if (error.message && !stderr) result += `\n[Message]: ${error.message}`;
+                        if (error.message && !errStr) result += `\n[Message]: ${error.message}`;
                     }
                 }
                 
