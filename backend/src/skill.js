@@ -216,7 +216,7 @@ Important:
 - NEVER just announce or mention a skill in your text response without actually calling this tool
 - This is a BLOCKING REQUIREMENT: invoke the relevant Skill tool BEFORE generating any other response about the task
 - Only use skills listed in "Available skills" below
-- Do not invoke a skill that is already running
+- Do Not invoke a skill that is already Activated
 - Only the skills listed below are available， do not make assumptions about other skills.
 
 Available skills:
