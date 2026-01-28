@@ -384,6 +384,61 @@ const toggleSkillDialog = async () => {
   isSkillDialogVisible.value = !isSkillDialogVisible.value;
 };
 
+const fetchSkillsList = async () => {
+  if (currentConfig.value?.skillPath || (window.api?.getConfig && (await window.api.getConfig())?.config?.skillPath)) {
+    const path = currentConfig.value?.skillPath || (await window.api.getConfig()).config.skillPath;
+    try {
+      const skills = await window.api.listSkills(path);
+      allSkillsList.value = skills.filter(s => !s.disabled).sort((a, b) => a.name.localeCompare(b.name));
+    } catch (e) {
+      console.error("Fetch skills failed:", e);
+    }
+  }
+};
+
+const handleQuickSkillToggle = async (skillName) => {
+  const index = sessionSkillIds.value.indexOf(skillName);
+  if (index === -1) {
+    sessionSkillIds.value.push(skillName);
+    // 同步更新 tempSessionSkillIds 防止弹窗状态不同步
+    if (!tempSessionSkillIds.value.includes(skillName)) {
+      tempSessionSkillIds.value.push(skillName);
+    }
+    
+    // 检查是否需要自动启用内置 MCP
+    if (currentConfig.value.mcpServers) {
+        const builtinIds = Object.entries(currentConfig.value.mcpServers)
+          .filter(([, server]) => server.type === 'builtin')
+          .map(([id]) => id);
+        
+        let changed = false;
+        builtinIds.forEach(id => {
+            if (!sessionMcpServerIds.value.includes(id)) {
+                sessionMcpServerIds.value.push(id);
+                changed = true;
+            }
+            // 同步 temp 列表
+            if (!tempSessionMcpServerIds.value.includes(id)) {
+                tempSessionMcpServerIds.value.push(id);
+            }
+        });
+        
+        if (changed) {
+            showDismissibleMessage.success(`已启用 Skill "${skillName}" (并自动关联内置 MCP)`);
+            await applyMcpTools(false); // 重新加载 MCP
+            return; 
+        }
+    }
+    showDismissibleMessage.success(`已启用 Skill "${skillName}"`);
+  } else {
+    sessionSkillIds.value.splice(index, 1);
+    // 同步删除 temp
+    const tempIndex = tempSessionSkillIds.value.indexOf(skillName);
+    if(tempIndex !== -1) tempSessionSkillIds.value.splice(tempIndex, 1);
+    showDismissibleMessage.info(`已禁用 Skill "${skillName}"`);
+  }
+};
+
 const handleSkillForkToggle = async (skill) => {
   const newForkState = skill.context !== 'fork';
   try {
@@ -1199,6 +1254,8 @@ onMounted(async () => {
       tempSessionMcpServerIds.value = [...validIds];
       await applyMcpTools(false);
     }
+
+    await fetchSkillsList();
 
     if (shouldDirectSend) {
       scrollToBottom();
@@ -3475,10 +3532,10 @@ const handleOpenSearch = () => {
           v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
           :is-mcp-active="isMcpActive" :all-mcp-servers="availableMcpServers" :active-mcp-ids="sessionMcpServerIds"
-          :active-skill-ids="sessionSkillIds" @submit="handleSubmit" @cancel="handleCancel"
+          :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" @submit="handleSubmit" @cancel="handleCancel"
           @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
           @send-audio="handleSendAudio" @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart"
-          @toggle-mcp="handleQuickMcpToggle" @open-skill-dialog="toggleSkillDialog" />
+          @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle" @open-skill-dialog="toggleSkillDialog" />
       </div>
     </el-container>
   </main>

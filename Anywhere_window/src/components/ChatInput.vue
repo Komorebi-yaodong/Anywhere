@@ -17,10 +17,12 @@ const props = defineProps({
     isMcpActive: Boolean,
     allMcpServers: { type: Array, default: () => [] },
     activeMcpIds: { type: Array, default: () => [] },
-    activeSkillIds: { type: Array, default: () => [] } 
+    activeSkillIds: { type: Array, default: () => [] },
+    allSkills: { type: Array, default: () => [] }
 });
+
 // 增加 toggle-mcp 事件
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'open-skill-dialog']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -34,6 +36,11 @@ const isRecording = ref(false);
 const showMcpQuickSelect = ref(false);
 const mcpFilterKeyword = ref('');
 const mcpHighlightIndex = ref(0);
+
+// --- Skill Quick Select State ---
+const showSkillQuickSelect = ref(false);
+const skillFilterKeyword = ref('');
+const skillHighlightIndex = ref(0);
 
 // --- Refs for closing popups ---
 const reasoningSelectorRef = ref(null);
@@ -69,18 +76,18 @@ const reasoningTooltipContent = computed(() => {
 const filteredMcpList = computed(() => {
     if (!showMcpQuickSelect.value) return [];
     const keyword = mcpFilterKeyword.value.toLowerCase();
-    
+
     let list = props.allMcpServers.filter(server => {
         // 1. 匹配名称 (包含匹配)
         const nameMatch = server.name && server.name.toLowerCase().includes(keyword);
-        
+
         // 2. 匹配标签
         const tagMatch = server.tags && server.tags.some(tag => tag.toLowerCase().includes(keyword));
 
         // 3. 匹配类型 (原始类型 + 中文显示名)
         const typeRaw = (server.type || '').toLowerCase();
         let typeDisplay = '';
-        
+
         // 简单的类型映射逻辑
         if (typeRaw === 'builtin') typeDisplay = '内置';
         else if (typeRaw === 'stdio') typeDisplay = 'stdio';
@@ -96,20 +103,44 @@ const filteredMcpList = computed(() => {
     return list.slice(0, 10);
 });
 
+// 过滤后的 Skill 列表逻辑
+const filteredSkillList = computed(() => {
+    if (!showSkillQuickSelect.value) return [];
+    const keyword = skillFilterKeyword.value.toLowerCase();
+
+    let list = props.allSkills.filter(skill => {
+        return skill.name.toLowerCase().includes(keyword) ||
+            (skill.description && skill.description.toLowerCase().includes(keyword));
+    });
+
+    return list.slice(0, 10);
+});
+
 // 监听 prompt 变化以触发快捷选择
 watch(prompt, (newVal) => {
-    if (newVal.startsWith('@')) {
-        const match = newVal.match(/^@([^ \n\r]*)$/);
-        if (match) {
-            mcpFilterKeyword.value = match[1];
-            showMcpQuickSelect.value = true;
-            mcpHighlightIndex.value = 0; // 重置高亮
-        } else {
-            showMcpQuickSelect.value = false;
-        }
-    } else {
-        showMcpQuickSelect.value = false;
+    // 处理 MCP (@) - 匹配行首或空格后的 @
+    const mcpMatch = newVal.match(/(?:^|\s)@([^@\s]*)$/);
+    if (mcpMatch) {
+        mcpFilterKeyword.value = mcpMatch[1];
+        showMcpQuickSelect.value = true;
+        showSkillQuickSelect.value = false; // 互斥
+        mcpHighlightIndex.value = 0;
+        return;
     }
+
+    // 处理 Skill (/) - 匹配行首或空格后的 /
+    const skillMatch = newVal.match(/(?:^|\s)\/([^/\s]*)$/);
+    if (skillMatch) {
+        skillFilterKeyword.value = skillMatch[1];
+        showSkillQuickSelect.value = true;
+        showMcpQuickSelect.value = false; // 互斥
+        skillHighlightIndex.value = 0;
+        return;
+    }
+
+    // 都不匹配则关闭
+    showMcpQuickSelect.value = false;
+    showSkillQuickSelect.value = false;
 });
 
 // --- Helper function ---
@@ -126,6 +157,19 @@ const insertNewline = () => {
     });
 };
 
+const handleToggleSkill = (skillName) => {
+    emit('toggle-skill', skillName);
+    showSkillQuickSelect.value = false;
+    prompt.value = prompt.value.replace(/(?:^|\s)\/([^/\s]*)$/, '').trimEnd();
+};
+
+const handleSkillTab = () => {
+    const skill = filteredSkillList.value[skillHighlightIndex.value];
+    if (skill) {
+        prompt.value = prompt.value.replace(/(\/)([^/\s]*)$/, `$1${skill.name} `);
+    }
+};
+
 // --- Event Handlers ---
 const handleKeyDown = (event) => {
     if (event.isComposing) return;
@@ -133,46 +177,68 @@ const handleKeyDown = (event) => {
     // [MCP 快捷选择键盘逻辑]
     if (showMcpQuickSelect.value && filteredMcpList.value.length > 0) {
         if (event.key === 'Escape') {
-            event.preventDefault();
-            event.stopPropagation(); // 阻止冒泡，防止关闭整个窗口
-            showMcpQuickSelect.value = false;
-            return;
+            event.preventDefault(); event.stopPropagation();
+            showMcpQuickSelect.value = false; return;
         }
         if (event.key === 'ArrowUp') {
             event.preventDefault();
             mcpHighlightIndex.value = (mcpHighlightIndex.value - 1 + filteredMcpList.value.length) % filteredMcpList.value.length;
-            // 确保视图滚动跟随
-            nextTick(() => {
-                const activeItem = document.querySelector('.mcp-quick-item.highlighted');
-                if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
-            });
+            nextTick(() => { const activeItem = document.querySelector('.mcp-quick-item.highlighted'); if (activeItem) activeItem.scrollIntoView({ block: 'nearest' }); });
             return;
         }
         if (event.key === 'ArrowDown') {
             event.preventDefault();
             mcpHighlightIndex.value = (mcpHighlightIndex.value + 1) % filteredMcpList.value.length;
-            nextTick(() => {
-                const activeItem = document.querySelector('.mcp-quick-item.highlighted');
-                if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
-            });
+            nextTick(() => { const activeItem = document.querySelector('.mcp-quick-item.highlighted'); if (activeItem) activeItem.scrollIntoView({ block: 'nearest' }); });
             return;
         }
         if (event.key === 'Enter') {
-            // 如果列表显示中，回车为选择，不是发送
             event.preventDefault();
             const server = filteredMcpList.value[mcpHighlightIndex.value];
-            if (server) {
-                handleToggleMcp(server.id);
-            }
+            if (server) handleToggleMcp(server.id);
             return;
         }
-        // 数字键 0-9 选择
         if (/^[0-9]$/.test(event.key)) {
             event.preventDefault();
             const idx = parseInt(event.key);
-            if (idx < filteredMcpList.value.length) {
-                handleToggleMcp(filteredMcpList.value[idx].id);
-            }
+            if (idx < filteredMcpList.value.length) handleToggleMcp(filteredMcpList.value[idx].id);
+            return;
+        }
+    }
+
+    // Skill 快捷选择键盘逻辑
+    if (showSkillQuickSelect.value && filteredSkillList.value.length > 0) {
+        if (event.key === 'Escape') {
+            event.preventDefault(); event.stopPropagation();
+            showSkillQuickSelect.value = false; return;
+        }
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            skillHighlightIndex.value = (skillHighlightIndex.value - 1 + filteredSkillList.value.length) % filteredSkillList.value.length;
+            nextTick(() => { const activeItem = document.querySelector('.skill-quick-item.highlighted'); if (activeItem) activeItem.scrollIntoView({ block: 'nearest' }); });
+            return;
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            skillHighlightIndex.value = (skillHighlightIndex.value + 1) % filteredSkillList.value.length;
+            nextTick(() => { const activeItem = document.querySelector('.skill-quick-item.highlighted'); if (activeItem) activeItem.scrollIntoView({ block: 'nearest' }); });
+            return;
+        }
+        if (event.key === 'Tab') { // Tab 补全
+            event.preventDefault();
+            handleSkillTab();
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const skill = filteredSkillList.value[skillHighlightIndex.value];
+            if (skill) handleToggleSkill(skill.name);
+            return;
+        }
+        if (/^[0-9]$/.test(event.key)) {
+            event.preventDefault();
+            const idx = parseInt(event.key);
+            if (idx < filteredSkillList.value.length) handleToggleSkill(filteredSkillList.value[idx].name);
             return;
         }
     }
@@ -187,7 +253,7 @@ const handleKeyDown = (event) => {
 
     // 原有的回车发送逻辑
     if (event.key !== 'Enter') return;
-    
+
     const isCtrlOrMetaPressed = event.ctrlKey || event.metaKey;
     if (!props.ctrlEnterToSend) {
         if (isCtrlOrMetaPressed) {
@@ -207,7 +273,8 @@ const handleKeyDown = (event) => {
 
 const handleToggleMcp = (serverId) => {
     emit('toggle-mcp', serverId);
-    showMcpQuickSelect.value = false; prompt.value = '';
+    showMcpQuickSelect.value = false;
+    prompt.value = prompt.value.replace(/(?:^|\s)@([^@\s]*)$/, '').trimEnd();
 };
 
 const handleMcpClick = (server) => {
@@ -477,12 +544,12 @@ const getDisplayTypeName = (type) => {
     if (!type) return '';
     const streamableHttpRegex = /^streamable[\s_-]?http$/i;
     const lowerType = type.toLowerCase();
-    
+
     if (lowerType === 'builtin') return '内置';
     if (streamableHttpRegex.test(lowerType) || lowerType === 'http') return 'HTTP'; // 简化显示
     if (lowerType === 'sse') return 'SSE';
     if (lowerType === 'stdio') return 'Stdio';
-    
+
     return type;
 };
 
@@ -505,20 +572,16 @@ defineExpose({ focus, senderRef });
                 <div class="file-card-container">
                     <div v-for="(file, index) in fileList" :key="index" class="custom-file-card">
                         <div class="file-icon">
-                            <el-icon :size="20"><Document /></el-icon>
+                            <el-icon :size="20">
+                                <Document />
+                            </el-icon>
                         </div>
                         <div class="file-info">
                             <div class="file-name" :title="file.name">{{ file.name }}</div>
                             <div class="file-size">{{ (file.size / 1024).toFixed(1) }} KB</div>
                         </div>
                         <div class="file-actions">
-                            <el-button 
-                                type="danger" 
-                                link 
-                                :icon="Delete" 
-                                size="small" 
-                                @click="onRemoveFile(index)" 
-                            />
+                            <el-button type="danger" link :icon="Delete" size="small" @click="onRemoveFile(index)" />
                         </div>
                     </div>
                 </div>
@@ -605,13 +668,13 @@ defineExpose({ focus, senderRef });
                         <!-- 顶部提示栏 -->
                         <div class="mcp-quick-header">
                             <span class="header-title">MCP快捷选择</span>
-                            <span class="header-hint">Esc 取消 <span class="divider">|</span> ⇅ 选择 <span class="divider">|</span> Enter/数字键 确认</span>
+                            <span class="header-hint">Esc 取消 <span class="divider">|</span> ⇅ 选择 <span
+                                    class="divider">|</span> Enter/数字键 确认</span>
                         </div>
-                        
+
                         <!-- 滚动列表区域 -->
                         <div class="mcp-quick-list-scroll">
-                            <div v-for="(server, idx) in filteredMcpList" :key="server.id" 
-                                class="mcp-quick-item" 
+                            <div v-for="(server, idx) in filteredMcpList" :key="server.id" class="mcp-quick-item"
                                 :class="{ 'highlighted': idx === mcpHighlightIndex, 'active': activeMcpIds.includes(server.id) }"
                                 @mousedown.prevent="handleMcpClick(server)">
                                 <div class="mcp-item-left">
@@ -619,13 +682,46 @@ defineExpose({ focus, senderRef });
                                     <span class="mcp-name">{{ server.name }}</span>
                                     <div class="mcp-tags">
                                         <!-- 显式显示类型标签 -->
-                                        <span v-if="server.type" class="mcp-tag type-tag">{{ getDisplayTypeName(server.type) }}</span>
+                                        <span v-if="server.type" class="mcp-tag type-tag">{{
+                                            getDisplayTypeName(server.type) }}</span>
                                         <!-- 原有的用户标签 -->
-                                        <span v-for="tag in (server.tags || []).slice(0,2)" :key="tag" class="mcp-tag">{{ tag }}</span>
+                                        <span v-for="tag in (server.tags || []).slice(0, 2)" :key="tag"
+                                            class="mcp-tag">{{ tag }}</span>
                                     </div>
                                 </div>
                                 <div class="mcp-item-right">
-                                    <el-icon v-if="activeMcpIds.includes(server.id)" class="active-icon"><Check /></el-icon>
+                                    <el-icon v-if="activeMcpIds.includes(server.id)" class="active-icon">
+                                        <Check />
+                                    </el-icon>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="showSkillQuickSelect && filteredSkillList.length > 0" class="mcp-quick-select">
+                        <div class="mcp-quick-header">
+                            <span class="header-title">Skill 技能选择</span>
+                            <span class="header-hint">Esc 取消 <span class="divider">|</span> Tab 补全 <span class="divider">|</span> Enter 确认</span>
+                        </div>
+                        <div class="mcp-quick-list-scroll">
+                            <div v-for="(skill, idx) in filteredSkillList" :key="skill.name"
+                                class="mcp-quick-item skill-quick-item"
+                                :class="{ 'highlighted': idx === skillHighlightIndex, 'active': activeSkillIds.includes(skill.name) }"
+                                @mousedown.prevent="handleToggleSkill(skill.name)">
+                                <div class="mcp-item-left">
+                                    <span class="mcp-index-badge">{{ idx }}</span>
+                                    <span class="mcp-name">{{ skill.name }}</span>
+                                    <div class="mcp-tags skill-tags-container">
+                                        <span v-if="skill.context === 'fork'" class="mcp-tag type-tag"
+                                            style="color: #E6A23C; background-color: rgba(230, 162, 60, 0.1); flex-shrink: 0;">Sub-Agent</span>
+                                        <span class="mcp-tag skill-desc-tag" :title="skill.description">{{
+                                            skill.description || '无描述' }}</span>
+                                    </div>
+                                </div>
+                                <div class="mcp-item-right">
+                                    <el-icon v-if="activeSkillIds.includes(skill.name)" class="active-icon">
+                                        <Check />
+                                    </el-icon>
                                 </div>
                             </div>
                         </div>
@@ -633,7 +729,7 @@ defineExpose({ focus, senderRef });
 
                     <div class="input-wrapper">
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
-                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容，“@”选择MCP'"
+                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容，“ @”选择MCP，“ /”选择skill'"
                             :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleKeyDown"
                             :disabled="isRecording" />
                     </div>
@@ -718,7 +814,7 @@ defineExpose({ focus, senderRef });
                             </el-tooltip>
                             <el-tooltip content="Skill 技能库">
                                 <el-button size="default" circle :disabled="isRecording"
-                                    :class="{ 'is-active-special': activeSkillIds && activeSkillIds.length > 0 }" 
+                                    :class="{ 'is-active-special': activeSkillIds && activeSkillIds.length > 0 }"
                                     @click="$emit('open-skill-dialog')">
                                     <el-icon :size="18">
                                         <Collection />
@@ -738,7 +834,16 @@ defineExpose({ focus, senderRef });
                                     <el-button ref="audioButtonRef" size="default" @click="toggleAudioSourceSelector"
                                         circle>
                                         <el-icon :size="17">
-                                            <svg t="1765029327206" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="68987" width="200" height="200"><path d="M516.368 732.288c126.944 0 230.096-99.696 230.096-222.272V230.272c0-122.56-103.28-222.272-230.096-222.272S286.16 107.696 286.16 230.272v279.744c0 122.56 103.28 222.272 230.208 222.272zM377.664 230.272c0-73.808 62.256-133.984 138.704-133.984 76.448 0 138.688 60.048 138.688 133.984v279.744c0 73.808-62.256 134-138.688 134-76.448 0-138.704-60.048-138.704-134V230.272z" p-id="68988"></path><path d="M465.088 899.296C267.52 876.656 113.776 712.928 113.776 514.928c0-24.832 20.64-44.896 46.16-44.896 25.536 0 46.16 20.064 46.16 44.896 0 163.952 137.184 297.376 305.856 297.376 168.656 0 305.968-133.424 305.968-297.376 0-24.832 20.656-44.896 46.192-44.896 25.504 0 46.128 20.064 46.128 44.896 0 196.976-152.096 359.872-348.16 384.016v68.592A48.416 48.416 0 0 1 513.6 1016a48.448 48.448 0 0 1-48.496-48.464v-68.24z" p-id="68989"></path></svg>
+                                            <svg t="1765029327206" class="icon" viewBox="0 0 1024 1024" version="1.1"
+                                                xmlns="http://www.w3.org/2000/svg" p-id="68987" width="200"
+                                                height="200">
+                                                <path
+                                                    d="M516.368 732.288c126.944 0 230.096-99.696 230.096-222.272V230.272c0-122.56-103.28-222.272-230.096-222.272S286.16 107.696 286.16 230.272v279.744c0 122.56 103.28 222.272 230.208 222.272zM377.664 230.272c0-73.808 62.256-133.984 138.704-133.984 76.448 0 138.688 60.048 138.688 133.984v279.744c0 73.808-62.256 134-138.688 134-76.448 0-138.704-60.048-138.704-134V230.272z"
+                                                    p-id="68988"></path>
+                                                <path
+                                                    d="M465.088 899.296C267.52 876.656 113.776 712.928 113.776 514.928c0-24.832 20.64-44.896 46.16-44.896 25.536 0 46.16 20.064 46.16 44.896 0 163.952 137.184 297.376 305.856 297.376 168.656 0 305.968-133.424 305.968-297.376 0-24.832 20.656-44.896 46.192-44.896 25.504 0 46.128 20.064 46.128 44.896 0 196.976-152.096 359.872-348.16 384.016v68.592A48.416 48.416 0 0 1 513.6 1016a48.448 48.448 0 0 1-48.496-48.464v-68.24z"
+                                                    p-id="68989"></path>
+                                            </svg>
                                         </el-icon>
                                     </el-button>
                                 </el-tooltip>
@@ -826,8 +931,10 @@ html.dark .drag-overlay {
     box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
     z-index: 100;
     margin-bottom: 8px;
-    padding: 0; /* padding 移到内部元素 */
-    overflow: hidden; /* 防止圆角溢出 */
+    padding: 0;
+    /* padding 移到内部元素 */
+    overflow: hidden;
+    /* 防止圆角溢出 */
 }
 
 /* 顶部提示栏样式 */
@@ -850,7 +957,8 @@ html.dark .drag-overlay {
 .header-hint {
     font-size: 11px;
     color: var(--el-text-color-secondary);
-    font-family: monospace; /* 等宽字体让快捷键更好看 */
+    font-family: monospace;
+    /* 等宽字体让快捷键更好看 */
 }
 
 .header-hint .divider {
@@ -860,7 +968,8 @@ html.dark .drag-overlay {
 
 /* 滚动列表区域 */
 .mcp-quick-list-scroll {
-    max-height: 260px; /* 列表内容的最大高度 */
+    max-height: 260px;
+    /* 列表内容的最大高度 */
     overflow-y: auto;
     padding: 6px;
     display: flex;
@@ -872,6 +981,7 @@ html.dark .drag-overlay {
 .mcp-quick-list-scroll::-webkit-scrollbar {
     width: 6px;
 }
+
 .mcp-quick-list-scroll::-webkit-scrollbar-thumb {
     background-color: var(--el-border-color);
     border-radius: 3px;
@@ -907,12 +1017,14 @@ html.dark .app-container.has-bg .mcp-quick-header {
     padding: 4px 8px 4px 8px;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 0.15s ease; /* 增加平滑过渡 */
-    border: 1px solid transparent; /* 预留边框位置防止跳动 */
+    transition: all 0.15s ease;
+    /* 增加平滑过渡 */
+    border: 1px solid transparent;
+    /* 预留边框位置防止跳动 */
 }
 
 /* 1. 默认状态：悬浮 (Hover) & 键盘高亮 (Highlighted) */
-.mcp-quick-item:hover, 
+.mcp-quick-item:hover,
 .mcp-quick-item.highlighted {
     background-color: var(--el-fill-color);
 }
@@ -924,34 +1036,36 @@ html.dark .app-container.has-bg .mcp-quick-header {
 }
 
 .mcp-quick-item.active .mcp-name {
-    color: var(--el-color-primary); /* 激活时名称变为主色 */
+    color: var(--el-color-primary);
+    /* 激活时名称变为主色 */
     font-weight: 600;
 }
 
 /* 3. 激活 + 悬浮/高亮 (叠加状态) */
-.mcp-quick-item.active:hover, 
+.mcp-quick-item.active:hover,
 .mcp-quick-item.active.highlighted {
     background-color: var(--el-color-primary-light-8);
 }
 
 /* --- 深色模式适配 (Dark Mode) --- */
 html.dark .mcp-quick-item.active {
-    background-color: rgba(64, 158, 255, 0.15); /* 使用透明主色，避免 light-9 在暗色下太亮 */
+    background-color: rgba(64, 158, 255, 0.15);
+    /* 使用透明主色，避免 light-9 在暗色下太亮 */
     border-color: rgba(64, 158, 255, 0.2);
 }
 
-html.dark .mcp-quick-item.active:hover, 
+html.dark .mcp-quick-item.active:hover,
 html.dark .mcp-quick-item.active.highlighted {
     background-color: rgba(64, 158, 255, 0.25);
 }
 
 /* 1. 悬浮/高亮 */
-.app-container.has-bg .mcp-quick-item:hover, 
+.app-container.has-bg .mcp-quick-item:hover,
 .app-container.has-bg .mcp-quick-item.highlighted {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
-html.dark .app-container.has-bg .mcp-quick-item:hover, 
+html.dark .app-container.has-bg .mcp-quick-item:hover,
 html.dark .app-container.has-bg .mcp-quick-item.highlighted {
     background-color: rgba(255, 255, 255, 0.1);
 }
@@ -970,12 +1084,12 @@ html.dark .app-container.has-bg .mcp-quick-item.active {
 }
 
 /* 3. 激活 + 悬浮/高亮 */
-.app-container.has-bg .mcp-quick-item.active:hover, 
+.app-container.has-bg .mcp-quick-item.active:hover,
 .app-container.has-bg .mcp-quick-item.active.highlighted {
     background-color: rgba(64, 158, 255, 0.25);
 }
 
-html.dark .app-container.has-bg .mcp-quick-item.active:hover, 
+html.dark .app-container.has-bg .mcp-quick-item.active:hover,
 html.dark .app-container.has-bg .mcp-quick-item.active.highlighted {
     background-color: rgba(64, 158, 255, 0.35);
 }
@@ -995,7 +1109,8 @@ html.dark .app-container.has-bg .mcp-quick-item.active.highlighted {
     min-width: 18px;
     height: 18px;
     border-radius: 4px;
-    background-color: var(--el-fill-color-dark); /* 浅色模式默认 */
+    background-color: var(--el-fill-color-dark);
+    /* 浅色模式默认 */
     color: var(--el-text-color-secondary);
     font-size: 11px;
     font-weight: bold;
@@ -1018,9 +1133,10 @@ html.dark .mcp-quick-item.highlighted .mcp-index-badge {
     background-color: rgba(255, 255, 255, 0.25);
     color: #ffffff;
 }
+
 html.dark .mcp-quick-item.active .mcp-index-badge {
     background-color: var(--el-color-primary);
-    color: #1a1a1a; 
+    color: #1a1a1a;
 }
 
 .mcp-name {
@@ -1052,11 +1168,11 @@ html.dark .mcp-quick-item.active .mcp-index-badge {
     color: var(--el-color-primary);
     font-weight: 600;
     padding-bottom: 0px;
-    padding-top:2px;
+    padding-top: 2px;
 }
 
 html.dark .mcp-tag.type-tag {
-    background-color: var(--el-color-primary-light-8); 
+    background-color: var(--el-color-primary-light-8);
     color: var(--el-color-primary-dark-2);
 }
 
@@ -1070,6 +1186,22 @@ html.dark .mcp-tag.type-tag {
 .active-icon {
     color: var(--el-color-primary);
     font-weight: bold;
+}
+
+.skill-tags-container {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.skill-desc-tag {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+    padding-top: 1px;
 }
 
 /* --- 文件卡片容器样式 (原有) --- */
@@ -1093,7 +1225,8 @@ html.dark .mcp-tag.type-tag {
     border: 1px solid var(--el-border-color-light);
     border-radius: 6px;
     padding: 6px 10px;
-    margin-right: 0; /* gap已处理间距 */
+    margin-right: 0;
+    /* gap已处理间距 */
     min-width: 140px;
     max-width: 220px;
     height: 48px;
@@ -1121,7 +1254,8 @@ html.dark .mcp-tag.type-tag {
     flex: 1;
     overflow: hidden;
     line-height: 1.2;
-    min-width: 0; /* 修复 flex 子项截断问题 */
+    min-width: 0;
+    /* 修复 flex 子项截断问题 */
 }
 
 .file-name {
@@ -1219,9 +1353,17 @@ html.dark .file-card-container::-webkit-scrollbar-thumb:hover {
 }
 
 @keyframes pulse-text {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; }
-    100% { opacity: 0.7; }
+    0% {
+        opacity: 0.7;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.7;
+    }
 }
 
 html.dark .waveform-display-area {
@@ -1290,7 +1432,8 @@ html.dark .el-divider--vertical {
     border-radius: 12px;
     padding: 10px 12px;
     border: 1px solid #E4E7ED;
-    position: relative; /* 确保绝对定位的 mcp 列表相对此定位 */
+    position: relative;
+    /* 确保绝对定位的 mcp 列表相对此定位 */
 }
 
 html.dark .chat-input-area-vertical {
@@ -1494,7 +1637,12 @@ html.dark .cancel-spinner {
 }
 
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 </style>
