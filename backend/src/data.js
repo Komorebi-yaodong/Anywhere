@@ -119,65 +119,168 @@ const defaultConfig = {
   }
 };
 
+function getLocalConfigId() {
+  return 'config_local_' + utools.getNativeId();
+}
+
 /**
- * [已重构] 拆分完整的 config 对象以便于分块存储
- * @param {object} fullConfig - 包含 prompts 和 providers 的完整 config 对象
- * @returns {{baseConfigPart: object, promptsPart: object, providersPart: object, mcpServersPart: object}} - 拆分后的四部分
+ * 拆分完整的 config 对象以便于分块存储
+ * 增加了 localConfigPart 用于存储设备特定的路径配置
  */
 function splitConfigForStorage(fullConfig) {
-  const { prompts, providers, mcpServers, ...restOfConfig } = fullConfig;
+  // 深拷贝一份以避免修改原对象影响后续逻辑
+  const configCopy = JSON.parse(JSON.stringify(fullConfig));
+  
+  const { prompts, providers, mcpServers, ...restOfConfig } = configCopy;
+
+  // 提取本地配置
+  const localConfigPart = {
+    skillPath: restOfConfig.skillPath || "",
+    localChatPath: restOfConfig.webdav?.localChatPath || ""
+  };
+
+  // 从共享配置中移除本地特定的字段，防止污染云端同步
+  delete restOfConfig.skillPath;
+  if (restOfConfig.webdav) {
+    delete restOfConfig.webdav.localChatPath;
+  }
 
   return {
     baseConfigPart: { config: restOfConfig },
     promptsPart: prompts,
     providersPart: providers,
     mcpServersPart: mcpServers,
+    localConfigPart: localConfigPart // 新增返回部分
   };
 }
 
 /**
- * 从数据库异步读取配置，合并分块数据，并处理旧版本数据迁移
- * @returns {Promise<object>} - 返回包含完整配置对象的 Promise
+ * [已重构] 拆分完整的 config 对象以便于分块存储
+ * @param {object} fullConfig - 包含 prompts 和 providers 的完整 config 对象
+ * @returns {{baseConfigPart: object, promptsPart: object, providersPart: object, mcpServersPart: object}} - 拆分后的四部分
+ */
+function splitConfigForStorage(fullConfig) {
+  // 1. 安全检查：如果传入为空，使用空对象防止崩溃
+  const source = fullConfig || {};
+  
+  // 2. 深拷贝
+  const configCopy = JSON.parse(JSON.stringify(source));
+  
+  const { prompts, providers, mcpServers, ...restOfConfig } = configCopy;
+
+  // 3. 提取本地配置 (增加安全访问)
+  const localConfigPart = {
+    skillPath: restOfConfig.skillPath || "",
+    localChatPath: (restOfConfig.webdav && restOfConfig.webdav.localChatPath) || ""
+  };
+
+  // 4. 从共享配置中移除本地字段
+  delete restOfConfig.skillPath;
+  if (restOfConfig.webdav) {
+    delete restOfConfig.webdav.localChatPath;
+  }
+
+  return {
+    baseConfigPart: { config: restOfConfig },
+    promptsPart: prompts,
+    providersPart: providers,
+    mcpServersPart: mcpServers,
+    localConfigPart: localConfigPart
+  };
+}
+
+/**
+ * 从数据库异步读取配置，合并分块数据
  */
 async function getConfig() {
   let configDoc = await utools.db.promises.get("config");
+  const localId = getLocalConfigId();
+  let localDoc = await utools.db.promises.get(localId);
 
   // --- 1. 新用户初始化 ---
   if (!configDoc) {
-    const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(defaultConfig.config);
+    const { baseConfigPart, promptsPart, providersPart, mcpServersPart, localConfigPart } = splitConfigForStorage(defaultConfig.config);
     await utools.db.promises.put({ _id: "config", data: baseConfigPart });
     await utools.db.promises.put({ _id: "prompts", data: promptsPart });
     await utools.db.promises.put({ _id: "providers", data: providersPart });
     await utools.db.promises.put({ _id: "mcpServers", data: mcpServersPart });
+    await utools.db.promises.put({ _id: localId, data: localConfigPart });
     return defaultConfig;
   }
 
   // --- 2. 旧版本数据自动迁移 ---
-  if (configDoc.data.config && configDoc.data.config.prompts) {
+  if (configDoc.data && configDoc.data.config && configDoc.data.config.prompts) {
     console.warn("Anywhere: Old configuration format detected. Starting migration.");
     const oldFullConfig = configDoc.data.config;
-    const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(oldFullConfig);
+    const { baseConfigPart, promptsPart, providersPart, mcpServersPart, localConfigPart } = splitConfigForStorage(oldFullConfig);
 
     await utools.db.promises.put({ _id: "prompts", data: promptsPart });
     await utools.db.promises.put({ _id: "providers", data: providersPart });
     await utools.db.promises.put({ _id: "mcpServers", data: mcpServersPart });
+    await utools.db.promises.put({ _id: localId, data: localConfigPart });
 
-    const updateResult = await utools.db.promises.put({
+    await utools.db.promises.put({
       _id: "config",
       data: baseConfigPart,
       _rev: configDoc._rev
     });
-
-    if (updateResult.ok) {
-      // console.log("Anywhere: Migration successful. Old config cleaned.");
-    } else {
-      console.error("Anywhere: Migration failed to update old config document.", updateResult.message);
-    }
+    
     configDoc = await utools.db.promises.get("config");
+    localDoc = await utools.db.promises.get(localId);
   }
 
-  // --- 3. 异步读取新版分块数据并合并 ---
-  const fullConfigData = configDoc.data;
+  // --- 3. 中间版本迁移：检查共享配置中是否残留了本地路径 ---
+  let baseConfig = (configDoc.data && configDoc.data.config) ? configDoc.data.config : null;
+  
+  if (baseConfig) {
+      // 关键修复：确保 localData 始终是一个对象，即使 localDoc.data 缺失
+      let localData = (localDoc && localDoc.data) ? localDoc.data : { skillPath: "", localChatPath: "" };
+      let needSaveShared = false;
+      let needSaveLocal = false;
+
+      // 检查 skillPath
+      if (baseConfig.skillPath !== undefined) {
+        if (!localData.skillPath) {
+          localData.skillPath = baseConfig.skillPath;
+          needSaveLocal = true;
+        }
+        delete baseConfig.skillPath;
+        needSaveShared = true;
+      }
+
+      // 检查 webdav.localChatPath
+      if (baseConfig.webdav && baseConfig.webdav.localChatPath !== undefined) {
+        if (!localData.localChatPath) {
+          localData.localChatPath = baseConfig.webdav.localChatPath;
+          needSaveLocal = true;
+        }
+        delete baseConfig.webdav.localChatPath;
+        needSaveShared = true;
+      }
+
+      if (needSaveShared) {
+        await utools.db.promises.put({
+          _id: "config",
+          data: configDoc.data, 
+          _rev: configDoc._rev
+        });
+        configDoc = await utools.db.promises.get("config");
+      }
+
+      if (needSaveLocal) {
+        await utools.db.promises.put({
+          _id: localId,
+          data: localData,
+          _rev: localDoc ? localDoc._rev : undefined
+        });
+        localDoc = await utools.db.promises.get(localId);
+      }
+  }
+
+  // --- 4. 合并数据 ---
+  const fullConfigData = configDoc.data || { config: {} };
+  if (!fullConfigData.config) fullConfigData.config = {};
+
   const [promptsDoc, providersDoc, mcpServersDoc] = await Promise.all([
     utools.db.promises.get("prompts"),
     utools.db.promises.get("providers"),
@@ -187,13 +290,17 @@ async function getConfig() {
   fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig.config.prompts;
   fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig.config.providers;
   
-  // 合并用户配置和内置服务器
+  // 注入本地路径 (再次确保安全性)
+  const currentLocalData = (localDoc && localDoc.data) ? localDoc.data : {};
+  fullConfigData.config.skillPath = currentLocalData.skillPath || "";
+  
+  if (!fullConfigData.config.webdav) fullConfigData.config.webdav = {};
+  fullConfigData.config.webdav.localChatPath = currentLocalData.localChatPath || "";
+
+  // 合并 MCP
   const userMcpServers = mcpServersDoc ? mcpServersDoc.data : (defaultConfig.config.mcpServers || {});
   const builtinServers = getBuiltinServers();
-  
-  // 如果用户数据库里有同名ID，说明用户可能修改了状态(isActive/isPersistent)，合并状态
   const mergedMcpServers = { ...userMcpServers };
-  
   for (const [id, server] of Object.entries(builtinServers)) {
       if (mergedMcpServers[id]) {
           mergedMcpServers[id] = { 
@@ -209,7 +316,6 @@ async function getConfig() {
 
   return fullConfigData;
 }
-
 
 function checkConfig(config) {
   let flag = false;
@@ -383,46 +489,73 @@ function checkConfig(config) {
  * @returns {{success: boolean, message?: string}}
  */
 async function saveSetting(keyPath, value) {
+  // 1. 拦截本地特定的设置项
+  if (keyPath === 'skillPath' || keyPath === 'webdav.localChatPath') {
+    const localId = getLocalConfigId();
+    let doc = await utools.db.promises.get(localId);
+    if (!doc) {
+      doc = { _id: localId, data: {} };
+    }
+    
+    // 更新本地数据
+    if (keyPath === 'skillPath') {
+      doc.data.skillPath = value;
+    } else if (keyPath === 'webdav.localChatPath') {
+      doc.data.localChatPath = value;
+    }
+
+    const result = await utools.db.promises.put({
+      _id: localId,
+      data: doc.data,
+      _rev: doc._rev
+    });
+
+    if (result.ok) {
+      // 广播更新
+      const fullConfig = await getConfig();
+      for (const windowInstance of windowMap.values()) {
+        if (!windowInstance.isDestroyed()) {
+          windowInstance.webContents.send('config-updated', fullConfig.config);
+        }
+      }
+      return { success: true };
+    } else {
+      console.error(`Failed to save local setting to "${localId}"`, result);
+      return { success: false, message: result.message };
+    }
+  }
+
   const rootKey = keyPath.split('.')[0];
   let docId;
-  let targetObjectKey; // 二级键名 (如 promptKey 或 serverId)
-  let targetPropKey;   // 属性名 (如 model, enable)
+  let targetObjectKey;
+  let targetPropKey;
 
   if (rootKey === 'prompts') {
     docId = 'prompts';
-    // 逻辑：keyPath 格式为 "prompts.{promptKey}.{property}"
-    // 我们需要提取中间的 promptKey，它可能包含点号
     const firstDotIndex = keyPath.indexOf('.');
     const lastDotIndex = keyPath.lastIndexOf('.');
-
     if (firstDotIndex === -1 || lastDotIndex === -1 || firstDotIndex === lastDotIndex) {
-      console.error(`Invalid keyPath for prompts: ${keyPath}`);
       return { success: false, message: `Invalid keyPath: ${keyPath}` };
     }
-
     targetObjectKey = keyPath.substring(firstDotIndex + 1, lastDotIndex);
     targetPropKey = keyPath.substring(lastDotIndex + 1);
 
   } else if (rootKey === 'providers') {
     docId = 'providers';
-    // providers 的 id 通常是时间戳，不含点号，但为了保险也用同样逻辑
     const firstDotIndex = keyPath.indexOf('.');
     const lastDotIndex = keyPath.lastIndexOf('.');
     if (firstDotIndex !== -1 && lastDotIndex !== -1 && firstDotIndex !== lastDotIndex) {
       targetObjectKey = keyPath.substring(firstDotIndex + 1, lastDotIndex);
       targetPropKey = keyPath.substring(lastDotIndex + 1);
     } else {
-      // Fallback for simple paths
       const parts = keyPath.split('.');
       targetObjectKey = parts[1];
       targetPropKey = parts[2];
     }
   } else if (rootKey === 'mcpServers') {
     docId = 'mcpServers';
-    // MCP server id 可能包含点号
     const firstDotIndex = keyPath.indexOf('.');
     const lastDotIndex = keyPath.lastIndexOf('.');
-
     if (firstDotIndex !== -1 && lastDotIndex !== -1 && firstDotIndex !== lastDotIndex) {
       targetObjectKey = keyPath.substring(firstDotIndex + 1, lastDotIndex);
       targetPropKey = keyPath.substring(lastDotIndex + 1);
@@ -435,7 +568,6 @@ async function saveSetting(keyPath, value) {
 
   const doc = await utools.db.promises.get(docId);
   if (!doc) {
-    console.error(`Config document "${docId}" not found, cannot save setting.`);
     return { success: false, message: `Config document "${docId}" not found` };
   }
 
@@ -452,7 +584,6 @@ async function saveSetting(keyPath, value) {
       current = current[part];
     }
     current[pathParts[pathParts.length - 1]] = value;
-
   } else {
     if (!dataToUpdate[targetObjectKey]) {
       dataToUpdate[targetObjectKey] = {};
@@ -475,7 +606,6 @@ async function saveSetting(keyPath, value) {
     }
     return { success: true };
   } else {
-    console.error(`Failed to save setting to "${docId}"`, result);
     return { success: false, message: result.message };
   }
 }
@@ -484,23 +614,16 @@ async function saveSetting(keyPath, value) {
  * 更新完整的配置，将其拆分并分别存储
  */
 function updateConfigWithoutFeatures(newConfig) {
-  // 在将配置存入数据库前，将其转换为纯净的 JavaScript 对象，以移除 Vue 的响应式 Proxy。
   const plainConfig = JSON.parse(JSON.stringify(newConfig.config));
   
-  // [关键修改] 在拆分前，过滤 mcpServers，防止内置MCP的全量配置被写入数据库
   if (plainConfig.mcpServers) {
       const serverToSave = {};
       const builtinIds = Object.keys(getBuiltinServers());
-      
       for (const [id, server] of Object.entries(plainConfig.mcpServers)) {
           if (server.type === 'builtin' || builtinIds.includes(id)) {
-              // 对于内置服务，仅保存状态，不保存完整定义
               serverToSave[id] = {
-                  id: server.id,
-                  type: 'builtin',
-                  name: server.name,
-                  isActive: server.isActive,
-                  isPersistent: server.isPersistent
+                  id: server.id, type: 'builtin', name: server.name,
+                  isActive: server.isActive, isPersistent: server.isPersistent
               };
           } else {
               serverToSave[id] = server;
@@ -509,9 +632,10 @@ function updateConfigWithoutFeatures(newConfig) {
       plainConfig.mcpServers = serverToSave;
   }
 
-  const { baseConfigPart, promptsPart, providersPart, mcpServersPart } = splitConfigForStorage(plainConfig);
+  // 使用新的拆分逻辑，获取 localConfigPart
+  const { baseConfigPart, promptsPart, providersPart, mcpServersPart, localConfigPart } = splitConfigForStorage(plainConfig);
 
-  // 1. 更新基础配置 (config)
+  // 1. 更新基础配置 (config) - 此时已移除 path
   let configDoc = utools.db.get("config");
   utools.db.put({
     _id: "config",
@@ -543,9 +667,17 @@ function updateConfigWithoutFeatures(newConfig) {
     _rev: mcpServersDoc ? mcpServersDoc._rev : undefined,
   });
 
-  // 5. 广播配置更新给所有已打开的独立窗口
+  // 5. 更新本地特定配置
+  const localId = getLocalConfigId();
+  let localDoc = utools.db.get(localId);
+  utools.db.put({
+    _id: localId,
+    data: localConfigPart,
+    _rev: localDoc ? localDoc._rev : undefined
+  });
+
+  // 6. 广播配置更新
   const fullConfigForFrontend = JSON.parse(JSON.stringify(newConfig.config));
-  
   for (const windowInstance of windowMap.values()) {
     if (!windowInstance.isDestroyed()) {
       windowInstance.webContents.send('config-updated', fullConfigForFrontend);
@@ -1122,7 +1254,7 @@ async function cacheBackgroundImage(url) {
     const arrayBuffer = await response.arrayBuffer();
     let buffer = Buffer.from(arrayBuffer);
 
-    // 3. [新增] 图片压缩处理
+    // 3. 图片压缩处理
     try {
       const image = nativeImage.createFromBuffer(buffer);
       if (!image.isEmpty()) {
