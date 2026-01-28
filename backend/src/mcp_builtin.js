@@ -24,7 +24,7 @@ function extractMetadata(html) {
     // 提取 Title
     const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     if (titleMatch) meta.title = titleMatch[1].trim();
-    
+
     // 辅助正则：从 meta 标签提取 content
     const getMetaContent = (propName) => {
         const regex = new RegExp(`<meta\\s+(?:name|property)=["']${propName}["']\\s+content=["'](.*?)["']`, 'i');
@@ -50,7 +50,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
     // 如果 noscript 内容比当前 body 内容长很多，优先使用 noscript
     const noscriptMatch = text.match(/<noscript[^>]*>([\s\S]*?)<\/noscript>/i);
     const bodyMatch = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    
+
     let bodyText = bodyMatch ? bodyMatch[1] : text;
     if (noscriptMatch && noscriptMatch[1].length > bodyText.length) {
         text = noscriptMatch[1];
@@ -60,15 +60,15 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
 
     // --- 2. 移除绝对无关的标签 ---
     text = text.replace(/<(script|style|svg|noscript|iframe|form|button|input|select|option|textarea)[^>]*>[\s\S]*?<\/\1>/gi, '');
-    
+
     // --- 3. 移除 HTML5 语义化噪音标签 ---
     text = text.replace(/<(nav|footer|aside)[^>]*>[\s\S]*?<\/\1>/gi, '');
 
     // --- 4. 基于类名/ID 的通用降噪 ---
     const noiseKeywords = "sidebar|comment|recommend|advert|ads|menu|login|modal|popup|cookie|auth|related|footer|copyright";
     const noiseRegex = new RegExp(`<div[^>]*(?:id|class)=["'][^"']*(${noiseKeywords})[^"']*["'][^>]*>[\\s\\S]*?<\\/div>`, 'gi');
-    text = text.replace(noiseRegex, ''); 
-    text = text.replace(noiseRegex, ''); 
+    text = text.replace(noiseRegex, '');
+    text = text.replace(noiseRegex, '');
 
     // --- 5. 移除注释 ---
     text = text.replace(/<!--[\s\S]*?-->/g, '');
@@ -77,7 +77,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
     const resolveUrl = (relativeUrl) => {
         if (!relativeUrl || !baseUrl) return relativeUrl;
         if (relativeUrl.startsWith('http')) return relativeUrl;
-        if (relativeUrl.startsWith('data:')) return ''; 
+        if (relativeUrl.startsWith('data:')) return '';
         try {
             return new URL(relativeUrl, baseUrl).href;
         } catch (e) {
@@ -113,7 +113,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
     });
 
     text = text.replace(/<(b|strong)[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**');
-    
+
     // 代码块处理
     text = text.replace(/<pre[^>]*>[\s\S]*?<code[^>]*>([\s\S]*?)<\/code>[\s\S]*?<\/pre>/gi, (match, code) => {
         return `\n\`\`\`\n${code}\n\`\`\`\n`;
@@ -131,7 +131,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
     // --- 10. 行级清洗与去重 ---
     const lines = text.split('\n').map(line => line.trim());
     const cleanLines = [];
-    
+
     const lineNoiseRegex = /^(Sign in|Sign up|Log in|Register|Subscribe|Share|Follow us|Menu|Top|Home|About|Contact|Privacy|Terms)/i;
 
     let blankLineCount = 0;
@@ -139,7 +139,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
     for (let line of lines) {
         if (!line) {
             blankLineCount++;
-            if (blankLineCount < 2) cleanLines.push(''); 
+            if (blankLineCount < 2) cleanLines.push('');
             continue;
         }
         blankLineCount = 0;
@@ -156,7 +156,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
         cleanLines.push(line);
     }
 
-    return cleanLines.join('\n'); 
+    return cleanLines.join('\n');
 }
 
 // --- Definitions ---
@@ -269,10 +269,10 @@ const BUILTIN_TOOLS = {
                     pattern: { type: "string", description: "Regex pattern to search for." },
                     path: { type: "string", description: "Root directory to search." },
                     glob: { type: "string", description: "Glob pattern to filter files (e.g., '**/*.js')." },
-                    output_mode: { 
-                        type: "string", 
-                        enum: ["content", "files_with_matches", "count"], 
-                        description: "Output mode: 'content' (lines), 'files_with_matches' (paths only), 'count'." 
+                    output_mode: {
+                        type: "string",
+                        enum: ["content", "files_with_matches", "count"],
+                        description: "Output mode: 'content' (lines), 'files_with_matches' (paths only), 'count'."
                     },
                     multiline: { type: "boolean", description: "Enable multiline matching." }
                 },
@@ -308,12 +308,46 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "write_file",
-            description: "Create a new file or completely overwrite an existing file.",
+            description: "Create a new file or completely overwrite an existing file. CAUTION: This tool is ONLY for TEXT-BASED files (code, txt, md, json, etc.). DO NOT use this for binary or Office files (e.g., .docx, .xlsx, .pdf, .png) as it will corrupt them.",
             inputSchema: {
                 type: "object",
                 properties: {
                     file_path: { type: "string", description: "Absolute path to the file." },
                     content: { type: "string", description: "Full content to write to the file." }
+                },
+                required: ["file_path", "content"]
+            }
+        },
+        {
+            name: "replace_pattern",
+            description: "Replace text in a file using JavaScript RegExp. Efficient for making specific changes (e.g., renaming variables, updating arguments) without rewriting the whole file. Supports capture groups ($1, $2).",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    file_path: { type: "string", description: "Absolute path to the file." },
+                    pattern: { type: "string", description: "The Regex pattern to search for. (e.g. 'function oldName\\((.*?)\\)')" },
+                    replacement: { type: "string", description: "The replacement text. Use $1, $2 for capture groups." },
+                    flags: { type: "string", description: "RegExp flags. Defaults to 'gm'.", default: "gm" }
+                },
+                required: ["file_path", "pattern", "replacement"]
+            }
+        },
+        {
+            name: "insert_content",
+            description: "Insert content into a file. Supports two modes: 1. By 'anchor_pattern' (Recommended, safer). 2. By 'line_number' (Use ONLY if you have verified the exact line number via grep_search).",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    file_path: { type: "string", description: "Absolute path to the file." },
+                    content: { type: "string", description: "The content to insert." },
+                    anchor_pattern: { type: "string", description: "Mode A: A unique regex pattern to locate the insertion point." },
+                    line_number: { type: "integer", description: "Mode B: Absolute line number (1-based). CAUTION: Only use if you recently retrieved the line number using 'grep_search'." },
+                    direction: {
+                        type: "string",
+                        enum: ["before", "after"],
+                        description: "Insert 'before' or 'after' the anchor/line. Defaults to 'after'.",
+                        default: "after"
+                    }
                 },
                 required: ["file_path", "content"]
             }
@@ -327,8 +361,8 @@ const BUILTIN_TOOLS = {
                 type: "object",
                 properties: {
                     command: { type: "string", description: `The command to execute (e.g., 'ls -la', 'git status', 'npm install'). Current OS: ${currentOS}.` },
-                    timeout: { 
-                        type: "integer", 
+                    timeout: {
+                        type: "integer",
                         description: "Optional. Timeout in milliseconds. Default is 15000 (15 seconds). Set higher (e.g., 300000 for 5 mins) for long-running tasks like installations.",
                         default: 15000
                     }
@@ -346,9 +380,9 @@ const BUILTIN_TOOLS = {
                 properties: {
                     query: { type: "string", description: "The search keywords." },
                     count: { type: "integer", description: "Number of results to return (default 5, max 10)." },
-                    language: { 
-                        type: "string", 
-                        description: "Preferred language/region code (e.g., 'zh-CN', 'en-US', 'jp'). Defaults to 'zh-CN'." 
+                    language: {
+                        type: "string",
+                        description: "Preferred language/region code (e.g., 'zh-CN', 'en-US', 'jp'). Defaults to 'zh-CN'."
                     }
                 },
                 required: ["query"]
@@ -377,10 +411,10 @@ const BUILTIN_TOOLS = {
                 properties: {
                     task: { type: "string", description: "The detailed task description." },
                     context: { type: "string", description: "Background info, previous conversation summary, code snippets, or user constraints. Do NOT leave empty if the task depends on previous messages." },
-                    tools: { 
-                        type: "array", 
-                        items: { type: "string" }, 
-                        description: "List of tool names to grant. You MUST explicitly list the tools required for the task. If omitted or empty, the Sub-Agent will have NO tools." 
+                    tools: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "List of tool names to grant. You MUST explicitly list the tools required for the task. If omitted or empty, the Sub-Agent will have NO tools."
                     },
                     planning_level: {
                         type: "string",
@@ -394,7 +428,7 @@ const BUILTIN_TOOLS = {
                         description: "Only used if planning_level is 'custom'."
                     }
                 },
-                required: ["task", "tools"] 
+                required: ["task", "tools"]
             }
         }
     ],
@@ -418,7 +452,7 @@ const resolvePath = (inputPath) => {
 // 稳健的 Glob 转 Regex 转换器
 const globToRegex = (glob) => {
     if (!glob) return null;
-    
+
     // 1. 将 Glob 特殊符号替换为唯一的临时占位符
     // 必须先处理 ** (递归)，再处理 * (单层)
     let regex = glob
@@ -426,10 +460,10 @@ const globToRegex = (glob) => {
         .replace(/\*\*/g, '___DOUBLE_STAR___')
         .replace(/\*/g, '___SINGLE_STAR___')
         .replace(/\?/g, '___QUESTION___');
-    
+
     // 2. 转义字符串中剩余的所有正则表达式特殊字符
     regex = regex.replace(/[\\^$|.+()\[\]{}]/g, '\\$&');
-    
+
     // 3. 将占位符替换回对应的正则表达式逻辑
     // ** -> .* (匹配任意字符)
     regex = regex.replace(/___DOUBLE_STAR___/g, '.*');
@@ -437,7 +471,7 @@ const globToRegex = (glob) => {
     regex = regex.replace(/___SINGLE_STAR___/g, '[^/\\\\]*');
     // ? -> . (匹配任意单个字符)
     regex = regex.replace(/___QUESTION___/g, '.');
-    
+
     try {
         return new RegExp(`^${regex}$`, 'i'); // 忽略大小写
     } catch (e) {
@@ -457,7 +491,7 @@ async function* walkDir(dir, maxDepth = 20, currentDepth = 0, signal = null) {
         const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
         for (const dirent of dirents) {
             if (signal && signal.aborted) return; // 循环中响应中断
-            
+
             const res = path.resolve(dir, dirent.name);
             if (dirent.isDirectory()) {
                 if (['node_modules', '.git', '.idea', '.vscode', 'dist', 'build', '__pycache__', '$RECYCLE.BIN', 'System Volume Information'].includes(dirent.name)) continue;
@@ -550,7 +584,7 @@ const runPythonScript = (code, interpreter, signal = null) => {
         }
 
         const env = { ...process.env, PYTHONIOENCODING: 'utf-8' };
-        
+
         const child = spawn(pythonPath, [tempFile], { env });
 
         // 监听中断信号
@@ -599,7 +633,7 @@ const isPathSafe = (targetPath) => {
         /\/etc\/passwd/i,
         /C:\\Windows\\System32\\config/i // Windows SAM hive
     ];
-    
+
     return !forbiddenPatterns.some(regex => regex.test(targetPath));
 };
 
@@ -614,7 +648,7 @@ async function runSubAgent(args, globalContext, signal) {
     // 只有当 allowedToolNames 被明确提供且为非空数组时，才进行筛选并授予权限
     if (allowedToolNames && Array.isArray(allowedToolNames) && allowedToolNames.length > 0) {
         const allowedSet = new Set(allowedToolNames);
-        availableTools = (allToolDefinitions || []).filter(t => 
+        availableTools = (allToolDefinitions || []).filter(t =>
             allowedSet.has(t.function.name) && t.function.name !== 'sub_agent' // 排除自身，防止递归
         );
     }
@@ -651,7 +685,7 @@ ${userContext || 'No additional context provided.'}
     ];
 
     let step = 0;
-    
+
     // 用于记录完整过程的日志
     const executionLog = [];
     const log = (msg) => {
@@ -662,15 +696,15 @@ ${userContext || 'No additional context provided.'}
         }
     };
 
-    log(`[Sub-Agent] Started. Max steps: ${MAX_STEPS}. Tools: ${availableTools.map(t=>t.function.name).join(', ') || 'None'}`);
+    log(`[Sub-Agent] Started. Max steps: ${MAX_STEPS}. Tools: ${availableTools.map(t => t.function.name).join(', ') || 'None'}`);
 
     // 动态导入
-    const { invokeMcpTool } = require('./mcp.js'); 
+    const { invokeMcpTool } = require('./mcp.js');
 
     while (step < MAX_STEPS) {
         if (signal && signal.aborted) throw new Error("Sub-Agent execution aborted by user.");
         step++;
-        
+
         log(`\n--- Step ${step}/${MAX_STEPS} ---`);
 
         try {
@@ -719,14 +753,14 @@ ${userContext || 'No additional context provided.'}
                 const toolName = toolCall.function.name;
                 let toolArgsObj = {};
                 let toolResult = "";
-                
+
                 try {
                     toolArgsObj = JSON.parse(toolCall.function.arguments);
                     log(`[Action] Calling ${toolName}...`);
-                    
+
                     // 执行
                     const result = await invokeMcpTool(toolName, toolArgsObj, signal, null);
-                    
+
                     if (typeof result === 'string') toolResult = result;
                     else if (Array.isArray(result)) toolResult = result.map(i => i.text || JSON.stringify(i)).join('\n');
                     else toolResult = JSON.stringify(result);
@@ -754,7 +788,7 @@ ${userContext || 'No additional context provided.'}
     }
 
     log(`[Stop] Reached maximum step limit.`);
-    
+
     // 定义静态兜底报告生成逻辑 (以防最后一次 LLM 调用失败)
     const generateStaticReport = () => {
         let report = `[Sub-Agent Warning] Execution stopped because the maximum step limit (${MAX_STEPS}) was reached.\n\n`;
@@ -762,9 +796,9 @@ ${userContext || 'No additional context provided.'}
         if (lastMessage) {
             report += `### Last State\n`;
             if (lastMessage.role === 'tool') {
-                 report += `Tool '${lastMessage.name}' output: ${lastMessage.content.slice(0, 500)}...\n`;
+                report += `Tool '${lastMessage.name}' output: ${lastMessage.content.slice(0, 500)}...\n`;
             } else if (lastMessage.content) {
-                 report += `Assistant thought: ${lastMessage.content}\n`;
+                report += `Assistant thought: ${lastMessage.content}\n`;
             }
         }
         report += `\n### Execution Log Summary\n`;
@@ -884,17 +918,17 @@ const handlers = {
 
             // 检测是否以盘符开头 (Win) 或 / 开头 (Unix)，且 searchPath 未指定或为默认
             const isAbsolutePath = path.isAbsolute(pattern) || /^[a-zA-Z]:[\\/]/.test(pattern);
-            
+
             if (isAbsolutePath) {
                 const magicIndex = pattern.search(/[*?\[{]/);
                 if (magicIndex > -1) {
                     const basePath = pattern.substring(0, magicIndex);
                     const lastSep = Math.max(basePath.lastIndexOf('/'), basePath.lastIndexOf('\\'));
-                    
+
                     if (lastSep > -1) {
                         rootDir = basePath.substring(0, lastSep + 1); // 包含分隔符
                         globPattern = pattern.substring(lastSep + 1); // 剩余部分作为 pattern
-                        
+
                         if (!searchPath || searchPath === '~' || searchPath === os.homedir()) {
                             searchPath = rootDir;
                         } else {
@@ -914,7 +948,7 @@ const handlers = {
             const regex = globToRegex(globPattern || "**/*");
             if (!regex) return "Error: Invalid glob pattern.";
 
-            const MAX_RESULTS = 5000; 
+            const MAX_RESULTS = 5000;
             const normalizedRoot = normalizePath(rootDir);
 
             // 传递 signal 给 walkDir
@@ -922,7 +956,7 @@ const handlers = {
                 if (signal && signal.aborted) throw new Error("Operation aborted by user.");
 
                 const normalizedFilePath = normalizePath(filePath);
-                
+
                 // 计算相对路径
                 let relativePath = normalizedFilePath.replace(normalizedRoot, '');
                 if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
@@ -946,7 +980,7 @@ const handlers = {
         try {
             const rootDir = resolvePath(searchPath);
             if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
-            
+
             const regexFlags = multiline ? 'gmi' : 'gi';
             let searchRegex;
             try {
@@ -955,7 +989,7 @@ const handlers = {
 
             const globRegex = glob ? globToRegex(glob) : null;
             const normalizedRoot = normalizePath(rootDir);
-            
+
             const results = [];
             let matchCount = 0;
             const MAX_SCANNED = 5000; // 限制扫描文件数防止卡死
@@ -974,7 +1008,7 @@ const handlers = {
                     const normalizedFilePath = normalizePath(filePath);
                     let relativePath = normalizedFilePath.replace(normalizedRoot, '');
                     if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
-                    
+
                     if (!globRegex.test(relativePath) && !globRegex.test(path.basename(filePath))) continue;
                 }
 
@@ -987,7 +1021,7 @@ const handlers = {
                     if (stats.size > 1024 * 1024) continue; // 跳过大文件
 
                     const content = await fs.promises.readFile(filePath, { encoding: 'utf-8', signal }); // [修改] 传递 signal
-                    
+
                     if (output_mode === 'files_with_matches') {
                         if (searchRegex.test(content)) {
                             results.push(filePath);
@@ -1062,7 +1096,7 @@ const handlers = {
                 if (!isPathSafe(safePath)) {
                     return `[Security Block] Access to sensitive system file '${path.basename(safePath)}' is restricted.`;
                 }
-                
+
                 if (!fs.existsSync(safePath)) return `Error: File not found at ${safePath}`;
 
                 // 传递 signal 给 readFile (Node v14.17+ 支持)
@@ -1078,14 +1112,14 @@ const handlers = {
                 const base64String = fileBuffer.toString('base64');
                 const ext = path.extname(safePath).toLowerCase();
                 // 简单的 mime 推断
-                const mime = {'.png':'image/png','.jpg':'image/jpeg','.pdf':'application/pdf'}[ext] || 'application/octet-stream';
+                const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf' }[ext] || 'application/octet-stream';
                 const dataUrl = `data:${mime};base64,${base64String}`;
-                
+
                 fileForHandler = {
                     name: path.basename(safePath),
                     size: stats.size,
                     type: mime,
-                    url: dataUrl 
+                    url: dataUrl
                 };
             }
 
@@ -1170,6 +1204,25 @@ const handlers = {
             const safePath = resolvePath(file_path);
             if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
 
+            // --- 二进制/Office 文件保护拦截 ---
+            const ext = path.extname(safePath).toLowerCase();
+            // 定义不支持直接文本写入的格式
+            const binaryExtensions = [
+                // Office 文档
+                '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods',
+                // PDF & 电子书
+                '.pdf', '.epub', '.mobi',
+                // 图片/音频/视频
+                '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.mp3', '.wav', '.mp4', '.mov',
+                // 压缩包 & 可执行文件
+                '.zip', '.rar', '.7z', '.tar', '.gz', '.exe', '.dll', '.bin', '.so', '.dmg'
+            ];
+
+            if (binaryExtensions.includes(ext)) {
+                return `[Operation Blocked] The 'write_file' tool only supports text-based files (code, markdown, json, etc.). Writing text content to a '${ext}' file will corrupt its binary structure. Please do not attempt to edit binary or Office files directly.`;
+            }
+            // ----------------------------------------
+
             const dir = path.dirname(safePath);
             if (!fs.existsSync(dir)) {
                 await fs.promises.mkdir(dir, { recursive: true });
@@ -1182,6 +1235,104 @@ const handlers = {
         }
     },
 
+    // 6. Regex Pattern Replace
+    replace_pattern: async ({ file_path, pattern, replacement, flags = 'gm' }) => {
+        try {
+            const safePath = resolvePath(file_path);
+            if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
+            if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
+
+            let content = await fs.promises.readFile(safePath, 'utf-8');
+
+            let regex;
+            try {
+                regex = new RegExp(pattern, flags);
+            } catch (e) {
+                return `Invalid Regex Pattern: ${e.message}`;
+            }
+
+            if (!regex.test(content)) {
+                return `Error: Pattern '${pattern}' not found in file. No changes made.`;
+            }
+
+            // 重置 lastIndex
+            regex.lastIndex = 0;
+
+            const newContent = content.replace(regex, replacement);
+
+            if (newContent === content) {
+                return `Warning: Pattern matched but content remained identical after replacement.`;
+            }
+
+            await fs.promises.writeFile(safePath, newContent, 'utf-8');
+            return `Successfully replaced pattern in ${path.basename(safePath)}.`;
+
+        } catch (e) {
+            return `Replace error: ${e.message}`;
+        }
+    },
+
+    // 7. Insert Content (Dual Mode: Line or Anchor)
+    insert_content: async ({ file_path, content, line_number, anchor_pattern, direction = 'after' }) => {
+        try {
+            const safePath = resolvePath(file_path);
+            if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
+            if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
+
+            let fileContent = await fs.promises.readFile(safePath, 'utf-8');
+
+            // --- 模式 A: 基于行号 (高风险，需精确) ---
+            if (line_number !== undefined && line_number !== null) {
+                const lines = fileContent.split(/\r?\n/);
+                const targetIndex = parseInt(line_number) - 1; // 转为 0-based
+
+                if (isNaN(targetIndex) || targetIndex < 0 || targetIndex > lines.length) {
+                    return `Error: Line number ${line_number} is out of bounds (File has ${lines.length} lines).`;
+                }
+
+                // 处理插入位置
+                const insertPos = direction === 'before' ? targetIndex : targetIndex + 1;
+
+                // 将新内容按行拆分插入，保持数组结构
+                const contentLines = content.split(/\r?\n/);
+                lines.splice(insertPos, 0, ...contentLines);
+
+                await fs.promises.writeFile(safePath, lines.join('\n'), 'utf-8');
+                return `Successfully inserted content at line ${line_number} in ${path.basename(safePath)}.`;
+            }
+
+            // --- 模式 B: 基于正则锚点 (推荐) ---
+            if (anchor_pattern) {
+                let regex;
+                try {
+                    // 使用多行模式 'm'，以便 ^$ 匹配行
+                    regex = new RegExp(anchor_pattern, 'm');
+                } catch (e) { return `Invalid Anchor Regex: ${e.message}`; }
+
+                if (!regex.test(fileContent)) {
+                    return `Error: Anchor pattern '${anchor_pattern}' not found in file.`;
+                }
+
+                // 使用回调函数替换，防止插入内容中的 $ 被误解析
+                const newFullContent = fileContent.replace(regex, (matchedStr) => {
+                    // 确保插入内容前后有换行符，避免粘连
+                    if (direction === 'before') {
+                        return `${content}\n${matchedStr}`;
+                    } else {
+                        return `${matchedStr}\n${content}`;
+                    }
+                });
+
+                await fs.promises.writeFile(safePath, newFullContent, 'utf-8');
+                return `Successfully inserted content ${direction} anchor pattern in ${path.basename(safePath)}.`;
+            }
+
+            return `Error: You must provide either 'line_number' or 'anchor_pattern'.`;
+
+        } catch (e) {
+            return `Insert error: ${e.message}`;
+        }
+    },
     // Bash / PowerShell
     execute_bash_command: async ({ command, timeout = 15000 }, context, signal) => {
         return new Promise((resolve) => {
@@ -1198,7 +1349,7 @@ const handlers = {
                 /\bchmod\s+777/i,     // chmod 777
                 /\bcat\s+.*id_rsa/i   // 读取私钥
             ];
-            
+
             if (dangerousPatterns.some(p => p.test(trimmedCmd))) {
                 return resolve(`[Security Block] The command contains potentially destructive operations and has been blocked.`);
             }
@@ -1224,9 +1375,9 @@ const handlers = {
             // [修改] encoding 设置为 buffer，手动处理解码以支持多语言
             let shellOptions = {
                 cwd: bashCwd,
-                encoding: 'buffer', 
+                encoding: 'buffer',
                 maxBuffer: 1024 * 1024 * 10,
-                timeout: validTimeout 
+                timeout: validTimeout
             };
 
             let finalCommand = command;
@@ -1242,8 +1393,8 @@ const handlers = {
                     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
                     $OutputEncoding = [System.Text.Encoding]::UTF8;
                     $PSDefaultParameterValues['*:Encoding'] = 'utf8';
-                `.replace(/\s+/g, ' '); 
-                
+                `.replace(/\s+/g, ' ');
+
                 finalCommand = `${preamble} ${command}`;
                 shellOptions.shell = shellToUse;
             } else {
@@ -1268,10 +1419,10 @@ const handlers = {
                 let result = "";
                 const outStr = decodeBuffer(stdout);
                 const errStr = decodeBuffer(stderr);
-                
+
                 if (outStr) result += outStr;
                 if (errStr) result += `\n[Stderr]: ${errStr}`;
-                
+
                 if (error) {
                     if (error.signal === 'SIGTERM') {
                         result += `\n[System Note]: Command timed out after ${validTimeout / 1000}s and was terminated.`;
@@ -1282,7 +1433,7 @@ const handlers = {
                         if (error.message && !errStr) result += `\n[Message]: ${error.message}`;
                     }
                 }
-                
+
                 if (!result.trim()) result = "Command executed successfully (no output).";
                 resolve(`[CWD: ${bashCwd}]\n${result}`);
             });
@@ -1301,10 +1452,10 @@ const handlers = {
         try {
             const limit = Math.min(Math.max(parseInt(count) || 5, 1), 10);
             const url = "https://html.duckduckgo.com/html/";
-            
+
             let ddgRegion = 'cn-zh';
             let acceptLang = 'zh-CN,zh;q=0.9,en;q=0.8';
-            
+
             const langInput = (language || '').toLowerCase();
             if (langInput.includes('en') || langInput.includes('us')) {
                 ddgRegion = 'us-en';
@@ -1335,7 +1486,7 @@ const handlers = {
             body.append('kl', ddgRegion);
 
             // 传递 signal
-            const response = await fetch(url, { 
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: headers,
                 body: body,
@@ -1344,7 +1495,7 @@ const handlers = {
 
             if (!response.ok) throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
             const html = await response.text();
-            
+
             const results = [];
             const titleLinkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
             const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
@@ -1367,7 +1518,7 @@ const handlers = {
                         const uddg = urlObj.searchParams.get("uddg");
                         if (uddg) link = decodeURIComponent(uddg);
                     }
-                } catch(e) {}
+                } catch (e) { }
                 results.push({
                     title: decodeHtml(titleRaw),
                     link: link,
@@ -1403,7 +1554,7 @@ const handlers = {
             };
 
             const response = await fetch(url, { headers, redirect: 'follow', signal });
-            
+
             if (response.status === 403 || response.status === 521) {
                 return `Failed to fetch page (Anti-bot protection ${response.status}).`;
             }
@@ -1414,7 +1565,7 @@ const handlers = {
             const rawText = await response.text();
             let fullText = "";
             if (contentType.includes('application/json')) {
-                try { fullText = JSON.stringify(JSON.parse(rawText), null, 2); } catch(e) { fullText = rawText; }
+                try { fullText = JSON.stringify(JSON.parse(rawText), null, 2); } catch (e) { fullText = rawText; }
             } else {
                 const metadata = extractMetadata(rawText);
                 const markdownBody = convertHtmlToMarkdown(rawText, url);
@@ -1469,7 +1620,7 @@ async function invokeBuiltinTool(toolName, args, signal = null, context = null) 
     if (handlers[toolName]) {
         const result = await handlers[toolName](args, context, signal);
         const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-        
+
         return JSON.stringify([{
             type: "text",
             text: text
