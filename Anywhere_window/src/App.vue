@@ -1116,6 +1116,14 @@ onMounted(async () => {
       chat_show.value = [];
     }
 
+    if (currentPromptConfig.defaultSkills && Array.isArray(currentPromptConfig.defaultSkills)) {
+      sessionSkillIds.value = [...currentPromptConfig.defaultSkills];
+      tempSessionSkillIds.value = [...currentPromptConfig.defaultSkills];
+    } else {
+      sessionSkillIds.value = [];
+      tempSessionSkillIds.value = [];
+    }
+
     let shouldDirectSend = false;
     let isFileDirectSend = false;
     if (data) {
@@ -2206,6 +2214,14 @@ const loadSession = async (jsonData) => {
     }
     model.value = restoredModel;
 
+    if (jsonData.activeSkillIds && Array.isArray(jsonData.activeSkillIds)) {
+      sessionSkillIds.value = [...jsonData.activeSkillIds];
+      tempSessionSkillIds.value = [...jsonData.activeSkillIds];
+    } else {
+      sessionSkillIds.value = [];
+      tempSessionSkillIds.value = [];
+    }
+    
     if (chat_show.value && chat_show.value.length > 0) {
       chat_show.value.forEach(msg => { if (msg.id === undefined) msg.id = messageIdCounter.value++; });
       const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
