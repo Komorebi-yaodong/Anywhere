@@ -19,6 +19,7 @@ dist-ssr
 coverage
 *.local
 
+
 /cypress/videos/
 /cypress/screenshots/
 
@@ -51,4 +52,16 @@ v1.9.9
 v1.9.10
 v1.9.11
 v1.9.13
+v1.10.3
 v1.11.1
+
+/v2.0.0/window/*
+/v2.0.0/fast_window/*
+/v2.0.0/main/*
+/v2.0.0/preload.js
+/v2.0.0/window_preload.js
+/v2.0.0/fast_window_preload.js
+
+!/v2.0.0/window/.gitkeep
+!/v2.0.0/fast_window/.gitkeep
+!/v2.0.0/main/.gitkeep

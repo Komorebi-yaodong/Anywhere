@@ -105,3 +105,8 @@ if __name__ == "__main__":
     fast_window_target_dir = os.path.join(latest_version_dir, 'fast_window')
     smart_copy("fast_window", fast_window_target_dir)
     print("fast_window 相关文件更新完成")
+
+    # 5. 在这几个目录下查u女鬼剑.gitkeep文件
+    for dir in [main_target_dir, window_target_dir, fast_window_target_dir]:
+        if not os.path.exists(os.path.join(dir, '.gitkeep')):
+            open(os.path.join(dir, '.gitkeep'), 'w').close()

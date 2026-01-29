@@ -2744,7 +2744,7 @@ const askAI = async (forceSend = false) => {
       // --- 构建工具列表 (MCP + Skill) ---
       let activeTools = [...openaiFormattedTools.value];
 
-      // [新增] 注入 Skill 工具定义
+      // 注入 Skill 工具定义
       if (sessionSkillIds.value.length > 0 && currentConfig.value.skillPath) {
         try {
           const skillToolDef = await window.api.getSkillToolDefinition(currentConfig.value.skillPath, sessionSkillIds.value);
@@ -2786,6 +2786,7 @@ const askAI = async (forceSend = false) => {
 
         let aggregatedReasoningContent = "";
         let aggregatedContent = "";
+        let aggregatedMedia = []; // 用于收集非文本内容（如 image_url）
         let aggregatedToolCalls = [];
         let aggregatedExtraContent = null;
         let lastUpdateTime = Date.now();
@@ -2815,14 +2816,34 @@ const askAI = async (forceSend = false) => {
               lastUpdateTime = Date.now();
             }
           }
+          
+          // 处理 content (支持 string 和 array)
           if (delta.content) {
-            aggregatedContent += delta.content;
+            if (typeof delta.content === 'string') {
+              aggregatedContent += delta.content;
+            } else if (Array.isArray(delta.content)) {
+              // 遍历数组处理多模态内容
+              delta.content.forEach(item => {
+                if (item.type === 'text') {
+                  aggregatedContent += (item.text || '');
+                } else if (item.type === 'image_url') {
+                  aggregatedMedia.push(item);
+                }
+                // 这里可以扩展其他类型
+              });
+            }
+
             if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking') {
               chat_show.value[currentAssistantChatShowIndex].status = 'end';
             }
 
             if (Date.now() - lastUpdateTime > 100) {
-              chat_show.value[currentAssistantChatShowIndex].content = [{ type: 'text', text: aggregatedContent }];
+              // 构建混合内容数组
+              const currentDisplayContent = [];
+              if (aggregatedContent) currentDisplayContent.push({ type: 'text', text: aggregatedContent });
+              if (aggregatedMedia.length > 0) currentDisplayContent.push(...aggregatedMedia);
+              
+              chat_show.value[currentAssistantChatShowIndex].content = currentDisplayContent;
               lastUpdateTime = Date.now();
             }
           }
@@ -2845,9 +2866,19 @@ const askAI = async (forceSend = false) => {
           }
         }
 
+        // 构建最终历史消息内容
+        let finalContentForHistory = null;
+        if (aggregatedMedia.length > 0) {
+            finalContentForHistory = [];
+            if (aggregatedContent) finalContentForHistory.push({ type: 'text', text: aggregatedContent });
+            finalContentForHistory.push(...aggregatedMedia);
+        } else {
+            finalContentForHistory = aggregatedContent || null;
+        }
+
         responseMessage = {
           role: 'assistant',
-          content: aggregatedContent || null,
+          content: finalContentForHistory,
           reasoning_content: aggregatedReasoningContent || null,
           extra_content: aggregatedExtraContent
         };
@@ -2871,9 +2902,15 @@ const askAI = async (forceSend = false) => {
       history.value.push(responseMessage);
 
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
+      // 处理最终显示内容
       if (responseMessage.content) {
-        currentBubble.content = [{ type: 'text', text: responseMessage.content }];
+        if (typeof responseMessage.content === 'string') {
+            currentBubble.content = [{ type: 'text', text: responseMessage.content }];
+        } else if (Array.isArray(responseMessage.content)) {
+            currentBubble.content = responseMessage.content;
+        }
       }
+      
       if (responseMessage.reasoning_content) {
         currentBubble.reasoning_content = responseMessage.reasoning_content;
         currentBubble.status = 'end';
@@ -2930,17 +2967,13 @@ const askAI = async (forceSend = false) => {
 
               // 区分 Skill 调用和普通 MCP 调用
               if (toolCall.function.name === 'Skill') {
-                // 调用 Skill
                 if (uiToolCall) uiToolCall.result = `Activating skill: ${toolArgs.skill}...`;
 
-                // 1. 构建上下文 (复用 sub_agent 的逻辑)
-                // 注意：需要确保 activeTools 变量在当前作用域可用 (askAI 函数内部已有)
                 let executionContext = null;
                 const currentApiKey = api_key.value;
                 const currentBaseUrl = base_url.value;
                 const currentModelName = model.value.split('|')[1] || model.value;
 
-                // 定义实时日志回调
                 const onUpdateCallback = (logContent) => {
                   if (uiToolCall) {
                     uiToolCall.result = logContent + "\n\n[Skill (Sub-Agent) Running...]";
@@ -2951,28 +2984,22 @@ const askAI = async (forceSend = false) => {
                   apiKey: currentApiKey,
                   baseUrl: currentBaseUrl,
                   model: currentModelName,
-                  // 传入所有可用工具，Skill 内部会根据配置进行过滤
                   tools: activeTools.filter(t => t.function.name !== 'sub_agent'),
-                  mcpSystemPrompt: mcpSystemPromptStr, // 确保 mcpSystemPromptStr 变量在作用域内
+                  mcpSystemPrompt: mcpSystemPromptStr, 
                   onUpdate: onUpdateCallback
                 };
 
-                // 2. 调用 API，传入完整参数对象和上下文
-                // toolArgs 现在是完整的 JSON 对象 (包含 args, context, planning_level 等)
                 toolContent = await window.api.resolveSkillInvocation(
                   currentConfig.value.skillPath,
                   toolArgs.skill,
-                  toolArgs, // 传入整个对象
+                  toolArgs, 
                   executionContext,
                   toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal
                 );
 
-                // 3. 处理结果显示
                 if (uiToolCall) {
-                  // 检查返回内容是否包含特定标记，判断是普通指令还是子智能体结果
                   if (toolContent.includes("[Sub-Agent]")) {
                     const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Skill (Sub-Agent) Running...]", "") : "";
-                    // 避免重复追加
                     if (!currentLog.includes(toolContent)) {
                       uiToolCall.result = `${currentLog}\n\n=== Skill Execution Result ===\n${toolContent}`;
                     } else {
@@ -2984,7 +3011,6 @@ const askAI = async (forceSend = false) => {
                 }
 
               } else {
-                // 原有 MCP 调用逻辑
                 let executionContext = null;
 
                 if (toolCall.function.name === 'sub_agent') {
@@ -2992,17 +3018,14 @@ const askAI = async (forceSend = false) => {
                   const currentBaseUrl = base_url.value;
                   const currentModelName = model.value.split('|')[1] || model.value;
 
-                  // 1. 获取全量工具列表 (排除 sub_agent 自身)
                   const toolsContext = activeTools.filter(t => t.function.name !== 'sub_agent');
 
-                  // 2. 定义实时更新回调
                   const onUpdateCallback = (logContent) => {
                     if (uiToolCall) {
                       uiToolCall.result = logContent + "\n\n[Sub-Agent 执行中...]";
                     }
                   };
 
-                  // 3. 组装上下文
                   executionContext = {
                     apiKey: currentApiKey,
                     baseUrl: currentBaseUrl,
@@ -3013,7 +3036,6 @@ const askAI = async (forceSend = false) => {
                   };
                 }
 
-                // 执行 MCP 工具
                 const result = await window.api.invokeMcpTool(
                   toolCall.function.name,
                   toolArgs,
