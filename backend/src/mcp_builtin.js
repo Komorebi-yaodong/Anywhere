@@ -293,20 +293,6 @@ const BUILTIN_TOOLS = {
             }
         },
         {
-            name: "edit_file",
-            description: "Precise string replacement for modifying code or text files. YOU MUST READ THE FILE FIRST to ensure you have the exact 'old_string'.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    file_path: { type: "string", description: "Absolute path to the local file." },
-                    old_string: { type: "string", description: "The EXACT text to be replaced. Must be unique in the file unless replace_all is true." },
-                    new_string: { type: "string", description: "The new text to replace with." },
-                    replace_all: { type: "boolean", description: "If true, replaces all occurrences. If false, fails if old_string is not unique." }
-                },
-                required: ["file_path", "old_string", "new_string"]
-            }
-        },
-        {
             name: "write_file",
             description: "Create a new file or completely overwrite an existing file. CAUTION: This tool is ONLY for TEXT-BASED files (code, txt, md, json, etc.). DO NOT use this for binary or Office files (e.g., .docx, .xlsx, .pdf, .png) as it will corrupt them.",
             inputSchema: {
@@ -319,8 +305,22 @@ const BUILTIN_TOOLS = {
             }
         },
         {
+            name: "edit_file",
+            description: "String replacement for modifying code or text files. YOU MUST READ THE FILE FIRST to ensure you have the exact 'old_string'.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    file_path: { type: "string", description: "Absolute path to the local file." },
+                    old_string: { type: "string", description: "The EXACT text to be replaced. Must be unique in the file unless replace_all is true." },
+                    new_string: { type: "string", description: "The new text to replace with." },
+                    replace_all: { type: "boolean", description: "If true, replaces all occurrences. If false, fails if old_string is not unique." }
+                },
+                required: ["file_path", "old_string", "new_string"]
+            }
+        },
+        {
             name: "replace_pattern",
-            description: "Replace text in a file using JavaScript RegExp. Efficient for making specific changes (e.g., renaming variables, updating arguments) without rewriting the whole file. Supports capture groups ($1, $2).",
+            description: "Efficient replace text in a file using JavaScript RegExp. Efficient for making specific changes (e.g., renaming variables, updating arguments) without rewriting the whole file. Supports capture groups ($1, $2).",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -334,7 +334,7 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "insert_content",
-            description: "Insert content into a file. Supports two modes: 1. By 'anchor_pattern' (Recommended, safer). 2. By 'line_number' (Use ONLY if you have verified the exact line number via grep_search).",
+            description: "Efficient insert content into a file. Supports two modes: 1. By 'anchor_pattern' (Recommended, safer). 2. By 'line_number' (Use ONLY if you have verified the exact line number via grep_search).",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -848,6 +848,15 @@ ${userContext || 'No additional context provided.'}
     return generateStaticReport() + `\n\n[Instruction for Main Agent]: Please check the conversation context or files to see if the task was partially completed.`;
 }
 
+// 辅助函数：处理 LLM 传入的转义字符，将 \\n 转换为 \n
+const unescapeContent = (str) => {
+    if (typeof str !== 'string') return str;
+    return str
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t');
+};
+
 // --- Execution Handlers ---
 const handlers = {
     // Python
@@ -1170,24 +1179,28 @@ const handlers = {
 
             let content = await fs.promises.readFile(safePath, 'utf-8');
 
+            // 处理转义字符
+            const targetOld = unescapeContent(old_string);
+            const targetNew = unescapeContent(new_string);
+
             // 检查 old_string 是否存在
-            if (!content.includes(old_string)) {
+            if (!content.includes(targetOld)) {
                 return `Error: 'old_string' not found in file. Please ensure you read the file first and use the exact string.`;
             }
 
             // 检查唯一性
             if (!replace_all) {
                 // 计算出现次数
-                const count = content.split(old_string).length - 1;
+                const count = content.split(targetOld).length - 1;
                 if (count > 1) {
                     return `Error: 'old_string' occurs ${count} times. Please set 'replace_all' to true if you intend to replace all, or provide a more unique context string.`;
                 }
             }
 
             if (replace_all) {
-                content = content.split(old_string).join(new_string);
+                content = content.split(targetOld).join(targetNew);
             } else {
-                content = content.replace(old_string, new_string);
+                content = content.replace(targetOld, targetNew);
             }
 
             await fs.promises.writeFile(safePath, content, 'utf-8');
@@ -1206,20 +1219,15 @@ const handlers = {
 
             // --- 二进制/Office 文件保护拦截 ---
             const ext = path.extname(safePath).toLowerCase();
-            // 定义不支持直接文本写入的格式
             const binaryExtensions = [
-                // Office 文档
                 '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods',
-                // PDF & 电子书
                 '.pdf', '.epub', '.mobi',
-                // 图片/音频/视频
                 '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.mp3', '.wav', '.mp4', '.mov',
-                // 压缩包 & 可执行文件
                 '.zip', '.rar', '.7z', '.tar', '.gz', '.exe', '.dll', '.bin', '.so', '.dmg'
             ];
 
             if (binaryExtensions.includes(ext)) {
-                return `[Operation Blocked] The 'write_file' tool only supports text-based files (code, markdown, json, etc.). Writing text content to a '${ext}' file will corrupt its binary structure. Please do not attempt to edit binary or Office files directly.`;
+                return `[Operation Blocked] The 'write_file' tool only supports text-based files. Writing text content to a '${ext}' file will corrupt its binary structure.`;
             }
             // ----------------------------------------
 
@@ -1228,7 +1236,10 @@ const handlers = {
                 await fs.promises.mkdir(dir, { recursive: true });
             }
 
-            await fs.promises.writeFile(safePath, content, 'utf-8');
+            // 处理转义字符
+            const processedContent = unescapeContent(content);
+
+            await fs.promises.writeFile(safePath, processedContent, 'utf-8');
             return `Successfully wrote to ${safePath}`;
         } catch (e) {
             return `Write failed: ${e.message}`;
@@ -1255,10 +1266,12 @@ const handlers = {
                 return `Error: Pattern '${pattern}' not found in file. No changes made.`;
             }
 
-            // 重置 lastIndex
             regex.lastIndex = 0;
 
-            const newContent = content.replace(regex, replacement);
+            // 处理 replacement 中的转义字符
+            const processedReplacement = unescapeContent(replacement);
+
+            const newContent = content.replace(regex, processedReplacement);
 
             if (newContent === content) {
                 return `Warning: Pattern matched but content remained identical after replacement.`;
@@ -1280,6 +1293,9 @@ const handlers = {
             if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
 
             let fileContent = await fs.promises.readFile(safePath, 'utf-8');
+            
+            // 处理要插入内容的转义字符
+            const processedContent = unescapeContent(content);
 
             // --- 模式 A: 基于行号 (高风险，需精确) ---
             if (line_number !== undefined && line_number !== null) {
@@ -1294,7 +1310,7 @@ const handlers = {
                 const insertPos = direction === 'before' ? targetIndex : targetIndex + 1;
 
                 // 将新内容按行拆分插入，保持数组结构
-                const contentLines = content.split(/\r?\n/);
+                const contentLines = processedContent.split(/\r?\n/);
                 lines.splice(insertPos, 0, ...contentLines);
 
                 await fs.promises.writeFile(safePath, lines.join('\n'), 'utf-8');
@@ -1317,9 +1333,9 @@ const handlers = {
                 const newFullContent = fileContent.replace(regex, (matchedStr) => {
                     // 确保插入内容前后有换行符，避免粘连
                     if (direction === 'before') {
-                        return `${content}\n${matchedStr}`;
+                        return `${processedContent}\n${matchedStr}`;
                     } else {
-                        return `${matchedStr}\n${content}`;
+                        return `${matchedStr}\n${processedContent}`;
                     }
                 });
 
@@ -1333,6 +1349,7 @@ const handlers = {
             return `Insert error: ${e.message}`;
         }
     },
+
     // Bash / PowerShell
     execute_bash_command: async ({ command, timeout = 15000 }, context, signal) => {
         return new Promise((resolve) => {
