@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const AdmZip = require('adm-zip');
 
 const { getBuiltinServers, getBuiltinTools } = require('./mcp_builtin.js');
 
@@ -414,11 +415,67 @@ function deleteSkill(skillRootPath, skillId) {
     return false;
 }
 
+/**
+ * 导出 Skill 为 .skill (zip) 文件
+ * @param {string} skillRootPath Skill 根目录
+ * @param {string} skillId Skill 文件夹名
+ * @param {string} outputDir 导出目标目录
+ * @returns {Promise<string>} 导出的文件路径
+ */
+function exportSkillToPackage(skillRootPath, skillId, outputDir) {
+    return new Promise((resolve, reject) => {
+        try {
+            const skillDir = path.join(skillRootPath, skillId);
+            if (!fs.existsSync(skillDir)) {
+                return reject(new Error(`Skill directory not found: ${skillDir}`));
+            }
+
+            const zip = new AdmZip();
+            // 将整个文件夹添加到 zip，不包含根文件夹本身，直接将内容放在根下
+            zip.addLocalFolder(skillDir);
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const outputFilename = `${skillId}_${timestamp}.skill`;
+            const outputPath = path.join(outputDir, outputFilename);
+
+            zip.writeZip(outputPath);
+            resolve(outputPath);
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
+
+/**
+ * 解压 .skill 文件到临时目录
+ * @param {string} filePath .skill 文件路径
+ * @returns {Promise<string>} 解压后的临时目录路径
+ */
+function extractSkillPackage(filePath) {
+    return new Promise((resolve, reject) => {
+        try {
+            const zip = new AdmZip(filePath);
+            const tempDir = path.join(os.tmpdir(), 'anywhere_skill_import', Date.now().toString());
+            
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
+            }
+
+            zip.extractAllTo(tempDir, true);
+            resolve(tempDir);
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
+
 module.exports = {
     listSkills,
     getSkillDetails,
     generateSkillToolDefinition,
     resolveSkillInvocation,
     saveSkill,
-    deleteSkill
+    deleteSkill,
+    exportSkillToPackage,
+    extractSkillPackage,
 };

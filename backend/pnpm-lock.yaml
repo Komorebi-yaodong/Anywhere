@@ -11,6 +11,9 @@ importers:
       '@langchain/mcp-adapters':
         specifier: ^1.0.0
         version: 1.0.0(@langchain/core@1.0.2)(@langchain/langgraph@1.0.1(@langchain/core@1.0.2)(zod-to-json-schema@3.24.6(zod@3.25.76))(zod@3.25.76))
+      adm-zip:
+        specifier: ^0.5.16
+        version: 0.5.16
       mammoth:
         specifier: ^1.11.0
         version: 1.11.0
@@ -246,6 +249,10 @@ packages:
   adler-32@1.3.1:
     resolution: {integrity: sha512-ynZ4w/nUUv5rrsR8UUGoe1VC9hZj6V5hU9Qw1HlMDJGEJw5S7TfTErWTjMys6M7vr0YWcPqs3qAr4ss0nDfP+A==}
     engines: {node: '>=0.8'}
+
+  adm-zip@0.5.16:
+    resolution: {integrity: sha512-TGw5yVi4saajsSEgz25grObGHEUaDrniwvA2qwSC060KfqGPdglhvPMA2lPIoxs3PQIItj2iag35fONcQqgUaQ==}
+    engines: {node: '>=12.0'}
 
   ajv@6.12.6:
     resolution: {integrity: sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g==}
@@ -975,6 +982,8 @@ snapshots:
       negotiator: 1.0.0
 
   adler-32@1.3.1: {}
+
+  adm-zip@0.5.16: {}
 
   ajv@6.12.6:
     dependencies:

@@ -5,8 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Anywhere</title>
-  <script type="module" crossorigin src="./assets/index-G6GrAwlN.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DZQ9Hs_5.css">
+  <script type="module" crossorigin src="./assets/index-CErfz0lz.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-CaxPxnvD.css">
 </head>
 
 <body>
@@ -360,6 +360,16 @@
       --el-button-hover-text-color: var(--text-on-accent);
       --el-button-hover-bg-color: var(--el-color-primary-light-3);
       --el-button-hover-border-color: var(--el-color-primary-light-3);
+    }
+
+    html.dark .el-button--primary.is-disabled,
+    html.dark .el-button--primary.is-disabled:hover,
+    html.dark .el-button--primary.is-disabled:focus,
+    html.dark .el-button--primary.is-disabled:active {
+      background-color: var(--el-fill-color-dark) !important;
+      border-color: var(--el-border-color-dark) !important;
+      color: var(--el-text-color-disabled) !important;
+      cursor: not-allowed;
     }
 
     .el-switch .el-switch__core .el-switch__inner .is-text {

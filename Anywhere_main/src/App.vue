@@ -162,7 +162,10 @@ const checkDocHasUpdate = (index) => {
   const doc = docList.value[index];
   if (!doc || !doc.lastUpdated) return false;
   
-  const lastRead = docReadMap.value[doc.file];
+  // 从配置中读取状态
+  const readMap = config.value?.docReadStatus || {};
+  const lastRead = readMap[doc.file];
+  
   // 如果从未读过，或者更新时间晚于阅读时间，显示红点
   if (!lastRead) return true;
   
@@ -179,13 +182,23 @@ const hasAnyUpdate = computed(() => {
 });
 
 // 标记文档为已读
-const markDocAsRead = (filename) => {
-  // 通过解构赋值替换对象，确保 Vue 强制触发响应式更新
-  const newMap = { ...docReadMap.value };
-  newMap[filename] = new Date().toISOString();
-  docReadMap.value = newMap;
-  
-  localStorage.setItem(readStatusKey, JSON.stringify(newMap));
+const markDocAsRead = async (filename) => {
+  if (!config.value) return;
+
+  // 1. 初始化对象 (如果不存在)
+  if (!config.value.docReadStatus) {
+    config.value.docReadStatus = {};
+  }
+
+  // 2. 更新内存中的配置 (触发界面响应)
+  config.value.docReadStatus[filename] = new Date().toISOString();
+
+  // 3. 持久化保存到 uTools 数据库，这里保存整个 docReadStatus 对象
+  try {
+    await window.api.saveSetting('docReadStatus', JSON.parse(JSON.stringify(config.value.docReadStatus)));
+  } catch (e) {
+    console.error("保存阅读状态失败:", e);
+  }
 };
 
 const fetchAndParseDoc = async (filename) => {
@@ -229,7 +242,6 @@ watch(activeDocIndex, (newIndex) => {
 
 // 打开弹窗时加载第一个文档，并更新阅读状态
 const openHelpDialog = () => {
-  loadReadStatus(); // 读取本地存储状态
   showDocDialog.value = true;
   
   const index = parseInt(activeDocIndex.value) || 0;
@@ -274,7 +286,6 @@ const handleDocLinks = (event) => {
 };
 
 onMounted(async () => {
-  loadReadStatus(); // 初始化时读取一次
   // 异步获取文档更新时间，获取后会自动更新UI红点
   fetchAllDocsMetadata();
 

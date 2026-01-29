@@ -56,7 +56,9 @@ const {
     generateSkillToolDefinition,
     resolveSkillInvocation,
     saveSkill,
-    deleteSkill
+    deleteSkill,
+    exportSkillToPackage,
+    extractSkillPackage,
 } = require('./skill.js');
 
 window.api = {
@@ -185,6 +187,17 @@ window.api = {
   },
   deleteSkill: async (rootPath, id) => {
       return deleteSkill(rootPath, id);
+  },
+   // 暴露给前端的导出/导入接口
+  exportSkillToPackage: async (rootPath, skillId, outputDir) => {
+      return exportSkillToPackage(rootPath, skillId, outputDir);
+  },
+  extractSkillPackage: async (filePath) => {
+      return extractSkillPackage(filePath);
+  },
+  // 在文件管理器中显示文件
+  shellShowItemInFolder: (fullPath) => {
+      utools.shellShowItemInFolder(fullPath);
   },
   // 生成 Skill Tool 定义 (供前端构建请求参数时使用)
   getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
@@ -428,12 +441,12 @@ ipcRenderer.on('window-event', (e, { senderId, event }) => {
         windowMap.delete(senderId);
         break;
       }
-      // [新增] 最小化
+      // 最小化
       case 'minimize-window': {
         bw.minimize();
         break;
       }
-      // [新增] 最大化/还原
+      // 最大化/还原
       case 'maximize-window': {
         if (bw.isMaximized()) {
           bw.unmaximize();
