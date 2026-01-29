@@ -428,6 +428,16 @@
       "forkUpdateFailed": "Mode update failed",
       "forkOn": "Sub-Agent mode enabled",
       "forkOff": "Sub-Agent mode disabled"
+    },
+    "export": {
+      "button": "Export Skills",
+      "title": "Export Skills",
+      "hint": "Select skills to export. They will be packaged as independent .skill files.",
+      "empty": "No skills available to export",
+      "selectAll": "Select All",
+      "clear": "Clear",
+      "confirmBtn": "Select Folder & Export",
+      "success": "Successfully exported {count} skill packages"
     }
   },
   "providers": {

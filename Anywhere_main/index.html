@@ -360,6 +360,16 @@
       --el-button-hover-border-color: var(--el-color-primary-light-3);
     }
 
+    html.dark .el-button--primary.is-disabled,
+    html.dark .el-button--primary.is-disabled:hover,
+    html.dark .el-button--primary.is-disabled:focus,
+    html.dark .el-button--primary.is-disabled:active {
+      background-color: var(--el-fill-color-dark) !important;
+      border-color: var(--el-border-color-dark) !important;
+      color: var(--el-text-color-disabled) !important;
+      cursor: not-allowed;
+    }
+
     .el-switch .el-switch__core .el-switch__inner .is-text {
       color: var(--text-primary) !important;
     }

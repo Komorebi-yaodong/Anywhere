@@ -428,6 +428,16 @@
       "forkUpdateFailed": "模式更新失败",
       "forkOn": "已开启子智能体模式",
       "forkOff": "已关闭子智能体模式"
+    },
+    "export": {
+      "button": "导出技能",
+      "title": "导出技能",
+      "hint": "选择要导出的技能，它们将被打包为独立的 .skill 文件。",
+      "empty": "暂无技能可导出",
+      "selectAll": "全选",
+      "clear": "清空",
+      "confirmBtn": "选择目录并导出",
+      "success": "成功导出 {count} 个技能包"
     }
   },
   "providers": {

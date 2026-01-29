@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   FolderOpened, Refresh, Edit, Delete, Plus,
   Document, UploadFilled, QuestionFilled, Search,
-  Collection, Folder, FolderAdd, Cpu, Warning, Close
+  Collection, Folder, FolderAdd, Cpu, Warning, Close, Download
 } from '@element-plus/icons-vue';
 
 const { t } = useI18n();
@@ -15,6 +15,9 @@ const skillPath = ref('');
 const skillsList = ref([]);
 const searchQuery = ref('');
 const isLoading = ref(false);
+const showExportDialog = ref(false);
+const skillsToExport = ref([]);
+const isExporting = ref(false);
 
 // 编辑对话框状态
 const showEditDialog = ref(false);
@@ -335,9 +338,6 @@ async function onDialogDrop(e) {
   if (!item.path) return;
 
   try {
-    // 优先判断是否为 Skill 包（包含 SKILL.md 的文件夹 或 单个 SKILL.md）
-    // 这种判断优先级高于 Tab 判断，从而实现“文件管理页面也能拖拽替换整个 Skill”
-    
     let isSkillPackage = false;
     let importContent = '';
     let importPath = '';
@@ -345,9 +345,29 @@ async function onDialogDrop(e) {
     // 情况 A: 直接拖入 SKILL.md 文件
     if (item.name.toLowerCase() === 'skill.md') {
         importContent = await window.api.readLocalFile(item.path);
+        importPath = window.api.pathJoin(item.path, '..'); // 记录父级目录用于拷贝资源
         isSkillPackage = true;
     }
-    // 情况 B: 拖入文件夹 (尝试查找内部的 SKILL.md)
+    // 情况 B: 拖入 .skill 文件 (Zip 包)
+    else if (item.name.toLowerCase().endsWith('.skill')) {
+        const loadingInstance = ElMessage.info({ message: '正在解压 Skill 包...', duration: 0 });
+        try {
+            // 解压到临时目录
+            const tempDir = await window.api.extractSkillPackage(item.path);
+            const skillMdPath = window.api.pathJoin(tempDir, 'SKILL.md');
+            
+            if (await window.api.readLocalFile(skillMdPath).then(() => true).catch(() => false)) {
+                importContent = await window.api.readLocalFile(skillMdPath);
+                importPath = tempDir; // 记录临时目录路径
+                isSkillPackage = true;
+            } else {
+                throw new Error("无效的 .skill 包：根目录下未找到 SKILL.md");
+            }
+        } finally {
+            loadingInstance.close();
+        }
+    }
+    // 情况 C: 拖入文件夹 (尝试查找内部的 SKILL.md)
     else {
         const skillMdPath = window.api.pathJoin(item.path, 'SKILL.md');
         try {
@@ -362,7 +382,7 @@ async function onDialogDrop(e) {
 
     // 逻辑分支 1：如果是 Skill 包，执行导入/替换逻辑
     if (isSkillPackage) {
-        // 记录待导入路径 (如果是文件夹)
+        // 记录待导入路径
         if (importPath) {
             pendingImportPath.value = importPath;
         }
@@ -370,15 +390,16 @@ async function onDialogDrop(e) {
         const { metadata, body } = parseFrontmatterSimple(importContent);
         applyImportedMetadata(metadata, body);
         
-        // 如果是新 Skill 且没名字，用文件夹名
-        if (!editingSkill.name && !metadata.name) editingSkill.name = item.name;
+        // 如果是新 Skill 且没名字，尝试用文件名(去掉后缀)或元数据
+        if (!editingSkill.name) {
+             if (metadata.name) editingSkill.name = metadata.name;
+             else editingSkill.name = item.name.replace(/\.skill$/i, '');
+        }
 
         // 提示信息
         const actionText = activeEditTab.value === 'files' ? " (已准备替换当前 Skill)" : " (检测到完整 Skill 包)";
         ElMessage.success(t('skills.alerts.parseSuccess') + actionText + "，请点击保存以应用");
         
-        // 如果在文件管理页拖入 Skill 包，为了让用户看到元数据变化，可以自动切回 Info tab
-        // activeEditTab.value = 'info'; 
         return;
     }
 
@@ -429,6 +450,51 @@ function deleteSkillFile(fileNode) {
     editingSkill.files = details.files;
     ElMessage.success(t('common.deleteSuccess'));
   }).catch((e) => { console.error(e); });
+}
+
+function openExportDialog() {
+  // 如果没有技能，提示并返回
+  if (skillsList.value.length === 0) {
+    ElMessage.warning(t('skills.noSkills'));
+    return;
+  }
+  // 重置选择状态（默认不全选，或者你可以改为默认全选）
+  skillsToExport.value = []; 
+  // 打开弹窗
+  showExportDialog.value = true;
+}
+
+async function handleExportSkills() {
+  if (skillsToExport.value.length === 0) {
+    return;
+  }
+
+  // 1. 选择导出目录
+  const result = await window.api.selectDirectory();
+  if (!result) return;
+  const outputDir = result;
+
+  isExporting.value = true;
+  try {
+    const exportPromises = skillsToExport.value.map(skillId => 
+      window.api.exportSkillToPackage(skillPath.value, skillId, outputDir)
+    );
+
+    const results = await Promise.all(exportPromises);
+    
+    ElMessage.success(t('skills.export.success', { count: results.length }));
+    showExportDialog.value = false;
+    
+    // 打开导出目录
+    if (results.length > 0) {
+      window.api.shellShowItemInFolder(results[0]);
+    }
+  } catch (e) {
+    console.error(e);
+    ElMessage.error("导出失败: " + e.message);
+  } finally {
+    isExporting.value = false;
+  }
 }
 </script>
 
@@ -515,6 +581,9 @@ function deleteSkillFile(fileNode) {
     <div class="bottom-actions-container">
       <el-button class="action-btn" @click="prepareAddSkill" :icon="Plus" type="primary">
         {{ t('skills.addTitle') }}
+      </el-button>
+      <el-button class="action-btn" @click="openExportDialog" :icon="Download">
+        {{ t('skills.export.button') }}
       </el-button>
       <el-button class="action-btn" @click="selectSkillPath" :icon="FolderOpened">
         {{ t('skills.setPathBtn') }}
@@ -653,6 +722,36 @@ function deleteSkillFile(fileNode) {
       <template #footer>
         <el-button @click="showEditDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="saveEditDialog">{{ t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
+    <el-dialog v-model="showExportDialog" :title="t('skills.export.title')" width="500px" :close-on-click-modal="false">
+      <div class="export-dialog-content">
+        <p style="margin-top:0; color:var(--el-text-color-secondary); font-size:13px;">
+          {{ t('skills.export.hint') }}
+        </p>
+        <el-scrollbar max-height="35vh" class="export-list-scroll">
+          <div v-if="skillsList.length === 0" style="text-align: center; padding: 20px; color: var(--text-tertiary);">
+            {{ t('skills.export.empty') }}
+          </div>
+          <el-checkbox-group v-model="skillsToExport" v-else>
+            <div v-for="skill in skillsList" :key="skill.id" class="export-item-row">
+              <el-checkbox :value="skill.id">
+                <span class="export-skill-name">{{ skill.name }}</span>
+                <span class="export-skill-id">{{ skill.id }}</span>
+              </el-checkbox>
+            </div>
+          </el-checkbox-group>
+        </el-scrollbar>
+        <div class="export-actions-bar" style="margin-top:10px; display:flex; justify-content:space-between;">
+           <el-button size="small" @click="skillsToExport = skillsList.map(s=>s.id)">{{ t('skills.export.selectAll') }}</el-button>
+           <el-button size="small" @click="skillsToExport = []">{{ t('skills.export.clear') }}</el-button>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showExportDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="handleExportSkills" :loading="isExporting" :disabled="skillsToExport.length === 0">
+          {{ t('skills.export.confirmBtn') }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -1191,5 +1290,32 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
   align-items: center;
   padding: 15px 20px 10px 20px !important;
   margin-right: 0;
+}
+
+.export-list-scroll {
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 10px;
+  background-color: var(--bg-tertiary);
+}
+
+.export-item-row {
+  margin-bottom: 8px;
+}
+
+.export-item-row:last-child {
+  margin-bottom: 0;
+}
+
+.export-skill-name {
+  font-weight: 600;
+  margin-right: 8px;
+  color: var(--text-primary);
+}
+
+.export-skill-id {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: monospace;
 }
 </style>
