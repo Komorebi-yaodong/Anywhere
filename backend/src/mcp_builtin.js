@@ -848,15 +848,6 @@ ${userContext || 'No additional context provided.'}
     return generateStaticReport() + `\n\n[Instruction for Main Agent]: Please check the conversation context or files to see if the task was partially completed.`;
 }
 
-// 辅助函数：处理 LLM 传入的转义字符，将 \\n 转换为 \n
-const unescapeContent = (str) => {
-    if (typeof str !== 'string') return str;
-    return str
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '\r')
-        .replace(/\\t/g, '\t');
-};
-
 // --- Execution Handlers ---
 const handlers = {
     // Python
@@ -1179,9 +1170,9 @@ const handlers = {
 
             let content = await fs.promises.readFile(safePath, 'utf-8');
 
-            // 处理转义字符
-            const targetOld = unescapeContent(old_string);
-            const targetNew = unescapeContent(new_string);
+            // 直接使用原始字符串，移除 unescapeContent
+            const targetOld = old_string;
+            const targetNew = new_string;
 
             // 检查 old_string 是否存在
             if (!content.includes(targetOld)) {
@@ -1236,10 +1227,8 @@ const handlers = {
                 await fs.promises.mkdir(dir, { recursive: true });
             }
 
-            // 处理转义字符
-            const processedContent = unescapeContent(content);
-
-            await fs.promises.writeFile(safePath, processedContent, 'utf-8');
+            // 直接写入原始 content
+            await fs.promises.writeFile(safePath, content, 'utf-8');
             return `Successfully wrote to ${safePath}`;
         } catch (e) {
             return `Write failed: ${e.message}`;
@@ -1268,10 +1257,8 @@ const handlers = {
 
             regex.lastIndex = 0;
 
-            // 处理 replacement 中的转义字符
-            const processedReplacement = unescapeContent(replacement);
-
-            const newContent = content.replace(regex, processedReplacement);
+            // 直接使用原始 replacement
+            const newContent = content.replace(regex, replacement);
 
             if (newContent === content) {
                 return `Warning: Pattern matched but content remained identical after replacement.`;
@@ -1285,7 +1272,7 @@ const handlers = {
         }
     },
 
-    // 7. Insert Content (Dual Mode: Line or Anchor)
+    // 7. Insert Content
     insert_content: async ({ file_path, content, line_number, anchor_pattern, direction = 'after' }) => {
         try {
             const safePath = resolvePath(file_path);
@@ -1294,22 +1281,19 @@ const handlers = {
 
             let fileContent = await fs.promises.readFile(safePath, 'utf-8');
             
-            // 处理要插入内容的转义字符
-            const processedContent = unescapeContent(content);
+            // 直接使用原始 content
+            const processedContent = content;
 
-            // --- 模式 A: 基于行号 (高风险，需精确) ---
+            // --- 模式 A: 基于行号 ---
             if (line_number !== undefined && line_number !== null) {
                 const lines = fileContent.split(/\r?\n/);
-                const targetIndex = parseInt(line_number) - 1; // 转为 0-based
+                const targetIndex = parseInt(line_number) - 1; 
 
                 if (isNaN(targetIndex) || targetIndex < 0 || targetIndex > lines.length) {
                     return `Error: Line number ${line_number} is out of bounds (File has ${lines.length} lines).`;
                 }
 
-                // 处理插入位置
                 const insertPos = direction === 'before' ? targetIndex : targetIndex + 1;
-
-                // 将新内容按行拆分插入，保持数组结构
                 const contentLines = processedContent.split(/\r?\n/);
                 lines.splice(insertPos, 0, ...contentLines);
 
@@ -1317,11 +1301,10 @@ const handlers = {
                 return `Successfully inserted content at line ${line_number} in ${path.basename(safePath)}.`;
             }
 
-            // --- 模式 B: 基于正则锚点 (推荐) ---
+            // --- 模式 B: 基于正则锚点 ---
             if (anchor_pattern) {
                 let regex;
                 try {
-                    // 使用多行模式 'm'，以便 ^$ 匹配行
                     regex = new RegExp(anchor_pattern, 'm');
                 } catch (e) { return `Invalid Anchor Regex: ${e.message}`; }
 
@@ -1329,9 +1312,7 @@ const handlers = {
                     return `Error: Anchor pattern '${anchor_pattern}' not found in file.`;
                 }
 
-                // 使用回调函数替换，防止插入内容中的 $ 被误解析
                 const newFullContent = fileContent.replace(regex, (matchedStr) => {
-                    // 确保插入内容前后有换行符，避免粘连
                     if (direction === 'before') {
                         return `${processedContent}\n${matchedStr}`;
                     } else {
@@ -1349,7 +1330,6 @@ const handlers = {
             return `Insert error: ${e.message}`;
         }
     },
-
     // Bash / PowerShell
     execute_bash_command: async ({ command, timeout = 15000 }, context, signal) => {
         return new Promise((resolve) => {
@@ -1360,7 +1340,7 @@ const handlers = {
                 /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i, // rm -rf / (防止误删根目录)
                 />\s*\/dev\/sd/i,     // 写入设备
                 /\bmkfs\b/i,          // mkfs 格式化
-                /\bdd\s+/i,           // dd (使用单词边界，修复 pnpm add 误判)
+                /\bdd\s+/i,           // dd
                 /\bwget\s+/i,         // wget 下载
                 /\bcurl\s+.*\|\s*sh/i,// curl | sh 管道执行
                 /\bchmod\s+777/i,     // chmod 777

@@ -109,8 +109,7 @@ const filteredSkillList = computed(() => {
     const keyword = skillFilterKeyword.value.toLowerCase();
 
     let list = props.allSkills.filter(skill => {
-        return skill.name.toLowerCase().includes(keyword) ||
-            (skill.description && skill.description.toLowerCase().includes(keyword));
+        return skill.name.toLowerCase().startsWith(keyword);
     });
 
     return list.slice(0, 10);
