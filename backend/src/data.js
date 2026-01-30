@@ -872,10 +872,6 @@ function copyText(content) {
   utools.copyText(content);
 }
 
-async function sethotkey(prompt_name, auto_copy) {
-  utools.redirectHotKeySetting(prompt_name, auto_copy);
-}
-
 async function openWindow(config, msg) {
   // 计时开始
   let startTime;
@@ -1361,7 +1357,6 @@ module.exports = {
   savePromptWindowSettings,
   getUser,
   copyText,
-  sethotkey,
   openWindow,
   coderedirect,
   setZoomFactor,

@@ -100,29 +100,6 @@ const getFileHandler = (fileName) => {
     return null;
 };
 
-
-async function sendFile(fileList) {
-    let contentList = [];
-    if (fileList.length === 0) return contentList;
-
-    for (const currentFile of fileList) {
-        const handler = getFileHandler(currentFile.name);
-        if (handler) {
-            try {
-                const processedContent = await handler(currentFile);
-                if (processedContent) {
-                    contentList.push(processedContent);
-                }
-            } catch (error) {
-                console.log(`处理文件 ${currentFile.name} 失败: ${error.message}`);
-            }
-        } else {
-            console.log(`文件类型不支持: ${currentFile.name}`);
-        }
-    }
-    return contentList;
-}
-
 const extensionToMimeType = {
     // 文本和代码
     '.txt': 'text/plain',
