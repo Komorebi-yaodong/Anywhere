@@ -356,11 +356,19 @@ const BUILTIN_TOOLS = {
     "builtin_bash": [
         {
             name: "execute_bash_command",
-            description: `Execute a shell command on the current ${currentOS} system. Note: Long-running commands (like servers) will be terminated after the timeout (default 15s) to prevent blocking.`,
+            description: `Execute a shell command on the current ${currentOS} system.
+IMPORTANT: The underlying shell is **${isWin ? "PowerShell" : "Bash"}**.
+- If on Windows: You MUST use PowerShell syntax (e.g., 'New-Item -ItemType Directory', 'if (Test-Path path) {}'). DO NOT use CMD/Batch syntax (like 'if exist') unless you explicitly wrap it in 'cmd /c'.
+- If on Linux/macOS: Use standard Bash syntax.
+Note: Long-running commands will be terminated after timeout.`,
             inputSchema: {
                 type: "object",
                 properties: {
-                    command: { type: "string", description: `The command to execute (e.g., 'ls -la', 'git status', 'npm install'). Current OS: ${currentOS}.` },
+                    command: { 
+                        type: "string", 
+                        // 在参数描述中再次强调环境
+                        description: `The command to execute. Ensure syntax matches ${isWin ? 'PowerShell' : 'Bash'}.` 
+                    },
                     timeout: {
                         type: "integer",
                         description: "Optional. Timeout in milliseconds. Default is 15000 (15 seconds). Set higher (e.g., 300000 for 5 mins) for long-running tasks like installations.",
@@ -1353,7 +1361,10 @@ const handlers = {
 
             if (trimmedCmd.startsWith('cd ')) {
                 let targetDir = trimmedCmd.substring(3).trim();
-                targetDir = targetDir.replace(/^["']|["']$/g, '');
+                // 简单的去引号处理
+                if ((targetDir.startsWith('"') && targetDir.endsWith('"')) || (targetDir.startsWith("'") && targetDir.endsWith("'"))) {
+                    targetDir = targetDir.substring(1, targetDir.length - 1);
+                }
                 try {
                     const newPath = path.resolve(bashCwd, targetDir);
                     if (fs.existsSync(newPath) && fs.statSync(newPath).isDirectory()) {
@@ -1369,10 +1380,9 @@ const handlers = {
 
             const validTimeout = (typeof timeout === 'number' && timeout > 0) ? timeout : 15000;
 
-            // [修改] encoding 设置为 buffer，手动处理解码以支持多语言
             let shellOptions = {
                 cwd: bashCwd,
-                encoding: 'buffer',
+                encoding: 'buffer', // 关键：使用 buffer 以便手动解码
                 maxBuffer: 1024 * 1024 * 10,
                 timeout: validTimeout
             };
@@ -1383,9 +1393,7 @@ const handlers = {
             if (isWin) {
                 shellToUse = 'powershell.exe';
                 // Windows 编码配置
-                // 1. [Console]::OutputEncoding: 确保 Node.js 拿到的 stdout 是 UTF-8
-                // 2. $OutputEncoding: 确保管道符 | 传递的是 UTF-8
-                // 3. $PSDefaultParameterValues: 确保 >> (Out-File/Add-Content) 写入文件时使用 UTF-8 (无BOM)，解决截图中的 NUL 问题
+                // 注意：语法错误会导致这部分代码不执行，因此后续解码逻辑需要兼容 GBK
                 const preamble = `
                     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
                     $OutputEncoding = [System.Text.Encoding]::UTF8;
@@ -1401,16 +1409,27 @@ const handlers = {
 
             // 保存子进程引用
             const child = exec(finalCommand, shellOptions, (error, stdout, stderr) => {
-                // 解码辅助函数
+                // 解码辅助函数：增强版，支持 Windows GBK 回退
                 const decodeBuffer = (buf) => {
                     if (!buf || buf.length === 0) return "";
-                    try {
-                        // 优先尝试 UTF-8 解码
-                        return new TextDecoder('utf-8').decode(buf);
-                    } catch (e) {
-                        // 兜底直接转字符串
-                        return buf.toString();
+                    
+                    // 1. 尝试 UTF-8
+                    const utf8Decoder = new TextDecoder('utf-8', { fatal: false });
+                    const utf8Str = utf8Decoder.decode(buf);
+
+                    // 2. 如果在 Windows 上，且 UTF-8 解码出现了大量替换字符()，或者 stderr 报错（解析错误通常是系统默认编码 GBK），尝试 GBK
+                    if (isWin && (utf8Str.includes('') || error)) {
+                        try {
+                            // Node.js 的 TextDecoder 支持 gbk (依赖系统 ICU，Electron 环境通常支持)
+                            const gbkDecoder = new TextDecoder('gbk', { fatal: false });
+                            const gbkStr = gbkDecoder.decode(buf);
+                            // 简单的启发式判断：如果 GBK 解码结果看起来更正常（这里简单返回 GBK 结果）
+                            return gbkStr;
+                        } catch (e) {
+                            return utf8Str; // 不支持 gbk 则回退
+                        }
                     }
+                    return utf8Str;
                 };
 
                 let result = "";
@@ -1427,7 +1446,8 @@ const handlers = {
                         result += `\n[System Note]: Command was aborted by user.`;
                     } else {
                         result += `\n[Error Code]: ${error.code}`;
-                        if (error.message && !errStr) result += `\n[Message]: ${error.message}`;
+                        // 避免重复显示 message，因为 message 通常包含 stderr
+                        if (error.message && !errStr && !outStr) result += `\n[Message]: ${error.message}`;
                     }
                 }
 
