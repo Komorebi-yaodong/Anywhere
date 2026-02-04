@@ -66,6 +66,24 @@ const preprocessKatex = (text) => {
   return processedText;
 };
 
+const processFilePaths = (text) => {
+  if (!text) return '';
+  // 正则说明：
+  // 1. (?<!["'=]) 避免匹配到 HTML 属性中的路径
+  // 2. [a-zA-Z]:\\ 匹配盘符 (如 D:\)
+  // 3. [^:<>"|?*\n\r\t]+ 匹配合法路径字符 (允许空格、中文)
+  return text.replace(/(?<!["'=])([a-zA-Z]:\\[^:<>"|?*\n\r\t]+)/g, (match) => {
+    // 清洗末尾的标点符号 (如句号、逗号、括号)
+    const cleanPath = match.replace(/[.,;:)\]。，；：]+$/, '').trim();
+    
+    // 过滤过短的误判
+    if (cleanPath.length < 3) return match;
+
+    // 生成带 data-filepath 的链接，href 设为 void(0) 防止跳转
+    return `<a href="javascript:void(0)" data-filepath="${cleanPath}" class="local-file-link" title="点击打开文件: ${cleanPath}">${cleanPath}</a>`;
+  });
+};
+
 const mermaidConfig = computed(() => ({
   theme: props.isDarkMode ? 'dark' : 'neutral',
 }));
@@ -185,30 +203,33 @@ const renderedMarkdownContent = computed(() => {
     return placeholder;
   };
 
-  // 1. 保护代码块和数学公式不被 DOMPurify 处理
+  // 1. 保护代码块和数学公式 (避免路径匹配误伤代码)
   let processedContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
     return prefix + addPlaceholder(delimiter + inner + delimiter);
   });
   processedContent = processedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => addPlaceholder(match));
   processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => addPlaceholder(match));
+  
+  // 在保护代码块之后，处理文件路径
+  processedContent = processFilePaths(processedContent);
+
   processedContent = processedContent.replace(/(^|[^\\])\*\*([^\n]+?)\*\*/g, '$1<strong>$2</strong>');
 
   // 2. 进行 HTML 清洗
   let sanitizedPart = DOMPurify.sanitize(processedContent, {
     ADD_TAGS: ['video', 'audio', 'source'],
     USE_PROFILES: { html: true, svg: true, svgFilters: true },
-    ADD_ATTR: ['style']
+    // 允许 data-filepath 属性通过清洗
+    ADD_ATTR: ['style', 'data-filepath', 'onclick'],
   });
 
-  // 全局将 &gt; 恢复为 >
   sanitizedPart = sanitizedPart.replace(/&gt;/g, '>');
 
-  // 3. 恢复受保护的内容（代码块等）
+  // 3. 恢复受保护的内容
   let finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
     return protectedMap.get(placeholder) || placeholder;
   });
 
-  // 匹配 <table...> 标签并包裹 div，利用正则确保只匹配实际的标签
   finalContent = finalContent.replace(/<table/g, '<div class="table-scroll-wrapper"><table').replace(/<\/table>/g, '</table></div>');
 
   if (!finalContent && props.message.role === 'assistant') return ' ';
@@ -1477,5 +1498,21 @@ html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb {
 
 html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:hover {
   background: #999;
+}
+
+:deep(.local-file-link) {
+  color: var(--el-color-primary);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  word-break: break-all;
+  font-weight: 500;
+}
+
+:deep(.local-file-link:hover) {
+  opacity: 0.8;
+  background-color: rgba(var(--el-color-primary-rgb), 0.1);
+  border-radius: 4px;
 }
 </style>

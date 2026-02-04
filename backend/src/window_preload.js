@@ -68,14 +68,27 @@ window.preload = {
 
 window.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (event) => {
+        // 向上寻找 <a> 标签
         let target = event.target;
         while (target && target.tagName !== 'A') {
             target = target.parentNode;
         }
 
-        if (target && target.tagName === 'A' && target.href) {
-            event.preventDefault();
-            utools.shellOpenExternal(target.href);
+        if (target && target.tagName === 'A') {
+            const filePath = target.getAttribute('data-filepath');
+            if (filePath) {
+                event.preventDefault();
+                event.stopPropagation();
+                const cleanPath = decodeURIComponent(filePath);
+                utools.shellOpenPath(cleanPath);
+                return;
+            }
+
+            // 处理普通外部链接
+            if (target.href && target.href.startsWith('http')) {
+                event.preventDefault();
+                utools.shellOpenExternal(target.href);
+            }
         }
     });
 });
@@ -115,7 +128,10 @@ window.api = {
     closeMcpClient,
     isFileTypeSupported,
     parseFileObject,
-
+    shellOpenPath: (fullPath) => {
+        console.log(fullPath);
+        utools.shellOpenPath(fullPath);
+    },
     // 向父进程(preload.js)发送切换置顶状态的请求
     toggleAlwaysOnTop: () => {
       if (senderId) {

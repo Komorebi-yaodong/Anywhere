@@ -193,7 +193,7 @@ const BUILTIN_SERVERS = {
     },
     "builtin_search": {
         id: "builtin_search",
-        name: "Web Search",
+        name: "Web Toolkit",
         description: "使用 DuckDuckGo 进行免费联网搜索，获取相关网页标题、链接和摘要；抓取网页内容。",
         type: "builtin",
         isActive: true,
