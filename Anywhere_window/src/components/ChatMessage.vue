@@ -68,20 +68,40 @@ const preprocessKatex = (text) => {
 
 const processFilePaths = (text) => {
   if (!text) return '';
-  // 正则说明：
-  // 1. (?<!["'=]) 避免匹配到 HTML 属性中的路径
-  // 2. [a-zA-Z]:\\ 匹配盘符 (如 D:\)
-  // 3. [^:<>"|?*\n\r\t]+ 匹配合法路径字符 (允许空格、中文)
-  return text.replace(/(?<!["'=])([a-zA-Z]:\\[^:<>"|?*\n\r\t]+)/g, (match) => {
+
+  // 辅助函数：生成链接 HTML
+  const createLink = (pathStr) => {
     // 清洗末尾的标点符号 (如句号、逗号、括号)
-    const cleanPath = match.replace(/[.,;:)\]。，；：]+$/, '').trim();
+    const cleanPath = pathStr.replace(/[.,;:)\]。，；：]+$/, '').trim();
     
     // 过滤过短的误判
-    if (cleanPath.length < 3) return match;
+    if (cleanPath.length < 2) return pathStr;
+    // 排除单纯的根目录符号
+    if (cleanPath === '/' || cleanPath === '~' || cleanPath === '\\') return pathStr;
 
     // 生成带 data-filepath 的链接，href 设为 void(0) 防止跳转
     return `<a href="javascript:void(0)" data-filepath="${cleanPath}" class="local-file-link" title="点击打开文件: ${cleanPath}">${cleanPath}</a>`;
+  };
+
+  let processed = text;
+
+  // 1. 处理 Windows 路径 (盘符开头，如 C:\Users)
+  // (?<!["'=]) 避免匹配到 HTML 属性中的路径
+  processed = processed.replace(/(?<!["'=])([a-zA-Z]:\\[^:<>"|?*\n\r\t]+)/g, (match) => {
+    return createLink(match);
   });
+
+  // 2. 处理 Unix/Linux/macOS 路径 (/ 或 ~ 开头)
+  // (?<!["'=:\w]) 避免匹配 URL (http://) 或 HTML 属性
+  // (^|[\s"'(>]) 确保路径出现在行首、空格、引号或括号之后
+  processed = processed.replace(/(^|[\s"'(>])((?:\/|~)[^:<>"|?*\n\r\t\s]+)/g, (match, prefix, pathStr) => {
+    // 二次校验：防止匹配 URL 的一部分 (如 https://example.com/foo)
+    // 如果 prefix 是空或者是空白符，通常是安全的。
+    // 如果是 > (HTML标签结束)，也是安全的。
+    return prefix + createLink(pathStr);
+  });
+
+  return processed;
 };
 
 const mermaidConfig = computed(() => ({
@@ -203,33 +223,77 @@ const renderedMarkdownContent = computed(() => {
     return placeholder;
   };
 
-  // 1. 保护代码块和数学公式 (避免路径匹配误伤代码)
-  let processedContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
-    return prefix + addPlaceholder(delimiter + inner + delimiter);
-  });
-  processedContent = processedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => addPlaceholder(match));
-  processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => addPlaceholder(match));
-  
-  // 在保护代码块之后，处理文件路径
-  processedContent = processFilePaths(processedContent);
+  // 1. HTML 转义辅助函数 (用于显示文本)
+  const escapeHtml = (unsafe) => {
+    return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  };
 
+  // 2. 属性转义辅助函数 (本逻辑中已改用 encodeURIComponent，此函数暂留作备用)
+  const escapeAttr = (unsafe) => {
+    return unsafe.replace(/"/g, "&quot;");
+  };
+
+  // 3. 保护数学公式 (最高优先级)
+  let processedContent = formattedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => addPlaceholder(match));
+  processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => addPlaceholder(match));
+
+  // 4. 保护块级代码 (```...```)
+  processedContent = processedContent.replace(/(^|\n)(```)([\s\S]*?)\2/g, (match) => {
+    return addPlaceholder(match);
+  });
+
+  // 5. 处理行内代码 (`...`) - 在此处检测文件路径并生成链接
+  processedContent = processedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
+    const trimmedInner = inner.trim();
+    
+    // 路径判定逻辑：
+    // 1. 包含 Windows 盘符 (C:\) 或 Unix 路径符 (/ 或 ~)
+    // 2. 不包含换行符
+    // 3. 长度大于 1
+    const isWinPath = /^[a-zA-Z]:\\/.test(trimmedInner);
+    const isUnixPath = /^[\/~]/.test(trimmedInner);
+    const hasNewline = trimmedInner.includes('\n');
+
+    if ((isWinPath || isUnixPath) && !hasNewline && trimmedInner.length > 1) {
+      // 清洗末尾标点
+      const cleanPath = trimmedInner.replace(/[.,;:)\]。，；：]+$/, '');
+      
+      // 1. 将 <a> 包裹在 <code> 外面，避免 HTML 解析器截断或隐藏代码块内容。
+      // 2. 使用 encodeURIComponent 编码路径，解决空格和中文导致的属性解析错误。
+      // 3. 添加 style="text-decoration:none;" 防止下划线干扰代码块样式。
+      const linkHtml = `<a href="#" data-filepath="${encodeURIComponent(cleanPath)}" class="local-file-link" style="text-decoration:none;" title="点击打开文件"><code class="inline-code-tag">${escapeHtml(inner)}</code></a>`;
+      return prefix + addPlaceholder(linkHtml);
+    }
+
+    // 普通代码块，正常显示
+    const codeHtml = `<code class="inline-code-tag">${escapeHtml(inner)}</code>`;
+    return prefix + addPlaceholder(codeHtml);
+  });
+
+  // 6. 加粗处理
   processedContent = processedContent.replace(/(^|[^\\])\*\*([^\n]+?)\*\*/g, '$1<strong>$2</strong>');
 
-  // 2. 进行 HTML 清洗
+  // 7. HTML 清洗
   let sanitizedPart = DOMPurify.sanitize(processedContent, {
     ADD_TAGS: ['video', 'audio', 'source'],
     USE_PROFILES: { html: true, svg: true, svgFilters: true },
-    // 允许 data-filepath 属性通过清洗
-    ADD_ATTR: ['style', 'data-filepath', 'onclick'],
+    // 确保允许 data-filepath 和 onclick
+    ADD_ATTR: ['style', 'data-filepath', 'onclick', 'target', 'title'],
   });
 
   sanitizedPart = sanitizedPart.replace(/&gt;/g, '>');
 
-  // 3. 恢复受保护的内容
+  // 8. 恢复受保护的内容
   let finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
     return protectedMap.get(placeholder) || placeholder;
   });
 
+  // 9. 表格包裹
   finalContent = finalContent.replace(/<table/g, '<div class="table-scroll-wrapper"><table').replace(/<\/table>/g, '</table></div>');
 
   if (!finalContent && props.message.role === 'assistant') return ' ';
