@@ -2035,20 +2035,24 @@ const saveSessionAsJson = async () => {
           const finalFilename = finalBasename + '.json';
           instance.confirmButtonLoading = true;
           try {
-            let fullDefaultPath = finalFilename;
             const localChatPath = currentConfig.value.webdav?.localChatPath;
+            
+            // 优化逻辑：如果有本地路径，直接写入；否则弹出保存框
             if (localChatPath) {
-              const separator = basic_msg.value.os === 'win' ? '\\' : '/';
-              fullDefaultPath = `${localChatPath}${separator}${finalFilename}`;
+              const separator = currentOS.value === 'win' ? '\\' : '/';
+              const fullPath = `${localChatPath}${separator}${finalFilename}`;
+              // 直接写入文件，不弹窗
+              await window.api.writeLocalFile(fullPath, jsonString);
+            } else {
+              // 未配置路径，弹出系统选择框
+              await window.api.saveFile({
+                title: '保存聊天会话',
+                defaultPath: finalFilename,
+                buttonLabel: '保存',
+                filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }],
+                fileContent: jsonString
+              });
             }
-
-            await window.api.saveFile({
-              title: '保存聊天会话',
-              defaultPath: fullDefaultPath,
-              buttonLabel: '保存',
-              filters: [{ name: 'JSON 文件', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }],
-              fileContent: jsonString
-            });
 
             defaultConversationName.value = finalBasename;
             showDismissibleMessage.success('会话已成功保存！');

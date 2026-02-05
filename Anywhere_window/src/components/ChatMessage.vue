@@ -243,7 +243,10 @@ const renderedMarkdownContent = computed(() => {
   processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => addPlaceholder(match));
 
   // 4. 保护块级代码 (```...```)
-  processedContent = processedContent.replace(/(^|\n)(```)([\s\S]*?)\2/g, (match) => {
+  // [修改] 优化正则以支持带缩进的代码块（例如列表中的代码块）
+  // 原正则: /(^|\n)(```)([\s\S]*?)\2/g 
+  // 新正则: /(^|\n)([ \t]*)(```)([\s\S]*?)\3/g  <- 增加了 ([ \t]*) 捕获缩进，并将反向引用改为 \3
+  processedContent = processedContent.replace(/(^|\n)([ \t]*)(```)([\s\S]*?)\3/g, (match) => {
     return addPlaceholder(match);
   });
 
