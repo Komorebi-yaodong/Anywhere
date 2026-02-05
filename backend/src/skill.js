@@ -330,7 +330,7 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
     // 1. Fork 模式 (子智能体)
     if (targetSkill.context === 'fork') {
         // 构建 Full Task
-        let fullTask = `Execute Skill: ${targetSkill.name}\n\n`;
+        let fullTask = `Skill Launched: ${targetSkill.name}\n\n`;
         if (targetSkill.description) {
             fullTask += `### Description\n${targetSkill.description}\n\n`;
         }
@@ -342,7 +342,7 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
 
         // 拼接具体的 Task 指令
         if (taskInput) {
-            fullTask += `\n\n### Current Task Request\n${taskInput}`;
+            fullTask += `\n### Current Task Request\n${taskInput}`;
         }
 
         // 确定允许的工具
@@ -372,7 +372,7 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
     }
 
     // 2. 普通模式 (直接返回 Prompt)
-    let response = `## Skill Activated: ${targetSkill.name}\n\n`;
+    let response = `## Skill Launched: ${targetSkill.name}\n\n`;
     response += `### Instructions\n${instructions}\n\n`;
     
     if (targetSkill.allowedTools) {
@@ -382,7 +382,7 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
 
     response += assetsInfo;
 
-    // [新增] 普通模式下也把 AI 的具体指令带上，作为上下文补充
+    // 普通模式下也把 AI 的具体指令带上，作为上下文补充
     if (taskInput) {
         response += `\n\n### Current Task Request\n${taskInput}`;
     }
