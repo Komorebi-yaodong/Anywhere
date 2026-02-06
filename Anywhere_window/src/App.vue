@@ -162,7 +162,6 @@ const loadBackground = async (newUrl) => {
       }
       cachedBackgroundBlobUrl.value = newBlobUrl;
     } else {
-      console.log(`[Background] Cache miss, downloading in background: ${newUrl}`);
       window.api.cacheBackgroundImage(newUrl);
     }
   } catch (e) {
@@ -642,13 +641,51 @@ const addCopyButtonsToCodeBlocks = async () => {
   });
 };
 
-const handleMarkdownImageClick = (event) => {
-  if (event.target.tagName !== 'IMG' || !event.target.closest('.markdown-wrapper')) return;
-  const imgElement = event.target;
-  if (imgElement && imgElement.src) {
-    imageViewerSrcList.value = [imgElement.src];
-    imageViewerInitialIndex.value = 0;
-    imageViewerVisible.value = true;
+const handleMainClick = async (event) => {
+  const target = event.target;
+  // 1. 处理图片点击
+  const img = target.closest('img');
+  if (img && img.closest('.markdown-wrapper')) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (img.src) {
+      imageViewerSrcList.value = [img.src];
+      imageViewerInitialIndex.value = 0;
+      imageViewerVisible.value = true;
+    }
+    return;
+  }
+
+  // 2. 处理内联代码块点击
+  const codeEl = target.closest('code') || target.closest('.inline-code-tag');
+  
+  if (codeEl) {
+    const inMarkdown = codeEl.closest('.markdown-wrapper');
+    const inPre = codeEl.closest('pre');
+
+    if (inMarkdown && !inPre) {
+      event.preventDefault();
+      event.stopPropagation();
+      
+      const codeContent = (codeEl.textContent || '').trim();
+
+      if (codeContent) {
+        try {
+          const result = await window.api.handleCodeClick(codeContent);
+          
+          if (result === 'opened-url') {
+            showDismissibleMessage.success('已在浏览器中打开链接');
+          } else if (result === 'opened-path') {
+            showDismissibleMessage.success('已在系统中打开文件/目录');
+          } else { // 'copied'
+            showDismissibleMessage.success('内容已复制到剪贴板');
+          }
+        } catch (error) {
+          console.error('[Click Error]', error);
+          showDismissibleMessage.error('操作失败: ' + error.message);
+        }
+      }
+    }
   }
 };
 
@@ -1070,8 +1107,6 @@ onMounted(async () => {
   window.addEventListener('blur', handleWindowBlur);
   const chatMainElement = chatContainerRef.value?.$el;
   if (chatMainElement) {
-    chatMainElement.addEventListener('click', handleMarkdownImageClick);
-
     chatObserver = new MutationObserver(() => {
       // 只要处于粘滞状态，任何 DOM 变化（文字生成、元素高度变化）
       // 都立即将 scrollTop 设为最大值。这在浏览器重绘前发生，因此视觉上是“内容上推”。
@@ -1371,8 +1406,6 @@ onBeforeUnmount(async () => {
   window.removeEventListener('blur', handleWindowBlur);
   if (textSearchInstance) textSearchInstance.destroy();
   if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
-  const chatMainElement = chatContainerRef.value?.$el;
-  if (chatMainElement) chatMainElement.removeEventListener('click', handleMarkdownImageClick);
   await window.api.closeMcpClient();
   window.removeEventListener('error', handleGlobalImageError, true);
   window.removeEventListener('keydown', handleGlobalKeyDown);
@@ -3552,8 +3585,7 @@ const scrollToMessageByIndex = (index) => {
         @open-search="handleOpenSearch" />
 
       <div class="main-area-wrapper">
-        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMarkdownImageClick"
-          @scroll="handleScroll">
+        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMainClick" @scroll="handleScroll">
           <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :is-auto-approve="isAutoApproveTools"
             @update-auto-approve="handleToggleAutoApprove" @confirm-tool="handleToolApproval"
             @reject-tool="handleToolApproval" :ref="el => setMessageRef(el, message.id)" :message="message"
