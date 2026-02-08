@@ -43,39 +43,83 @@ function adaptToolsForResponses(tools) {
 }
 
 /**
- * [核心修复] 将 Chat Completions 格式的消息历史转换为 Responses API 的 Input Items
- * 解决 "调用工具后的请求都会报错" 的问题
+ * 将 Chat Completions 格式的消息历史转换为 Responses API 的 Input Items
  */
 function convertMessagesToResponsesInput(messages) {
     const inputItems = [];
 
     for (const msg of messages) {
-        if (msg.role === 'system') {
-            // Responses API 中 system role 对应 developer role
+        // 1. Role 映射 (Responses API 使用 developer 代替 system)
+        let role = msg.role;
+        if (role === 'system') role = 'developer';
+
+        // 2. 处理工具返回结果 (保持 type: function_call_output)
+        if (role === 'tool') {
             inputItems.push({
-                type: "message",
-                role: "developer",
-                content: msg.content
+                type: "function_call_output",
+                call_id: msg.tool_call_id,
+                output: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
             });
+            continue;
         }
-        else if (msg.role === 'user') {
-            inputItems.push({
-                type: "message",
-                role: "user",
-                content: msg.content
-            });
-        }
-        else if (msg.role === 'assistant') {
-            // 1. 处理文本内容
-            if (msg.content) {
+
+        // 3. 处理常规消息 (User / Assistant / Developer)
+        if (role === 'assistant' || role === 'user' || role === 'developer') {
+            let contentList = [];
+            
+            // [关键修复] 根据角色决定文本类型
+            // Assistant 的输出历史必须标记为 output_text，用户的输入标记为 input_text
+            const textType = role === 'assistant' ? 'output_text' : 'input_text';
+
+            // 情况A: 字符串内容
+            if (typeof msg.content === 'string') {
+                if (msg.content) {
+                    contentList.push({ type: textType, text: msg.content });
+                }
+            } 
+            // 情况B: 数组内容 -> 逐项转换类型
+            else if (Array.isArray(msg.content)) {
+                for (const item of msg.content) {
+                    // 文本转换
+                    if (item.type === 'text') {
+                        contentList.push({ type: textType, text: item.text });
+                    } 
+                    // 图片/文件转换 (仅限非 Assistant 角色，Assistant 历史通常不包含输入型多模态数据)
+                    else if (role !== 'assistant') {
+                        if (item.type === 'image_url') {
+                            const url = item.image_url?.url || item.image_url;
+                            contentList.push({
+                                type: "input_image",
+                                image_url: url
+                            });
+                        } 
+                        else if (item.type === 'file' || item.type === 'input_file') {
+                            const f = item.file || item;
+                            contentList.push({
+                                type: "input_file",
+                                filename: f.filename || f.name,
+                                file_data: f.file_data || f.url
+                            });
+                        }
+                        else {
+                            // 保留其他可能的类型 (如 input_audio)
+                            contentList.push(item);
+                        }
+                    }
+                }
+            }
+
+            // 只有当 contentList 不为空时才添加 message item
+            if (contentList.length > 0) {
                 inputItems.push({
-                    type: "message",
-                    role: "assistant",
-                    content: msg.content
+                    role: role,
+                    content: contentList
                 });
             }
-            // 2. 处理工具调用 (Chat Completions 中是嵌套数组，Responses 中是扁平 Items)
-            if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+
+            // 4. 特殊处理 Assistant 的工具调用 (保持 type: function_call)
+            // 在 Responses API 中，function_call 是独立的 item，跟在 message item 后面
+            if (role === 'assistant' && msg.tool_calls && Array.isArray(msg.tool_calls)) {
                 for (const tc of msg.tool_calls) {
                     inputItems.push({
                         type: "function_call",
@@ -85,14 +129,6 @@ function convertMessagesToResponsesInput(messages) {
                     });
                 }
             }
-        }
-        else if (msg.role === 'tool') {
-            // 3. 处理工具返回结果 (转换为 function_call_output Item)
-            inputItems.push({
-                type: "function_call_output",
-                call_id: msg.tool_call_id,
-                output: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-            });
         }
     }
     return inputItems;
