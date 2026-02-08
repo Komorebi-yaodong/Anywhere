@@ -449,6 +449,11 @@
     "moveUpTooltip": "上に移動",
     "moveDownTooltip": "下に移動",
     "deleteProviderTooltip": "サービスプロバイダーを削除",
+    "apiTypeTooltip": "APIプロトコルを選択",
+    "apiTypes": {
+        "chatCompletions": "OpenAI-Chat",
+        "responses": "OpenAI-Response"
+    },
     "apiKeyLabel": "APIキー",
     "apiKeyPlaceholder": "APIキーを入力（複数可、カンマ区切り）",
     "apiKeyDescription": "複数のAPIキーをカンマで区切って入力できます。",

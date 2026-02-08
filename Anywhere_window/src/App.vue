@@ -2650,7 +2650,7 @@ const askAI = async (forceSend = false) => {
     return;
   }
 
-  // --- 1. 处理用户输入 (保持不变) ---
+  // --- 1. 处理用户输入 ---
   if (!forceSend) {
     let file_content = await sendFile();
     const promptText = prompt.value.trim();
@@ -2686,18 +2686,13 @@ const askAI = async (forceSend = false) => {
   let useStream = currentPromptConfig?.stream && !isVoiceReply;
   let tool_calls_count = 0;
 
+  // 获取当前服务商的 API 类型
+  const currentProviderConfig = currentConfig.value.providers[currentProviderID.value];
+  const apiType = currentProviderConfig?.apiType || 'chat_completions';
+
   let currentAssistantChatShowIndex = -1;
 
   try {
-    const { OpenAI } = await import('openai');
-
-    const openai = new OpenAI({
-      apiKey: () => window.api.getRandomItem(api_key.value),
-      baseURL: base_url.value,
-      dangerouslyAllowBrowser: true,
-      maxRetries: 3,
-    });
-
     // --- 3. 开始工具调用循环 ---
     while (!signalController.value.signal.aborted) {
       chatInputRef.value?.focus({ cursor: 'end' });
@@ -2769,19 +2764,23 @@ const askAI = async (forceSend = false) => {
         }
       }
 
-      const payload = {
+      // 构建请求参数对象
+      const requestParams = {
+        baseUrl: base_url.value,
+        apiKey: api_key.value,
         model: model.value.split("|")[1],
+        apiType: apiType,
         messages: messagesForThisRequest,
         stream: useStream,
+        signal: signalController.value.signal
       };
 
-      if (currentPromptConfig?.isTemperature) payload.temperature = currentPromptConfig.temperature;
-      if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') payload.reasoning_effort = tempReasoningEffort.value;
+      if (currentPromptConfig?.isTemperature) requestParams.temperature = currentPromptConfig.temperature;
+      if (tempReasoningEffort.value && tempReasoningEffort.value !== 'default') requestParams.reasoning_effort = tempReasoningEffort.value;
 
       // --- 构建工具列表 (MCP + Skill) ---
       let activeTools = [...openaiFormattedTools.value];
 
-      // 注入 Skill 工具定义
       if (sessionSkillIds.value.length > 0 && currentConfig.value.skillPath) {
         try {
           const skillToolDef = await window.api.getSkillToolDefinition(currentConfig.value.skillPath, sessionSkillIds.value);
@@ -2794,15 +2793,15 @@ const askAI = async (forceSend = false) => {
       }
 
       if (activeTools.length > 0) {
-        payload.tools = activeTools;
-        payload.tool_choice = "auto";
+        requestParams.tools = activeTools;
+        requestParams.tool_choice = "auto";
       }
 
       if (isVoiceReply) {
-        payload.stream = false;
+        requestParams.stream = false;
         useStream = false;
-        payload.modalities = ["text", "audio"];
-        payload.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
+        requestParams.modalities = ["text", "audio"];
+        requestParams.audio = { voice: selectedVoice.value.split('-')[0].trim(), format: "wav" };
       }
 
       const assistantMessageId = messageIdCounter.value++;
@@ -2819,91 +2818,127 @@ const askAI = async (forceSend = false) => {
       let responseMessage;
 
       if (useStream) {
-        const stream = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
+        // --- 流式处理 ---
+        const stream = await window.api.createChatCompletion(requestParams);
 
         let aggregatedReasoningContent = "";
         let aggregatedContent = "";
-        let aggregatedMedia = []; // 用于收集非文本内容（如 image_url）
-        let aggregatedToolCalls = [];
+        let aggregatedMedia = []; 
+        let aggregatedToolCalls = []; 
         let aggregatedExtraContent = null;
         let lastUpdateTime = Date.now();
 
+        const responsesItemIdToIndexMap = new Map();
+
         for await (const part of stream) {
-          const delta = part.choices?.[0]?.delta;
+          if (apiType === 'responses') {
+              if (part.type === 'response.output_text.delta') {
+                  aggregatedContent += part.delta;
+                  if (chat_show.value[currentAssistantChatShowIndex].status === 'thinking') {
+                    chat_show.value[currentAssistantChatShowIndex].status = 'end';
+                  }
+              } 
+              else if (part.type === 'response.reasoning_summary_text.delta') {
+                  aggregatedReasoningContent += part.delta;
+                  if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
+                    chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
+                  }
+                  if (Date.now() - lastUpdateTime > 100) {
+                    chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+                    lastUpdateTime = Date.now();
+                  }
+              }
+              else if (part.type === 'response.output_item.added') {
+                  if (part.item && part.item.type === 'function_call') {
+                      const index = aggregatedToolCalls.length;
+                      aggregatedToolCalls.push({
+                          id: part.item.call_id || part.item.id,
+                          type: "function",
+                          function: { name: part.item.name || "", arguments: "" }
+                      });
+                      responsesItemIdToIndexMap.set(part.item.id, index);
+                  }
+              }
+              else if (part.type === 'response.function_call_arguments.delta') {
+                  const index = responsesItemIdToIndexMap.get(part.item_id);
+                  if (index !== undefined && aggregatedToolCalls[index]) {
+                      aggregatedToolCalls[index].function.arguments += (part.delta || "");
+                  }
+              }
+          } 
+          else {
+              // Chat Completions 流式
+              const delta = part.choices?.[0]?.delta;
+              if (!delta) continue;
 
-          if (!delta) continue;
+              if (delta.extra_content) {
+                aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
+              }
+              if (delta.thought_signature) {
+                aggregatedExtraContent = aggregatedExtraContent || {};
+                aggregatedExtraContent.google = aggregatedExtraContent.google || {};
+                aggregatedExtraContent.google.thought_signature = delta.thought_signature;
+              }
 
-          if (delta.extra_content) {
-            aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
-          }
-          if (delta.thought_signature) {
-            aggregatedExtraContent = aggregatedExtraContent || {};
-            aggregatedExtraContent.google = aggregatedExtraContent.google || {};
-            aggregatedExtraContent.google.thought_signature = delta.thought_signature;
-          }
-
-          if (delta.reasoning_content) {
-            aggregatedReasoningContent += delta.reasoning_content;
-            if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
-              chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
-            }
-
-            if (Date.now() - lastUpdateTime > 100) {
-              chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-              lastUpdateTime = Date.now();
-            }
-          }
-          
-          // 处理 content (支持 string 和 array)
-          if (delta.content) {
-            if (typeof delta.content === 'string') {
-              aggregatedContent += delta.content;
-            } else if (Array.isArray(delta.content)) {
-              // 遍历数组处理多模态内容
-              delta.content.forEach(item => {
-                if (item.type === 'text') {
-                  aggregatedContent += (item.text || '');
-                } else if (item.type === 'image_url') {
-                  aggregatedMedia.push(item);
+              if (delta.reasoning_content) {
+                aggregatedReasoningContent += delta.reasoning_content;
+                if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
+                  chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
                 }
-                // 这里可以扩展其他类型
-              });
-            }
+                if (Date.now() - lastUpdateTime > 100) {
+                  chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+                  lastUpdateTime = Date.now();
+                }
+              }
+              
+              if (delta.content) {
+                if (typeof delta.content === 'string') {
+                  aggregatedContent += delta.content;
+                } else if (Array.isArray(delta.content)) {
+                  delta.content.forEach(item => {
+                    if (item.type === 'text') {
+                      aggregatedContent += (item.text || '');
+                    } else if (item.type === 'image_url') {
+                      aggregatedMedia.push(item);
+                    }
+                  });
+                }
+                if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking') {
+                  chat_show.value[currentAssistantChatShowIndex].status = 'end';
+                }
+              }
 
-            if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking') {
-              chat_show.value[currentAssistantChatShowIndex].status = 'end';
-            }
+              if (delta.tool_calls) {
+                for (const toolCallChunk of delta.tool_calls) {
+                  const index = toolCallChunk.index ?? aggregatedToolCalls.length;
+                  if (!aggregatedToolCalls[index]) {
+                    aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
+                  }
+                  const currentTool = aggregatedToolCalls[index];
+                  if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
+                  if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
+                  if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
+                  if (toolCallChunk.extra_content) {
+                    currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
+                  }
+                }
+              }
+          }
 
-            if (Date.now() - lastUpdateTime > 100) {
-              // 构建混合内容数组
+          if (Date.now() - lastUpdateTime > 100) {
               const currentDisplayContent = [];
               if (aggregatedContent) currentDisplayContent.push({ type: 'text', text: aggregatedContent });
               if (aggregatedMedia.length > 0) currentDisplayContent.push(...aggregatedMedia);
               
               chat_show.value[currentAssistantChatShowIndex].content = currentDisplayContent;
+              
+              if (aggregatedReasoningContent) {
+                  chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+              }
               lastUpdateTime = Date.now();
-            }
-          }
-
-          if (delta.tool_calls) {
-            for (const toolCallChunk of delta.tool_calls) {
-              const index = toolCallChunk.index ?? aggregatedToolCalls.length;
-              if (!aggregatedToolCalls[index]) {
-                aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
-              }
-              const currentTool = aggregatedToolCalls[index];
-              if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
-              if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
-              if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
-
-              if (toolCallChunk.extra_content) {
-                currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
-              }
-            }
           }
         }
 
-        // 构建最终历史消息内容
         let finalContentForHistory = null;
         if (aggregatedMedia.length > 0) {
             finalContentForHistory = [];
@@ -2924,8 +2959,57 @@ const askAI = async (forceSend = false) => {
           responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
         }
       } else {
-        const response = await openai.chat.completions.create(payload, { signal: signalController.value.signal });
-        responseMessage = response.choices[0].message;
+        // --- 非流式处理 ---
+        const response = await window.api.createChatCompletion(requestParams);
+        
+        if (apiType === 'responses') {
+            let contentText = "";
+            let toolCalls = [];
+            let reasoningText = "";
+            
+            if (response.output_text) {
+                contentText = response.output_text;
+            } 
+            
+            // 完整解析 output 数组
+            if (response.output && Array.isArray(response.output)) {
+                response.output.forEach(item => {
+                    // 1. Message
+                    if (item.type === 'message' && item.content) {
+                        item.content.forEach(c => {
+                            if (c.type === 'output_text') contentText += c.text;
+                        });
+                    } 
+                    // 2. Tool Calls
+                    else if (item.type === 'function_call') {
+                        toolCalls.push({
+                            id: item.call_id || item.id,
+                            type: 'function',
+                            function: {
+                                name: item.name,
+                                arguments: item.arguments
+                            }
+                        });
+                    } 
+                    // 3. Reasoning
+                    else if (item.type === 'reasoning' && item.summary) {
+                        item.summary.forEach(s => {
+                            if (s.type === 'summary_text') reasoningText += s.text;
+                        });
+                    }
+                });
+            }
+
+            responseMessage = {
+                role: 'assistant',
+                content: contentText || null,
+                reasoning_content: reasoningText || null,
+                tool_calls: toolCalls.length > 0 ? toolCalls : undefined
+            };
+        } else {
+            // Chat Completions
+            responseMessage = response.choices[0].message;
+        }
       }
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
@@ -2938,8 +3022,10 @@ const askAI = async (forceSend = false) => {
 
       history.value.push(responseMessage);
 
+      // --- 更新 UI 气泡 ---
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
-      // 处理最终显示内容
+      
+      // 更新正文
       if (responseMessage.content) {
         if (typeof responseMessage.content === 'string') {
             currentBubble.content = [{ type: 'text', text: responseMessage.content }];
@@ -2948,9 +3034,11 @@ const askAI = async (forceSend = false) => {
         }
       }
       
+      // 更新思考内容并标记结束
       if (responseMessage.reasoning_content) {
         currentBubble.reasoning_content = responseMessage.reasoning_content;
-        currentBubble.status = 'end';
+        // 关键：非流式下如果存在思考内容，必须将 status 设为 end 才能正确显示
+        currentBubble.status = 'end'; 
       }
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
@@ -2965,6 +3053,7 @@ const askAI = async (forceSend = false) => {
 
         await nextTick();
 
+        // 工具调用执行逻辑
         const toolMessages = await Promise.all(
           responseMessage.tool_calls.map(async (toolCall) => {
             const uiToolCall = currentBubble.tool_calls.find(t => t.id === toolCall.id);
@@ -3002,7 +3091,6 @@ const askAI = async (forceSend = false) => {
             try {
               const toolArgs = JSON.parse(toolCall.function.arguments);
 
-              // 区分 Skill 调用和普通 MCP 调用
               if (toolCall.function.name === 'Skill') {
                 if (uiToolCall) uiToolCall.result = `Activating skill: ${toolArgs.skill}...`;
 
@@ -3023,7 +3111,8 @@ const askAI = async (forceSend = false) => {
                   model: currentModelName,
                   tools: activeTools.filter(t => t.function.name !== 'sub_agent'),
                   mcpSystemPrompt: mcpSystemPromptStr, 
-                  onUpdate: onUpdateCallback
+                  onUpdate: onUpdateCallback,
+                  apiType: apiType 
                 };
 
                 toolContent = await window.api.resolveSkillInvocation(
@@ -3069,7 +3158,8 @@ const askAI = async (forceSend = false) => {
                     model: currentModelName,
                     tools: toolsContext,
                     mcpSystemPrompt: mcpSystemPromptStr,
-                    onUpdate: onUpdateCallback
+                    onUpdate: onUpdateCallback,
+                    apiType: apiType 
                   };
                 }
 

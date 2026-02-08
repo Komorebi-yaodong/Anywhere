@@ -2,12 +2,12 @@ const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
+const { createChatCompletion, getRandomItem } = require('./chat.js');
 
 const {
     getConfig,
     updateConfig,
     saveSetting,
-    getRandomItem,
     getUser,
     copyText,
     sethotkey,
@@ -134,6 +134,9 @@ window.api = {
     saveSetting,
     getUser,
     getRandomItem,
+    createChatCompletion: async (params) => {
+        return await createChatCompletion(params);
+    },
     copyText,
     handleFilePath,
     saveFile,

@@ -1,10 +1,13 @@
 const {
+  getRandomItem,
+} = require('./chat.js');
+
+const {
   getConfig,
   updateConfig,
   saveSetting,
   updateConfigWithoutFeatures,
   checkConfig,
-  getRandomItem,
   getUser,
   copyText,
   openWindow,

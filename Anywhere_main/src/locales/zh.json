@@ -449,6 +449,11 @@
     "moveUpTooltip": "上移",
     "moveDownTooltip": "下移",
     "deleteProviderTooltip": "删除服务商",
+    "apiTypeTooltip": "选择 API 协议类型",
+    "apiTypes": {
+        "chatCompletions": "OpenAI-Chat",
+        "responses": "OpenAI-Response"
+    },
     "apiKeyLabel": "API 密钥",
     "apiKeyPlaceholder": "输入 API 密钥 (可输入多个，用逗号分隔)",
     "apiKeyDescription": "可以输入多个 API 密钥，用逗号分隔",
