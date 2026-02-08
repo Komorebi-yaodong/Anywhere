@@ -2,14 +2,12 @@ const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-const {
-    getRandomItem,
-} = require('./input.js');
 
 const {
     getConfig,
     updateConfig,
     saveSetting,
+    getRandomItem,
     getUser,
     copyText,
     sethotkey,

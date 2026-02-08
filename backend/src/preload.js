@@ -4,6 +4,7 @@ const {
   saveSetting,
   updateConfigWithoutFeatures,
   checkConfig,
+  getRandomItem,
   getUser,
   copyText,
   openWindow,
@@ -33,9 +34,6 @@ const {
   copyLocalPath,
 } = require('./file.js');
 
-const {
-  getRandomItem,
-} = require('./input.js');
 
 const { 
   invokeBuiltinTool,
