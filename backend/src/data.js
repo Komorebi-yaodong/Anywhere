@@ -1,11 +1,11 @@
 const { webFrame, nativeImage } = require('electron');
 const crypto = require('crypto');
+
+const { createChatCompletion, getRandomItem } = require('./chat.js'); 
+
 const windowMap = new Map();
 const feature_suffix = "anywhere助手^_^"
 
-const {
-  requestTextOpenAI
-} = require('./input.js');
 const { 
   getBuiltinServers
 } = require('./mcp_builtin.js');
@@ -18,6 +18,7 @@ const defaultConfig = {
         name: "default",
         url: "https://api.openai.com/v1",
         api_key: "",
+        apiType: "chat_completions",
         modelList: [],
         enable: true,
       },
@@ -155,7 +156,7 @@ function splitConfigForStorage(fullConfig) {
 }
 
 /**
- * [已重构] 拆分完整的 config 对象以便于分块存储
+ * 拆分完整的 config 对象以便于分块存储
  * @param {object} fullConfig - 包含 prompts 和 providers 的完整 config 对象
  * @returns {{baseConfigPart: object, promptsPart: object, providersPart: object, mcpServersPart: object}} - 拆分后的四部分
  */
@@ -319,7 +320,7 @@ async function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  const CURRENT_VERSION = "1.11.17";
+  const CURRENT_VERSION = "2.1.15";
 
   // --- 1. 版本检查与旧数据迁移 ---
   if (config.version !== CURRENT_VERSION) {
@@ -457,6 +458,7 @@ function checkConfig(config) {
       if (prov.modelListByUser !== undefined) { delete prov.modelListByUser; flag = true; }
       if (prov.enable === undefined) { prov.enable = true; flag = true; }
       if (prov.folderId === undefined) { prov.folderId = ""; flag = true; }
+      if (prov.apiType === undefined) { prov.apiType = "chat_completions"; flag = true; }
     }
   }
 
@@ -480,6 +482,7 @@ function checkConfig(config) {
     updateConfig({ "config": config });
   }
 }
+
 
 /**
  * 保存单个设置项，自动判断应写入哪个文档
@@ -1000,78 +1003,117 @@ async function openFastInputWindow(config, msg) {
     startTime = performance.now();
     console.log(`[Timer Start] Opening window for code: ${msg.code}`);
   }
-  // 1. 【并行】立即发起 AI 请求
-  const streamBuffer = []; // 缓冲区，用于存储窗口未就绪时收到的数据
-  let fastWindowRef = null; // 用于在请求回调中引用窗口
+  
+  const streamBuffer = []; 
+  let fastWindowRef = null; 
 
-  // 定义发送数据到窗口的辅助函数
   const sendToWindow = (type, payload) => {
     if (fastWindowRef && !fastWindowRef.isDestroyed()) {
       fastWindowRef.webContents.send('stream-update', { type, payload });
     } else {
-      // 窗口还没好，存入缓冲区
       streamBuffer.push({ type, payload });
     }
   };
 
-  // 执行请求处理逻辑 (不 await，让其在后台运行)
-  requestTextOpenAI(msg.code, msg.content, config).then(async (response) => {
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
+  // 1. 准备请求参数
+  const code = msg.code;
+  const promptConfig = config.prompts[code];
+  
+  // 解析模型配置
+  let apiUrl = config.providers["0"]?.url; // 默认 fallback
+  let apiKey = config.providers["0"]?.api_key;
+  let apiType = config.providers["0"]?.apiType || 'chat_completions'; // 默认 API 类型
+  let modelName = "";
 
-    const isStream = config.prompts[msg.code].stream ?? true;
-
-    if (isStream) {
-      // --- 流式处理 ---
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        let boundary = buffer.lastIndexOf("\n");
-
-        if (boundary !== -1) {
-          const completeData = buffer.substring(0, boundary);
-          buffer = buffer.substring(boundary + 1);
-
-          const lines = completeData.split("\n").filter((line) => line.trim() !== "");
-          for (const line of lines) {
-            const message = line.replace(/^data: /, "");
-            if (message === "[DONE]") break;
-            try {
-              const parsed = JSON.parse(message);
-              if (parsed.choices[0].delta.content) {
-                const chunk = parsed.choices[0].delta.content;
-                sendToWindow('chunk', chunk);
-              }
-            } catch (e) {
-              // 忽略解析错误
-            }
-          }
-        }
+  if (promptConfig && promptConfig.model) {
+      const [providerId, mName] = promptConfig.model.split("|");
+      const provider = config.providers[providerId];
+      if (provider) {
+          apiUrl = provider.url;
+          apiKey = provider.api_key;
+          apiType = provider.apiType || 'chat_completions';
+          modelName = mName;
       }
-    } else {
-      // --- 非流式处理 ---
-      const data = await response.json();
-      const fullText = data.choices[0].message.content || "";
-      sendToWindow('chunk', fullText);
-    }
+  }
 
-    isStreamEnded = true;
-    sendToWindow('done', null);
+  // 处理 timestamp 必要性
+  let content = msg.content;
+  if (promptConfig && promptConfig.ifTextNecessary) {
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      if (typeof content === "string") {
+          content = timestamp + "\n\n" + content;
+      } else if (Array.isArray(content)) {
+          const hasText = content.some(c => c.type === 'text' && c.text && !c.text.startsWith('file name:'));
+          if (!hasText) {
+              content.push({ type: "text", text: timestamp });
+          }
+      }
+  }
 
+  const isStream = promptConfig.stream ?? true;
+
+  // 2. 发起请求 (使用 chat.js)
+  createChatCompletion({
+      baseUrl: apiUrl,
+      apiKey: apiKey,
+      model: modelName,
+      apiType: apiType, // 传递 API 类型
+      messages: [
+          { role: "system", content: promptConfig.prompt },
+          { role: "user", content: content }
+      ],
+      stream: isStream
+  }).then(async (response) => {
+      if (isStream) {
+          // 流式处理: response 是一个 AsyncIterable
+          for await (const part of response) {
+              let deltaContent = null;
+
+              if (apiType === 'responses') {
+                  // [修复] Responses API 流式处理逻辑
+                  // 根据调试数据: {"type":"response.output_text.delta", ..., "delta":"..."}
+                  if (part.type === 'response.output_text.delta') {
+                      deltaContent = part.delta;
+                  }
+              } else {
+                  // Chat Completions API
+                  deltaContent = part.choices?.[0]?.delta?.content;
+              }
+
+              if (deltaContent) {
+                  sendToWindow('chunk', deltaContent);
+              }
+          }
+      } else {
+          // 非流式处理: response 是完整对象
+          let fullText = "";
+          if (apiType === 'responses') {
+              // [修复] Responses API 完整响应处理
+              // 结构: { output: [ { content: [ { type: 'output_text', text: '...' } ] } ] }
+              if (response.output && Array.isArray(response.output)) {
+                  response.output.forEach(item => {
+                      if (item.type === 'message' && item.content) {
+                          item.content.forEach(c => {
+                              if (c.type === 'output_text') fullText += c.text;
+                          });
+                      }
+                  });
+              }
+          } else {
+              // Chat Completions API
+              fullText = response.choices?.[0]?.message?.content || "";
+          }
+          
+          sendToWindow('chunk', fullText);
+      }
+      sendToWindow('done', null);
   }).catch((error) => {
-    console.error("FastWindow AI Request Error:", error);
-    streamError = error.message;
-    sendToWindow('error', error.message);
+      console.error("FastWindow AI Request Error:", error);
+      sendToWindow('error', error.message);
   });
 
-  // 2. 【并行】创建窗口
+  // 3. 创建窗口 (保持原有逻辑不变)
   msg.config = config;
   const { x, y, width, height } = getFastInputPosition(config);
   let channel = "fast-window";
@@ -1104,30 +1146,20 @@ async function openFastInputWindow(config, msg) {
     entryPath,
     windowOptions,
     () => {
-      fastWindowRef = fastWindow; // 赋值引用
+      fastWindowRef = fastWindow;
       windowMap.set(senderId, fastWindow);
-
-      // 发送初始化配置
       fastWindow.webContents.send(channel, msg);
-
-      // 3. 【同步】发送缓冲区中已积压的数据
       if (streamBuffer.length > 0) {
         streamBuffer.forEach(item => {
           fastWindow.webContents.send('stream-update', item);
         });
-        streamBuffer.length = 0; // 清空
+        streamBuffer.length = 0;
       }
-
-      // 计时结束
       if (utools.isDev()) {
-        const windowShownTime = performance.now();
-        console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+        console.log(`[Timer] Fast window opened`);
       }
     }
   );
-  if (utools.isDev()) {// 调试用
-    fastWindow.webContents.openDevTools({ mode: "detach" });
-  }
 }
 
 /**

@@ -1,4 +1,8 @@
 const {
+  getRandomItem,
+} = require('./chat.js');
+
+const {
   getConfig,
   updateConfig,
   saveSetting,
@@ -33,9 +37,6 @@ const {
   copyLocalPath,
 } = require('./file.js');
 
-const {
-  getRandomItem,
-} = require('./input.js');
 
 const { 
   invokeBuiltinTool,

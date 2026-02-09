@@ -231,11 +231,15 @@ function add_prvider_function() {
   atomicSave(config => {
     config.providers[timestamp] = {
       name: newName,
-      url: "", api_key: "", modelList: [], enable: true,
-      folderId: "" // 默认为空
+      url: "",
+      api_key: "",
+      modelList: [],
+      enable: true,
+      folderId: "",
+      apiType: "chat_completions"
     };
     config.providerOrder.push(timestamp);
-    provider_key.value = timestamp; // 设置新添加的为当前选中
+    provider_key.value = timestamp;
   });
 
   addprovider_form.name = "";
@@ -452,6 +456,11 @@ function saveModelOrder() {
 // 对于简单的开关和输入框，使用精确的 saveSetting
 async function saveSingleProviderSetting(key, value) {
   if (!provider_key.value) return;
+
+  if (currentConfig.value.providers[provider_key.value]) {
+    currentConfig.value.providers[provider_key.value][key] = value;
+  }
+
   const keyPath = `providers.${provider_key.value}.${key}`;
   try {
     await window.api.saveSetting(keyPath, value);
@@ -566,8 +575,18 @@ const apiKeyCount = computed(() => {
                       :title="t('providers.deleteProviderTooltip')" />
                   </div>
                 </div>
-                <el-switch v-model="selectedProvider.enable"
-                  @change="(value) => saveSingleProviderSetting('enable', value)" size="large" />
+                <div class="provider-header-controls">
+                  <el-tooltip :content="t('providers.apiTypeTooltip')" placement="top" :show-after="500">
+                    <el-select v-model="selectedProvider.apiType"
+                      @change="(val) => saveSingleProviderSetting('apiType', val)" size="normal" class="api-type-select"
+                      placeholder="Chat Completions">
+                      <el-option :label="t('providers.apiTypes.chatCompletions')" value="chat_completions" />
+                      <el-option :label="t('providers.apiTypes.responses')" value="responses" />
+                    </el-select>
+                  </el-tooltip>
+                  <el-switch v-model="selectedProvider.enable"
+                    @change="(value) => saveSingleProviderSetting('enable', value)" size="large" />
+                </div>
               </div>
 
               <el-form label-position="left" label-width="75px" class="provider-form">
@@ -924,6 +943,20 @@ const apiKeyCount = computed(() => {
 .header-buttons {
   display: flex;
   gap: 8px;
+}
+
+.provider-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.api-type-select {
+  width: 130px;
+}
+
+html.dark .api-type-select {
+  --el-fill-color-blank: var(--bg-primary);
 }
 
 .provider-form {

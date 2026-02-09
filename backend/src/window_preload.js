@@ -1,8 +1,8 @@
 const { ipcRenderer } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
-const {
-    getRandomItem,
-} = require('./input.js');
+const { createChatCompletion, getRandomItem } = require('./chat.js');
 
 const {
     getConfig,
@@ -68,30 +68,65 @@ window.preload = {
 
 window.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (event) => {
-        // 向上寻找 <a> 标签
         let target = event.target;
         while (target && target.tagName !== 'A') {
             target = target.parentNode;
         }
 
-        if (target && target.tagName === 'A') {
-            const filePath = target.getAttribute('data-filepath');
-            if (filePath) {
-                event.preventDefault();
-                event.stopPropagation();
-                const cleanPath = decodeURIComponent(filePath);
-                utools.shellOpenPath(cleanPath);
-                return;
-            }
-
-            // 处理普通外部链接
-            if (target.href && target.href.startsWith('http')) {
-                event.preventDefault();
-                utools.shellOpenExternal(target.href);
-            }
+        if (target && target.tagName === 'A' && target.href) {
+            event.preventDefault();
+            utools.shellOpenExternal(target.href);
         }
     });
 });
+
+// 处理代码块点击事件的核心逻辑
+async function handleCodeClick(text) {
+
+  if (!text || typeof text !== 'string') {
+    return 'copied';
+  }
+  
+  // 移除首尾空白和引号 (支持 'path' 或 "path")
+  const content = text.trim().replace(/^["']|["']$/g, '');
+
+  // 1. 检查是否为 URL
+  if (/^https?:\/\//i.test(content) || /^mailto:/i.test(content)) {
+    utools.shellOpenExternal(content);
+    return 'opened-url';
+  }
+
+  // 2. 检查是否为本地文件路径
+  try {
+    let resolvedPath = content;
+    
+    // 处理 ~ 路径 (macOS/Linux)
+    if (content.startsWith('~')) {
+      resolvedPath = path.join(utools.getPath('home'), content.slice(1));
+    }
+    
+    // 简单的路径格式校验 (Windows盘符 或 Unix根路径 或 相对路径)
+    // 增加对 C:\ 或 /Users 等格式的宽容度
+    const isLikelyPath = /^[a-zA-Z]:[\\/]/.test(resolvedPath) || resolvedPath.startsWith('/') || resolvedPath.startsWith('./') || resolvedPath.startsWith('../') || resolvedPath.includes(path.sep);
+
+    if (isLikelyPath) {
+        const exists = fs.existsSync(resolvedPath);
+        
+        if (exists) {
+            // 尝试打开文件或目录
+            utools.shellOpenPath(resolvedPath);
+            return 'opened-path';
+        }
+    }
+  } catch (e) {
+    // 忽略路径检查错误，回退到复制
+    console.warn(`[Preload Debug] Path check failed:`, e.message);
+  }
+
+  // 3. 如果以上都不是，则复制内容
+  utools.copyText(text); // 复制原始文本
+  return 'copied';
+}
 
 window.api = {
     getConfig,
@@ -99,12 +134,16 @@ window.api = {
     saveSetting,
     getUser,
     getRandomItem,
+    createChatCompletion: async (params) => {
+        return await createChatCompletion(params);
+    },
     copyText,
     handleFilePath,
     saveFile,
     renameLocalFile,
     listJsonFiles,
     writeLocalFile,
+    handleCodeClick,
     sethotkey,
     setZoomFactor,
     defaultConfig,
@@ -129,7 +168,6 @@ window.api = {
     isFileTypeSupported,
     parseFileObject,
     shellOpenPath: (fullPath) => {
-        console.log(fullPath);
         utools.shellOpenPath(fullPath);
     },
     // 向父进程(preload.js)发送切换置顶状态的请求

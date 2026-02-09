@@ -449,6 +449,11 @@
     "moveUpTooltip": "Move Up",
     "moveDownTooltip": "Move Down",
     "deleteProviderTooltip": "Delete Provider",
+    "apiTypeTooltip": "Select API Protocol",
+    "apiTypes": {
+        "chatCompletions": "OpenAI-Chat",
+        "responses": "OpenAI-Response"
+    },
     "apiKeyLabel": "API Key",
     "apiKeyPlaceholder": "Enter API Key (multiple can be entered, separated by commas)",
     "apiKeyDescription": "You can enter multiple API keys separated by commas.",

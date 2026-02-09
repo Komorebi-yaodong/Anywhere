@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
 import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush } from '@element-plus/icons-vue'
@@ -75,6 +75,10 @@ const formatBytes = (bytes, decimals = 2) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
+const handleWindowFocus = () => {
+    refreshData();
+};
+
 onMounted(async () => {
     try {
         const result = await window.api.getConfig();
@@ -84,13 +88,22 @@ onMounted(async () => {
             isWebdavConfigValid.value = !!(webdavConfig.value.url && webdavConfig.value.data_path);
             if (localChatPath.value) await fetchLocalFiles();
         }
-    } catch (error) { ElMessage.error(t('chats.alerts.configError')); }
+    } catch (error) { 
+        ElMessage.error(t('chats.alerts.configError')); 
+    }
+    window.addEventListener('focus', handleWindowFocus);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('focus', handleWindowFocus);
 });
 
 watch(activeView, async (newView) => {
     if (newView === 'cloud' && !isCloudDataLoaded.value && isWebdavConfigValid.value) {
         await fetchCloudFiles();
         isCloudDataLoaded.value = true;
+    } else if (newView === 'local' && localChatPath.value) {
+        await fetchLocalFiles();
     }
 });
 

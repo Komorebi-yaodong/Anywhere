@@ -449,6 +449,11 @@
     "moveUpTooltip": "Переместить вверх",
     "moveDownTooltip": "Переместить вниз",
     "deleteProviderTooltip": "Удалить провайдера",
+    "apiTypeTooltip": "Выберите протокол API",
+    "apiTypes": {
+        "chatCompletions": "OpenAI-Chat",
+        "responses": "OpenAI-Response"
+    },
     "apiKeyLabel": "Ключ API",
     "apiKeyPlaceholder": "Введите ключ API (можно несколько, через запятую)",
     "apiKeyDescription": "Вы можете ввести несколько ключей API, разделенных запятыми.",
