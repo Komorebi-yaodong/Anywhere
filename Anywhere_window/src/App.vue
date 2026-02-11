@@ -2809,7 +2809,8 @@ const askAI = async (forceSend = false) => {
         id: assistantMessageId,
         role: "assistant", content: [], reasoning_content: "", status: "",
         aiName: modelMap.value[model.value] || model.value.split('|')[1],
-        voiceName: selectedVoice.value, tool_calls: []
+        voiceName: selectedVoice.value, tool_calls: [],
+        startTime: Date.now()
       });
       currentAssistantChatShowIndex = chat_show.value.length - 1;
 
@@ -3276,6 +3277,8 @@ const askAI = async (forceSend = false) => {
     loading.value = false;
     signalController.value = null;
     if (currentAssistantChatShowIndex > -1) {
+      const endTime = Date.now();
+      chat_show.value[currentAssistantChatShowIndex].endTime = endTime; 
       chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
     }
     await nextTick();

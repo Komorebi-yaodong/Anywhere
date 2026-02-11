@@ -25,6 +25,45 @@ const editInputRef = ref(null);
 const isEditing = ref(false);
 const editedContent = ref('');
 
+// 计算耗时或显示开始时间
+const timeDisplay = computed(() => {
+  const msg = props.message;
+  // 获取开始时间：优先取 startTime (AI)，其次取 timestamp (User/AI旧数据)
+  const startTime = msg.startTime || msg.timestamp;
+  if (!startTime) return '';
+
+  const formattedStart = formatTimestamp(startTime);
+
+  // 如果是 AI 消息且有结束时间，追加耗时
+  if (msg.role === 'assistant' && msg.endTime && msg.startTime) {
+    const duration = (msg.endTime - msg.startTime) / 1000;
+    let durationStr = '';
+    if (duration < 60) {
+        durationStr = `${duration.toFixed(1)} s`;
+    } else {
+        durationStr = `${(duration / 60).toFixed(1)} min`;
+    }
+    // 格式：2023-01-01 12:00 (3.5 s)
+    return `${formattedStart} (${durationStr})`;
+  }
+
+  return formattedStart;
+});
+
+// 优化 Loading 显示逻辑：如果是最后一条消息 && 正在加载 && 没有正在进行的思考内容
+const showBubbleLoading = computed(() => {
+  if (!props.isLastMessage || !props.isLoading) return false;
+  
+  // 如果有 reasoning_content 且状态是 thinking，说明正在思考，不显示正文 loading
+  if (props.message.reasoning_content && props.message.status === 'thinking') {
+    return false;
+  }
+  
+  // 正文为空时才显示 loading
+  const contentEmpty = !props.message.content || (Array.isArray(props.message.content) && props.message.content.length === 0);
+  return contentEmpty && (!props.message.tool_calls || props.message.tool_calls.length === 0);
+});
+
 // 格式化工具参数为易读的 JSON 字符串
 const formatToolArgs = (argsString) => {
   try {
@@ -211,8 +250,13 @@ const renderedMarkdownContent = computed(() => {
   // 匹配 <table...> 标签并包裹 div，利用正则确保只匹配实际的标签
   finalContent = finalContent.replace(/<table/g, '<div class="table-scroll-wrapper"><table').replace(/<\/table>/g, '</table></div>');
 
-  if (!finalContent && props.message.role === 'assistant') return ' ';
-  return finalContent || ' ';
+  return finalContent || '';
+});
+
+const hasContentToShow = computed(() => {
+  const hasText = renderedMarkdownContent.value && renderedMarkdownContent.value.trim().length > 0;
+  const hasTools = props.message.tool_calls && props.message.tool_calls.length > 0;
+  return hasText || hasTools || isEditing.value || showBubbleLoading.value;
 });
 
 const shouldShowCollapseButton = computed(() => {
@@ -306,19 +350,19 @@ const truncateFilename = (filename, maxLength = 30) => {
             <span class="ai-name">{{ message.aiName }}</span>
             <span v-if="message.voiceName" class="voice-name">({{ message.voiceName }})</span>
           </div>
-          <span class="timestamp-row" v-if="message.completedTimestamp">{{ formatTimestamp(message.completedTimestamp)
-          }}</span>
+          <span class="timestamp-row">{{ timeDisplay }}</span>
         </div>
       </div>
 
       <Bubble class="ai-bubble" placement="start" shape="corner" maxWidth="100%"
-        :loading="isLastMessage && isLoading && renderedMarkdownContent === ' ' && (!message.tool_calls || message.tool_calls.length === 0)">
+        :class="{ 'no-content': !hasContentToShow }"
+        :loading="showBubbleLoading">
         <template #header>
           <Thinking v-if="message.reasoning_content && message.reasoning_content.trim().length > 0" maxWidth="90%"
             :content="(message.reasoning_content || '').trim()" :modelValue="false" :status="message.status">
           </Thinking>
         </template>
-        <template #content>
+        <template #content v-if="hasContentToShow">
           <div v-if="!isEditing" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
             <XMarkdown :markdown="renderedMarkdownContent" :is-dark="isDarkMode" :enable-latex="true"
               :mermaid-config="mermaidConfig" :default-theme-mode="isDarkMode ? 'dark' : 'light'"
@@ -425,6 +469,7 @@ const truncateFilename = (filename, maxLength = 30) => {
   flex-direction: column;
   overflow-x: hidden;
   padding: 0px;
+  --bubble-radius: 12px;
 }
 
 .message-wrapper {
@@ -464,14 +509,16 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 .ai-meta-header {
   flex-direction: row;
-  align-items: flex-start;
+  align-items: center;
+  margin-bottom: 4px;
 }
 
 .meta-info-column {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  line-height: 1.3;
+  line-height: 1.2;
+  gap: 0px;
 }
 
 .meta-name-row {
@@ -482,8 +529,8 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 .timestamp-row {
   font-size: 11px;
-  color: var(--el-text-color-placeholder);
-  margin-top: 1px;
+  color: var(--el-text-color-primary);
+  margin-top: 2px;
 }
 
 .chat-avatar-top {
@@ -504,8 +551,8 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 .ai-avatar {
   border-radius: 6px;
+  margin-right: 10px;
 }
-
 .ai-name {
   font-weight: 700;
   font-size: 13px;
@@ -517,7 +564,7 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 .chat-message .user-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
-    border-radius: 18px;
+    border-radius: var(--bubble-radius);
     background-color: var(--el-bg-color-userbubble);
     padding-top: 10px;
     padding-bottom: 10px;
@@ -539,6 +586,7 @@ html.dark .chat-message .user-bubble {
 
 .chat-message .ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
+    border-radius: var(--bubble-radius);
     background-color: transparent;
     padding-left: 4px;
     padding-right: 0px;
@@ -548,6 +596,12 @@ html.dark .chat-message .user-bubble {
 
   :deep(.el-bubble-content-wrapper .el-bubble-footer) {
     margin-top: 0;
+  }
+}
+
+.chat-message .ai-bubble.no-content {
+  :deep(.el-bubble-content) {
+    display: none !important;
   }
 }
 
@@ -578,8 +632,7 @@ html.dark .chat-message .ai-bubble {
     max-width: 100%;
     overflow-x: auto;
     white-space: pre;
-    box-sizing: border-box;
-    border-radius: 6px;
+    border-radius: var(--bubble-radius) !important;
   }
 
   :deep(.katex) {
@@ -1197,6 +1250,7 @@ html.dark .ai-name {
 }
 
 html.dark .ai-bubble :deep(.el-thinking .trigger) {
+  border-radius: var(--bubble-radius) !important;
   background-color: var(--el-fill-color-darker, #2c2e33);
   color: var(--el-text-color-primary, #F9FAFB);
   border-color: var(--el-border-color-dark, #373A40);
@@ -1218,6 +1272,7 @@ html.dark .ai-bubble :deep(.el-thinking-popper .el-popper__arrow::before) {
 }
 
 .ai-bubble :deep(.el-thinking .content pre) {
+  border-radius: var(--bubble-radius) !important;
   max-width: 100%;
   margin-bottom: 10px;
   white-space: pre-wrap;
@@ -1254,7 +1309,7 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
   :deep(.el-collapse-item__header) {
     background-color: var(--el-fill-color-light);
     border: 1px solid var(--el-border-color-lighter);
-    border-radius: 8px;
+    border-radius: var(--bubble-radius);
     padding: 0 12px;
     font-size: 13px;
     transition: border-radius 0.2s;
@@ -1270,8 +1325,8 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
     background-color: transparent;
     border: 1px solid var(--el-border-color-lighter);
     border-top: none;
-    border-bottom-left-radius: 8px;
-    border-bottom-right-radius: 8px;
+    border-bottom-left-radius: var(--bubble-radius);
+    border-bottom-right-radius: var(--bubble-radius);
   }
 
   :deep(.el-collapse-item__content) {
@@ -1409,6 +1464,10 @@ html.dark .stop-btn-wrapper {
       }
     }
   }
+}
+
+.tool-call-details .tool-detail-section pre {
+    border-radius: var(--bubble-radius);
 }
 
 .tool-call-details .tool-detail-section pre::-webkit-scrollbar {
