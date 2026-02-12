@@ -183,6 +183,11 @@ Anywhere/
 2. **DeepSeek**: [官方平台](https://platform.deepseek.com/)，性能强劲，完美支持 Function Calling，且价格亲民。
 3. **OpenRouter**: [聚合平台](https://openrouter.ai)，支持几乎所有主流模型。
 
+
+---
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Komorebi-yaodong/Anywhere&type=Timeline)](https://star-history.com/#Komorebi-yaodong/Anywhere&Timeline)
+
 ---
 
 ## 🤝 社区与支持

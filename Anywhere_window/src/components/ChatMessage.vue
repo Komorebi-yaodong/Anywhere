@@ -496,7 +496,7 @@ const truncateFilename = (filename, maxLength = 30) => {
 .message-meta-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0px;
   margin-bottom: 4px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
