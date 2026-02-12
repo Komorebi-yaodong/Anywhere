@@ -252,24 +252,24 @@ const BUILTIN_TOOLS = {
     "builtin_filesystem": [
         {
             name: "glob_files",
-            description: "Fast file pattern matching to locate file paths. Use this to find files before reading them.",
+            description: "Fast file pattern matching to locate file paths. You MUST specify a 'path' to limit the search scope.",
             inputSchema: {
                 type: "object",
                 properties: {
                     pattern: { type: "string", description: "Glob pattern (e.g., 'src/**/*.ts' for recursive, '*.json' for current dir)." },
-                    path: { type: "string", description: "Root directory to search. Defaults to current user home." }
+                    path: { type: "string", description: "The directory to search in. You MUST provide a specific path (e.g., project root or subfolder). Do NOT use root '/' or '~' unless absolutely necessary." }
                 },
-                required: ["pattern"]
+                required: ["pattern", "path"]
             }
         },
         {
             name: "grep_search",
-            description: "Search for patterns in file contents using Regex.",
+            description: "Search for patterns in file contents using Regex. You MUST specify a 'path' to limit the search scope.",
             inputSchema: {
                 type: "object",
                 properties: {
                     pattern: { type: "string", description: "Regex pattern to search for." },
-                    path: { type: "string", description: "Root directory to search." },
+                    path: { type: "string", description: "The directory to search in. You MUST provide a specific path." },
                     glob: { type: "string", description: "Glob pattern to filter files (e.g., '**/*.js')." },
                     output_mode: {
                         type: "string",
@@ -278,7 +278,7 @@ const BUILTIN_TOOLS = {
                     },
                     multiline: { type: "boolean", description: "Enable multiline matching." }
                 },
-                required: ["pattern"]
+                required: ["pattern", "path"]
             }
         },
         {
@@ -947,62 +947,61 @@ const handlers = {
     // 1. Glob Files
     glob_files: async ({ pattern, path: searchPath }, context, signal) => {
         try {
-            let rootDir = "";
+            if (!searchPath) {
+                return "Error: You MUST provide a 'path' argument to specify the directory.";
+            }
+
+            let rootDir = resolvePath(searchPath);
+            
+            const parsed = path.parse(rootDir);
+            if (parsed.root === rootDir && rootDir.length <= 3) {
+                // Windows: C:\, Linux/Mac: /
+                return `Error: Scanning the system root directory ('${rootDir}') is not allowed due to performance and security reasons. Please specify a more specific directory (e.g., project folder).`;
+            }
+
             let globPattern = pattern;
 
-            // 检测是否以盘符开头 (Win) 或 / 开头 (Unix)，且 searchPath 未指定或为默认
             const isAbsolutePath = path.isAbsolute(pattern) || /^[a-zA-Z]:[\\/]/.test(pattern);
-
             if (isAbsolutePath) {
                 const magicIndex = pattern.search(/[*?\[{]/);
                 if (magicIndex > -1) {
                     const basePath = pattern.substring(0, magicIndex);
                     const lastSep = Math.max(basePath.lastIndexOf('/'), basePath.lastIndexOf('\\'));
-
                     if (lastSep > -1) {
-                        rootDir = basePath.substring(0, lastSep + 1); // 包含分隔符
-                        globPattern = pattern.substring(lastSep + 1); // 剩余部分作为 pattern
-
-                        if (!searchPath || searchPath === '~' || searchPath === os.homedir()) {
-                            searchPath = rootDir;
-                        } else {
-                            globPattern = pattern.replace(normalizePath(resolvePath(searchPath)), '').replace(/^[\\/]/, '');
+                        const extractedRoot = basePath.substring(0, lastSep + 1);
+                        if (extractedRoot.startsWith(rootDir)) {
+                            // 优化：如果 pattern 指定的目录在 searchPath 内部，缩小搜索范围
+                            rootDir = extractedRoot;
+                            globPattern = pattern.substring(lastSep + 1);
                         }
                     }
                 }
             }
-            // -----------------------------------------------------------
 
-            rootDir = resolvePath(searchPath);
             if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
             if (!isPathSafe(rootDir)) return `[Security Block] Access restricted.`;
 
             const results = [];
-            // 如果 globPattern 为空（完全被提取为路径），默认匹配所有
             const regex = globToRegex(globPattern || "**/*");
             if (!regex) return "Error: Invalid glob pattern.";
 
             const MAX_RESULTS = 5000;
             const normalizedRoot = normalizePath(rootDir);
 
-            // 传递 signal 给 walkDir
             for await (const filePath of walkDir(rootDir, 20, 0, signal)) {
                 if (signal && signal.aborted) throw new Error("Operation aborted by user.");
 
                 const normalizedFilePath = normalizePath(filePath);
-
-                // 计算相对路径
                 let relativePath = normalizedFilePath.replace(normalizedRoot, '');
                 if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
 
-                // 匹配相对路径 或 文件名
                 if (regex.test(relativePath) || regex.test(path.basename(filePath))) {
                     results.push(filePath);
                 }
                 if (results.length >= MAX_RESULTS) break;
             }
 
-            if (results.length === 0) return `No files matched in ${rootDir}.`;
+            if (results.length === 0) return `No files matched pattern '${globPattern}' in ${rootDir}.`;
             return results.join('\n') + (results.length >= MAX_RESULTS ? `\n... (Limit reached: ${MAX_RESULTS})` : '');
         } catch (e) {
             return `Glob error: ${e.message}`;
@@ -1012,7 +1011,19 @@ const handlers = {
     // 2. Grep Search
     grep_search: async ({ pattern, path: searchPath, glob, output_mode = 'content', multiline = false }, context, signal) => {
         try {
+            // 强制路径检查
+            if (!searchPath) {
+                return "Error: You MUST provide a 'path' argument to specify the directory.";
+            }
+
             const rootDir = resolvePath(searchPath);
+
+            // 安全检查：禁止扫描根目录
+            const parsed = path.parse(rootDir);
+            if (parsed.root === rootDir && rootDir.length <= 3) {
+                return `Error: Grep searching the system root directory ('${rootDir}') is not allowed. Please specify a project directory.`;
+            }
+
             if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
 
             const regexFlags = multiline ? 'gmi' : 'gi';
@@ -1026,18 +1037,16 @@ const handlers = {
 
             const results = [];
             let matchCount = 0;
-            const MAX_SCANNED = 5000; // 限制扫描文件数防止卡死
+            const MAX_SCANNED = 5000; 
             let scanned = 0;
 
-            // 传递 signal 给 walkDir
             for await (const filePath of walkDir(rootDir, 20, 0, signal)) {
-                if (signal && signal.aborted) throw new Error("Operation aborted by user."); // 响应中断
+                if (signal && signal.aborted) throw new Error("Operation aborted by user.");
                 if (scanned++ > MAX_SCANNED) {
-                    results.push(`\n[System] Scan limit reached (${MAX_SCANNED} files). Please narrow down your search path.`);
+                    results.push(`\n[System] Scan limit reached (${MAX_SCANNED} files). Please narrow down your search path or use a glob filter.`);
                     break;
                 }
 
-                // Glob 过滤
                 if (globRegex) {
                     const normalizedFilePath = normalizePath(filePath);
                     let relativePath = normalizedFilePath.replace(normalizedRoot, '');
@@ -1046,15 +1055,14 @@ const handlers = {
                     if (!globRegex.test(relativePath) && !globRegex.test(path.basename(filePath))) continue;
                 }
 
-                // 跳过二进制文件
                 const ext = path.extname(filePath).toLowerCase();
-                if (['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.exe', '.bin', '.zip', '.node', '.dll', '.db'].includes(ext)) continue;
+                if (['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.exe', '.bin', '.zip', '.node', '.dll', '.db', '.pyc'].includes(ext)) continue;
 
                 try {
                     const stats = await fs.promises.stat(filePath);
-                    if (stats.size > 1024 * 1024) continue; // 跳过大文件
+                    if (stats.size > 1024 * 1024) continue; 
 
-                    const content = await fs.promises.readFile(filePath, { encoding: 'utf-8', signal }); // [修改] 传递 signal
+                    const content = await fs.promises.readFile(filePath, { encoding: 'utf-8', signal });
 
                     if (output_mode === 'files_with_matches') {
                         if (searchRegex.test(content)) {
@@ -1072,7 +1080,8 @@ const handlers = {
                                 const offset = m.index;
                                 const lineNum = content.substring(0, offset).split(/\r?\n/).length;
                                 const lineContent = lines[lineNum - 1].trim();
-                                results.push(`${filePath}:${lineNum}: ${lineContent.substring(0, 100)}`);
+                                // 限制单行预览长度
+                                results.push(`${filePath}:${lineNum}: ${lineContent.substring(0, 150)}`);
                             });
                         }
                     }
