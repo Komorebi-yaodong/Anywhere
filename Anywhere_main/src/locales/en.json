@@ -1,12 +1,12 @@
 {
   "app": {
     "header": {
-      "chats": "Chats 💬",
-      "prompts": "Agent Prompts 🚀",
-      "mcp": "MCP Servers 🔧",
-      "skills": "Skills 📚",
-      "providers": "Providers ☁️",
-      "settings": "Settings ⚙️",
+      "chats": "Chats",
+      "prompts": "Agent Prompts",
+      "mcp": "MCP Servers",
+      "skills": "Skills",
+      "providers": "Providers",
+      "settings": "Settings",
       "help": "User Guide"
     },
     "tabs": {

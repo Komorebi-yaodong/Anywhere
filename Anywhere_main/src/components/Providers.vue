@@ -840,8 +840,8 @@ const apiKeyCount = computed(() => {
 }
 
 .provider-item.active {
-  background-color: var(--bg-accent-light);
-  color: var(--text-accent);
+  background-color: var(--bg-accent); 
+  color: var(--text-on-accent) !important;
   font-weight: 600;
 }
 

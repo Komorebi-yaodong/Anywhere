@@ -1,12 +1,12 @@
 {
   "app": {
     "header": {
-      "chats": "对话 💬",
-      "prompts": "快捷助手 🚀",
-      "mcp": "MCP 服务 🔧",
-      "skills": "Skill 技能库 📚",
-      "providers": "服务商 ☁️",
-      "settings": "设置 ⚙️",
+      "chats": "历史对话",
+      "prompts": "快捷助手",
+      "mcp": "MCP 服务",
+      "skills": "Skill 技能库",
+      "providers": "服务商",
+      "settings": "设置",
       "help": "使用指南"
     },
     "tabs": {
