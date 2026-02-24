@@ -1,0 +1,70 @@
+name: Build and Package Anywhere
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 拉取代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. 安装 pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      # 3. 安装 Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: "**/pnpm-lock.yaml"
+
+      # 4. 安装 Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 5. 执行构建流程
+      - name: Build All Modules
+        run: |
+          echo "=== build Anywhere_main ==="
+          cd Anywhere_main
+          pnpm install
+          pnpm build
+          cd ..
+
+          echo "=== build Anywhere_window ==="
+          cd Anywhere_window
+          pnpm install
+          pnpm build
+          cd ..
+
+          echo "=== build backend ==="
+          cd backend
+          pnpm install
+          pnpm build
+          cd ..
+
+      # 6. 运行 Python 脚本移动并整理文件
+      - name: Run moveDist Script
+        run: |
+          python moveDist.py
+
+      # 7. 上传构建结果作为 Artifact
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anywhere-Build-Result
+          path: v*/
