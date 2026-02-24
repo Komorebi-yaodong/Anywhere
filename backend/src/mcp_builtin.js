@@ -47,50 +47,84 @@ function extractMetadata(html) {
 function convertHtmlToMarkdown(html, baseUrl = '') {
     let text = html;
 
-    // --- 1. SPA/SEO 增强：检查 <noscript> ---
-    // 很多单页应用(Linux.do, Discourse)会将正文放在 noscript 中供爬虫读取
-    // 如果 noscript 内容比当前 body 内容长很多，优先使用 noscript
-    const noscriptMatch = text.match(/<noscript[^>]*>([\s\S]*?)<\/noscript>/i);
-    const bodyMatch = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    // --- 0. 特殊站点适配：Discourse ---
+    try {
+        const dataPreloadedMatch = text.match(/id=["']data-preloaded["'][^>]*data-preloaded=["']([\s\S]*?)["']/i);
+        if (dataPreloadedMatch) {
+            const decodeEntities = (str) => {
+                if (!str) return "";
+                return str.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&#x27;/g, "'").replace(/&#x2F;/g, "/");
+            };
+            const rawJson = decodeEntities(dataPreloadedMatch[1]);
+            const data = JSON.parse(rawJson);
+            for (const key in data) {
+                if (key.startsWith('topic_') && typeof data[key] === 'string') {
+                    const topicData = JSON.parse(data[key]);
+                    if (topicData?.post_stream?.posts?.[0]?.cooked) {
+                        text = topicData.post_stream.posts[0].cooked;
+                    }
+                    break;
+                }
+            }
+        }
+    } catch (e) {}
 
-    let bodyText = bodyMatch ? bodyMatch[1] : text;
-    if (noscriptMatch && noscriptMatch[1].length > bodyText.length) {
-        text = noscriptMatch[1];
-    } else {
-        text = bodyText;
+    // --- 1. 常规 DOM 容器提取 ---
+    const cookedMatch = text.match(/<div[^>]*class=["'][^"']*cooked[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+    const articleMatch = text.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+    const mainMatch = text.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+
+    if (cookedMatch && cookedMatch[1].length > 100) text = cookedMatch[1];
+    else if (articleMatch && articleMatch[1].length > 100) text = articleMatch[1];
+    else if (mainMatch && mainMatch[1].length > 100) text = mainMatch[1];
+    else {
+        const bodyMatch = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        if (bodyMatch) text = bodyMatch[1];
     }
 
     // --- 2. 移除绝对无关的标签 ---
-    text = text.replace(/<(script|style|svg|noscript|iframe|form|button|input|select|option|textarea)[^>]*>[\s\S]*?<\/\1>/gi, '');
-
-    // --- 3. 移除 HTML5 语义化噪音标签 ---
-    text = text.replace(/<(nav|footer|aside)[^>]*>[\s\S]*?<\/\1>/gi, '');
-
-    // --- 4. 基于类名/ID 的通用降噪 ---
-    const noiseKeywords = "sidebar|comment|recommend|advert|ads|menu|login|modal|popup|cookie|auth|related|footer|copyright";
-    const noiseRegex = new RegExp(`<div[^>]*(?:id|class)=["'][^"']*(${noiseKeywords})[^"']*["'][^>]*>[\\s\\S]*?<\\/div>`, 'gi');
-    text = text.replace(noiseRegex, '');
-    text = text.replace(noiseRegex, '');
-
-    // --- 5. 移除注释 ---
+    text = text.replace(/<(head|script|style|svg|noscript|iframe|form|button|input|select|option|textarea)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    text = text.replace(/<(nav|footer|aside|header)[^>]*>[\s\S]*?<\/\1>/gi, '');
     text = text.replace(/<!--[\s\S]*?-->/g, '');
+
+    // --- 代码块保护机制 ---
+    // 在移除 HTML 标签前，先提取代码块并用占位符替换，防止代码块内的 <tag> 被误删
+    const codeBlockPlaceholders = [];
+    
+    // 处理 <pre><code>...</code></pre>
+    text = text.replace(/<pre[^>]*>[\s\S]*?<code[^>]*>([\s\S]*?)<\/code>[\s\S]*?<\/pre>/gi, (match, code) => {
+        // 解码 HTML 实体，还原 <meta-directives> 等内容
+        const decodedCode = code
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+        
+        const placeholder = `___CODE_BLOCK_${codeBlockPlaceholders.length}___`;
+        codeBlockPlaceholders.push(`\n\`\`\`\n${decodedCode}\n\`\`\`\n`);
+        return placeholder;
+    });
+
+    // 处理行内 <code>...</code> (Discourse 有时会用这个，虽然少见)
+    text = text.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, (match, code) => {
+        const decodedCode = code.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        const placeholder = `___CODE_BLOCK_${codeBlockPlaceholders.length}___`;
+        codeBlockPlaceholders.push(` \`${decodedCode}\` `);
+        return placeholder;
+    });
 
     // --- 6. 辅助函数：处理相对 URL ---
     const resolveUrl = (relativeUrl) => {
         if (!relativeUrl || !baseUrl) return relativeUrl;
         if (relativeUrl.startsWith('http')) return relativeUrl;
         if (relativeUrl.startsWith('data:')) return '';
-        try {
-            return new URL(relativeUrl, baseUrl).href;
-        } catch (e) {
-            return relativeUrl;
-        }
+        try { return new URL(relativeUrl, baseUrl).href; } catch (e) { return relativeUrl; }
     };
 
     // --- 7. 元素转换 Markdown ---
     text = text.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (match, level, content) => {
-        const cleanContent = content.replace(/<[^>]+>/g, '').trim();
-        return cleanContent ? `\n\n${'#'.repeat(level)} ${cleanContent}\n` : '';
+        return `\n\n${'#'.repeat(level)} ${content.replace(/<[^>]+>/g, '').trim()}\n`;
     });
 
     text = text.replace(/<\/li>/gi, '\n');
@@ -100,12 +134,10 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
     text = text.replace(/<br\s*\/?>/gi, '\n');
 
     text = text.replace(/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*>/gi, (match, src, alt) => {
-        const fullUrl = resolveUrl(src);
-        return fullUrl ? `\n![${alt.trim()}](${fullUrl})\n` : '';
+        const fullUrl = resolveUrl(src); return fullUrl ? `\n![${alt.trim()}](${fullUrl})\n` : '';
     });
     text = text.replace(/<img[^>]*src="([^"]*)"[^>]*>/gi, (match, src) => {
-        const fullUrl = resolveUrl(src);
-        return fullUrl ? `\n![](${fullUrl})\n` : '';
+        const fullUrl = resolveUrl(src); return fullUrl ? `\n![](${fullUrl})\n` : '';
     });
 
     text = text.replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (match, href, content) => {
@@ -116,26 +148,21 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
 
     text = text.replace(/<(b|strong)[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**');
 
-    // 代码块处理
-    text = text.replace(/<pre[^>]*>[\s\S]*?<code[^>]*>([\s\S]*?)<\/code>[\s\S]*?<\/pre>/gi, (match, code) => {
-        return `\n\`\`\`\n${code}\n\`\`\`\n`;
-    });
-    text = text.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, '\n```\n$1\n```\n');
-    text = text.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, ' `$1` ');
-
-    // --- 8. 移除剩余 HTML 标签 ---
+    // --- 8. 移除剩余 HTML 标签 (此时代码块已是占位符，安全) ---
     text = text.replace(/<[^>]+>/g, '');
 
-    // --- 9. 实体解码 ---
+    // --- 9. 还原代码块 ---
+    codeBlockPlaceholders.forEach((codeBlock, index) => {
+        text = text.replace(`___CODE_BLOCK_${index}___`, () => codeBlock); // 使用函数返回防止 replacement 里的 $ 被特殊解析
+    });
+
+    // --- 10. 实体解码与清洗 ---
     const entities = { '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&copy;': '©', '&mdash;': '—' };
     text = text.replace(/&[a-z0-9]+;/gi, (match) => entities[match] || '');
 
-    // --- 10. 行级清洗与去重 ---
     const lines = text.split('\n').map(line => line.trim());
     const cleanLines = [];
-
     const lineNoiseRegex = /^(Sign in|Sign up|Log in|Register|Subscribe|Share|Follow us|Menu|Top|Home|About|Contact|Privacy|Terms)/i;
-
     let blankLineCount = 0;
 
     for (let line of lines) {
@@ -145,20 +172,11 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
             continue;
         }
         blankLineCount = 0;
-
-        // 过滤纯数字行 (解决代码块行号问题)
-        if (/^\d+$/.test(line)) continue;
-
-        // 过滤极短的纯符号行
-        if (line.length < 5 && !/[a-zA-Z0-9\u4e00-\u9fa5]/.test(line)) continue;
-
-        // 过滤导航类噪音
         if (line.length < 20 && lineNoiseRegex.test(line)) continue;
-
         cleanLines.push(line);
     }
 
-    return cleanLines.join('\n');
+    return cleanLines.join('\n').trim();
 }
 
 // --- Definitions ---
