@@ -58,6 +58,7 @@ const onCopyImage = async () => {
   
   const loadingMsg = ElMessage.info({ message: '正在生成图片...', duration: 0 });
   
+  // 延时让 UI 有机会渲染 Loading
   setTimeout(async () => {
     let wrapper = null;
     try {
@@ -73,11 +74,15 @@ const onCopyImage = async () => {
           themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
       }
 
-      // 3. 构建截图容器
+      // 3. 构建截图容器 (Wrapper)
+      // 设置最小宽度
+      const MIN_IMAGE_WIDTH = 800; 
+      const targetWidth = Math.max(messageWrapperRef.value.clientWidth, MIN_IMAGE_WIDTH);
+
       wrapper = document.createElement('div');
       wrapper.style.cssText = `
         position: fixed; top: -10000px; left: 0; z-index: -9999;
-        width: ${messageWrapperRef.value.clientWidth}px;
+        width: ${targetWidth}px;
         box-sizing: content-box; padding: 20px;
         display: flex; flex-direction: column; overflow: hidden;
       `;
@@ -142,7 +147,7 @@ const onCopyImage = async () => {
           clonedBubble.style.overflow = 'hidden'; 
       }
 
-      // B. 思考按钮 (Trigger)
+      // B. 思考按钮
       const originalThinkingTriggers = messageWrapperRef.value.querySelectorAll('.el-thinking .trigger');
       const clonedThinkingTriggers = clone.querySelectorAll('.el-thinking .trigger');
       originalThinkingTriggers.forEach((orig, i) => {
@@ -155,17 +160,16 @@ const onCopyImage = async () => {
           }
       });
 
-      // E. [新增] 思考内容块 (Content Pre) - 专门修复这里的圆角
+      // E. 思考内容块
       const originalThinkingContent = messageWrapperRef.value.querySelectorAll('.el-thinking .content pre');
       const clonedThinkingContent = clone.querySelectorAll('.el-thinking .content pre');
       originalThinkingContent.forEach((orig, i) => {
           if (clonedThinkingContent[i]) {
               const comp = getComputedStyle(orig);
-              clonedThinkingContent[i].style.borderRadius = comp.borderRadius; // 强制同步圆角
+              clonedThinkingContent[i].style.borderRadius = comp.borderRadius;
               clonedThinkingContent[i].style.backgroundColor = comp.backgroundColor;
               clonedThinkingContent[i].style.border = comp.border;
               clonedThinkingContent[i].style.color = comp.color;
-              // 展开内容
               clonedThinkingContent[i].style.whiteSpace = 'pre-wrap';
               clonedThinkingContent[i].style.overflow = 'visible';
               clonedThinkingContent[i].style.height = 'auto';
@@ -173,8 +177,8 @@ const onCopyImage = async () => {
           }
       });
 
-      // C. 普通代码块 (Pre)
-      const originalPres = messageWrapperRef.value.querySelectorAll('pre:not(.el-thinking *)'); // 排除思考块内的pre
+      // C. 普通代码块
+      const originalPres = messageWrapperRef.value.querySelectorAll('pre:not(.el-thinking *)');
       const clonedPres = clone.querySelectorAll('pre:not(.el-thinking *)');
       originalPres.forEach((orig, i) => {
           if (clonedPres[i]) {

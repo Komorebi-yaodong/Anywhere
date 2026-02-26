@@ -2234,7 +2234,7 @@ const saveSessionAsImage = async () => {
           try {
             const element = chatContainerRef.value.$el;
             
-            // 获取兜底的主题背景色
+            // 获取背景色
             const computedStyle = getComputedStyle(document.documentElement);
             let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
             if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
@@ -2244,9 +2244,11 @@ const saveSessionAsImage = async () => {
 
             const clone = element.cloneNode(true);
             
-            // 设置克隆体样式
-            const originalWidth = element.clientWidth;
-            clone.style.width = `${originalWidth}px`;
+            // 设置最小宽度
+            const MIN_IMAGE_WIDTH = 800;
+            const targetWidth = Math.max(element.clientWidth, MIN_IMAGE_WIDTH);
+
+            clone.style.width = `${targetWidth}px`;
             clone.style.height = 'auto';
             clone.style.maxHeight = 'none';
             clone.style.overflow = 'visible';
@@ -2255,17 +2257,14 @@ const saveSessionAsImage = async () => {
             clone.style.left = '0';
             clone.style.zIndex = '-9999';
             
-            // [关键修改] 背景处理逻辑
+            // 背景处理
             if (windowBackgroundImage.value) {
-                // 如果有背景图片，应用图片背景
                 clone.style.backgroundImage = `url('${windowBackgroundImage.value}')`;
                 clone.style.backgroundSize = 'cover';
                 clone.style.backgroundPosition = 'center';
                 clone.style.backgroundRepeat = 'no-repeat';
-                // 同时保留背景色作为底层，防止图片透明部分透出
                 clone.style.backgroundColor = themeBgColor; 
             } else {
-                // 没有图片时使用纯色
                 clone.style.background = themeBgColor;
             }
             
@@ -2295,7 +2294,6 @@ const saveSessionAsImage = async () => {
             const canvas = await html2canvas(clone, {
               useCORS: true,
               allowTaint: true,
-              // [关键修改] 这里设置为 null，让 html2canvas 使用元素自身的背景样式（即我们上面设置的图片）
               backgroundColor: null, 
               scale: 2, 
               logging: false,
@@ -2303,9 +2301,7 @@ const saveSessionAsImage = async () => {
               windowHeight: clone.scrollHeight,
               x: 0, 
               y: 0, 
-              ignoreElements: (el) => {
-                 return false;
-              }
+              ignoreElements: (el) => false
             });
 
             if (clone.parentNode) {
