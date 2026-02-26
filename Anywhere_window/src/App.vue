@@ -2232,10 +2232,9 @@ const saveSessionAsImage = async () => {
           const loadingMsg = ElMessage.info({ message: '正在生成长图，请稍候...', duration: 0 });
 
           try {
-            // 1. 获取聊天容器
             const element = chatContainerRef.value.$el;
             
-            // 2. 获取背景色
+            // 获取兜底的主题背景色
             const computedStyle = getComputedStyle(document.documentElement);
             let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
             if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
@@ -2243,57 +2242,64 @@ const saveSessionAsImage = async () => {
                 themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
             }
 
-            // 3. 克隆节点
             const clone = element.cloneNode(true);
             
             // 设置克隆体样式
-            // 注意：宽度需要显式设置，防止脱离文档流后宽度塌陷
             const originalWidth = element.clientWidth;
             clone.style.width = `${originalWidth}px`;
             clone.style.height = 'auto';
             clone.style.maxHeight = 'none';
             clone.style.overflow = 'visible';
-            clone.style.position = 'absolute'; // 使用 absolute 并在父级内定位，保持层级上下文
+            clone.style.position = 'absolute'; 
             clone.style.top = '0';
             clone.style.left = '0';
-            clone.style.zIndex = '-9999'; // 置于底层
-            clone.style.background = themeBgColor;
+            clone.style.zIndex = '-9999';
             
-            // [关键修复]：处理克隆体内的代码块和markdown容器，强制展开
+            // [关键修改] 背景处理逻辑
+            if (windowBackgroundImage.value) {
+                // 如果有背景图片，应用图片背景
+                clone.style.backgroundImage = `url('${windowBackgroundImage.value}')`;
+                clone.style.backgroundSize = 'cover';
+                clone.style.backgroundPosition = 'center';
+                clone.style.backgroundRepeat = 'no-repeat';
+                // 同时保留背景色作为底层，防止图片透明部分透出
+                clone.style.backgroundColor = themeBgColor; 
+            } else {
+                // 没有图片时使用纯色
+                clone.style.background = themeBgColor;
+            }
+            
+            // 强制展开代码块
             const preElements = clone.querySelectorAll('pre');
             preElements.forEach(pre => {
-                pre.style.whiteSpace = 'pre-wrap'; // 强制换行，防止过宽截断
-                pre.style.overflow = 'visible';    // 移除内部滚动条
-                pre.style.height = 'auto';         // 自动高度
+                pre.style.whiteSpace = 'pre-wrap';
+                pre.style.overflow = 'visible';
+                pre.style.height = 'auto';
                 pre.style.maxHeight = 'none';
             });
 
-            // 确保 Markdown 容器也被撑开
             const mdWrappers = clone.querySelectorAll('.markdown-wrapper');
             mdWrappers.forEach(wrapper => {
                 wrapper.style.height = 'auto';
                 wrapper.style.overflow = 'visible';
             });
 
-            // 4. [关键修复] 将克隆体插入到 element.parentNode (原父容器)
-            // 这样可以继承父级的 CSS 变量和 Scoped CSS 样式，解决代码块样式丢失问题
             if (element.parentNode) {
                 element.parentNode.appendChild(clone);
             } else {
                 document.body.appendChild(clone);
             }
 
-            // 等待图片和样式渲染
             await new Promise(r => setTimeout(r, 500));
 
-            // 5. 截图
             const canvas = await html2canvas(clone, {
               useCORS: true,
               allowTaint: true,
-              backgroundColor: themeBgColor,
+              // [关键修改] 这里设置为 null，让 html2canvas 使用元素自身的背景样式（即我们上面设置的图片）
+              backgroundColor: null, 
               scale: 2, 
               logging: false,
-              height: clone.scrollHeight, // 使用撑开后的完整高度
+              height: clone.scrollHeight,
               windowHeight: clone.scrollHeight,
               x: 0, 
               y: 0, 
@@ -2302,14 +2308,12 @@ const saveSessionAsImage = async () => {
               }
             });
 
-            // 6. 清理
             if (clone.parentNode) {
                 clone.parentNode.removeChild(clone);
             }
 
             const dataUrl = canvas.toDataURL('image/png');
 
-            // 7. 保存
             const byteString = atob(dataUrl.split(',')[1]);
             const ab = new ArrayBuffer(byteString.length);
             const ia = new Uint8Array(ab);

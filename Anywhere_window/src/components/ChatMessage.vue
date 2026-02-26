@@ -52,38 +52,123 @@ const timeDisplay = computed(() => {
   return formattedStart;
 });
 
+
 const onCopyImage = async () => {
   if (!messageWrapperRef.value) return;
   
   const loadingMsg = ElMessage.info({ message: '正在生成图片...', duration: 0 });
   
   try {
-    // 1. 动态获取当前主题的背景色
-    // 我们尝试获取 --el-bg-color 变量，这是 Element Plus 的标准背景色变量
+    // 1. 获取背景图信息
+    const bgLayer = document.querySelector('.window-bg-layer');
+    const bgImage = bgLayer ? getComputedStyle(bgLayer).backgroundImage : 'none';
+    const hasBg = bgImage && bgImage !== 'none';
+    
+    // 2. 获取兜底主题色
     const computedStyle = getComputedStyle(document.documentElement);
     let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
-
-    // 如果获取不到或为透明（极端情况），则根据 dark 类名兜底
     if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
         const isDark = document.documentElement.classList.contains('dark');
-        // 使用预设的深/浅色背景值 (参考 App.vue 中的定义)
         themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
     }
 
-    const canvas = await html2canvas(messageWrapperRef.value, {
+    // 3. 创建截图容器 (Wrapper)
+    const wrapper = document.createElement('div');
+    
+    // 设置容器样式
+    wrapper.style.position = 'fixed';
+    wrapper.style.top = '-10000px';
+    wrapper.style.left = '0';
+    wrapper.style.zIndex = '-9999';
+    // 宽度增加一点，防止文字换行变化
+    wrapper.style.width = `${messageWrapperRef.value.clientWidth + 2}px`; 
+    wrapper.style.boxSizing = 'border-box';
+    wrapper.style.padding = '20px'; // 增加内边距，形成卡片感
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    
+    // 应用背景
+    if (hasBg) {
+        wrapper.style.backgroundImage = bgImage;
+        wrapper.style.backgroundSize = 'cover';
+        wrapper.style.backgroundPosition = 'center';
+        wrapper.style.backgroundColor = themeBgColor; // 底色防透
+    } else {
+        wrapper.style.backgroundColor = themeBgColor;
+    }
+
+    // 4. 克隆消息内容
+    const clone = messageWrapperRef.value.cloneNode(true);
+    
+    // 移除底部操作栏
+    const footer = clone.querySelector('.message-footer');
+    if (footer) footer.remove();
+
+    // 样式重置
+    clone.style.margin = '0';
+    clone.style.maxWidth = '100%';
+    // 确保气泡对齐方式正确
+    if (props.message.role === 'user') {
+        clone.style.alignSelf = 'flex-end';
+    } else {
+        clone.style.alignSelf = 'flex-start';
+    }
+    // 同步气泡本体的样式 (背景色、边框、阴影)
+    const originalBubbleContent = messageWrapperRef.value.querySelector('.el-bubble-content');
+    const clonedBubbleContent = clone.querySelector('.el-bubble-content');
+    
+    if (originalBubbleContent && clonedBubbleContent) {
+        const computed = getComputedStyle(originalBubbleContent);
+        // 强制写入 rgba 背景色，覆盖默认样式
+        clonedBubbleContent.style.backgroundColor = computed.backgroundColor; 
+        clonedBubbleContent.style.border = computed.border;
+        clonedBubbleContent.style.borderRadius = computed.borderRadius;
+        clonedBubbleContent.style.boxShadow = computed.boxShadow;
+        clonedBubbleContent.style.backdropFilter = 'none'; // html2canvas 不支持 backdrop-filter，强制移除避免渲染错误
+        clonedBubbleContent.style.color = computed.color;
+    }
+
+    // 同步代码块 (Pre) 的样式
+    const originalPres = messageWrapperRef.value.querySelectorAll('pre');
+    const clonedPres = clone.querySelectorAll('pre');
+    originalPres.forEach((orig, i) => {
+        if (clonedPres[i]) {
+            const computed = getComputedStyle(orig);
+            clonedPres[i].style.backgroundColor = computed.backgroundColor;
+            clonedPres[i].style.color = computed.color;
+            clonedPres[i].style.border = computed.border;
+            // 强制展开
+            clonedPres[i].style.whiteSpace = 'pre-wrap';
+            clonedPres[i].style.overflow = 'visible';
+            clonedPres[i].style.height = 'auto';
+            clonedPres[i].style.maxHeight = 'none';
+        }
+    });
+
+    // 同步 Markdown 容器状态
+    clone.querySelectorAll('.markdown-wrapper').forEach(md => {
+        md.style.height = 'auto';
+        md.style.overflow = 'visible';
+        md.classList.remove('collapsed');
+    });
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
+    // 5. 截图
+    // 给予稍长的等待时间，确保大背景图渲染完成
+    await new Promise(r => setTimeout(r, 300));
+
+    const canvas = await html2canvas(wrapper, {
       useCORS: true, 
       allowTaint: true,
-      backgroundColor: themeBgColor, // [关键修改] 使用当前主题色作为背景，而非 null
+      backgroundColor: null, 
       scale: 2, 
       logging: false,
-      // 增加一点内边距，防止文字贴边，视觉效果更好（html2canvas 不支持 padding 选项，这里是通过渲染范围控制，或者保持默认即可）
-      ignoreElements: (element) => {
-        if (element.classList && element.classList.contains('message-footer')) {
-          return true;
-        }
-        return false;
-      }
+      ignoreElements: (el) => false
     });
+
+    // 6. 清理与复制
+    document.body.removeChild(wrapper);
 
     const dataUrl = canvas.toDataURL('image/png');
     await window.api.copyImage(dataUrl);
@@ -93,11 +178,13 @@ const onCopyImage = async () => {
     console.error('截图失败:', error);
     loadingMsg.close();
     ElMessage.error('生成图片失败');
+    const orphans = document.querySelectorAll('[style*="-10000px"]');
+    orphans.forEach(el => el.remove());
   }
 };
 
 
-// 优化 Loading 显示逻辑：如果是最后一条消息 && 正在加载 && 没有正在进行的思考内容
+// 如果是最后一条消息 && 正在加载 && 没有正在进行的思考内容
 const showBubbleLoading = computed(() => {
   if (!props.isLastMessage || !props.isLoading) return false;
   
