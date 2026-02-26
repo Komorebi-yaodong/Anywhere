@@ -13,6 +13,7 @@
     "dompurify": "^3.2.5",
     "element-plus": "^2.9.7",
     "highlight.js": "^11.11.1",
+    "html2canvas": "^1.4.1",
     "katex": "^0.16.22",
     "marked": "^17.0.0",
     "mermaid": "^11.12.2",

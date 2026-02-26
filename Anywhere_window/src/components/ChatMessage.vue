@@ -2,9 +2,10 @@
 import { computed, ref, nextTick } from 'vue';
 import { Bubble, Thinking, XMarkdown } from 'vue-element-plus-x';
 import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon, ElCheckbox, ElTag } from 'element-plus';
-import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close, CloseBold } from '@element-plus/icons-vue';
+import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close, CloseBold, Picture } from '@element-plus/icons-vue';
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
+import html2canvas from 'html2canvas';
 
 import { formatTimestamp, formatMessageText, sanitizeToolArgs } from '../utils/formatters.js';
 
@@ -24,6 +25,7 @@ const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-colla
 const editInputRef = ref(null);
 const isEditing = ref(false);
 const editedContent = ref('');
+const messageWrapperRef = ref(null);
 
 // 计算耗时或显示开始时间
 const timeDisplay = computed(() => {
@@ -49,6 +51,33 @@ const timeDisplay = computed(() => {
 
   return formattedStart;
 });
+
+const onCopyImage = async () => {
+  if (!messageWrapperRef.value) return;
+    
+  try {
+    const canvas = await html2canvas(messageWrapperRef.value, {
+      useCORS: true, // 允许加载跨域图片（如头像）
+      allowTaint: true,
+      backgroundColor: null, // 保持背景透明（或者根据主题自动适配）
+      scale: 2, // 提高清晰度
+      logging: false,
+      ignoreElements: (element) => {
+        // 截图时忽略底部的操作栏，只保留气泡和头像
+        if (element.classList && element.classList.contains('message-footer')) {
+          return true;
+        }
+        return false;
+      }
+    });
+
+    const dataUrl = canvas.toDataURL('image/png');
+    await window.api.copyImage(dataUrl);
+  } catch (error) {
+    console.error('截图失败:', error);
+  }
+};
+
 
 // 优化 Loading 显示逻辑：如果是最后一条消息 && 正在加载 && 没有正在进行的思考内容
 const showBubbleLoading = computed(() => {
@@ -290,7 +319,7 @@ const truncateFilename = (filename, maxLength = 30) => {
   <div class="chat-message" v-if="message.role !== 'system'">
 
     <!-- 用户消息 -->
-    <div v-if="message.role === 'user'" class="message-wrapper user-wrapper">
+    <div v-if="message.role === 'user'" class="message-wrapper user-wrapper" ref="messageWrapperRef">
       <div class="message-meta-header user-meta-header">
         <span class="timestamp" v-if="message.timestamp">{{ formatTimestamp(message.timestamp) }}</span>
         <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)"
@@ -319,6 +348,9 @@ const truncateFilename = (filename, maxLength = 30) => {
             <div class="footer-wrapper">
               <div class="footer-actions">
                 <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
+                <el-tooltip content="复制为图片" placement="top" :show-after="500">
+                  <el-button :icon="Picture" @click="onCopyImage" size="small" circle />
+                </el-tooltip>
                 <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small"
                   circle />
                 <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
@@ -341,7 +373,7 @@ const truncateFilename = (filename, maxLength = 30) => {
     </div>
 
     <!-- AI 消息 -->
-    <div v-if="message.role === 'assistant'" class="message-wrapper ai-wrapper">
+    <div v-if="message.role === 'assistant'" class="message-wrapper ai-wrapper" ref="messageWrapperRef">
       <div class="message-meta-header ai-meta-header">
         <img :src="aiAvatar" alt="AI Avatar" @click="onAvatarClick('assistant', $event)"
           class="chat-avatar-top ai-avatar">
@@ -447,6 +479,9 @@ const truncateFilename = (filename, maxLength = 30) => {
           <div class="message-footer">
             <div class="footer-actions">
               <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
+              <el-tooltip content="复制为图片" placement="top" :show-after="500">
+                  <el-button :icon="Picture" @click="onCopyImage" size="small" circle />
+                </el-tooltip>
               <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small"
                 circle />
               <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
