@@ -58,129 +58,190 @@ const onCopyImage = async () => {
   
   const loadingMsg = ElMessage.info({ message: '正在生成图片...', duration: 0 });
   
-  try {
-    // 1. 获取背景图信息
-    const bgLayer = document.querySelector('.window-bg-layer');
-    const bgImage = bgLayer ? getComputedStyle(bgLayer).backgroundImage : 'none';
-    const hasBg = bgImage && bgImage !== 'none';
-    
-    // 2. 获取兜底主题色
-    const computedStyle = getComputedStyle(document.documentElement);
-    let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
-    if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
-        const isDark = document.documentElement.classList.contains('dark');
-        themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
+  setTimeout(async () => {
+    let wrapper = null;
+    try {
+      // 1. 获取 App 全局背景节点
+      const originalBgBase = document.querySelector('.window-bg-base');
+      const originalBgLayer = document.querySelector('.window-bg-layer');
+      
+      // 2. 获取兜底主题色
+      const rootStyle = getComputedStyle(document.documentElement);
+      let themeBgColor = rootStyle.getPropertyValue('--el-bg-color').trim();
+      const isDark = document.documentElement.classList.contains('dark');
+      if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
+          themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
+      }
+
+      // 3. 构建截图容器
+      wrapper = document.createElement('div');
+      wrapper.style.cssText = `
+        position: fixed; top: -10000px; left: 0; z-index: -9999;
+        width: ${messageWrapperRef.value.clientWidth}px;
+        box-sizing: content-box; padding: 20px;
+        display: flex; flex-direction: column; overflow: hidden;
+      `;
+      wrapper.style.backgroundColor = themeBgColor;
+
+      // 3.1 重建背景层 (Base)
+      const bgBaseClone = document.createElement('div');
+      bgBaseClone.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; z-index: 0;';
+      if (originalBgBase) {
+          bgBaseClone.style.backgroundColor = getComputedStyle(originalBgBase).backgroundColor;
+      } else {
+          bgBaseClone.style.backgroundColor = themeBgColor;
+      }
+      wrapper.appendChild(bgBaseClone);
+
+      // 3.2 重建背景层 (Layer)
+      if (originalBgLayer) {
+          const layerComputed = getComputedStyle(originalBgLayer);
+          if (layerComputed.backgroundImage !== 'none' && layerComputed.opacity !== '0') {
+              const bgLayerClone = document.createElement('div');
+              bgLayerClone.style.cssText = `
+                  position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
+                  background-image: ${layerComputed.backgroundImage};
+                  background-size: ${layerComputed.backgroundSize};
+                  background-position: ${layerComputed.backgroundPosition};
+                  background-repeat: ${layerComputed.backgroundRepeat};
+                  opacity: ${layerComputed.opacity};
+                  filter: ${layerComputed.filter};
+              `;
+              wrapper.appendChild(bgLayerClone);
+          }
+      }
+
+      // 4. 克隆消息内容
+      const clone = messageWrapperRef.value.cloneNode(true);
+      clone.style.position = 'relative';
+      clone.style.zIndex = '2'; 
+      clone.style.margin = '0';
+      clone.style.maxWidth = '100%';
+      
+      const footer = clone.querySelector('.message-footer');
+      if (footer) footer.remove();
+
+      if (props.message.role === 'user') {
+          clone.style.alignSelf = 'flex-end';
+      } else {
+          clone.style.alignSelf = 'flex-start';
+      }
+
+      // A. 气泡本体
+      const originalBubble = messageWrapperRef.value.querySelector('.el-bubble-content');
+      const clonedBubble = clone.querySelector('.el-bubble-content');
+      
+      if (originalBubble && clonedBubble) {
+          const comp = getComputedStyle(originalBubble);
+          clonedBubble.style.backgroundColor = comp.backgroundColor;
+          clonedBubble.style.color = comp.color;
+          clonedBubble.style.border = comp.border;
+          clonedBubble.style.borderRadius = comp.borderRadius;
+          clonedBubble.style.boxShadow = comp.boxShadow;
+          clonedBubble.style.backdropFilter = 'none';
+          clonedBubble.style.overflow = 'hidden'; 
+      }
+
+      // B. 思考按钮 (Trigger)
+      const originalThinkingTriggers = messageWrapperRef.value.querySelectorAll('.el-thinking .trigger');
+      const clonedThinkingTriggers = clone.querySelectorAll('.el-thinking .trigger');
+      originalThinkingTriggers.forEach((orig, i) => {
+          if (clonedThinkingTriggers[i]) {
+              const comp = getComputedStyle(orig);
+              clonedThinkingTriggers[i].style.backgroundColor = comp.backgroundColor;
+              clonedThinkingTriggers[i].style.border = comp.border;
+              clonedThinkingTriggers[i].style.borderRadius = comp.borderRadius;
+              clonedThinkingTriggers[i].style.color = comp.color;
+          }
+      });
+
+      // E. [新增] 思考内容块 (Content Pre) - 专门修复这里的圆角
+      const originalThinkingContent = messageWrapperRef.value.querySelectorAll('.el-thinking .content pre');
+      const clonedThinkingContent = clone.querySelectorAll('.el-thinking .content pre');
+      originalThinkingContent.forEach((orig, i) => {
+          if (clonedThinkingContent[i]) {
+              const comp = getComputedStyle(orig);
+              clonedThinkingContent[i].style.borderRadius = comp.borderRadius; // 强制同步圆角
+              clonedThinkingContent[i].style.backgroundColor = comp.backgroundColor;
+              clonedThinkingContent[i].style.border = comp.border;
+              clonedThinkingContent[i].style.color = comp.color;
+              // 展开内容
+              clonedThinkingContent[i].style.whiteSpace = 'pre-wrap';
+              clonedThinkingContent[i].style.overflow = 'visible';
+              clonedThinkingContent[i].style.height = 'auto';
+              clonedThinkingContent[i].style.maxHeight = 'none';
+          }
+      });
+
+      // C. 普通代码块 (Pre)
+      const originalPres = messageWrapperRef.value.querySelectorAll('pre:not(.el-thinking *)'); // 排除思考块内的pre
+      const clonedPres = clone.querySelectorAll('pre:not(.el-thinking *)');
+      originalPres.forEach((orig, i) => {
+          if (clonedPres[i]) {
+              const comp = getComputedStyle(orig);
+              clonedPres[i].style.backgroundColor = comp.backgroundColor;
+              clonedPres[i].style.color = comp.color;
+              clonedPres[i].style.border = comp.border;
+              clonedPres[i].style.borderRadius = comp.borderRadius;
+              clonedPres[i].style.whiteSpace = 'pre-wrap';
+              clonedPres[i].style.overflow = 'visible';
+              clonedPres[i].style.height = 'auto';
+              clonedPres[i].style.maxHeight = 'none';
+          }
+      });
+
+      // D. Markdown 容器
+      clone.querySelectorAll('.markdown-wrapper').forEach(md => {
+          md.style.height = 'auto';
+          md.style.overflow = 'visible';
+          md.classList.remove('collapsed');
+      });
+
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      await new Promise(r => requestAnimationFrame(() => setTimeout(r, 200)));
+
+      // 5. 截图
+      const canvas = await html2canvas(wrapper, {
+        useCORS: true, 
+        allowTaint: true,
+        backgroundColor: null,
+        scale: 2, 
+        logging: false,
+        ignoreElements: (el) => false
+      });
+
+      // 6. 清理
+      document.body.removeChild(wrapper);
+      wrapper = null;
+
+      // 7. 导出
+      const dataUrl = canvas.toDataURL('image/png');
+      
+      requestAnimationFrame(async () => {
+          try {
+              await window.api.copyImage(dataUrl);
+              loadingMsg.close();
+              ElMessage.success('消息图片已复制');
+          } catch (clipErr) {
+              console.error(clipErr);
+              loadingMsg.close();
+              ElMessage.error('写入剪贴板失败');
+          }
+      });
+
+    } catch (error) {
+      console.error('截图失败:', error);
+      loadingMsg.close();
+      ElMessage.error('生成图片失败');
+      if (wrapper && wrapper.parentNode) {
+          wrapper.parentNode.removeChild(wrapper);
+      }
+      const orphans = document.querySelectorAll('[style*="-10000px"]');
+      orphans.forEach(el => el.remove());
     }
-
-    // 3. 创建截图容器 (Wrapper)
-    const wrapper = document.createElement('div');
-    
-    // 设置容器样式
-    wrapper.style.position = 'fixed';
-    wrapper.style.top = '-10000px';
-    wrapper.style.left = '0';
-    wrapper.style.zIndex = '-9999';
-    // 宽度增加一点，防止文字换行变化
-    wrapper.style.width = `${messageWrapperRef.value.clientWidth + 2}px`; 
-    wrapper.style.boxSizing = 'border-box';
-    wrapper.style.padding = '20px'; // 增加内边距，形成卡片感
-    wrapper.style.display = 'flex';
-    wrapper.style.flexDirection = 'column';
-    
-    // 应用背景
-    if (hasBg) {
-        wrapper.style.backgroundImage = bgImage;
-        wrapper.style.backgroundSize = 'cover';
-        wrapper.style.backgroundPosition = 'center';
-        wrapper.style.backgroundColor = themeBgColor; // 底色防透
-    } else {
-        wrapper.style.backgroundColor = themeBgColor;
-    }
-
-    // 4. 克隆消息内容
-    const clone = messageWrapperRef.value.cloneNode(true);
-    
-    // 移除底部操作栏
-    const footer = clone.querySelector('.message-footer');
-    if (footer) footer.remove();
-
-    // 样式重置
-    clone.style.margin = '0';
-    clone.style.maxWidth = '100%';
-    // 确保气泡对齐方式正确
-    if (props.message.role === 'user') {
-        clone.style.alignSelf = 'flex-end';
-    } else {
-        clone.style.alignSelf = 'flex-start';
-    }
-    // 同步气泡本体的样式 (背景色、边框、阴影)
-    const originalBubbleContent = messageWrapperRef.value.querySelector('.el-bubble-content');
-    const clonedBubbleContent = clone.querySelector('.el-bubble-content');
-    
-    if (originalBubbleContent && clonedBubbleContent) {
-        const computed = getComputedStyle(originalBubbleContent);
-        // 强制写入 rgba 背景色，覆盖默认样式
-        clonedBubbleContent.style.backgroundColor = computed.backgroundColor; 
-        clonedBubbleContent.style.border = computed.border;
-        clonedBubbleContent.style.borderRadius = computed.borderRadius;
-        clonedBubbleContent.style.boxShadow = computed.boxShadow;
-        clonedBubbleContent.style.backdropFilter = 'none'; // html2canvas 不支持 backdrop-filter，强制移除避免渲染错误
-        clonedBubbleContent.style.color = computed.color;
-    }
-
-    // 同步代码块 (Pre) 的样式
-    const originalPres = messageWrapperRef.value.querySelectorAll('pre');
-    const clonedPres = clone.querySelectorAll('pre');
-    originalPres.forEach((orig, i) => {
-        if (clonedPres[i]) {
-            const computed = getComputedStyle(orig);
-            clonedPres[i].style.backgroundColor = computed.backgroundColor;
-            clonedPres[i].style.color = computed.color;
-            clonedPres[i].style.border = computed.border;
-            // 强制展开
-            clonedPres[i].style.whiteSpace = 'pre-wrap';
-            clonedPres[i].style.overflow = 'visible';
-            clonedPres[i].style.height = 'auto';
-            clonedPres[i].style.maxHeight = 'none';
-        }
-    });
-
-    // 同步 Markdown 容器状态
-    clone.querySelectorAll('.markdown-wrapper').forEach(md => {
-        md.style.height = 'auto';
-        md.style.overflow = 'visible';
-        md.classList.remove('collapsed');
-    });
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
-
-    // 5. 截图
-    // 给予稍长的等待时间，确保大背景图渲染完成
-    await new Promise(r => setTimeout(r, 300));
-
-    const canvas = await html2canvas(wrapper, {
-      useCORS: true, 
-      allowTaint: true,
-      backgroundColor: null, 
-      scale: 2, 
-      logging: false,
-      ignoreElements: (el) => false
-    });
-
-    // 6. 清理与复制
-    document.body.removeChild(wrapper);
-
-    const dataUrl = canvas.toDataURL('image/png');
-    await window.api.copyImage(dataUrl);
-    loadingMsg.close();
-    ElMessage.success('消息图片已复制');
-  } catch (error) {
-    console.error('截图失败:', error);
-    loadingMsg.close();
-    ElMessage.error('生成图片失败');
-    const orphans = document.querySelectorAll('[style*="-10000px"]');
-    orphans.forEach(el => el.remove());
-  }
+  }, 50);
 };
 
 
