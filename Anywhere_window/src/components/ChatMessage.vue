@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, nextTick } from 'vue';
 import { Bubble, Thinking, XMarkdown } from 'vue-element-plus-x';
-import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon, ElCheckbox, ElTag } from 'element-plus';
+import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon, ElCheckbox, ElTag, ElMessage } from 'element-plus';
 import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close, CloseBold, Picture } from '@element-plus/icons-vue';
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
@@ -54,16 +54,30 @@ const timeDisplay = computed(() => {
 
 const onCopyImage = async () => {
   if (!messageWrapperRef.value) return;
-    
+  
+  const loadingMsg = ElMessage.info({ message: '正在生成图片...', duration: 0 });
+  
   try {
+    // 1. 动态获取当前主题的背景色
+    // 我们尝试获取 --el-bg-color 变量，这是 Element Plus 的标准背景色变量
+    const computedStyle = getComputedStyle(document.documentElement);
+    let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
+
+    // 如果获取不到或为透明（极端情况），则根据 dark 类名兜底
+    if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
+        const isDark = document.documentElement.classList.contains('dark');
+        // 使用预设的深/浅色背景值 (参考 App.vue 中的定义)
+        themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
+    }
+
     const canvas = await html2canvas(messageWrapperRef.value, {
-      useCORS: true, // 允许加载跨域图片（如头像）
+      useCORS: true, 
       allowTaint: true,
-      backgroundColor: null, // 保持背景透明（或者根据主题自动适配）
-      scale: 2, // 提高清晰度
+      backgroundColor: themeBgColor, // [关键修改] 使用当前主题色作为背景，而非 null
+      scale: 2, 
       logging: false,
+      // 增加一点内边距，防止文字贴边，视觉效果更好（html2canvas 不支持 padding 选项，这里是通过渲染范围控制，或者保持默认即可）
       ignoreElements: (element) => {
-        // 截图时忽略底部的操作栏，只保留气泡和头像
         if (element.classList && element.classList.contains('message-footer')) {
           return true;
         }
@@ -73,8 +87,12 @@ const onCopyImage = async () => {
 
     const dataUrl = canvas.toDataURL('image/png');
     await window.api.copyImage(dataUrl);
+    loadingMsg.close();
+    ElMessage.success('消息图片已复制');
   } catch (error) {
     console.error('截图失败:', error);
+    loadingMsg.close();
+    ElMessage.error('生成图片失败');
   }
 };
 

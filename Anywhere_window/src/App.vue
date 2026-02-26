@@ -12,6 +12,7 @@ import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import html2canvas from 'html2canvas';
 
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, sanitizeToolArgs } from './utils/formatters.js';
@@ -2192,6 +2193,156 @@ const handleRenameSession = async () => {
   }
 };
 
+const saveSessionAsImage = async () => {
+  const now = new Date();
+  const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+  const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
+  const inputValue = ref(defaultBasename);
+
+  try {
+    await ElMessageBox({
+      title: '保存为图片',
+      message: () => h('div', null, [
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入文件名。'),
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '文件名',
+          ref: (elInputInstance) => {
+            if (elInputInstance) {
+              setTimeout(() => elInputInstance.focus(), 100);
+            }
+          },
+          onKeydown: (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
+            }
+          }
+        },
+          { append: () => h('div', { class: 'input-suffix-display' }, '.png') })]),
+      showCancelButton: true, confirmButtonText: '保存', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
+      beforeClose: async (action, instance, done) => {
+        if (action === 'confirm') {
+          let finalBasename = inputValue.value.trim();
+          if (!finalBasename) { showDismissibleMessage.error('文件名不能为空'); return; }
+          const finalFilename = finalBasename + '.png';
+          instance.confirmButtonLoading = true;
+          
+          const loadingMsg = ElMessage.info({ message: '正在生成长图，请稍候...', duration: 0 });
+
+          try {
+            // 1. 获取聊天容器
+            const element = chatContainerRef.value.$el;
+            
+            // 2. 获取背景色
+            const computedStyle = getComputedStyle(document.documentElement);
+            let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
+            if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
+                const isDark = document.documentElement.classList.contains('dark');
+                themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
+            }
+
+            // 3. 克隆节点
+            const clone = element.cloneNode(true);
+            
+            // 设置克隆体样式
+            // 注意：宽度需要显式设置，防止脱离文档流后宽度塌陷
+            const originalWidth = element.clientWidth;
+            clone.style.width = `${originalWidth}px`;
+            clone.style.height = 'auto';
+            clone.style.maxHeight = 'none';
+            clone.style.overflow = 'visible';
+            clone.style.position = 'absolute'; // 使用 absolute 并在父级内定位，保持层级上下文
+            clone.style.top = '0';
+            clone.style.left = '0';
+            clone.style.zIndex = '-9999'; // 置于底层
+            clone.style.background = themeBgColor;
+            
+            // [关键修复]：处理克隆体内的代码块和markdown容器，强制展开
+            const preElements = clone.querySelectorAll('pre');
+            preElements.forEach(pre => {
+                pre.style.whiteSpace = 'pre-wrap'; // 强制换行，防止过宽截断
+                pre.style.overflow = 'visible';    // 移除内部滚动条
+                pre.style.height = 'auto';         // 自动高度
+                pre.style.maxHeight = 'none';
+            });
+
+            // 确保 Markdown 容器也被撑开
+            const mdWrappers = clone.querySelectorAll('.markdown-wrapper');
+            mdWrappers.forEach(wrapper => {
+                wrapper.style.height = 'auto';
+                wrapper.style.overflow = 'visible';
+            });
+
+            // 4. [关键修复] 将克隆体插入到 element.parentNode (原父容器)
+            // 这样可以继承父级的 CSS 变量和 Scoped CSS 样式，解决代码块样式丢失问题
+            if (element.parentNode) {
+                element.parentNode.appendChild(clone);
+            } else {
+                document.body.appendChild(clone);
+            }
+
+            // 等待图片和样式渲染
+            await new Promise(r => setTimeout(r, 500));
+
+            // 5. 截图
+            const canvas = await html2canvas(clone, {
+              useCORS: true,
+              allowTaint: true,
+              backgroundColor: themeBgColor,
+              scale: 2, 
+              logging: false,
+              height: clone.scrollHeight, // 使用撑开后的完整高度
+              windowHeight: clone.scrollHeight,
+              x: 0, 
+              y: 0, 
+              ignoreElements: (el) => {
+                 return false;
+              }
+            });
+
+            // 6. 清理
+            if (clone.parentNode) {
+                clone.parentNode.removeChild(clone);
+            }
+
+            const dataUrl = canvas.toDataURL('image/png');
+
+            // 7. 保存
+            const byteString = atob(dataUrl.split(',')[1]);
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+              ia[i] = byteString.charCodeAt(i);
+            }
+
+            await window.api.saveFile({ 
+                title: '保存为图片', 
+                defaultPath: finalFilename, 
+                buttonLabel: '保存', 
+                filters: [{ name: 'PNG 图片', extensions: ['png'] }], 
+                fileContent: ia 
+            });
+            
+            defaultConversationName.value = finalBasename;
+            loadingMsg.close();
+            showDismissibleMessage.success('会话已成功保存为长图！');
+            done();
+          } catch (error) {
+            loadingMsg.close();
+            if (!error.message.includes('canceled by the user') && !error.message.includes('用户取消')) {
+              console.error('保存图片失败:', error);
+              showDismissibleMessage.error(`保存失败: ${error.message}`);
+            }
+            done();
+          } finally { instance.confirmButtonLoading = false; }
+        } else { done(); }
+      }
+    });
+  } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
+};
+
 const handleSaveAction = async () => {
   if (autoCloseOnBlur.value) handleTogglePin();
   const isCloudEnabled = currentConfig.value.webdav?.url && currentConfig.value.webdav?.data_path;
@@ -2214,6 +2365,7 @@ const handleSaveAction = async () => {
   saveOptions.push({ title: '保存为 JSON', description: '保存为可恢复的会話文件，便于下次继续。', buttonType: 'primary', action: saveSessionAsJson, isDefault: true });
   saveOptions.push({ title: '保存为 Markdown', description: '导出为可读性更强的 .md 文件，适合分享。', buttonType: '', action: saveSessionAsMarkdown });
   saveOptions.push({ title: '保存为 HTML', description: '导出为带样式的网页文件，保留格式和图片。', buttonType: '', action: saveSessionAsHtml });
+  saveOptions.push({ title: '保存为 图片', description: '将完整聊天记录保存为长图 (.png)。', buttonType: '', action: saveSessionAsImage });
 
   const messageVNode = h('div', { class: 'save-options-list' }, saveOptions.map(opt => {
     const trigger = () => { ElMessageBox.close(); opt.action(); };
