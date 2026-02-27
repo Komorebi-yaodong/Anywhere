@@ -1217,6 +1217,8 @@ onMounted(async () => {
 
     let shouldDirectSend = false;
     let isFileDirectSend = false;
+    let isSessionRestored = false;
+
     if (data) {
       basic_msg.value = { code: data.code, type: data.type, payload: data.payload };
       if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
@@ -1225,7 +1227,12 @@ onMounted(async () => {
         let sessionLoaded = false;
         try {
           let old_session = JSON.parse(data.payload);
-          if (old_session && old_session.anywhere_history === true) { sessionLoaded = true; await loadSession(old_session); autoCloseOnBlur.value = false; }
+          if (old_session && old_session.anywhere_history === true) { 
+            sessionLoaded = true; 
+            isSessionRestored = true; // 标记会话已恢复
+            await loadSession(old_session); 
+            autoCloseOnBlur.value = false; 
+          }
         } catch (error) { }
         if (!sessionLoaded) {
           if (CODE.value.trim().toLowerCase().includes(data.payload.trim().toLowerCase())) { /* do nothing */ }
@@ -1250,7 +1257,10 @@ onMounted(async () => {
           let sessionLoaded = false;
           if (data.payload.length === 1 && data.payload[0].path.toLowerCase().endsWith('.json')) {
             const fileObject = await window.api.handleFilePath(data.payload[0].path);
-            if (fileObject) { sessionLoaded = await checkAndLoadSessionFromFile(fileObject); }
+            if (fileObject) { 
+              sessionLoaded = await checkAndLoadSessionFromFile(fileObject); 
+              if (sessionLoaded) isSessionRestored = true; // 标记会话已恢复
+            }
           }
           if (!sessionLoaded) {
             const fileProcessingPromises = data.payload.map((fileInfo) => processFilePath(fileInfo.path));
@@ -1267,28 +1277,29 @@ onMounted(async () => {
       window.addEventListener('blur', closePage);
     }
 
-    // --- MCP 加载逻辑 ---
-    const defaultMcpServers = currentPromptConfig.defaultMcpServers || [];
-    let mcpServersToLoad = [...defaultMcpServers];
+    if (!isSessionRestored) {
+      const defaultMcpServers = currentPromptConfig.defaultMcpServers || [];
+      let mcpServersToLoad = [...defaultMcpServers];
 
-    // 如果存在 Skill，强制合并内置 MCP 服务
-    if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
-      const builtinIds = Object.entries(currentConfig.value.mcpServers)
-        .filter(([, server]) => server.type === 'builtin')
-        .map(([id]) => id);
-      // 去重合并
-      mcpServersToLoad = [...new Set([...mcpServersToLoad, ...builtinIds])];
-    }
+      // 如果存在 Skill，强制合并内置 MCP 服务
+      if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
+        const builtinIds = Object.entries(currentConfig.value.mcpServers)
+          .filter(([, server]) => server.type === 'builtin')
+          .map(([id]) => id);
+        // 去重合并
+        mcpServersToLoad = [...new Set([...mcpServersToLoad, ...builtinIds])];
+      }
 
-    if (mcpServersToLoad.length > 0) {
-      // 过滤出有效的 ID
-      const validIds = mcpServersToLoad.filter(id =>
-        currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
-      );
+      if (mcpServersToLoad.length > 0) {
+        // 过滤出有效的 ID
+        const validIds = mcpServersToLoad.filter(id =>
+          currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
+        );
 
-      sessionMcpServerIds.value = [...validIds];
-      tempSessionMcpServerIds.value = [...validIds];
-      await applyMcpTools(false);
+        sessionMcpServerIds.value = [...validIds];
+        tempSessionMcpServerIds.value = [...validIds];
+        await applyMcpTools(false);
+      }
     }
 
     await fetchSkillsList();
