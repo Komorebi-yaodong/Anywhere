@@ -3296,7 +3296,7 @@ const askAI = async (forceSend = false) => {
                       uiToolCall.result = currentLog;
                     }
                   } else {
-                    uiToolCall.result = `[Skill Instructions Loaded]\n${toolContent}`;
+                    uiToolCall.result = toolContent;
                   }
                 }
 

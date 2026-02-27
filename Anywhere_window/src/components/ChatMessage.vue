@@ -7,7 +7,7 @@ import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
 import html2canvas from 'html2canvas';
 
-import { formatTimestamp, formatMessageText, sanitizeToolArgs } from '../utils/formatters.js';
+import { formatTimestamp, formatMessageText, sanitizeToolArgs, formatToolResult } from '../utils/formatters.js';
 
 const props = defineProps({
   message: Object,
@@ -625,7 +625,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                       v-if="toolCall.result && toolCall.result !== '等待批准...' && toolCall.result !== '执行中...'">
                       <strong>结果:</strong>
                       <div class="tool-result-wrapper">
-                        <pre><code>{{ toolCall.result }}</code></pre>
+                        <pre><code>{{ formatToolResult(toolCall.result) }}</code></pre>
                       </div>
                     </div>
                   </div>

@@ -245,18 +245,18 @@ ${availableSkillsText}
                         type: "string"
                     },
                     context: {
-                        description: "Optional context/background information for the Sub-Agent (e.g. 'The user is on Windows', 'Previous code analysis results').",
+                        description: "Optional context/background information for the Sub-Agent (e.g. 'The user is on Windows', 'Previous code analysis results'). Required for Sub-Agent mode.",
                         type: "string"
                     },
                     tools: {
                         type: "array",
                         items: { type: "string" },
-                        description: "Optional. Explicitly specify tool names to grant to the Sub-Agent. Defaults to all builtin tools if omitted."
+                        description: "Optional. Explicitly specify tool names to grant to the Sub-Agent. Defaults to all builtin tools if omitted. Required for Sub-Agent mode."
                     },
                     planning_level: {
                         type: "string",
                         enum: ["fast", "medium", "high"],
-                        description: "Complexity level for Sub-Agent. Defaults to 'medium'."
+                        description: "Complexity level for Sub-Agent. Defaults to 'medium'. Required for Sub-Agent mode."
                     }
                 },
                 required: ["skill"],
@@ -289,7 +289,7 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
     if (instructions.includes('$ARGUMENTS')) {
         instructions = instructions.replace(/\$ARGUMENTS/g, argsInput);
     } 
-    // 2. [新增] 如果模板中没有占位符，但 AI 传了 args，则按官方文档规范追加到末尾
+    // 2. 如果模板中没有占位符，但 AI 传了 args，则按官方文档规范追加到末尾
     else if (argsInput) {
         instructions += `\n\n### Input Arguments\n${argsInput}`;
     }
@@ -385,6 +385,8 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
     if (taskInput) {
         response += `\n\n### Current Task Request\n${taskInput}`;
     }
+
+    response += `\n\n### End of Skill Instructions\n ${targetSkill.name} launched successfully. Please use the skill correctly according to the Instructions, and do not repeatedly launch the same skill. `
 
     return response;
 }
