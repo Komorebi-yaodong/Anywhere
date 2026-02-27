@@ -1,7 +1,7 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
-import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon } from 'element-plus';
-import { Close, Check, Document, Delete, Collection } from '@element-plus/icons-vue'; // 引入 Tools
+import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon, ElImage } from 'element-plus';
+import { Close, Check, Document, Delete, Collection, Picture } from '@element-plus/icons-vue';
 
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
@@ -71,6 +71,12 @@ const reasoningTooltipContent = computed(() => {
     const map = { default: '默认', low: '低', medium: '中', high: '高' };
     return `思考预算: ${map[tempReasoningEffort.value] || '默认'}`;
 });
+
+const isImage = (file) => {
+    if (file.type && file.type.startsWith('image/')) return true;
+    if (file.name && /\.(png|jpg|jpeg|gif|webp|bmp|ico|svg)$/i.test(file.name)) return true;
+    return false;
+};
 
 // 过滤后的 MCP 列表逻辑
 const filteredMcpList = computed(() => {
@@ -571,7 +577,23 @@ defineExpose({ focus, senderRef });
                 <div class="file-card-container">
                     <div v-for="(file, index) in fileList" :key="index" class="custom-file-card">
                         <div class="file-icon">
-                            <el-icon :size="20">
+                            <el-image
+                                v-if="isImage(file)"
+                                style="width: 32px; height: 32px; border-radius: 4px; display: block;"
+                                :src="file.url"
+                                :preview-src-list="[file.url]"
+                                :initial-index="0"
+                                fit="cover"
+                                preview-teleported
+                                hide-on-click-modal
+                                @click.stop
+                            >
+                                <template #error>
+                                    <el-icon :size="20" style="display: flex; justify-content: center; align-items: center; width: 100%; height: 100%;"><Picture /></el-icon>
+                                </template>
+                            </el-image>
+                            <!-- 非图片文件显示默认图标 -->
+                            <el-icon v-else :size="20">
                                 <Document />
                             </el-icon>
                         </div>
