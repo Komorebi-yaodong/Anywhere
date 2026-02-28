@@ -186,6 +186,7 @@ const systemPromptContent = ref('');
 const imageViewerVisible = ref(false);
 const imageViewerSrcList = ref([]);
 const imageViewerInitialIndex = ref(0);
+const currentImageViewerIndex = ref(0);
 
 const toolCallControllers = ref(new Map());
 const tempSessionMcpServerIds = ref([]);
@@ -650,8 +651,19 @@ const handleMainClick = async (event) => {
     event.preventDefault();
     event.stopPropagation();
     if (img.src) {
-      imageViewerSrcList.value = [img.src];
-      imageViewerInitialIndex.value = 0;
+      // 收集当前所有渲染成功的图片
+      const allImages = Array.from(document.querySelectorAll('.markdown-wrapper img'));
+      const validSrcList = allImages.map(imgEl => imgEl.src).filter(Boolean);
+      
+      let initialIndex = validSrcList.indexOf(img.src);
+      if (initialIndex === -1) {
+          initialIndex = 0;
+          validSrcList.unshift(img.src);
+      }
+      
+      imageViewerSrcList.value = validSrcList;
+      imageViewerInitialIndex.value = initialIndex;
+      currentImageViewerIndex.value = initialIndex;
       imageViewerVisible.value = true;
     }
     return;
@@ -3953,11 +3965,11 @@ const scrollToMessageByIndex = (index) => {
   </el-dialog>
 
   <el-image-viewer v-if="imageViewerVisible" :url-list="imageViewerSrcList" :initial-index="imageViewerInitialIndex"
-    @close="imageViewerVisible = false" :hide-on-click-modal="true" teleported />
+    @close="imageViewerVisible = false" @switch="(idx) => currentImageViewerIndex = idx" :hide-on-click-modal="true" teleported />
   <div v-if="imageViewerVisible" class="custom-viewer-actions">
-    <el-button type="primary" :icon="DocumentCopy" circle @click="handleCopyImageFromViewer(imageViewerSrcList[0])"
+    <el-button type="primary" :icon="DocumentCopy" circle @click="handleCopyImageFromViewer(imageViewerSrcList[currentImageViewerIndex])"
       title="复制图片" />
-    <el-button type="primary" :icon="Download" circle @click="handleDownloadImageFromViewer(imageViewerSrcList[0])"
+    <el-button type="primary" :icon="Download" circle @click="handleDownloadImageFromViewer(imageViewerSrcList[currentImageViewerIndex])"
       title="下载图片" />
   </div>
 
