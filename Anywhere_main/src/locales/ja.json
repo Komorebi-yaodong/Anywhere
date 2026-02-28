@@ -427,7 +427,9 @@
       "statusUpdateFailed": "ステータス更新に失敗しました",
       "forkUpdateFailed": "モード更新に失敗しました",
       "forkOn": "サブエージェントモードを有効にしました",
-      "forkOff": "サブエージェントモードを無効にしました"
+      "forkOff": "サブエージェントモードを無効にしました",
+      "extracting": "Skillパッケージを展開中...",
+      "invalidPackage": "無効なパッケージ：SKILL.mdが見つかりません"
     },
     "export": {
       "button": "スキルをエクスポート",

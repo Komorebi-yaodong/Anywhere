@@ -427,7 +427,9 @@
       "statusUpdateFailed": "Status update failed",
       "forkUpdateFailed": "Mode update failed",
       "forkOn": "Sub-Agent mode enabled",
-      "forkOff": "Sub-Agent mode disabled"
+      "forkOff": "Sub-Agent mode disabled",
+      "extracting": "Extracting Skill package...",
+      "invalidPackage": "Invalid package: SKILL.md not found"
     },
     "export": {
       "button": "Export Skills",

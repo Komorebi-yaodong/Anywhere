@@ -448,9 +448,9 @@ function exportSkillToPackage(skillRootPath, skillId, outputDir) {
 }
 
 /**
- * 解压 .skill 文件到临时目录
+ * 解压 .skill 或 .zip 文件到临时目录，并智能寻找包含 SKILL.md 的实际目录
  * @param {string} filePath .skill 文件路径
- * @returns {Promise<string>} 解压后的临时目录路径
+ * @returns {Promise<string>} 包含 SKILL.md 的真实目录路径
  */
 function extractSkillPackage(filePath) {
     return new Promise((resolve, reject) => {
@@ -463,7 +463,25 @@ function extractSkillPackage(filePath) {
             }
 
             zip.extractAllTo(tempDir, true);
-            resolve(tempDir);
+            
+            // 智能查找 SKILL.md 所在目录
+            let finalDir = tempDir;
+            const skillPath = path.join(tempDir, 'SKILL.md');
+            
+            // 如果根目录下没有 SKILL.md，尝试寻找唯一的有效子文件夹
+            if (!fs.existsSync(skillPath)) {
+                const items = fs.readdirSync(tempDir, { withFileTypes: true });
+                // 排除系统生成的隐藏目录或 Mac 资源目录
+                const dirs = items.filter(item => item.isDirectory() && !item.name.startsWith('.') && item.name !== '__MACOSX');
+                if (dirs.length === 1) {
+                    const subDir = path.join(tempDir, dirs[0].name);
+                    if (fs.existsSync(path.join(subDir, 'SKILL.md'))) {
+                        finalDir = subDir;
+                    }
+                }
+            }
+
+            resolve(finalDir);
         } catch (e) {
             reject(e);
         }

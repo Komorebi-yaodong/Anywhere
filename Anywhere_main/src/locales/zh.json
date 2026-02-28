@@ -427,7 +427,9 @@
       "statusUpdateFailed": "状态更新失败",
       "forkUpdateFailed": "模式更新失败",
       "forkOn": "已开启子智能体模式",
-      "forkOff": "已关闭子智能体模式"
+      "forkOff": "已关闭子智能体模式",
+      "extracting": "正在解压 Skill 包...",
+      "invalidPackage": "无效的压缩包：未找到 SKILL.md 文件"
     },
     "export": {
       "button": "导出技能",

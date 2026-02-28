@@ -35,7 +35,7 @@ const editingSkill = reactive({
   absolutePath: ''
 });
 
-const pendingImportPath = ref(''); 
+const pendingImportPath = ref('');
 
 // 弹窗拖拽状态
 const isDialogDragOver = ref(false);
@@ -93,7 +93,7 @@ async function refreshSkills() {
 function prepareAddSkill() {
   isNewSkill.value = true;
   activeEditTab.value = 'info';
-  pendingImportPath.value = ''; 
+  pendingImportPath.value = '';
   Object.assign(editingSkill, {
     id: '',
     name: '',
@@ -209,27 +209,27 @@ async function saveEditDialog() {
   try {
     // 只要有 pendingImportPath，无论是新建还是编辑，都执行文件夹拷贝
     if (pendingImportPath.value) {
-        const targetDir = window.api.pathJoin(skillPath.value, dirName);
-        if (!isNewSkill.value) {
-             // 只有当 ID (文件夹名) 没变时，才需要清空当前目录。
-             // 如果 ID 变了，相当于新目录，不需要清空。
-             if (dirName === editingSkill.id) {
-                 await window.api.deleteSkill(skillPath.value, dirName);
-             }
+      const targetDir = window.api.pathJoin(skillPath.value, dirName);
+      if (!isNewSkill.value) {
+        // 只有当 ID (文件夹名) 没变时，才需要清空当前目录。
+        // 如果 ID 变了，相当于新目录，不需要清空。
+        if (dirName === editingSkill.id) {
+          await window.api.deleteSkill(skillPath.value, dirName);
         }
-        
-        // 执行全量拷贝
-        await window.api.copyLocalPath(pendingImportPath.value, targetDir);
+      }
+
+      // 执行全量拷贝
+      await window.api.copyLocalPath(pendingImportPath.value, targetDir);
     }
 
     // 保存 SKILL.md (覆盖拷贝过来的旧配置，以当前 UI 编辑的内容为准)
     const success = await saveSkillContent(dirName, metadata, editingSkill.instructions);
-    
+
     if (success) {
       ElMessage.success(t('common.saveSuccess'));
       showEditDialog.value = false;
       // 导入完成后重置 pendingImportPath
-      pendingImportPath.value = ''; 
+      pendingImportPath.value = '';
       refreshSkills();
     } else {
       throw new Error('Save returned false');
@@ -344,80 +344,80 @@ async function onDialogDrop(e) {
 
     // 情况 A: 直接拖入 SKILL.md 文件
     if (item.name.toLowerCase() === 'skill.md') {
-        importContent = await window.api.readLocalFile(item.path);
-        importPath = window.api.pathJoin(item.path, '..'); // 记录父级目录用于拷贝资源
-        isSkillPackage = true;
+      importContent = await window.api.readLocalFile(item.path);
+      importPath = window.api.pathJoin(item.path, '..'); // 记录父级目录用于拷贝资源
+      isSkillPackage = true;
     }
     // 情况 B: 拖入 .skill 文件 (Zip 包)
-    else if (item.name.toLowerCase().endsWith('.skill')) {
-        const loadingInstance = ElMessage.info({ message: '正在解压 Skill 包...', duration: 0 });
-        try {
-            // 解压到临时目录
-            const tempDir = await window.api.extractSkillPackage(item.path);
-            const skillMdPath = window.api.pathJoin(tempDir, 'SKILL.md');
-            
-            if (await window.api.readLocalFile(skillMdPath).then(() => true).catch(() => false)) {
-                importContent = await window.api.readLocalFile(skillMdPath);
-                importPath = tempDir; // 记录临时目录路径
-                isSkillPackage = true;
-            } else {
-                throw new Error("无效的 .skill 包：根目录下未找到 SKILL.md");
-            }
-        } finally {
-            loadingInstance.close();
+    else if (item.name.toLowerCase().endsWith('.skill') || item.name.toLowerCase().endsWith('.zip')) {
+      const loadingInstance = ElMessage.info({ message: t('skills.alerts.extracting'), duration: 0 });
+      try {
+        // 解压到临时目录 (后端会智能返回包含 SKILL.md 的实际目录)
+        const tempDir = await window.api.extractSkillPackage(item.path);
+        const skillMdPath = window.api.pathJoin(tempDir, 'SKILL.md');
+
+        if (await window.api.readLocalFile(skillMdPath).then(() => true).catch(() => false)) {
+          importContent = await window.api.readLocalFile(skillMdPath);
+          importPath = tempDir; // 记录临时目录路径
+          isSkillPackage = true;
+        } else {
+          throw new Error(t('skills.alerts.invalidPackage'));
         }
+      } finally {
+        loadingInstance.close();
+      }
     }
     // 情况 C: 拖入文件夹 (尝试查找内部的 SKILL.md)
     else {
-        const skillMdPath = window.api.pathJoin(item.path, 'SKILL.md');
-        try {
-            importContent = await window.api.readLocalFile(skillMdPath);
-            importPath = item.path; // 记录文件夹路径
-            isSkillPackage = true;
-        } catch (err) {
-            // 不是 Skill 包，忽略
-            isSkillPackage = false;
-        }
+      const skillMdPath = window.api.pathJoin(item.path, 'SKILL.md');
+      try {
+        importContent = await window.api.readLocalFile(skillMdPath);
+        importPath = item.path; // 记录文件夹路径
+        isSkillPackage = true;
+      } catch (err) {
+        // 不是 Skill 包，忽略
+        isSkillPackage = false;
+      }
     }
 
     // 逻辑分支 1：如果是 Skill 包，执行导入/替换逻辑
     if (isSkillPackage) {
-        // 记录待导入路径
-        if (importPath) {
-            pendingImportPath.value = importPath;
-        }
-        
-        const { metadata, body } = parseFrontmatterSimple(importContent);
-        applyImportedMetadata(metadata, body);
-        
-        // 如果是新 Skill 且没名字，尝试用文件名(去掉后缀)或元数据
-        if (!editingSkill.name) {
-             if (metadata.name) editingSkill.name = metadata.name;
-             else editingSkill.name = item.name.replace(/\.skill$/i, '');
-        }
+      // 记录待导入路径
+      if (importPath) {
+        pendingImportPath.value = importPath;
+      }
 
-        // 提示信息
-        const actionText = activeEditTab.value === 'files' ? " (已准备替换当前 Skill)" : " (检测到完整 Skill 包)";
-        ElMessage.success(t('skills.alerts.parseSuccess') + actionText + "，请点击保存以应用");
-        
-        return;
+      const { metadata, body } = parseFrontmatterSimple(importContent);
+      applyImportedMetadata(metadata, body);
+
+      // 如果是新 Skill 且没名字，尝试用文件名(去掉后缀)或元数据
+      if (!editingSkill.name) {
+        if (metadata.name) editingSkill.name = metadata.name;
+        else editingSkill.name = item.name.replace(/\.skill$/i, '');
+      }
+
+      // 提示信息
+      const actionText = activeEditTab.value === 'files' ? " (已准备替换当前 Skill)" : " (检测到完整 Skill 包)";
+      ElMessage.success(t('skills.alerts.parseSuccess') + actionText + "，请点击保存以应用");
+
+      return;
     }
 
     // 逻辑分支 2：如果不是 Skill 包，且在“文件管理”Tab，则视为普通文件上传
     if (activeEditTab.value === 'files') {
-        if (!isNewSkill.value) {
-            handleBatchUpload(files);
-        } else {
-            ElMessage.warning(t('skills.alerts.saveFirstHint') || "请先保存 Skill 后再上传文件");
-        }
-        return;
+      if (!isNewSkill.value) {
+        handleBatchUpload(files);
+      } else {
+        ElMessage.warning(t('skills.alerts.saveFirstHint') || "请先保存 Skill 后再上传文件");
+      }
+      return;
     }
 
     // 逻辑分支 3：不是 Skill 包，且在“基本信息”Tab，报错
     ElMessage.warning(t('skills.alerts.noSkillMd'));
     // 仅在新建时尝试回填名字，编辑时不覆盖
     if (isNewSkill.value) {
-        editingSkill.name = item.name;
+      editingSkill.name = item.name;
     }
 
   } catch (err) {
@@ -435,7 +435,7 @@ function applyImportedMetadata(metadata, body) {
   }
   // 兼容布尔值和字符串的 context 配置
   if (metadata.context === 'fork') editingSkill.forkMode = true;
-  
+
   editingSkill.instructions = body.trim();
 }
 
@@ -459,7 +459,7 @@ function openExportDialog() {
     return;
   }
   // 重置选择状态（默认不全选，或者你可以改为默认全选）
-  skillsToExport.value = []; 
+  skillsToExport.value = [];
   // 打开弹窗
   showExportDialog.value = true;
 }
@@ -476,15 +476,15 @@ async function handleExportSkills() {
 
   isExporting.value = true;
   try {
-    const exportPromises = skillsToExport.value.map(skillId => 
+    const exportPromises = skillsToExport.value.map(skillId =>
       window.api.exportSkillToPackage(skillPath.value, skillId, outputDir)
     );
 
     const results = await Promise.all(exportPromises);
-    
+
     ElMessage.success(t('skills.export.success', { count: results.length }));
     showExportDialog.value = false;
-    
+
     // 打开导出目录
     if (results.length > 0) {
       window.api.shellShowItemInFolder(results[0]);
@@ -604,7 +604,7 @@ async function handleExportSkills() {
               {{ t('skills.dialog.dragHint') }}
             </span>
           </div>
-          
+
           <!-- 右侧：Tab 切换器 -->
           <el-radio-group v-model="activeEditTab" size="small">
             <el-radio-button value="info">{{ t('skills.tabs.info') }}</el-radio-button>
@@ -743,13 +743,15 @@ async function handleExportSkills() {
           </el-checkbox-group>
         </el-scrollbar>
         <div class="export-actions-bar" style="margin-top:10px; display:flex; justify-content:space-between;">
-           <el-button size="small" @click="skillsToExport = skillsList.map(s=>s.id)">{{ t('skills.export.selectAll') }}</el-button>
-           <el-button size="small" @click="skillsToExport = []">{{ t('skills.export.clear') }}</el-button>
+          <el-button size="small" @click="skillsToExport = skillsList.map(s => s.id)">{{ t('skills.export.selectAll')
+          }}</el-button>
+          <el-button size="small" @click="skillsToExport = []">{{ t('skills.export.clear') }}</el-button>
         </div>
       </div>
       <template #footer>
         <el-button @click="showExportDialog = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleExportSkills" :loading="isExporting" :disabled="skillsToExport.length === 0">
+        <el-button type="primary" @click="handleExportSkills" :loading="isExporting"
+          :disabled="skillsToExport.length === 0">
           {{ t('skills.export.confirmBtn') }}
         </el-button>
       </template>
@@ -1123,13 +1125,13 @@ html.dark .bottom-actions-container {
 .transparent-textarea :deep(.el-textarea__inner),
 .transparent-textarea :deep(.el-textarea__inner:focus),
 .transparent-textarea :deep(.el-textarea__inner:hover) {
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 8px 12px;
-    color: var(--text-primary);
-    font-size: 13px;
-    line-height: 1.6;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 /* 移除 Input 自身可能的原生滚动条 */
