@@ -282,7 +282,7 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "grep_search",
-            description: "Search for patterns in file contents using Regex. You MUST specify a 'path' to limit the search scope.",
+            description: "Search for patterns in file contents using Regex. You MUST specify a 'path' to limit the search scope.\nWARNING FOR CODE/LATEX: In JSON, you must double-escape backslashes.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -294,7 +294,7 @@ const BUILTIN_TOOLS = {
                         enum: ["content", "files_with_matches", "count"],
                         description: "Output mode: 'content' (lines), 'files_with_matches' (paths only), 'count'."
                     },
-                    multiline: { type: "boolean", description: "Enable multiline matching." }
+                    multiline: { type: "boolean", description: "Enable multiline matching. When true, enables 'm' and 's' (dotAll) regex flags so '.' matches newlines." }
                 },
                 required: ["pattern", "path"]
             }
@@ -326,7 +326,7 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "edit_file",
-            description: "String replacement for modifying code or text files. YOU MUST READ THE FILE FIRST to ensure you have the exact 'old_string'.",
+            description: "EXACT literal string replacement for modifying files. Safer than regex for code containing special characters (like LaTeX or C++). YOU MUST READ THE FILE FIRST to ensure you have the exact 'old_string'.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -340,14 +340,14 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "replace_pattern",
-            description: "Efficient replace text in a file using JavaScript RegExp. Efficient for making specific changes (e.g., renaming variables, updating arguments) without rewriting the whole file. Supports capture groups ($1, $2).",
+            description: "Efficiently replace text in a file using JavaScript RegExp. Supports capture groups ($1, $2).\nCRITICAL WARNING FOR LATEX/CODE: The 'replacement' string is inserted literally. DO NOT double-escape backslashes in 'replacement' unless you actually want two backslashes. For example, to insert '\\begin', pass '\\begin' in JSON",
             inputSchema: {
                 type: "object",
                 properties: {
                     file_path: { type: "string", description: "Absolute path to the file." },
                     pattern: { type: "string", description: "The Regex pattern to search for. (e.g. 'function oldName\\((.*?)\\)')" },
                     replacement: { type: "string", description: "The replacement text. Use $1, $2 for capture groups." },
-                    flags: { type: "string", description: "RegExp flags. Defaults to 'gm'.", default: "gm" }
+                    flags: { type: "string", description: "RegExp flags. Defaults to 'gm'. IMPORTANT: If you need '.' to match newlines for multiline code blocks, you MUST pass 'gms'.", default: "gm" }
                 },
                 required: ["file_path", "pattern", "replacement"]
             }
@@ -464,6 +464,24 @@ Note: Long-running commands will be terminated after timeout.`,
 
 // --- Helpers ---
 
+// 异步文件互斥锁，解决并发写入导致的竞态覆盖和文件内容丢失问题
+const fileLocks = new Map();
+async function acquireLock(filePath) {
+    let currentLock;
+    while ((currentLock = fileLocks.get(filePath))) {
+        await currentLock;
+    }
+    let resolveLock;
+    const lockPromise = new Promise(resolve => resolveLock = resolve);
+    fileLocks.set(filePath, lockPromise);
+    return () => {
+        if (fileLocks.get(filePath) === lockPromise) {
+            fileLocks.delete(filePath);
+        }
+        resolveLock();
+    };
+}
+
 // 路径解析器：相对路径默认相对于用户主目录，而不是插件运行目录
 const resolvePath = (inputPath) => {
     if (!inputPath) return os.homedir();
@@ -482,10 +500,10 @@ const globToRegex = (glob) => {
     if (!glob) return null;
 
     // 1. 将 Glob 特殊符号替换为唯一的临时占位符
-    // 必须先处理 ** (递归)，再处理 * (单层)
     let regex = glob
         .replace(/\\/g, '/') // 统一反斜杠为正斜杠，防止转义混乱
-        .replace(/\*\*/g, '___DOUBLE_STAR___')
+        .replace(/\*\*\//g, '___DOUBLE_STAR_SLASH___') // 优先处理带有斜杠的 **，用于匹配零个或多个目录
+        .replace(/\*\*/g, '___DOUBLE_STAR___') // 单独的 **
         .replace(/\*/g, '___SINGLE_STAR___')
         .replace(/\?/g, '___QUESTION___');
 
@@ -493,10 +511,12 @@ const globToRegex = (glob) => {
     regex = regex.replace(/[\\^$|.+()\[\]{}]/g, '\\$&');
 
     // 3. 将占位符替换回对应的正则表达式逻辑
+    // **/ -> (?:.*/)? (匹配零个或多个目录层级，这就允许跨目录匹配也能兼容根目录)
+    regex = regex.replace(/___DOUBLE_STAR_SLASH___/g, '(?:.*/)?');
     // ** -> .* (匹配任意字符)
     regex = regex.replace(/___DOUBLE_STAR___/g, '.*');
-    // * -> [^/]* (匹配除路径分隔符外的任意字符)
-    regex = regex.replace(/___SINGLE_STAR___/g, '[^/\\\\]*');
+    // * -> [^/]* (匹配除路径分隔符外的任意字符，由于路径已全部转为正斜杠，所以只需排除 /)
+    regex = regex.replace(/___SINGLE_STAR___/g, '[^/]*');
     // ? -> . (匹配任意单个字符)
     regex = regex.replace(/___QUESTION___/g, '.');
 
@@ -1029,9 +1049,11 @@ const handlers = {
     // 2. Grep Search
     grep_search: async ({ pattern, path: searchPath, glob, output_mode = 'content', multiline = false }, context, signal) => {
         try {
-            // 强制路径检查
             if (!searchPath) {
                 return "Error: You MUST provide a 'path' argument to specify the directory.";
+            }
+            if (!pattern) {
+                return "Error: You MUST provide a 'pattern' argument. Do not put it inside a 'description' field.";
             }
 
             const rootDir = resolvePath(searchPath);
@@ -1044,11 +1066,16 @@ const handlers = {
 
             if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
 
-            const regexFlags = multiline ? 'gmi' : 'gi';
+            const regexFlags = multiline ? 'gmsi' : 'gi';
             let searchRegex;
             try {
                 searchRegex = new RegExp(pattern, regexFlags);
             } catch (e) { return `Invalid Regex: ${e.message}`; }
+
+            if (searchRegex.test("")) {
+                return `Error: The regex pattern '${pattern}' matches empty strings (e.g., .* or \\s*). This will match every character boundary and crash the search. Please use a more specific pattern (e.g., .+ instead of .*).`;
+            }
+            searchRegex.lastIndex = 0; // 重置正则状态
 
             const globRegex = glob ? globToRegex(glob) : null;
             const normalizedRoot = normalizePath(rootDir);
@@ -1056,6 +1083,7 @@ const handlers = {
             const results = [];
             let matchCount = 0;
             const MAX_SCANNED = 5000; 
+            const MAX_RESULTS_LINES = 1000; // 强制防线3：限制最大返回结果数，防止 Token 爆炸
             let scanned = 0;
 
             for await (const filePath of walkDir(rootDir, 20, 0, signal)) {
@@ -1086,6 +1114,7 @@ const handlers = {
                         if (searchRegex.test(content)) {
                             results.push(filePath);
                             searchRegex.lastIndex = 0;
+                            if (results.length >= MAX_RESULTS_LINES) break; // 熔断
                         }
                     } else {
                         const matches = [...content.matchAll(searchRegex)];
@@ -1094,16 +1123,30 @@ const handlers = {
                             if (output_mode === 'count') continue;
 
                             const lines = content.split(/\r?\n/);
-                            matches.forEach(m => {
+                            for (const m of matches) {
+                                if (results.length >= MAX_RESULTS_LINES) break; // 熔断
+
                                 const offset = m.index;
                                 const lineNum = content.substring(0, offset).split(/\r?\n/).length;
-                                const lineContent = lines[lineNum - 1].trim();
-                                // 限制单行预览长度
-                                results.push(`${filePath}:${lineNum}: ${lineContent.substring(0, 150)}`);
-                            });
+                                
+                                let previewText = m[0].replace(/\r?\n/g, ' ').trim();
+                                if (previewText.length > 150) {
+                                    previewText = previewText.substring(0, 150) + '...';
+                                } else if (previewText.length < 10) {
+                                    previewText = lines[lineNum - 1].trim().substring(0, 150);
+                                }
+                                
+                                results.push(`${filePath}:${lineNum}: ${previewText}`);
+                            }
                         }
                     }
                 } catch (readErr) { /* ignore */ }
+                
+                // 文件级熔断退出
+                if (output_mode !== 'count' && results.length >= MAX_RESULTS_LINES) {
+                    results.push(`\n[System Warning] Output truncated. Reached maximum of ${MAX_RESULTS_LINES} result lines. Please use a more specific pattern.`);
+                    break;
+                }
             }
 
             if (output_mode === 'count') return `Total matches: ${matchCount}`;
@@ -1224,14 +1267,14 @@ const handlers = {
 
     // 4. Edit File
     edit_file: async ({ file_path, old_string, new_string, replace_all = false }) => {
-        try {
-            const safePath = resolvePath(file_path);
-            if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
-            if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
+        const safePath = resolvePath(file_path);
+        if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
+        if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
 
+        const unlock = await acquireLock(safePath);
+        try {
             let content = await fs.promises.readFile(safePath, 'utf-8');
 
-            // 直接使用原始字符串，移除 unescapeContent
             const targetOld = old_string;
             const targetNew = new_string;
 
@@ -1242,7 +1285,6 @@ const handlers = {
 
             // 检查唯一性
             if (!replace_all) {
-                // 计算出现次数
                 const count = content.split(targetOld).length - 1;
                 if (count > 1) {
                     return `Error: 'old_string' occurs ${count} times. Please set 'replace_all' to true if you intend to replace all, or provide a more unique context string.`;
@@ -1252,57 +1294,53 @@ const handlers = {
             if (replace_all) {
                 content = content.split(targetOld).join(targetNew);
             } else {
-                content = content.replace(targetOld, targetNew);
+                const index = content.indexOf(targetOld);
+                if (index !== -1) {
+                    content = content.substring(0, index) + targetNew + content.substring(index + targetOld.length);
+                }
             }
 
             await fs.promises.writeFile(safePath, content, 'utf-8');
             return `Successfully edited ${path.basename(safePath)}.`;
-
         } catch (e) {
             return `Edit failed: ${e.message}`;
+        } finally {
+            unlock();
         }
     },
 
     // 5. Write File
     write_file: async ({ file_path, content }) => {
+        const safePath = resolvePath(file_path);
+        if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
+
+        const ext = path.extname(safePath).toLowerCase();
+        const binaryExtensions = ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods', '.pdf', '.epub', '.mobi', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.mp3', '.wav', '.mp4', '.mov', '.zip', '.rar', '.7z', '.tar', '.gz', '.exe', '.dll', '.bin', '.so', '.dmg'];
+        if (binaryExtensions.includes(ext)) {
+            return `[Operation Blocked] The 'write_file' tool only supports text-based files. Writing text content to a '${ext}' file will corrupt its binary structure.`;
+        }
+
+        const unlock = await acquireLock(safePath);
         try {
-            const safePath = resolvePath(file_path);
-            if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
-
-            // --- 二进制/Office 文件保护拦截 ---
-            const ext = path.extname(safePath).toLowerCase();
-            const binaryExtensions = [
-                '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods',
-                '.pdf', '.epub', '.mobi',
-                '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.mp3', '.wav', '.mp4', '.mov',
-                '.zip', '.rar', '.7z', '.tar', '.gz', '.exe', '.dll', '.bin', '.so', '.dmg'
-            ];
-
-            if (binaryExtensions.includes(ext)) {
-                return `[Operation Blocked] The 'write_file' tool only supports text-based files. Writing text content to a '${ext}' file will corrupt its binary structure.`;
-            }
-            // ----------------------------------------
-
             const dir = path.dirname(safePath);
-            if (!fs.existsSync(dir)) {
-                await fs.promises.mkdir(dir, { recursive: true });
-            }
-
-            // 直接写入原始 content
+            if (!fs.existsSync(dir)) await fs.promises.mkdir(dir, { recursive: true });
             await fs.promises.writeFile(safePath, content, 'utf-8');
             return `Successfully wrote to ${safePath}`;
         } catch (e) {
             return `Write failed: ${e.message}`;
+        } finally {
+            unlock();
         }
     },
 
     // 6. Regex Pattern Replace
     replace_pattern: async ({ file_path, pattern, replacement, flags = 'gm' }) => {
-        try {
-            const safePath = resolvePath(file_path);
-            if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
-            if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
+        const safePath = resolvePath(file_path);
+        if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
+        if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
 
+        const unlock = await acquireLock(safePath);
+        try {
             let content = await fs.promises.readFile(safePath, 'utf-8');
 
             let regex;
@@ -1312,40 +1350,39 @@ const handlers = {
                 return `Invalid Regex Pattern: ${e.message}`;
             }
 
-            if (!regex.test(content)) {
+            const matches = content.match(regex);
+            if (!matches) {
                 return `Error: Pattern '${pattern}' not found in file. No changes made.`;
             }
-
+            const matchCount = matches.length;
             regex.lastIndex = 0;
 
-            // 直接使用原始 replacement
             const newContent = content.replace(regex, replacement);
 
             if (newContent === content) {
-                return `Warning: Pattern matched but content remained identical after replacement.`;
+                return `Warning: Pattern matched ${matchCount} time(s), but content remained identical after replacement.`;
             }
 
             await fs.promises.writeFile(safePath, newContent, 'utf-8');
-            return `Successfully replaced pattern in ${path.basename(safePath)}.`;
-
+            return `Successfully replaced ${matchCount} occurrence(s) of pattern in ${path.basename(safePath)}.`;
         } catch (e) {
             return `Replace error: ${e.message}`;
+        } finally {
+            unlock();
         }
     },
 
     // 7. Insert Content
     insert_content: async ({ file_path, content, line_number, anchor_pattern, direction = 'after' }) => {
-        try {
-            const safePath = resolvePath(file_path);
-            if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
-            if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
+        const safePath = resolvePath(file_path);
+        if (!isPathSafe(safePath)) return `[Security Block] Access denied to ${safePath}.`;
+        if (!fs.existsSync(safePath)) return `Error: File not found: ${safePath}`;
 
+        const unlock = await acquireLock(safePath);
+        try {
             let fileContent = await fs.promises.readFile(safePath, 'utf-8');
-            
-            // 直接使用原始 content
             const processedContent = content;
 
-            // --- 模式 A: 基于行号 ---
             if (line_number !== undefined && line_number !== null) {
                 const lines = fileContent.split(/\r?\n/);
                 const targetIndex = parseInt(line_number) - 1; 
@@ -1362,7 +1399,6 @@ const handlers = {
                 return `Successfully inserted content at line ${line_number} in ${path.basename(safePath)}.`;
             }
 
-            // --- 模式 B: 基于正则锚点 ---
             if (anchor_pattern) {
                 let regex;
                 try {
@@ -1374,23 +1410,20 @@ const handlers = {
                 }
 
                 const newFullContent = fileContent.replace(regex, (matchedStr) => {
-                    if (direction === 'before') {
-                        return `${processedContent}\n${matchedStr}`;
-                    } else {
-                        return `${matchedStr}\n${processedContent}`;
-                    }
+                    return direction === 'before' ? `${processedContent}\n${matchedStr}` : `${matchedStr}\n${processedContent}`;
                 });
 
                 await fs.promises.writeFile(safePath, newFullContent, 'utf-8');
                 return `Successfully inserted content ${direction} anchor pattern in ${path.basename(safePath)}.`;
             }
-
             return `Error: You must provide either 'line_number' or 'anchor_pattern'.`;
-
         } catch (e) {
             return `Insert error: ${e.message}`;
+        } finally {
+            unlock();
         }
     },
+
     // Bash / PowerShell
     execute_bash_command: async ({ command, timeout = 15000 }, context, signal) => {
         return new Promise((resolve) => {
