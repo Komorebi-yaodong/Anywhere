@@ -133,7 +133,7 @@ function listSkills(skillRootPath) {
                             name: metadata.name || item.name,
                             description: metadata.description || 'No description provided.',
                             userInvocable: metadata['user-invocable'] !== false,
-                            disabled: metadata['disable-model-invocation'] === false, // 注意 yaml解析后是 boolean
+                            disabled: metadata['disable-model-invocation'] === true,
                             context: metadata.context || 'normal', // normal | fork
                             allowedTools: metadata['allowed-tools'],
                             path: skillDir

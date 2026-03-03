@@ -579,10 +579,10 @@ async function handleExportSkills() {
     </el-tooltip>
 
     <div class="bottom-actions-container">
-      <el-button class="action-btn" @click="prepareAddSkill" :icon="Plus" type="primary">
+      <el-button class="action-btn" @click="prepareAddSkill" :icon="Plus" type="primary" :disabled="!skillPath">
         {{ t('skills.addTitle') }}
       </el-button>
-      <el-button class="action-btn" @click="openExportDialog" :icon="Download">
+      <el-button class="action-btn" @click="openExportDialog" :icon="Download" :disabled="!skillPath">
         {{ t('skills.export.button') }}
       </el-button>
       <el-button class="action-btn" @click="selectSkillPath" :icon="FolderOpened">

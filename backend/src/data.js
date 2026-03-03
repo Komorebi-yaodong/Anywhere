@@ -1178,11 +1178,16 @@ async function saveMcpToolCache(serverId, tools) {
     doc = { _id: "mcp_tools_cache", data: {} };
   }
   doc.data[serverId] = tools;
-  return await utools.db.promises.put({
+  const result = await utools.db.promises.put({
     _id: "mcp_tools_cache",
     data: doc.data,
     _rev: doc._rev
   });
+  
+  if (result.ok) {
+    broadcastEvent('mcp-cache-updated', serverId);
+  }
+  return result;
 }
 
 /**
@@ -1385,6 +1390,14 @@ async function cleanUpBackgroundCache(fullConfig) {
   }
 }
 
+function broadcastEvent(channel, payload) {
+  for (const windowInstance of windowMap.values()) {
+    if (!windowInstance.isDestroyed()) {
+      windowInstance.webContents.send(channel, payload);
+    }
+  }
+}
+
 module.exports = {
   getConfig,
   checkConfig,
@@ -1406,4 +1419,5 @@ module.exports = {
   getMcpToolCache,
   getCachedBackgroundImage,
   cacheBackgroundImage,
+  broadcastEvent,
 };

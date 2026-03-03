@@ -19,6 +19,7 @@ const {
   savePromptWindowSettings,
   saveMcpToolCache,
   getMcpToolCache,
+  broadcastEvent,
 } = require('./data.js');
 
 const {
@@ -182,10 +183,14 @@ window.api = {
       return getSkillDetails(rootPath, id);
   },
   saveSkill: async (rootPath, id, content) => {
-      return saveSkill(rootPath, id, content);
+      const res = await saveSkill(rootPath, id, content);
+      broadcastEvent('skills-updated');
+      return res;
   },
   deleteSkill: async (rootPath, id) => {
-      return deleteSkill(rootPath, id);
+      const res = await deleteSkill(rootPath, id);
+      broadcastEvent('skills-updated');
+      return res;
   },
    // 暴露给前端的导出/导入接口
   exportSkillToPackage: async (rootPath, skillId, outputDir) => {

@@ -391,6 +391,18 @@ const fetchSkillsList = async () => {
     try {
       const skills = await window.api.listSkills(path);
       allSkillsList.value = skills.filter(s => !s.disabled).sort((a, b) => a.name.localeCompare(b.name));
+      
+      const validSkillNames = allSkillsList.value.map(s => s.name);
+      
+      const validSessionSkills = sessionSkillIds.value.filter(name => validSkillNames.includes(name));
+      if (validSessionSkills.length !== sessionSkillIds.value.length) {
+          sessionSkillIds.value = validSessionSkills;
+      }
+      
+      const validTempSkills = tempSessionSkillIds.value.filter(name => validSkillNames.includes(name));
+      if (validTempSkills.length !== tempSessionSkillIds.value.length) {
+          tempSessionSkillIds.value = validTempSkills;
+      }
     } catch (e) {
       console.error("Fetch skills failed:", e);
     }
@@ -1353,7 +1365,70 @@ onMounted(async () => {
         if (newConfig.zoom !== undefined) {
           zoomLevel.value = newConfig.zoom;
         }
+
+        // 1. 配置更新后同步重构服务商和模型列表
+        const newModelList = [];
+        const newModelMap = {};
+        newConfig.providerOrder.forEach(id => {
+          const provider = newConfig.providers[id];
+          if (provider?.enable) {
+            provider.modelList.forEach(m => {
+              const key = `${id}|${m}`;
+              newModelList.push({ key, value: key, label: `${provider.name}|${m}` });
+              newModelMap[key] = `${provider.name}|${m}`;
+            });
+          }
+        });
+        modelList.value = newModelList;
+        modelMap.value = newModelMap;
+
+        // 2. 校验并清理已删除或被禁用的 MCP 服务
+        if (newConfig.mcpServers) {
+           let mcpChanged = false;
+           // 筛选当前真正有效的选中 ID
+           const validMcpIds = sessionMcpServerIds.value.filter(id => {
+             const server = newConfig.mcpServers[id];
+             return server && server.isActive; // 必须存在且启用
+           });
+           
+           if (validMcpIds.length !== sessionMcpServerIds.value.length) {
+             sessionMcpServerIds.value = validMcpIds;
+             tempSessionMcpServerIds.value = tempSessionMcpServerIds.value.filter(id => {
+                const server = newConfig.mcpServers[id];
+                return server && server.isActive;
+             });
+             mcpChanged = true;
+           }
+
+           // 如果发现存在失效的 MCP 服务，通知后端重新加载客户端
+           if (mcpChanged && !loading.value) {
+             applyMcpTools(false);
+           }
+        }
       }
+    });
+  }
+
+  if (window.api && window.api.onMcpCacheUpdated) {
+    window.api.onMcpCacheUpdated(async (serverId) => {
+      try {
+        const cache = await window.api.getMcpToolCache() || {};
+        mcpToolCache.value = cache;
+        
+        // 如果被修改具体工具启停的 MCP 正在被当前对话使用，并且没有在生成消息，重载工具
+        if (sessionMcpServerIds.value.includes(serverId) && !loading.value) {
+            applyMcpTools(false);
+        }
+      } catch (error) {
+        console.error("Auto refresh MCP cache failed:", error);
+      }
+    });
+  }
+
+  if (window.api && window.api.onSkillsUpdated) {
+    window.api.onSkillsUpdated(async () => {
+      // 内部已经集成了无效选中清理逻辑
+      await fetchSkillsList();
     });
   }
 });

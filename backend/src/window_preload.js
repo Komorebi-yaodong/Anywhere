@@ -18,6 +18,7 @@ const {
     getMcpToolCache,
     getCachedBackgroundImage,
     cacheBackgroundImage,
+    broadcastEvent,
 } = require('./data.js');
 
 const {
@@ -215,25 +216,27 @@ window.api = {
         return getSkillDetails(rootPath, id);
     },
     saveSkill: async (rootPath, id, content) => {
-        return saveSkill(rootPath, id, content);
+        const res = await saveSkill(rootPath, id, content);
+        broadcastEvent('skills-updated');
+        return res;
     },
     deleteSkill: async (rootPath, id) => {
-        return deleteSkill(rootPath, id);
+        const res = await deleteSkill(rootPath, id);
+        broadcastEvent('skills-updated');
+        return res;
     },
     toggleSkillForkMode: async (rootPath, skillId, enableFork) => {
         try {
-            const details = getSkillDetails(rootPath, skillId);
+            const details = await getSkillDetails(rootPath, skillId);
             const meta = details.metadata;
             const body = details.content;
 
-            // 更新元数据
             if (enableFork) {
                 meta['context'] = 'fork';
             } else {
                 delete meta['context'];
             }
 
-            // 重建文件内容 (简易 YAML 构建，保持与 Skills.vue 逻辑一致)
             const lines = ['---'];
             if (meta.name) lines.push(`name: ${meta.name}`);
             if (meta.description) lines.push(`description: ${meta.description}`);
@@ -251,11 +254,23 @@ window.api = {
             lines.push(body || '');
 
             const content = lines.join('\n');
-            return saveSkill(rootPath, skillId, content);
+            const res = await saveSkill(rootPath, skillId, content);
+            broadcastEvent('skills-updated');
+            return res;
         } catch (e) {
             console.error("Toggle Fork Mode Error:", e);
             throw e;
         }
+    },
+    onMcpCacheUpdated: (callback) => {
+        ipcRenderer.on('mcp-cache-updated', (event, serverId) => {
+            callback(serverId);
+        });
+    },
+    onSkillsUpdated: (callback) => {
+        ipcRenderer.on('skills-updated', (event) => {
+            callback();
+        });
     },
     // 生成 Skill Tool 定义
     getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
