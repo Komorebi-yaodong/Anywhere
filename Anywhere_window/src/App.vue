@@ -405,37 +405,37 @@ const handleQuickSkillToggle = async (skillName) => {
     if (!tempSessionSkillIds.value.includes(skillName)) {
       tempSessionSkillIds.value.push(skillName);
     }
-    
+
     // 检查是否需要自动启用内置 MCP
     if (currentConfig.value.mcpServers) {
-        const builtinIds = Object.entries(currentConfig.value.mcpServers)
-          .filter(([, server]) => server.type === 'builtin')
-          .map(([id]) => id);
-        
-        let changed = false;
-        builtinIds.forEach(id => {
-            if (!sessionMcpServerIds.value.includes(id)) {
-                sessionMcpServerIds.value.push(id);
-                changed = true;
-            }
-            // 同步 temp 列表
-            if (!tempSessionMcpServerIds.value.includes(id)) {
-                tempSessionMcpServerIds.value.push(id);
-            }
-        });
-        
-        if (changed) {
-            showDismissibleMessage.success(`已启用 Skill "${skillName}" (并自动关联内置 MCP)`);
-            await applyMcpTools(false); // 重新加载 MCP
-            return; 
+      const builtinIds = Object.entries(currentConfig.value.mcpServers)
+        .filter(([, server]) => server.type === 'builtin')
+        .map(([id]) => id);
+
+      let changed = false;
+      builtinIds.forEach(id => {
+        if (!sessionMcpServerIds.value.includes(id)) {
+          sessionMcpServerIds.value.push(id);
+          changed = true;
         }
+        // 同步 temp 列表
+        if (!tempSessionMcpServerIds.value.includes(id)) {
+          tempSessionMcpServerIds.value.push(id);
+        }
+      });
+
+      if (changed) {
+        showDismissibleMessage.success(`已启用 Skill "${skillName}" (并自动关联内置 MCP)`);
+        await applyMcpTools(false); // 重新加载 MCP
+        return;
+      }
     }
     showDismissibleMessage.success(`已启用 Skill "${skillName}"`);
   } else {
     sessionSkillIds.value.splice(index, 1);
     // 同步删除 temp
     const tempIndex = tempSessionSkillIds.value.indexOf(skillName);
-    if(tempIndex !== -1) tempSessionSkillIds.value.splice(tempIndex, 1);
+    if (tempIndex !== -1) tempSessionSkillIds.value.splice(tempIndex, 1);
     showDismissibleMessage.info(`已禁用 Skill "${skillName}"`);
   }
 };
@@ -654,13 +654,13 @@ const handleMainClick = async (event) => {
       // 收集当前所有渲染成功的图片
       const allImages = Array.from(document.querySelectorAll('.markdown-wrapper img'));
       const validSrcList = allImages.map(imgEl => imgEl.src).filter(Boolean);
-      
+
       let initialIndex = validSrcList.indexOf(img.src);
       if (initialIndex === -1) {
-          initialIndex = 0;
-          validSrcList.unshift(img.src);
+        initialIndex = 0;
+        validSrcList.unshift(img.src);
       }
-      
+
       imageViewerSrcList.value = validSrcList;
       imageViewerInitialIndex.value = initialIndex;
       currentImageViewerIndex.value = initialIndex;
@@ -671,7 +671,7 @@ const handleMainClick = async (event) => {
 
   // 2. 处理内联代码块点击
   const codeEl = target.closest('code') || target.closest('.inline-code-tag');
-  
+
   if (codeEl) {
     const inMarkdown = codeEl.closest('.markdown-wrapper');
     const inPre = codeEl.closest('pre');
@@ -679,13 +679,13 @@ const handleMainClick = async (event) => {
     if (inMarkdown && !inPre) {
       event.preventDefault();
       event.stopPropagation();
-      
+
       const codeContent = (codeEl.textContent || '').trim();
 
       if (codeContent) {
         try {
           const result = await window.api.handleCodeClick(codeContent);
-          
+
           if (result === 'opened-url') {
             showDismissibleMessage.success('已在浏览器中打开链接');
           } else if (result === 'opened-path') {
@@ -1239,11 +1239,11 @@ onMounted(async () => {
         let sessionLoaded = false;
         try {
           let old_session = JSON.parse(data.payload);
-          if (old_session && old_session.anywhere_history === true) { 
-            sessionLoaded = true; 
+          if (old_session && old_session.anywhere_history === true) {
+            sessionLoaded = true;
             isSessionRestored = true; // 标记会话已恢复
-            await loadSession(old_session); 
-            autoCloseOnBlur.value = false; 
+            await loadSession(old_session);
+            autoCloseOnBlur.value = false;
           }
         } catch (error) { }
         if (!sessionLoaded) {
@@ -1269,8 +1269,8 @@ onMounted(async () => {
           let sessionLoaded = false;
           if (data.payload.length === 1 && data.payload[0].path.toLowerCase().endsWith('.json')) {
             const fileObject = await window.api.handleFilePath(data.payload[0].path);
-            if (fileObject) { 
-              sessionLoaded = await checkAndLoadSessionFromFile(fileObject); 
+            if (fileObject) {
+              sessionLoaded = await checkAndLoadSessionFromFile(fileObject);
               if (sessionLoaded) isSessionRestored = true; // 标记会话已恢复
             }
           }
@@ -2093,7 +2093,7 @@ const saveSessionAsJson = async () => {
           instance.confirmButtonLoading = true;
           try {
             const localChatPath = currentConfig.value.webdav?.localChatPath;
-            
+
             // 优化逻辑：如果有本地路径，直接写入；否则弹出保存框
             if (localChatPath) {
               const separator = currentOS.value === 'win' ? '\\' : '/';
@@ -2251,22 +2251,22 @@ const saveSessionAsImage = async () => {
           if (!finalBasename) { showDismissibleMessage.error('文件名不能为空'); return; }
           const finalFilename = finalBasename + '.png';
           instance.confirmButtonLoading = true;
-          
+
           const loadingMsg = ElMessage.info({ message: '正在生成长图，请稍候...', duration: 0 });
 
           try {
             const element = chatContainerRef.value.$el;
-            
+
             // 获取背景色
             const computedStyle = getComputedStyle(document.documentElement);
             let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
             if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
-                const isDark = document.documentElement.classList.contains('dark');
-                themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
+              const isDark = document.documentElement.classList.contains('dark');
+              themeBgColor = isDark ? '#212121' : '#FFFFFD';
             }
 
             const clone = element.cloneNode(true);
-            
+
             // 设置最小宽度
             const MIN_IMAGE_WIDTH = 800;
             const targetWidth = Math.max(element.clientWidth, MIN_IMAGE_WIDTH);
@@ -2275,41 +2275,41 @@ const saveSessionAsImage = async () => {
             clone.style.height = 'auto';
             clone.style.maxHeight = 'none';
             clone.style.overflow = 'visible';
-            clone.style.position = 'absolute'; 
+            clone.style.position = 'absolute';
             clone.style.top = '0';
             clone.style.left = '0';
             clone.style.zIndex = '-9999';
-            
+
             // 背景处理
             if (windowBackgroundImage.value) {
-                clone.style.backgroundImage = `url('${windowBackgroundImage.value}')`;
-                clone.style.backgroundSize = 'cover';
-                clone.style.backgroundPosition = 'center';
-                clone.style.backgroundRepeat = 'no-repeat';
-                clone.style.backgroundColor = themeBgColor; 
+              clone.style.backgroundImage = `url('${windowBackgroundImage.value}')`;
+              clone.style.backgroundSize = 'cover';
+              clone.style.backgroundPosition = 'center';
+              clone.style.backgroundRepeat = 'no-repeat';
+              clone.style.backgroundColor = themeBgColor;
             } else {
-                clone.style.background = themeBgColor;
+              clone.style.background = themeBgColor;
             }
-            
+
             // 强制展开代码块
             const preElements = clone.querySelectorAll('pre');
             preElements.forEach(pre => {
-                pre.style.whiteSpace = 'pre-wrap';
-                pre.style.overflow = 'visible';
-                pre.style.height = 'auto';
-                pre.style.maxHeight = 'none';
+              pre.style.whiteSpace = 'pre-wrap';
+              pre.style.overflow = 'visible';
+              pre.style.height = 'auto';
+              pre.style.maxHeight = 'none';
             });
 
             const mdWrappers = clone.querySelectorAll('.markdown-wrapper');
             mdWrappers.forEach(wrapper => {
-                wrapper.style.height = 'auto';
-                wrapper.style.overflow = 'visible';
+              wrapper.style.height = 'auto';
+              wrapper.style.overflow = 'visible';
             });
 
             if (element.parentNode) {
-                element.parentNode.appendChild(clone);
+              element.parentNode.appendChild(clone);
             } else {
-                document.body.appendChild(clone);
+              document.body.appendChild(clone);
             }
 
             await new Promise(r => setTimeout(r, 500));
@@ -2317,18 +2317,18 @@ const saveSessionAsImage = async () => {
             const canvas = await html2canvas(clone, {
               useCORS: true,
               allowTaint: true,
-              backgroundColor: null, 
-              scale: 2, 
+              backgroundColor: null,
+              scale: 2,
               logging: false,
               height: clone.scrollHeight,
               windowHeight: clone.scrollHeight,
-              x: 0, 
-              y: 0, 
+              x: 0,
+              y: 0,
               ignoreElements: (el) => false
             });
 
             if (clone.parentNode) {
-                clone.parentNode.removeChild(clone);
+              clone.parentNode.removeChild(clone);
             }
 
             const dataUrl = canvas.toDataURL('image/png');
@@ -2340,14 +2340,14 @@ const saveSessionAsImage = async () => {
               ia[i] = byteString.charCodeAt(i);
             }
 
-            await window.api.saveFile({ 
-                title: '保存为图片', 
-                defaultPath: finalFilename, 
-                buttonLabel: '保存', 
-                filters: [{ name: 'PNG 图片', extensions: ['png'] }], 
-                fileContent: ia 
+            await window.api.saveFile({
+              title: '保存为图片',
+              defaultPath: finalFilename,
+              buttonLabel: '保存',
+              filters: [{ name: 'PNG 图片', extensions: ['png'] }],
+              fileContent: ia
             });
-            
+
             defaultConversationName.value = finalBasename;
             loadingMsg.close();
             showDismissibleMessage.success('会话已成功保存为长图！');
@@ -2490,7 +2490,7 @@ const loadSession = async (jsonData) => {
       sessionSkillIds.value = [];
       tempSessionSkillIds.value = [];
     }
-    
+
     if (chat_show.value && chat_show.value.length > 0) {
       chat_show.value.forEach(msg => { if (msg.id === undefined) msg.id = messageIdCounter.value++; });
       const maxId = Math.max(...chat_show.value.map(m => m.id || 0));
@@ -2999,129 +2999,129 @@ const askAI = async (forceSend = false) => {
 
         let aggregatedReasoningContent = "";
         let aggregatedContent = "";
-        let aggregatedMedia = []; 
-        let aggregatedToolCalls = []; 
+        let aggregatedMedia = [];
+        let aggregatedToolCalls = [];
         let aggregatedExtraContent = null;
         let lastUpdateTime = Date.now();
 
         const responsesItemIdToIndexMap = new Map();
 
         for await (const part of stream) {
+          // console.log(part);
           if (apiType === 'responses') {
-              if (part.type === 'response.output_text.delta') {
-                  aggregatedContent += part.delta;
-                  if (chat_show.value[currentAssistantChatShowIndex].status === 'thinking') {
-                    chat_show.value[currentAssistantChatShowIndex].status = 'end';
-                  }
-              } 
-              else if (part.type === 'response.reasoning_summary_text.delta') {
-                  aggregatedReasoningContent += part.delta;
-                  if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
-                    chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
-                  }
-                  if (Date.now() - lastUpdateTime > 100) {
-                    chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-                    lastUpdateTime = Date.now();
-                  }
+            if (part.type === 'response.output_text.delta') {
+              aggregatedContent += part.delta;
+              if (chat_show.value[currentAssistantChatShowIndex].status === 'thinking') {
+                chat_show.value[currentAssistantChatShowIndex].status = 'end';
               }
-              else if (part.type === 'response.output_item.added') {
-                  if (part.item && part.item.type === 'function_call') {
-                      const index = aggregatedToolCalls.length;
-                      aggregatedToolCalls.push({
-                          id: part.item.call_id || part.item.id,
-                          type: "function",
-                          function: { name: part.item.name || "", arguments: "" }
-                      });
-                      responsesItemIdToIndexMap.set(part.item.id, index);
-                  }
+            }
+            else if (part.type === 'response.reasoning_summary_text.delta') {
+              aggregatedReasoningContent += part.delta;
+              if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
+                chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
               }
-              else if (part.type === 'response.function_call_arguments.delta') {
-                  const index = responsesItemIdToIndexMap.get(part.item_id);
-                  if (index !== undefined && aggregatedToolCalls[index]) {
-                      aggregatedToolCalls[index].function.arguments += (part.delta || "");
-                  }
+              if (Date.now() - lastUpdateTime > 100) {
+                chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+                lastUpdateTime = Date.now();
               }
-          } 
+            }
+            else if (part.type === 'response.output_item.added') {
+              if (part.item && part.item.type === 'function_call') {
+                const index = aggregatedToolCalls.length;
+                aggregatedToolCalls.push({
+                  id: part.item.call_id || part.item.id,
+                  type: "function",
+                  function: { name: part.item.name || "", arguments: "" }
+                });
+                responsesItemIdToIndexMap.set(part.item.id, index);
+              }
+            }
+            else if (part.type === 'response.function_call_arguments.delta') {
+              const index = responsesItemIdToIndexMap.get(part.item_id);
+              if (index !== undefined && aggregatedToolCalls[index]) {
+                aggregatedToolCalls[index].function.arguments += (part.delta || "");
+              }
+            }
+          }
           else {
-              // Chat Completions 流式
-              const delta = part.choices?.[0]?.delta;
-              if (!delta) continue;
+            // Chat Completions 流式
+            const delta = part.choices?.[0]?.delta;
+            if (!delta) continue;
+            if (delta.extra_content) {
+              aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
+            }
+            if (delta.thought_signature) {
+              aggregatedExtraContent = aggregatedExtraContent || {};
+              aggregatedExtraContent.google = aggregatedExtraContent.google || {};
+              aggregatedExtraContent.google.thought_signature = delta.thought_signature;
+            }
 
-              if (delta.extra_content) {
-                aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
+            if (delta.reasoning_content || delta.reasoning) {
+              aggregatedReasoningContent += delta.reasoning_content || delta.reasoning;
+              if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
+                chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
               }
-              if (delta.thought_signature) {
-                aggregatedExtraContent = aggregatedExtraContent || {};
-                aggregatedExtraContent.google = aggregatedExtraContent.google || {};
-                aggregatedExtraContent.google.thought_signature = delta.thought_signature;
+              if (Date.now() - lastUpdateTime > 100) {
+                chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+                lastUpdateTime = Date.now();
               }
+            }
 
-              if (delta.reasoning_content) {
-                aggregatedReasoningContent += delta.reasoning_content;
-                if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
-                  chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
-                }
-                if (Date.now() - lastUpdateTime > 100) {
-                  chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-                  lastUpdateTime = Date.now();
-                }
-              }
-              
-              if (delta.content) {
-                if (typeof delta.content === 'string') {
-                  aggregatedContent += delta.content;
-                } else if (Array.isArray(delta.content)) {
-                  delta.content.forEach(item => {
-                    if (item.type === 'text') {
-                      aggregatedContent += (item.text || '');
-                    } else if (item.type === 'image_url') {
-                      aggregatedMedia.push(item);
-                    }
-                  });
-                }
-                if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking') {
-                  chat_show.value[currentAssistantChatShowIndex].status = 'end';
-                }
-              }
-
-              if (delta.tool_calls) {
-                for (const toolCallChunk of delta.tool_calls) {
-                  const index = toolCallChunk.index ?? aggregatedToolCalls.length;
-                  if (!aggregatedToolCalls[index]) {
-                    aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
+            if (delta.content) {
+              if (typeof delta.content === 'string') {
+                aggregatedContent += delta.content;
+              } else if (Array.isArray(delta.content)) {
+                delta.content.forEach(item => {
+                  if (item.type === 'text') {
+                    aggregatedContent += (item.text || '');
+                  } else if (item.type === 'image_url') {
+                    aggregatedMedia.push(item);
                   }
-                  const currentTool = aggregatedToolCalls[index];
-                  if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
-                  if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
-                  if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
-                  if (toolCallChunk.extra_content) {
-                    currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
-                  }
+                });
+              }
+              if (chat_show.value[currentAssistantChatShowIndex].status == 'thinking') {
+                chat_show.value[currentAssistantChatShowIndex].status = 'end';
+              }
+            }
+
+            if (delta.tool_calls) {
+              for (const toolCallChunk of delta.tool_calls) {
+                const index = toolCallChunk.index ?? aggregatedToolCalls.length;
+                if (!aggregatedToolCalls[index]) {
+                  aggregatedToolCalls[index] = { id: "", type: "function", function: { name: "", arguments: "" } };
+                }
+                const currentTool = aggregatedToolCalls[index];
+                if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
+                if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
+                if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
+                if (toolCallChunk.extra_content) {
+                  currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
                 }
               }
+            }
           }
 
           if (Date.now() - lastUpdateTime > 100) {
-              const currentDisplayContent = [];
-              if (aggregatedContent) currentDisplayContent.push({ type: 'text', text: aggregatedContent });
-              if (aggregatedMedia.length > 0) currentDisplayContent.push(...aggregatedMedia);
-              
-              chat_show.value[currentAssistantChatShowIndex].content = currentDisplayContent;
-              
-              if (aggregatedReasoningContent) {
-                  chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-              }
-              lastUpdateTime = Date.now();
+            const currentDisplayContent = [];
+            if (aggregatedContent) currentDisplayContent.push({ type: 'text', text: aggregatedContent });
+            if (aggregatedMedia.length > 0) currentDisplayContent.push(...aggregatedMedia);
+
+            chat_show.value[currentAssistantChatShowIndex].content = currentDisplayContent;
+
+            if (aggregatedReasoningContent) {
+              chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+            }
+            lastUpdateTime = Date.now();
           }
         }
 
         let finalContentForHistory = null;
         if (aggregatedMedia.length > 0) {
-            finalContentForHistory = [];
-            if (aggregatedContent) finalContentForHistory.push({ type: 'text', text: aggregatedContent });
-            finalContentForHistory.push(...aggregatedMedia);
+          finalContentForHistory = [];
+          if (aggregatedContent) finalContentForHistory.push({ type: 'text', text: aggregatedContent });
+          finalContentForHistory.push(...aggregatedMedia);
         } else {
-            finalContentForHistory = aggregatedContent || null;
+          finalContentForHistory = aggregatedContent || null;
         }
 
         responseMessage = {
@@ -3137,54 +3137,54 @@ const askAI = async (forceSend = false) => {
       } else {
         // --- 非流式处理 ---
         const response = await window.api.createChatCompletion(requestParams);
-        
-        if (apiType === 'responses') {
-            let contentText = "";
-            let toolCalls = [];
-            let reasoningText = "";
-            
-            if (response.output_text) {
-                contentText = response.output_text;
-            } 
-            
-            // 完整解析 output 数组
-            if (response.output && Array.isArray(response.output)) {
-                response.output.forEach(item => {
-                    // 1. Message
-                    if (item.type === 'message' && item.content) {
-                        item.content.forEach(c => {
-                            if (c.type === 'output_text') contentText += c.text;
-                        });
-                    } 
-                    // 2. Tool Calls
-                    else if (item.type === 'function_call') {
-                        toolCalls.push({
-                            id: item.call_id || item.id,
-                            type: 'function',
-                            function: {
-                                name: item.name,
-                                arguments: item.arguments
-                            }
-                        });
-                    } 
-                    // 3. Reasoning
-                    else if (item.type === 'reasoning' && item.summary) {
-                        item.summary.forEach(s => {
-                            if (s.type === 'summary_text') reasoningText += s.text;
-                        });
-                    }
-                });
-            }
 
-            responseMessage = {
-                role: 'assistant',
-                content: contentText || null,
-                reasoning_content: reasoningText || null,
-                tool_calls: toolCalls.length > 0 ? toolCalls : undefined
-            };
+        if (apiType === 'responses') {
+          let contentText = "";
+          let toolCalls = [];
+          let reasoningText = "";
+
+          if (response.output_text) {
+            contentText = response.output_text;
+          }
+
+          // 完整解析 output 数组
+          if (response.output && Array.isArray(response.output)) {
+            response.output.forEach(item => {
+              // 1. Message
+              if (item.type === 'message' && item.content) {
+                item.content.forEach(c => {
+                  if (c.type === 'output_text') contentText += c.text;
+                });
+              }
+              // 2. Tool Calls
+              else if (item.type === 'function_call') {
+                toolCalls.push({
+                  id: item.call_id || item.id,
+                  type: 'function',
+                  function: {
+                    name: item.name,
+                    arguments: item.arguments
+                  }
+                });
+              }
+              // 3. Reasoning
+              else if (item.type === 'reasoning' && item.summary) {
+                item.summary.forEach(s => {
+                  if (s.type === 'summary_text') reasoningText += s.text;
+                });
+              }
+            });
+          }
+
+          responseMessage = {
+            role: 'assistant',
+            content: contentText || null,
+            reasoning_content: reasoningText || null,
+            tool_calls: toolCalls.length > 0 ? toolCalls : undefined
+          };
         } else {
-            // Chat Completions
-            responseMessage = response.choices[0].message;
+          // Chat Completions
+          responseMessage = response.choices[0].message;
         }
       }
 
@@ -3200,21 +3200,21 @@ const askAI = async (forceSend = false) => {
 
       // --- 更新 UI 气泡 ---
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
-      
+
       // 更新正文
       if (responseMessage.content) {
         if (typeof responseMessage.content === 'string') {
-            currentBubble.content = [{ type: 'text', text: responseMessage.content }];
+          currentBubble.content = [{ type: 'text', text: responseMessage.content }];
         } else if (Array.isArray(responseMessage.content)) {
-            currentBubble.content = responseMessage.content;
+          currentBubble.content = responseMessage.content;
         }
       }
-      
+
       // 更新思考内容并标记结束
       if (responseMessage.reasoning_content) {
         currentBubble.reasoning_content = responseMessage.reasoning_content;
         // 关键：非流式下如果存在思考内容，必须将 status 设为 end 才能正确显示
-        currentBubble.status = 'end'; 
+        currentBubble.status = 'end';
       }
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
@@ -3286,15 +3286,15 @@ const askAI = async (forceSend = false) => {
                   baseUrl: currentBaseUrl,
                   model: currentModelName,
                   tools: activeTools.filter(t => t.function.name !== 'sub_agent'),
-                  mcpSystemPrompt: mcpSystemPromptStr, 
+                  mcpSystemPrompt: mcpSystemPromptStr,
                   onUpdate: onUpdateCallback,
-                  apiType: apiType 
+                  apiType: apiType
                 };
 
                 toolContent = await window.api.resolveSkillInvocation(
                   currentConfig.value.skillPath,
                   toolArgs.skill,
-                  toolArgs, 
+                  toolArgs,
                   executionContext,
                   toolCallControllers.value.get(toolCall.id)?.signal || signalController.value.signal
                 );
@@ -3335,7 +3335,7 @@ const askAI = async (forceSend = false) => {
                     tools: toolsContext,
                     mcpSystemPrompt: mcpSystemPromptStr,
                     onUpdate: onUpdateCallback,
-                    apiType: apiType 
+                    apiType: apiType
                   };
                 }
 
@@ -3453,7 +3453,7 @@ const askAI = async (forceSend = false) => {
     signalController.value = null;
     if (currentAssistantChatShowIndex > -1) {
       const endTime = Date.now();
-      chat_show.value[currentAssistantChatShowIndex].endTime = endTime; 
+      chat_show.value[currentAssistantChatShowIndex].endTime = endTime;
       chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
     }
     await nextTick();
@@ -3780,7 +3780,7 @@ const navMessages = computed(() => {
 
 const getMessagePreviewText = (message) => {
   let text = '';
-  
+
   // 1. 尝试获取文本内容
   if (typeof message.content === 'string') {
     text = message.content;
@@ -3793,7 +3793,7 @@ const getMessagePreviewText = (message) => {
       const filePart = message.content.find(p => p.type === 'file' || p.type === 'input_file');
       const imgPart = message.content.find(p => p.type === 'image_url');
       const audioPart = message.content.find(p => p.type === 'input_audio');
-      
+
       if (filePart) {
         // 优先显示文件名
         text = `[文件] ${filePart.filename || filePart.name || '未知文件'}`;
@@ -3810,7 +3810,7 @@ const getMessagePreviewText = (message) => {
     const toolNames = message.tool_calls.map(t => t.name).join(', ');
     text = `调用工具: ${toolNames}`;
   }
-  
+
   // 4. AI 思考中状态
   if (!text && message.role === 'assistant' && message.status === 'thinking') {
     text = '思考中...';
@@ -3853,7 +3853,8 @@ const scrollToMessageByIndex = (index) => {
         @open-search="handleOpenSearch" />
 
       <div class="main-area-wrapper">
-        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMainClick" @scroll="handleScroll">
+        <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMainClick"
+          @scroll="handleScroll">
           <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :is-auto-approve="isAutoApproveTools"
             @update-auto-approve="handleToggleAutoApprove" @confirm-tool="handleToolApproval"
             @reject-tool="handleToolApproval" :ref="el => setMessageRef(el, message.id)" :message="message"
@@ -3866,21 +3867,25 @@ const scrollToMessageByIndex = (index) => {
         </el-main>
 
         <div class="unified-nav-sidebar" v-if="chat_show.length > 0">
-          
+
           <!-- 上部控制区 -->
           <div class="nav-group top">
             <el-tooltip content="回到顶部" placement="left" :show-after="500">
               <div class="nav-mini-btn" @click="scrollToTop">
                 <el-icon :size="16">
                   <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-                    <path d="M199.36 572.768a31.904 31.904 0 0 0 22.624-9.376l294.144-294.144 285.728 285.728a31.968 31.968 0 1 0 45.248-45.248L538.752 201.376a32 32 0 0 0-45.28 0L176.704 518.144a31.968 31.968 0 0 0 22.656 54.624z m339.424-115.392a32 32 0 0 0-45.28 0L176.736 774.144a31.968 31.968 0 1 0 45.248 45.248l294.144-294.144 285.728 285.728a31.968 31.968 0 1 0 45.248-45.248l-308.32-308.352z"></path>
+                    <path
+                      d="M199.36 572.768a31.904 31.904 0 0 0 22.624-9.376l294.144-294.144 285.728 285.728a31.968 31.968 0 1 0 45.248-45.248L538.752 201.376a32 32 0 0 0-45.28 0L176.704 518.144a31.968 31.968 0 0 0 22.656 54.624z m339.424-115.392a32 32 0 0 0-45.28 0L176.736 774.144a31.968 31.968 0 1 0 45.248 45.248l294.144-294.144 285.728 285.728a31.968 31.968 0 1 0 45.248-45.248l-308.32-308.352z">
+                    </path>
                   </svg>
                 </el-icon>
               </div>
             </el-tooltip>
             <el-tooltip content="上一条消息" placement="left" :show-after="500">
               <div class="nav-mini-btn" @click="navigateToPreviousMessage">
-                <el-icon><ArrowUp /></el-icon>
+                <el-icon>
+                  <ArrowUp />
+                </el-icon>
               </div>
             </el-tooltip>
           </div>
@@ -3888,24 +3893,14 @@ const scrollToMessageByIndex = (index) => {
           <div class="nav-timeline-area">
             <div class="timeline-track"></div>
             <div class="timeline-scroller no-scrollbar">
-              <div 
-                v-for="msg in navMessages" 
-                :key="msg.id"
-                class="timeline-node-wrapper"
-                @click="scrollToMessageByIndex(msg.originalIndex)"
-              >
-                <el-tooltip 
-                  :content="getMessagePreviewText(msg)" 
-                  placement="left" 
-                  :show-after="200"
-                  :enterable="false"
-                  effect="dark"
-                >
-                  <div class="timeline-node" 
-                       :class="[
-                         msg.role, 
-                         { 'active': focusedMessageIndex === msg.originalIndex }
-                       ]">
+              <div v-for="msg in navMessages" :key="msg.id" class="timeline-node-wrapper"
+                @click="scrollToMessageByIndex(msg.originalIndex)">
+                <el-tooltip :content="getMessagePreviewText(msg)" placement="left" :show-after="200" :enterable="false"
+                  effect="dark">
+                  <div class="timeline-node" :class="[
+                    msg.role,
+                    { 'active': focusedMessageIndex === msg.originalIndex }
+                  ]">
                   </div>
                 </el-tooltip>
               </div>
@@ -3916,17 +3911,20 @@ const scrollToMessageByIndex = (index) => {
           <div class="nav-group bottom">
             <el-tooltip :content="nextButtonTooltip" placement="left" :show-after="500">
               <div class="nav-mini-btn" @click="navigateToNextMessage">
-                <el-icon><ArrowDown /></el-icon>
+                <el-icon>
+                  <ArrowDown />
+                </el-icon>
               </div>
             </el-tooltip>
-            
+
             <el-tooltip content="跳到底部" placement="left" :show-after="500">
-              <div class="nav-mini-btn" 
-                   :class="{ 'highlight-bottom': showScrollToBottomButton }" 
-                   @click="forceScrollToBottom">
+              <div class="nav-mini-btn" :class="{ 'highlight-bottom': showScrollToBottomButton }"
+                @click="forceScrollToBottom">
                 <el-icon :size="16">
                   <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-                    <path d="M493.504 558.144a31.904 31.904 0 0 0 45.28 0l308.352-308.352a31.968 31.968 0 1 0-45.248-45.248L516.16 490.272 221.984 196.128a31.968 31.968 0 1 0-45.248 45.248l316.768 316.768z m308.384-97.568L516.16 746.304 222.016 452.16a31.968 31.968 0 1 0-45.248 45.248l316.768 316.768a31.904 31.904 0 0 0 45.28 0l308.352-308.352a32 32 0 1 0-45.28-45.248z"></path>
+                    <path
+                      d="M493.504 558.144a31.904 31.904 0 0 0 45.28 0l308.352-308.352a31.968 31.968 0 1 0-45.248-45.248L516.16 490.272 221.984 196.128a31.968 31.968 0 1 0-45.248 45.248l316.768 316.768z m308.384-97.568L516.16 746.304 222.016 452.16a31.968 31.968 0 1 0-45.248 45.248l316.768 316.768a31.904 31.904 0 0 0 45.28 0l308.352-308.352a32 32 0 1 0-45.28-45.248z">
+                    </path>
                   </svg>
                 </el-icon>
               </div>
@@ -3942,7 +3940,8 @@ const scrollToMessageByIndex = (index) => {
           :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" @submit="handleSubmit" @cancel="handleCancel"
           @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
           @send-audio="handleSendAudio" @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart"
-          @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle" @open-skill-dialog="toggleSkillDialog" />
+          @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle"
+          @open-skill-dialog="toggleSkillDialog" />
       </div>
     </el-container>
   </main>
@@ -3965,12 +3964,13 @@ const scrollToMessageByIndex = (index) => {
   </el-dialog>
 
   <el-image-viewer v-if="imageViewerVisible" :url-list="imageViewerSrcList" :initial-index="imageViewerInitialIndex"
-    @close="imageViewerVisible = false" @switch="(idx) => currentImageViewerIndex = idx" :hide-on-click-modal="true" teleported />
+    @close="imageViewerVisible = false" @switch="(idx) => currentImageViewerIndex = idx" :hide-on-click-modal="true"
+    teleported />
   <div v-if="imageViewerVisible" class="custom-viewer-actions">
-    <el-button type="primary" :icon="DocumentCopy" circle @click="handleCopyImageFromViewer(imageViewerSrcList[currentImageViewerIndex])"
-      title="复制图片" />
-    <el-button type="primary" :icon="Download" circle @click="handleDownloadImageFromViewer(imageViewerSrcList[currentImageViewerIndex])"
-      title="下载图片" />
+    <el-button type="primary" :icon="DocumentCopy" circle
+      @click="handleCopyImageFromViewer(imageViewerSrcList[currentImageViewerIndex])" title="复制图片" />
+    <el-button type="primary" :icon="Download" circle
+      @click="handleDownloadImageFromViewer(imageViewerSrcList[currentImageViewerIndex])" title="下载图片" />
   </div>
 
   <el-dialog v-model="isMcpDialogVisible" width="80%" custom-class="mcp-dialog no-header-dialog" @close="focusOnInput"
@@ -4943,7 +4943,7 @@ html.dark .app-container {
   right: 12px;
   top: 40%;
   transform: translateY(-50%);
-  max-height: 60vh; 
+  max-height: 60vh;
   width: 24px;
   z-index: 90;
   display: flex;
@@ -4971,19 +4971,19 @@ html.dark .app-container {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  
+
   color: #2c2c2c;
   background-color: transparent !important;
   border: none;
   box-shadow: none;
-  
+
   transition: all 0.2s ease;
-  font-size: 14px; 
+  font-size: 14px;
   border-radius: 4px;
 
   &:hover {
     color: #000;
-    background-color: transparent; 
+    background-color: transparent;
     transform: scale(1.2);
   }
 }
@@ -4995,9 +4995,9 @@ html.dark .app-container {
   width: 100%;
   display: flex;
   justify-content: center;
-  overflow: hidden; 
+  overflow: hidden;
   flex-direction: column;
-  min-height: 0;   
+  min-height: 0;
   pointer-events: auto;
 }
 
@@ -5024,15 +5024,19 @@ html.dark .app-container {
   align-items: center;
   gap: 6px;
   padding: 4px 0;
-  
-  &::-webkit-scrollbar { display: none; }
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
   scrollbar-width: none;
 }
 
 /* 消息节点 */
 .timeline-node-wrapper {
   width: 100%;
-  height: 8px; /* 减小高度，让横线更紧凑 */
+  height: 8px;
+  /* 减小高度，让横线更紧凑 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5041,12 +5045,13 @@ html.dark .app-container {
   position: relative;
 
   /* 增加悬浮热区高度 */
-  padding: 2px 0; 
+  padding: 2px 0;
 
   &:hover .timeline-node {
-    transform: scaleX(1.5) scaleY(1.2); /* 横向拉长效果 */
+    transform: scaleX(1.5) scaleY(1.2);
+    /* 横向拉长效果 */
   }
-  
+
   &:hover .node-tooltip {
     opacity: 1;
     transform: translateX(0) scale(1);
@@ -5057,34 +5062,38 @@ html.dark .app-container {
 .timeline-node {
   /* 变成短横线 */
   width: 10px;
-  height: 3px; 
-  border-radius: 2px; /* 微圆角 */
-  
+  height: 3px;
+  border-radius: 2px;
+  /* 微圆角 */
+
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  box-shadow: none; 
+  box-shadow: none;
   border: none;
-  opacity: 0.6; /* 默认半透明，不抢眼 */
+  opacity: 0.6;
+  /* 默认半透明，不抢眼 */
 
   &.user {
     background-color: var(--el-color-primary);
   }
 
   &.assistant {
-    background-color: #000000; 
+    background-color: #000000;
   }
 
   /* 当前聚焦的消息：高亮、变宽、完全不透明 */
   &.active {
     opacity: 1;
-    width: 16px; /* 激活时变长 */
-    box-shadow: 0 0 4px rgba(255,215,0,0.5);
+    width: 16px;
+    /* 激活时变长 */
+    box-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
   }
 }
 
 /* 悬浮提示框 (Tooltip) */
 .node-tooltip {
   position: absolute;
-  right: 28px; /* 点的左侧 */
+  right: 28px;
+  /* 点的左侧 */
   top: 50%;
   transform: translateY(-50%) translateX(10px) scale(0.9);
   background-color: var(--el-color-black);
@@ -5097,7 +5106,7 @@ html.dark .app-container {
   opacity: 0;
   visibility: hidden;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5110,10 +5119,12 @@ html.dark {
     background-color: #2c2c2c;
     border-color: #4c4c4c;
     color: #a3a6ad;
+
     &:hover {
       background-color: transparent;
       color: #fff;
     }
+
     &.highlight-bottom {
       background-color: rgba(64, 158, 255, 0.2);
       color: #409eff;
@@ -5123,15 +5134,17 @@ html.dark {
 
   /* 强制区分颜色 */
   .timeline-node.user {
-    background-color: #409eff; /* 用户：强制蓝色 */
+    background-color: #409eff;
+    /* 用户：强制蓝色 */
     border-color: #409eff;
   }
 
   .timeline-node.assistant {
-    background-color: #ffffff; /* AI：强制纯白 */
+    background-color: #ffffff;
+    /* AI：强制纯白 */
     border-color: #ffffff;
   }
-  
+
   .timeline-track {
     background-color: #4c4c4c;
   }

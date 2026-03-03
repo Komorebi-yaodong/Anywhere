@@ -170,7 +170,7 @@ async function createChatCompletion(params) {
 
     try {
         if (apiType === 'responses') {
-            // [关键] 转换历史消息格式
+            // 转换历史消息格式
             const convertedInput = convertMessagesToResponsesInput(openAiParams.messages);
 
             // Responses API 参数映射
@@ -201,7 +201,10 @@ async function createChatCompletion(params) {
 
             // 处理推理配置
             if (openAiParams.reasoning_effort) {
-                responseParams.reasoning = { effort: openAiParams.reasoning_effort };
+                responseParams.reasoning = { 
+                    effort: openAiParams.reasoning_effort,
+                    summary: "auto"
+                };
             }
 
             // 处理 Temperature
