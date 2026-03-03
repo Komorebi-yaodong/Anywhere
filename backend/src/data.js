@@ -38,6 +38,7 @@ const defaultConfig = {
         isTemperature: false,
         isDirectSend_file: false,
         isDirectSend_normal: true,
+        isDirectSend_image: true,
         ifTextNecessary: false,
         voice: null,
         reasoning_effort: "default",
@@ -406,7 +407,7 @@ function checkConfig(config) {
     const promptDefaults = {
       enable: true, stream: true, showMode: 'window', type: "general",
       isTemperature: false, temperature: 0.7,
-      isDirectSend_normal: true, isDirectSend_file: false, ifTextNecessary: false,
+      isDirectSend_normal: true, isDirectSend_file: false, isDirectSend_image: false, ifTextNecessary: false,
       voice: '', reasoning_effort: "default", defaultMcpServers: [], defaultSkills: [],
       window_width: 580, window_height: 740, position_x: 0, position_y: 0,
       isAlwaysOnTop: true, autoCloseOnBlur: true, matchRegex: "", icon: "",
@@ -428,6 +429,10 @@ function checkConfig(config) {
       if (p.isDirectSend !== undefined) {
         if (p.isDirectSend_file === undefined) p.isDirectSend_file = p.isDirectSend;
         delete p.isDirectSend;
+        flag = true;
+      }
+      if (p.isDirectSend_image === undefined && p.isDirectSend_normal !== undefined) {
+        p.isDirectSend_image = p.isDirectSend_normal;
         flag = true;
       }
       if (p.idex !== undefined) { delete p.idex; flag = true; }

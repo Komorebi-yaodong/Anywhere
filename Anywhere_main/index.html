@@ -446,10 +446,19 @@
       color: #FCA5A5; /* 浅红 */
     }
     html.dark .el-switch.is-checked .el-switch__core {
-      background-color: var(--bg-accent) !important; /* 白色 */
+      background-color: var(--bg-accent) !important;
+      border-color: var(--bg-accent) !important;
     }
     html.dark .el-switch.is-checked .el-switch__core .el-switch__action {
-      background-color: var(--bg-primary); /* 黑色圆点 */
+      background-color: var(--bg-primary) !important;
+    }
+
+    html.dark .el-switch:not(.is-checked) .el-switch__core {
+      background-color: #18181B !important;
+      border-color: #18181B !important;
+    }
+    html.dark .el-switch:not(.is-checked) .el-switch__core .el-switch__action {
+      background-color: #A1A1AA !important;
     }
 
     html.dark .el-checkbox__input.is-checked .el-checkbox__inner {
@@ -457,7 +466,7 @@
       border-color: var(--bg-accent) !important;
     }
     html.dark .el-checkbox__input.is-checked .el-checkbox__inner::after {
-      border-color: var(--bg-primary) !important; /* 黑色勾 */
+      border-color: var(--bg-primary) !important;
     }
   </style>
   <script type="module" src="/src/main.js"></script>

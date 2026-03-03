@@ -1036,6 +1036,7 @@ const saveSystemPrompt = async () => {
         ifTextNecessary: false,
         isDirectSend_file: true,
         isDirectSend_normal: true,
+        isDirectSend_image: true,
         voice: "",
         isAlwaysOnTop: latestConfigData.config.isAlwaysOnTop_global,
         autoCloseOnBlur: latestConfigData.config.autoCloseOnBlur_global,
@@ -1257,7 +1258,7 @@ onMounted(async () => {
           }
         }
       } else if (data.type === "img" && data.payload) {
-        if (currentPromptConfig.isDirectSend_normal) {
+        if (currentPromptConfig.isDirectSend_image ?? true) {
           history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
           chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
           shouldDirectSend = true;

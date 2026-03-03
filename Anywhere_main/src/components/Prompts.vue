@@ -109,6 +109,7 @@ const editingPrompt = reactive({
   temperature: 0.7,
   isDirectSend_file: false,
   isDirectSend_normal: true,
+  isDirectSend_image: true,
   ifTextNecessary: false,
   voice: '',
   reasoning_effort: "default",
@@ -476,7 +477,7 @@ function prepareAddPrompt() {
   Object.assign(editingPrompt, {
     originalKey: null, key: "", type: "general", prompt: "", showMode: "window", model: "",
     enable: true, selectedTag: [], icon: "", stream: true, isTemperature: false, temperature: 0.7,
-    isDirectSend_file: false, isDirectSend_normal: true, ifTextNecessary: false,
+    isDirectSend_file: false, isDirectSend_normal: true, isDirectSend_image: true, ifTextNecessary: false,
     voice: '', reasoning_effort: "default", defaultMcpServers: [],
     defaultSkills: [],
     window_width: 540, window_height: 700,
@@ -524,7 +525,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     selectedTag: belongingTags,
     stream: p.stream ?? true, isTemperature: p.isTemperature ?? false,
     temperature: p.temperature ?? 0.7, isDirectSend_file: p.isDirectSend_file ?? false,
-    isDirectSend_normal: p.isDirectSend_normal ?? true, ifTextNecessary: p.ifTextNecessary ?? false,
+    isDirectSend_normal: p.isDirectSend_normal ?? true, isDirectSend_image: p.isDirectSend_image ?? true, ifTextNecessary: p.ifTextNecessary ?? false,
     voice: p.voice ?? '', reasoning_effort: p.reasoning_effort ?? "default",
     defaultMcpServers: p.defaultMcpServers ?? [],
     defaultSkills: p.defaultSkills || [],
@@ -555,7 +556,7 @@ function savePrompt() {
       model: editingPrompt.model, enable: editingPrompt.enable, icon: editingPrompt.icon || "",
       stream: editingPrompt.stream, isTemperature: editingPrompt.isTemperature,
       temperature: editingPrompt.temperature, isDirectSend_file: editingPrompt.isDirectSend_file,
-      isDirectSend_normal: editingPrompt.isDirectSend_normal, ifTextNecessary: editingPrompt.ifTextNecessary,
+      isDirectSend_normal: editingPrompt.isDirectSend_normal, isDirectSend_image: editingPrompt.isDirectSend_image, ifTextNecessary: editingPrompt.ifTextNecessary,
       voice: editingPrompt.voice, reasoning_effort: editingPrompt.reasoning_effort,
       defaultMcpServers: editingPrompt.defaultMcpServers,
       defaultSkills: editingPrompt.defaultSkills,
@@ -1060,6 +1061,14 @@ async function refreshPromptsConfig() {
                       </el-icon></el-tooltip>
                     <div class="spacer"></div>
                     <el-switch v-model="editingPrompt.isDirectSend_normal" />
+                  </div>
+                  <div class="param-item">
+                    <span class="param-label">{{ t('prompts.sendImageDirectLabel') }}</span>
+                    <el-tooltip :content="t('prompts.tooltips.sendImageDirect')" placement="top"><el-icon class="tip-icon">
+                        <QuestionFilled />
+                      </el-icon></el-tooltip>
+                    <div class="spacer"></div>
+                    <el-switch v-model="editingPrompt.isDirectSend_image" />
                   </div>
                   <div class="param-item">
                     <span class="param-label">{{ t('prompts.sendFileLabel') }}</span>
