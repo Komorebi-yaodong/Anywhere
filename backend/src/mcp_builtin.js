@@ -1849,7 +1849,8 @@ const handlers = {
             triggerType: schedule_type === 'daily' ? 'daily' : 'interval',
             enabled: enabled,
             intervalMinutes: 60, intervalStartTime: '00:00', dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyTime: '12:00',
-            extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: []
+            extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
+            lastRunTime: enabled ? Date.now() : 0
         };
 
         if (configData.config.mcpServers) {
@@ -1908,18 +1909,23 @@ const handlers = {
             }
         }
 
-        if (schedule_type) task.triggerType = schedule_type;
+        let timeChanged = false; // 【修复Bug】增加标记
+        if (schedule_type) { task.triggerType = schedule_type; timeChanged = true; }
 
         if (time_param) {
             const currentType = schedule_type || task.triggerType;
             if (currentType === 'daily') {
-                if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) task.dailyTime = time_param;
+                if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) { task.dailyTime = time_param; timeChanged = true; }
                 else return "Error: Invalid time format for daily schedule. Use HH:mm.";
             } else if (currentType === 'interval') {
                 const minutes = parseInt(time_param);
-                if (!isNaN(minutes) && minutes > 0) task.intervalMinutes = minutes;
+                if (!isNaN(minutes) && minutes > 0) { task.intervalMinutes = minutes; timeChanged = true; }
                 else return "Error: Invalid interval minutes.";
             }
+        }
+
+        if (timeChanged && task.enabled) {
+            task.lastRunTime = Date.now();
         }
 
         configData.config.tasks = tasks;

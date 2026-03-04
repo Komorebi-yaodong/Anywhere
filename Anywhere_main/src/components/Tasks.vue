@@ -253,9 +253,17 @@ async function saveTaskSetting(key, value) {
 
     if (currentConfig.value.tasks[activeTaskId.value]) {
         currentConfig.value.tasks[activeTaskId.value][key] = value;
+        if (key === 'enabled' && value === true) {
+            currentConfig.value.tasks[activeTaskId.value].lastRunTime = Date.now();
+        }
     }
+    
     atomicSave(config => {
         config.tasks[activeTaskId.value][key] = value;
+        // 同步保存到数据库
+        if (key === 'enabled' && value === true) {
+            config.tasks[activeTaskId.value].lastRunTime = Date.now();
+        }
     });
 }
 
