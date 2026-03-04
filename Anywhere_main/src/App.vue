@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, provide, onBeforeUnmount, computed } from 'vue'
+import { ref, watch, onMounted, nextTick, provide, onBeforeUnmount, computed } from 'vue'
 import Chats from './components/Chats.vue'
 import Tasks from './components/Tasks.vue'
 import Prompts from './components/Prompts.vue'
@@ -103,6 +103,7 @@ const showDocDialog = ref(false);
 const docLoading = ref(false);
 const currentDocContent = ref('');
 const activeDocIndex = ref('0');
+const docScrollbarRef = ref(null);
 
 // 文档列表配置，增加 i18nKey 用于动态标题，lastUpdated 动态获取
 const docList = ref([
@@ -207,13 +208,19 @@ const fetchAndParseDoc = async (filename) => {
       : `${GITHUB_BASE}image/`;
 
     // 图片路径修正逻辑
-    // 替换 Windows 风格反斜杠路径 (..\image\) 和 Unix 风格路径 (../image/)
     text = text.replace(/!\[(.*?)\]\((\.\.[\\/])?image[\\/](.*?)\)/g, (match, alt, prefix, imgFilename) => {
-      // 对文件名进行 encodeURI 处理，防止中文乱码
       return `![${alt}](${imgBaseUrl}${encodeURIComponent(imgFilename)})`;
     });
 
     currentDocContent.value = marked.parse(text);
+
+    // 等待 DOM 更新后，将滚动条回到顶部
+    nextTick(() => {
+      if (docScrollbarRef.value) {
+        docScrollbarRef.value.setScrollTop(0);
+      }
+    });
+
   } catch (error) {
     console.error('Failed to load doc:', error);
     currentDocContent.value = `<h3>${t('doc.loadFailed')}</h3><p>${t('doc.checkNetwork')}</p><p style="font-size:12px; color:#888;">(Github & Gitee sources both unreachable)</p>`;
@@ -538,7 +545,7 @@ watch(locale, () => {
           </el-menu>
         </div>
         <div class="doc-content" v-loading="docLoading" :element-loading-text="t('doc.loading')">
-          <el-scrollbar height="60vh">
+          <el-scrollbar ref="docScrollbarRef" height="60vh">
             <div class="markdown-body" v-html="currentDocContent" @click="handleDocLinks"></div>
           </el-scrollbar>
         </div>

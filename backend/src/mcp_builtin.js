@@ -1823,160 +1823,182 @@ const handlers = {
     },
 
     create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true }) => {
-        const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
-        const configData = await getConfig();
-        const tasks = configData.config.tasks || {};
-        const prompts = configData.config.prompts || {};
+        const unlock = await acquireLock('config_tasks'); // 加锁
+        try {
+            const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+            const configData = await getConfig();
+            const tasks = configData.config.tasks || {};
+            const prompts = configData.config.prompts || {};
 
-        if (Object.values(tasks).some(t => t.name === name)) return `Error: A task with name "${name}" already exists.`;
+            if (Object.values(tasks).some(t => t.name === name)) return `Error: A task with name "${name}" already exists.`;
 
-        let targetPromptKey = '__DEFAULT__';
-        if (agent_name && agent_name !== '__DEFAULT__') {
-            const exactMatch = Object.keys(prompts).find(k => k === agent_name);
-            if (exactMatch) targetPromptKey = exactMatch;
-            else {
-                const fuzzyMatch = Object.keys(prompts).find(k => k.toLowerCase().includes(agent_name.toLowerCase()));
-                if (fuzzyMatch) targetPromptKey = fuzzyMatch;
-                else return `Error: Agent "${agent_name}" not found. Try using list_agents.`;
+            let targetPromptKey = '__DEFAULT__';
+            if (agent_name && agent_name !== '__DEFAULT__') {
+                const exactMatch = Object.keys(prompts).find(k => k === agent_name);
+                if (exactMatch) targetPromptKey = exactMatch;
+                else {
+                    const fuzzyMatch = Object.keys(prompts).find(k => k.toLowerCase().includes(agent_name.toLowerCase()));
+                    if (fuzzyMatch) targetPromptKey = fuzzyMatch;
+                    else return `Error: Agent "${agent_name}" not found. Try using list_agents.`;
+                }
             }
+
+            const taskId = `task_${Date.now()}`;
+            const newTask = {
+                name: name,
+                description: instruction || "",
+                promptKey: targetPromptKey,
+                triggerType: schedule_type === 'daily' ? 'daily' : 'interval',
+                enabled: enabled,
+                intervalMinutes: 60, intervalStartTime: '00:00', dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyTime: '12:00',
+                extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
+                // 【修复Bug】：新建任务时如果是启用状态，立即打上时间戳
+                lastRunTime: enabled ? Date.now() : 0
+            };
+
+            if (configData.config.mcpServers) {
+                newTask.extraMcp = Object.entries(configData.config.mcpServers).filter(([_, s]) => s.type === 'builtin').map(([id]) => id);
+            }
+
+            if (schedule_type === 'daily') {
+                if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) newTask.dailyTime = time_param;
+                else return "Error: Invalid time format. Use HH:mm.";
+            } else {
+                const minutes = parseInt(time_param);
+                if (!isNaN(minutes) && minutes > 0) newTask.intervalMinutes = minutes;
+                else return "Error: Invalid interval minutes.";
+            }
+
+            tasks[taskId] = newTask;
+            configData.config.tasks = tasks;
+            await updateConfigWithoutFeatures({ config: configData.config });
+
+            return `Task "${name}" created successfully.`;
+        } finally {
+            unlock(); // 释放锁
         }
-
-        const taskId = `task_${Date.now()}`;
-        const newTask = {
-            name: name,
-            description: instruction || "",
-            promptKey: targetPromptKey,
-            triggerType: schedule_type === 'daily' ? 'daily' : 'interval',
-            enabled: enabled,
-            intervalMinutes: 60, intervalStartTime: '00:00', dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyTime: '12:00',
-            extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
-            lastRunTime: enabled ? Date.now() : 0
-        };
-
-        if (configData.config.mcpServers) {
-            newTask.extraMcp = Object.entries(configData.config.mcpServers).filter(([_, s]) => s.type === 'builtin').map(([id]) => id);
-        }
-
-        if (schedule_type === 'daily') {
-            if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) newTask.dailyTime = time_param;
-            else return "Error: Invalid time format. Use HH:mm.";
-        } else {
-            const minutes = parseInt(time_param);
-            if (!isNaN(minutes) && minutes > 0) newTask.intervalMinutes = minutes;
-            else return "Error: Invalid interval minutes.";
-        }
-
-        tasks[taskId] = newTask;
-        configData.config.tasks = tasks;
-        await updateConfigWithoutFeatures({ config: configData.config });
-
-        return `Task "${name}" created successfully.`;
     },
 
     edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param }) => {
-        const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
-        const configData = await getConfig();
-        const tasks = configData.config.tasks || {};
-        const prompts = configData.config.prompts || {};
+        const unlock = await acquireLock('config_tasks'); // 加锁
+        try {
+            const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+            const configData = await getConfig();
+            const tasks = configData.config.tasks || {};
+            const prompts = configData.config.prompts || {};
 
-        let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
-        if (!targetId) {
-            const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
-            if (entry) targetId = entry[0];
-        }
+            let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+            if (!targetId) {
+                const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+                if (entry) targetId = entry[0];
+            }
 
-        if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
-        const task = tasks[targetId];
+            if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+            const task = tasks[targetId];
 
-        if (new_name && new_name !== task.name) {
-            if (Object.values(tasks).some(t => t.name === new_name)) return `Error: Task name "${new_name}" already exists.`;
-            task.name = new_name;
-        }
+            if (new_name && new_name !== task.name) {
+                if (Object.values(tasks).some(t => t.name === new_name)) return `Error: Task name "${new_name}" already exists.`;
+                task.name = new_name;
+            }
 
-        if (instruction !== undefined) task.description = instruction;
+            if (instruction !== undefined) task.description = instruction;
 
-        if (agent_name) {
-            if (agent_name === '__DEFAULT__') {
-                task.promptKey = '__DEFAULT__';
-            } else {
-                const exactMatch = Object.keys(prompts).find(k => k === agent_name);
-                if (exactMatch) task.promptKey = exactMatch;
-                else {
-                    const fuzzyMatch = Object.keys(prompts).find(k => k.toLowerCase().includes(agent_name.toLowerCase()));
-                    if (fuzzyMatch) task.promptKey = fuzzyMatch;
-                    else return `Error: Agent "${agent_name}" not found. Edit cancelled.`;
+            if (agent_name) {
+                if (agent_name === '__DEFAULT__') {
+                    task.promptKey = '__DEFAULT__';
+                } else {
+                    const exactMatch = Object.keys(prompts).find(k => k === agent_name);
+                    if (exactMatch) task.promptKey = exactMatch;
+                    else {
+                        const fuzzyMatch = Object.keys(prompts).find(k => k.toLowerCase().includes(agent_name.toLowerCase()));
+                        if (fuzzyMatch) task.promptKey = fuzzyMatch;
+                        else return `Error: Agent "${agent_name}" not found. Edit cancelled.`;
+                    }
                 }
             }
-        }
 
-        let timeChanged = false;
-        if (schedule_type) { task.triggerType = schedule_type; timeChanged = true; }
+            let timeChanged = false;
+            if (schedule_type) { task.triggerType = schedule_type; timeChanged = true; }
 
-        if (time_param) {
-            const currentType = schedule_type || task.triggerType;
-            if (currentType === 'daily') {
-                if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) { task.dailyTime = time_param; timeChanged = true; }
-                else return "Error: Invalid time format for daily schedule. Use HH:mm.";
-            } else if (currentType === 'interval') {
-                const minutes = parseInt(time_param);
-                if (!isNaN(minutes) && minutes > 0) { task.intervalMinutes = minutes; timeChanged = true; }
-                else return "Error: Invalid interval minutes.";
+            if (time_param) {
+                const currentType = schedule_type || task.triggerType;
+                if (currentType === 'daily') {
+                    if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) { task.dailyTime = time_param; timeChanged = true; }
+                    else return "Error: Invalid time format for daily schedule. Use HH:mm.";
+                } else if (currentType === 'interval') {
+                    const minutes = parseInt(time_param);
+                    if (!isNaN(minutes) && minutes > 0) { task.intervalMinutes = minutes; timeChanged = true; }
+                    else return "Error: Invalid interval minutes.";
+                }
             }
+
+            // 【修复Bug】如果AI修改了正在运行任务的时间规则，必须重置 lastRunTime
+            if (timeChanged && task.enabled) {
+                task.lastRunTime = Date.now();
+            }
+
+            configData.config.tasks = tasks;
+            await updateConfigWithoutFeatures({ config: configData.config });
+
+            return `Task updated successfully.\nCurrent State:\n- Name: ${task.name}\n- Agent: ${task.promptKey}\n- Type: ${task.triggerType}`;
+        } finally {
+            unlock(); // 释放锁
         }
-
-        if (timeChanged && task.enabled) {
-            task.lastRunTime = Date.now();
-        }
-
-        configData.config.tasks = tasks;
-        await updateConfigWithoutFeatures({ config: configData.config });
-
-        return `Task updated successfully.\nCurrent State:\n- Name: ${task.name}\n- Agent: ${task.promptKey}\n- Type: ${task.triggerType}`;
     },
 
     control_task: async ({ task_name_or_id, enable }) => {
-        const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
-        const configData = await getConfig();
-        const tasks = configData.config.tasks || {};
+        const unlock = await acquireLock('config_tasks'); // 加锁
+        try {
+            const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+            const configData = await getConfig();
+            const tasks = configData.config.tasks || {};
 
-        let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
-        if (!targetId) {
-            // Try finding by name
-            const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
-            if (entry) targetId = entry[0];
+            let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+            if (!targetId) {
+                // Try finding by name
+                const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+                if (entry) targetId = entry[0];
+            }
+
+            if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+
+            tasks[targetId].enabled = enable;
+            
+            // Reset last run time if enabling, so it doesn't trigger immediately if missed
+            if (enable) {
+                tasks[targetId].lastRunTime = Date.now(); 
+            }
+
+            await updateConfigWithoutFeatures({ config: configData.config });
+            return `Task "${tasks[targetId].name}" has been ${enable ? 'ENABLED' : 'DISABLED'}.`;
+        } finally {
+            unlock(); // 释放锁
         }
-
-        if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
-
-        tasks[targetId].enabled = enable;
-        
-        // Reset last run time if enabling, so it doesn't trigger immediately if missed
-        if (enable) {
-            tasks[targetId].lastRunTime = Date.now(); 
-        }
-
-        await updateConfigWithoutFeatures({ config: configData.config });
-        return `Task "${tasks[targetId].name}" has been ${enable ? 'ENABLED' : 'DISABLED'}.`;
     },
 
     delete_task: async ({ task_name_or_id }) => {
-        const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
-        const configData = await getConfig();
-        const tasks = configData.config.tasks || {};
+        const unlock = await acquireLock('config_tasks'); // 加锁
+        try {
+            const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+            const configData = await getConfig();
+            const tasks = configData.config.tasks || {};
 
-        let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
-        if (!targetId) {
-            const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
-            if (entry) targetId = entry[0];
+            let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+            if (!targetId) {
+                const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+                if (entry) targetId = entry[0];
+            }
+
+            if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+
+            const deletedName = tasks[targetId].name;
+            delete tasks[targetId];
+
+            await updateConfigWithoutFeatures({ config: configData.config });
+            return `Task "${deletedName}" deleted successfully.`;
+        } finally {
+            unlock(); // 释放锁
         }
-
-        if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
-
-        const deletedName = tasks[targetId].name;
-        delete tasks[targetId];
-
-        await updateConfigWithoutFeatures({ config: configData.config });
-        return `Task "${deletedName}" deleted successfully.`;
     },
 };
 
