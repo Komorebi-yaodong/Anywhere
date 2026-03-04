@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, reactive, onMounted, computed, inject } from 'vue'
-import { Plus, Delete, Document, Collection, Search, InfoFilled, Refresh, Clock, Setting as SettingIcon, List, VideoPlay } from '@element-plus/icons-vue';
+import { Plus, Delete, Document, Edit, Search, InfoFilled, Refresh, Clock, Setting as SettingIcon, List, VideoPlay } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
@@ -173,6 +173,33 @@ function handleAddTask() {
     showAddDialog.value = false;
 }
 
+const showRenameDialog = ref(false);
+const renameTaskForm = reactive({ name: "" });
+
+function openRenameTaskDialog() {
+    if (selectedTask.value) {
+        renameTaskForm.name = selectedTask.value.name;
+        showRenameDialog.value = true;
+    }
+}
+
+function handleRenameTask() {
+    const newName = renameTaskForm.name.trim();
+    if (!newName) {
+        ElMessage.warning(t('tasks.addDialogNamePlaceholder'));
+        return;
+    }
+    if (/[\\/:*?"<>|]/.test(newName)) {
+        ElMessage.warning(t('tasks.nameInvalidFileSystem'));
+        return;
+    }
+
+    saveTaskSetting('name', newName);
+    
+    showRenameDialog.value = false;
+    ElMessage.success(t('common.saveSuccess'));
+}
+
 function deleteTask() {
     if (!activeTaskId.value) return;
     ElMessageBox.confirm(t('tasks.deleteConfirm'), t('tasks.warning'), { type: 'warning', confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel') }).then(() => {
@@ -325,9 +352,15 @@ const formatTime = (ts) => {
                             <!-- 顶部标题区 -->
                             <div class="task-header">
                                 <div class="task-title-actions">
-                                    <el-input v-model="selectedTask.name"
-                                        @change="(val) => saveTaskSetting('name', val)" class="task-title-input" />
-                                    <el-button type="danger" :icon="Delete" circle plain size="small"
+                                    <h2 class="task-name-display" @click="openRenameTaskDialog">
+                                        {{ selectedTask.name }}
+                                        <el-tooltip :content="t('common.edit')" placement="top">
+                                            <el-icon class="edit-icon">
+                                                <Edit />
+                                            </el-icon>
+                                        </el-tooltip>
+                                    </h2>
+                                    <el-button type="danger" :icon="Delete" circle plain size="default"
                                         @click="deleteTask" :title="t('tasks.deleteTaskTooltip')"
                                         style="margin-left: 12px;" />
                                 </div>
@@ -638,6 +671,20 @@ const formatTime = (ts) => {
             </template>
         </el-dialog>
 
+        <el-dialog v-model="showRenameDialog" :title="t('chats.rename.promptTitle')" width="400px"
+            :close-on-click-modal="false">
+            <el-form :model="renameTaskForm" @submit.prevent="handleRenameTask">
+                <el-form-item :label="t('tasks.addDialogNameLabel')" required>
+                    <el-input v-model="renameTaskForm.name" :placeholder="t('tasks.addDialogNamePlaceholder')"
+                        @keyup.enter="handleRenameTask" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="showRenameDialog = false">{{ t('common.cancel') }}</el-button>
+                <el-button type="primary" @click="handleRenameTask">{{ t('common.confirm') }}</el-button>
+            </template>
+        </el-dialog>
+
         <!-- 默认助手设置弹窗 -->
         <el-dialog v-model="showGlobalSettingDialog" :title="t('tasks.globalSettingsDialogTitle')" width="400px"
             :close-on-click-modal="false">
@@ -800,39 +847,37 @@ const formatTime = (ts) => {
     margin-bottom: 20px;
 }
 
-/* 修改点：移除弹性占位，让按钮紧贴输入框 */
 .task-title-actions {
     display: flex;
     align-items: center;
 }
 
-.task-title-input {
-    width: 220px;
-}
-
-/* 修改点：固定宽度取代 max-width，避免过宽 */
-.task-title-input :deep(.el-input__wrapper) {
-    box-shadow: none;
-    background: transparent;
-    padding: 0;
-    font-size: 20px;
-    font-weight: bold;
+.task-name-display {
+    font-size: 22px;
+    font-weight: 600;
     color: var(--text-primary);
+    margin: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    max-width: 400px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.task-title-input :deep(.el-input__wrapper:hover) {
-    box-shadow: 0 0 0 1px var(--border-primary) inset;
-    padding: 0 10px;
-    background: var(--bg-tertiary);
+.task-name-display .edit-icon {
+    margin-left: 10px;
+    color: var(--text-secondary);
+    font-size: 16px;
+    opacity: 0;
+    transition: opacity 0.2s;
 }
 
-.task-title-input :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--text-accent) inset;
-    padding: 0 10px;
-    background: var(--bg-tertiary);
+.task-name-display:hover .edit-icon {
+    opacity: 1;
 }
 
-/* 修改点：将开关推到最右侧 */
 .task-header-controls {
     margin-left: auto;
     display: flex;

@@ -578,7 +578,7 @@ const apiKeyCount = computed(() => {
                 <div class="provider-header-controls">
                   <el-tooltip :content="t('providers.apiTypeTooltip')" placement="top" :show-after="500">
                     <el-select v-model="selectedProvider.apiType"
-                      @change="(val) => saveSingleProviderSetting('apiType', val)" size="normal" class="api-type-select"
+                      @change="(val) => saveSingleProviderSetting('apiType', val)" size="default" class="api-type-select"
                       placeholder="Chat Completions">
                       <el-option :label="t('providers.apiTypes.chatCompletions')" value="chat_completions" />
                       <el-option :label="t('providers.apiTypes.responses')" value="responses" />
