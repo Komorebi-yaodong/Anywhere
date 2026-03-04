@@ -2328,12 +2328,13 @@ const saveSessionAsImage = async () => {
           const finalFilename = finalBasename + '.png';
           instance.confirmButtonLoading = true;
 
+          // 还原最开始的消息提示，不作更改
           const loadingMsg = ElMessage.info({ message: '正在生成长图，请稍候...', duration: 0 });
 
           try {
-            const element = chatContainerRef.value.$el;
+            const chatMain = chatContainerRef.value.$el;
+            const messageNodes = Array.from(chatMain.querySelectorAll('.chat-message'));
 
-            // 获取背景色
             const computedStyle = getComputedStyle(document.documentElement);
             let themeBgColor = computedStyle.getPropertyValue('--el-bg-color').trim();
             if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
@@ -2341,75 +2342,137 @@ const saveSessionAsImage = async () => {
               themeBgColor = isDark ? '#212121' : '#FFFFFD';
             }
 
-            const clone = element.cloneNode(true);
+            const targetWidth = Math.max(chatMain.clientWidth, 800);
 
-            // 设置最小宽度
-            const MIN_IMAGE_WIDTH = 800;
-            const targetWidth = Math.max(element.clientWidth, MIN_IMAGE_WIDTH);
+            // 1. 创建离线渲染容器
+            const renderWrapper = document.createElement('div');
+            renderWrapper.style.cssText = `
+              position: absolute; top: -10000px; left: 0;
+              width: ${targetWidth}px;
+              padding: 0 10px; /* 模拟原容器边距 */
+              box-sizing: border-box;
+              background: transparent;
+              z-index: -9999;
+            `;
+            chatMain.appendChild(renderWrapper);
 
-            clone.style.width = `${targetWidth}px`;
-            clone.style.height = 'auto';
-            clone.style.maxHeight = 'none';
-            clone.style.overflow = 'visible';
-            clone.style.position = 'absolute';
-            clone.style.top = '0';
-            clone.style.left = '0';
-            clone.style.zIndex = '-9999';
+            // ================== 分组分块渲染 ==================
+            const chunkDataUrls = [];
+            const CHUNK_SIZE = 8;
 
-            // 背景处理
+            for (let i = 0; i < messageNodes.length; i += CHUNK_SIZE) {
+              const chunkNodes = messageNodes.slice(i, i + CHUNK_SIZE);
+              const chunkContainer = document.createElement('div');
+              chunkContainer.style.display = 'flex';
+              chunkContainer.style.flexDirection = 'column';
+              
+              const chunkImages = [];
+
+              for (const node of chunkNodes) {
+                const clone = node.cloneNode(true);
+                const footer = clone.querySelector('.message-footer');
+                if (footer) footer.remove();
+
+                // 解除 Markdown 容器高度限制，防止排版截断
+                const restrictSelectors = ['.markdown-wrapper', '.elx-xmarkdown-container', 'pre', '.table-scroll-wrapper'];
+                restrictSelectors.forEach(sel => {
+                  clone.querySelectorAll(sel).forEach(el => {
+                    el.style.display = 'block';
+                    el.style.height = 'auto';
+                    el.style.maxHeight = 'none';
+                    el.style.overflow = 'visible';
+                  });
+                });
+
+                // 强制关闭图片的懒加载机制，解决底部图片发白的问题
+                const images = Array.from(clone.querySelectorAll('img'));
+                images.forEach(img => {
+                  img.removeAttribute('loading');
+                  img.setAttribute('loading', 'eager');
+                  img.decoding = 'sync';
+                  const currentSrc = img.src;
+                  img.src = '';
+                  img.src = currentSrc;
+                  chunkImages.push(img);
+                });
+
+                chunkContainer.appendChild(clone);
+              }
+
+              renderWrapper.innerHTML = '';
+              renderWrapper.appendChild(chunkContainer);
+
+              // 严格等待本组图片加载完毕
+              await Promise.all(chunkImages.map(img => {
+                if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
+                return new Promise(resolve => {
+                  img.onload = resolve;
+                  img.onerror = resolve;
+                });
+              }));
+
+              await new Promise(r => setTimeout(r, 100)); // 让浏览器消化重绘队列
+
+              // 生成透明底的局部碎片
+              const msgCanvas = await html2canvas(renderWrapper, {
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: null,
+                scale: 2,
+                logging: false
+              });
+
+              chunkDataUrls.push(msgCanvas.toDataURL('image/png'));
+            }
+
+            // ================== 上下拼接与背景合成 ==================
+            renderWrapper.innerHTML = '';
+            renderWrapper.style.padding = '0'; // 消除内边距避免组装缝隙
+            
+            const finalContainer = document.createElement('div');
+            finalContainer.style.width = '100%';
+            finalContainer.style.display = 'flex';
+            finalContainer.style.flexDirection = 'column';
+
+            // 完全还原最开始的背景渲染方案
             if (windowBackgroundImage.value) {
-              clone.style.backgroundImage = `url('${windowBackgroundImage.value}')`;
-              clone.style.backgroundSize = 'cover';
-              clone.style.backgroundPosition = 'center';
-              clone.style.backgroundRepeat = 'no-repeat';
-              clone.style.backgroundColor = themeBgColor;
+              finalContainer.style.backgroundImage = `url('${windowBackgroundImage.value}')`;
+              finalContainer.style.backgroundSize = 'cover';
+              finalContainer.style.backgroundPosition = 'center';
+              finalContainer.style.backgroundRepeat = 'no-repeat';
+              finalContainer.style.backgroundColor = themeBgColor;
             } else {
-              clone.style.background = themeBgColor;
+              finalContainer.style.background = themeBgColor;
             }
 
-            // 强制展开代码块
-            const preElements = clone.querySelectorAll('pre');
-            preElements.forEach(pre => {
-              pre.style.whiteSpace = 'pre-wrap';
-              pre.style.overflow = 'visible';
-              pre.style.height = 'auto';
-              pre.style.maxHeight = 'none';
-            });
-
-            const mdWrappers = clone.querySelectorAll('.markdown-wrapper');
-            mdWrappers.forEach(wrapper => {
-              wrapper.style.height = 'auto';
-              wrapper.style.overflow = 'visible';
-            });
-
-            if (element.parentNode) {
-              element.parentNode.appendChild(clone);
-            } else {
-              document.body.appendChild(clone);
+            // 将刚才分批截好的块无缝贴入大容器中
+            for (const dataUrl of chunkDataUrls) {
+              const img = document.createElement('img');
+              img.src = dataUrl;
+              img.style.width = '100%';
+              img.style.height = 'auto';
+              img.style.display = 'block';
+              finalContainer.appendChild(img);
             }
 
-            await new Promise(r => setTimeout(r, 500));
+            renderWrapper.appendChild(finalContainer);
 
-            const canvas = await html2canvas(clone, {
+            await new Promise(r => setTimeout(r, 200));
+
+            // 进行极速合影 (因为此时 DOM 里只有几张 <img> 和 背景，没有任何复杂样式树，耗时约等于0)
+            const finalCanvas = await html2canvas(finalContainer, {
               useCORS: true,
               allowTaint: true,
-              backgroundColor: null,
-              scale: 2,
-              logging: false,
-              height: clone.scrollHeight,
-              windowHeight: clone.scrollHeight,
-              x: 0,
-              y: 0,
-              ignoreElements: (el) => false
+              backgroundColor: themeBgColor,
+              scale: 2, 
+              logging: false
             });
 
-            if (clone.parentNode) {
-              clone.parentNode.removeChild(clone);
-            }
+            chatMain.removeChild(renderWrapper);
 
-            const dataUrl = canvas.toDataURL('image/png');
-
-            const byteString = atob(dataUrl.split(',')[1]);
+            // 导出与保存
+            const finalDataUrl = finalCanvas.toDataURL('image/png');
+            const byteString = atob(finalDataUrl.split(',')[1]);
             const ab = new ArrayBuffer(byteString.length);
             const ia = new Uint8Array(ab);
             for (let i = 0; i < byteString.length; i++) {
@@ -2434,6 +2497,9 @@ const saveSessionAsImage = async () => {
               console.error('保存图片失败:', error);
               showDismissibleMessage.error(`保存失败: ${error.message}`);
             }
+            // 出错时清理残留节点
+            const orphans = document.querySelectorAll('div[style*="z-index: -9999"]');
+            orphans.forEach(el => el.remove());
             done();
           } finally { instance.confirmButtonLoading = false; }
         } else { done(); }
