@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, reactive, onMounted, computed, inject } from 'vue'
-import { Plus, Delete, Document, Collection, Search, InfoFilled, Refresh, Clock, Setting as SettingIcon, List } from '@element-plus/icons-vue';
+import { Plus, Delete, Document, Collection, Search, InfoFilled, Refresh, Clock, Setting as SettingIcon, List, VideoPlay } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
@@ -151,6 +151,7 @@ function handleAddTask() {
             triggerType: 'interval',
             intervalMinutes: 60,
             intervalStartTime: '00:00',
+            intervalTimeRanges: [],
             dailyTime: '12:00',
             weeklyDays: [1, 2, 3, 4, 5],
             weeklyTime: '12:00',
@@ -267,6 +268,15 @@ async function saveTaskSetting(key, value) {
     });
 }
 
+async function runTaskNow() {
+    if (!activeTaskId.value) return;
+    try {
+        await window.api.runTaskNow(activeTaskId.value);
+    } catch (error) {
+        console.error(error);
+    }
+}
+
 const formatTime = (ts) => {
     if (!ts) return t('tasks.neverExecuted');
     return new Date(ts).toLocaleString('zh-CN'); // 日期时间格式建议保留本地化
@@ -314,7 +324,6 @@ const formatTime = (ts) => {
 
                             <!-- 顶部标题区 -->
                             <div class="task-header">
-                                <!-- 修改点：输入框自适应靠左，按钮紧随其后 -->
                                 <div class="task-title-actions">
                                     <el-input v-model="selectedTask.name"
                                         @change="(val) => saveTaskSetting('name', val)" class="task-title-input" />
@@ -322,8 +331,13 @@ const formatTime = (ts) => {
                                         @click="deleteTask" :title="t('tasks.deleteTaskTooltip')"
                                         style="margin-left: 12px;" />
                                 </div>
-                                <!-- 修改点：开关推到右侧 -->
                                 <div class="task-header-controls">
+                                    <el-tooltip :content="t('tasks.testTaskTooltip')" placement="top">
+                                        <el-icon class="test-run-btn" @click="runTaskNow">
+                                            <VideoPlay />
+                                        </el-icon>
+                                    </el-tooltip>
+
                                     <span class="control-label">{{ t('tasks.enableTaskLabel') }}</span>
                                     <el-switch v-model="selectedTask.enabled"
                                         @change="(val) => saveTaskSetting('enabled', val)" size="large" />
@@ -370,6 +384,29 @@ const formatTime = (ts) => {
                                                             @change="(val) => saveTaskSetting('intervalStartTime', val)"
                                                             style="width: 100%;"
                                                             :placeholder="t('tasks.intervalStartTimePlaceholder')" />
+                                                    </el-form-item>
+                                                </el-col>
+                                                <el-col :span="24" style="margin-top: 10px;">
+                                                    <el-form-item :label="t('tasks.intervalTimeRangesLabel')">
+                                                        <div v-for="(range, index) in selectedTask.intervalTimeRanges"
+                                                            :key="index"
+                                                            style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center; width: 100%;">
+                                                            <el-time-picker
+                                                                v-model="selectedTask.intervalTimeRanges[index]"
+                                                                is-range
+                                                                :range-separator="t('tasks.timeRangeSeparator')"
+                                                                :start-placeholder="t('tasks.timeRangeStart')"
+                                                                :end-placeholder="t('tasks.timeRangeEnd')"
+                                                                format="HH:mm" value-format="HH:mm" style="flex: 1;"
+                                                                @change="(val) => { if (!val) selectedTask.intervalTimeRanges.splice(index, 1); saveTaskSetting('intervalTimeRanges', selectedTask.intervalTimeRanges) }" />
+                                                            <el-button type="danger" :icon="Delete" circle plain
+                                                                size="small"
+                                                                @click="() => { selectedTask.intervalTimeRanges.splice(index, 1); saveTaskSetting('intervalTimeRanges', selectedTask.intervalTimeRanges) }" />
+                                                        </div>
+                                                        <el-button size="small" :icon="Plus" plain
+                                                            @click="() => { if (!selectedTask.intervalTimeRanges) selectedTask.intervalTimeRanges = []; selectedTask.intervalTimeRanges.push(['09:00', '18:00']); saveTaskSetting('intervalTimeRanges', selectedTask.intervalTimeRanges) }">
+                                                            {{ t('tasks.addTimeRange') }}
+                                                        </el-button>
                                                     </el-form-item>
                                                 </el-col>
                                             </template>
@@ -547,7 +584,7 @@ const formatTime = (ts) => {
                                                 }}</el-button>
                                             <el-button size="small" type="danger" plain :icon="Delete"
                                                 @click="clearTaskHistory">{{
-                                                t('tasks.clearHistoryBtn') }}</el-button>
+                                                    t('tasks.clearHistoryBtn') }}</el-button>
                                         </div>
 
                                     </div>
@@ -555,7 +592,7 @@ const formatTime = (ts) => {
                                         <div class="history-list">
                                             <div v-if="!selectedTask.history || selectedTask.history.length === 0"
                                                 class="no-history">{{
-                                                t('tasks.noExecutionHistory') }}</div>
+                                                    t('tasks.noExecutionHistory') }}</div>
                                             <div v-else class="history-item"
                                                 v-for="(log, i) in selectedTask.history.slice(0, 8)" :key="i">
                                                 <span class="log-time">{{ formatTime(log.time) }}</span>
@@ -563,7 +600,7 @@ const formatTime = (ts) => {
                                                     :type="log.status === 'success' ? 'success' : 'danger'"
                                                     class="log-status">{{
                                                         log.status === 'success' ? t('tasks.statusSuccess') :
-                                                    t('tasks.statusFail') }}</el-tag>
+                                                            t('tasks.statusFail') }}</el-tag>
                                                 <span class="log-file" :title="log.file">
                                                     <el-icon style="margin-right: 4px; vertical-align: middle;">
                                                         <Document />
@@ -990,5 +1027,23 @@ html.dark .task-textarea-scrollbar :deep(.el-scrollbar__thumb) {
 html.dark .task-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
     background-color: var(--text-secondary);
     opacity: 0.8;
+}
+
+/* 立即运行测试按钮样式 */
+.test-run-btn {
+    font-size: 28px;
+    color: var(--el-color-success);
+    cursor: pointer;
+    margin-right: 10px;
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.5, 1);
+}
+
+.test-run-btn:hover {
+    transform: scale(1.15);
+    filter: brightness(1.1);
+}
+
+.test-run-btn:active {
+    transform: scale(0.95);
 }
 </style>

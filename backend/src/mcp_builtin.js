@@ -4,7 +4,7 @@ const os = require('os');
 const { exec, spawn } = require('child_process');
 const { handleFilePath, parseFileObject } = require('./file.js');
 
-const { createChatCompletion } = require('./chat.js'); 
+const { createChatCompletion } = require('./chat.js');
 
 const isWin = process.platform === 'win32';
 const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform === 'darwin' ? 'macOS' : 'Linux');
@@ -67,7 +67,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
                 }
             }
         }
-    } catch (e) {}
+    } catch (e) { }
 
     // --- 1. 常规 DOM 容器提取 ---
     const cookedMatch = text.match(/<div[^>]*class=["'][^"']*cooked[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
@@ -90,7 +90,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
     // --- 代码块保护机制 ---
     // 在移除 HTML 标签前，先提取代码块并用占位符替换，防止代码块内的 <tag> 被误删
     const codeBlockPlaceholders = [];
-    
+
     // 处理 <pre><code>...</code></pre>
     text = text.replace(/<pre[^>]*>[\s\S]*?<code[^>]*>([\s\S]*?)<\/code>[\s\S]*?<\/pre>/gi, (match, code) => {
         // 解码 HTML 实体，还原 <meta-directives> 等内容
@@ -100,7 +100,7 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
             .replace(/&amp;/g, '&')
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'");
-        
+
         const placeholder = `___CODE_BLOCK_${codeBlockPlaceholders.length}___`;
         codeBlockPlaceholders.push(`\n\`\`\`\n${decodedCode}\n\`\`\`\n`);
         return placeholder;
@@ -394,10 +394,10 @@ Note: Long-running commands will be terminated after timeout.`,
             inputSchema: {
                 type: "object",
                 properties: {
-                    command: { 
-                        type: "string", 
+                    command: {
+                        type: "string",
                         // 在参数描述中再次强调环境
-                        description: `The command to execute. Ensure syntax matches ${isWin ? 'PowerShell' : 'Bash'}.` 
+                        description: `The command to execute. Ensure syntax matches ${isWin ? 'PowerShell' : 'Bash'}.`
                     },
                     timeout: {
                         type: "integer",
@@ -478,8 +478,13 @@ Note: Long-running commands will be terminated after timeout.`,
         },
         {
             name: "list_tasks",
-            description: "List all scheduled tasks with their status, schedule, and agent details.",
-            inputSchema: { type: "object", properties: {} }
+            description: "List scheduled tasks. By default, it returns a summary (ID and Name). If 'task_name_or_id' is provided, it returns full details for that specific task.",
+            inputSchema: { 
+                type: "object", 
+                properties: {
+                    task_name_or_id: { type: "string", description: "Optional. Provide a Task ID or Name to view detailed configuration (including schedule, instructions, etc.)." }
+                } 
+            }
         },
         {
             name: "create_task",
@@ -488,13 +493,18 @@ Note: Long-running commands will be terminated after timeout.`,
                 type: "object",
                 properties: {
                     name: { type: "string", description: "Unique name for the task." },
-                    instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
+                    instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers." },
                     agent_name: { type: "string", description: "Optional. Name of the Quick Prompt to use. Defaults to '__DEFAULT__'." },
                     schedule_type: { 
                         type: "string", enum: ["interval", "daily"], 
                         description: "Type of schedule. 'interval' for recurring every X mins, 'daily' for fixed time." 
                     },
                     time_param: { type: "string", description: "For 'interval': number of minutes. For 'daily': HH:mm format." },
+                    interval_time_ranges: { 
+                        type: "array", 
+                        items: { type: "string" }, 
+                        description: "Optional. Active time ranges for 'interval' schedule only. Format: ['HH:mm-HH:mm']. E.g., ['09:00-12:00', '14:30-17:30']. If omitted, runs 24h." 
+                    },
                     enabled: { type: "boolean", description: "Enable immediately. Defaults to true.", default: true }
                 },
                 required: ["name", "instruction", "schedule_type", "time_param"]
@@ -508,10 +518,15 @@ Note: Long-running commands will be terminated after timeout.`,
                 properties: {
                     task_name_or_id: { type: "string" },
                     new_name: { type: "string" },
-                    instruction: { type: "string",description: "Optional. New prompt content. Provide a highly detailed, self-contained instruction for autonomous execution (explicitly stating tools to use, goals, and output formats)." },
-                    agent_name: { type: "string", description: "Use '__DEFAULT__' for the global default agent." },
+                    instruction: { type: "string" },
+                    agent_name: { type: "string" },
                     schedule_type: { type: "string", enum: ["interval", "daily"] },
-                    time_param: { type: "string" }
+                    time_param: { type: "string" },
+                    interval_time_ranges: { 
+                        type: "array", 
+                        items: { type: "string" }, 
+                        description: "Optional. New time ranges array. Pass empty array [] to clear restrictions."
+                    }
                 },
                 required: ["task_name_or_id"]
             }
@@ -779,7 +794,7 @@ async function runSubAgent(args, globalContext, signal) {
     }
 
     // --- 2. 步骤控制 ---
-    let MAX_STEPS = 20; 
+    let MAX_STEPS = 20;
     if (planning_level === 'fast') MAX_STEPS = 10;
     else if (planning_level === 'high') MAX_STEPS = 30;
     else if (planning_level === 'custom' && custom_steps) MAX_STEPS = Math.min(100, Math.max(10, custom_steps));
@@ -978,8 +993,8 @@ ${userContext || 'No additional context provided.'}
 
         let summaryContent = "";
         if (currentApiType === 'responses' && summaryResponse.output) {
-             const textItems = summaryResponse.output.filter(item => item.type === 'message');
-             textItems.forEach(item => {
+            const textItems = summaryResponse.output.filter(item => item.type === 'message');
+            textItems.forEach(item => {
                 if (item.content) {
                     item.content.forEach(c => {
                         if (c.type === 'output_text') summaryContent += c.text;
@@ -1070,7 +1085,7 @@ const handlers = {
             }
 
             let rootDir = resolvePath(searchPath);
-            
+
             const parsed = path.parse(rootDir);
             if (parsed.root === rootDir && rootDir.length <= 3) {
                 // Windows: C:\, Linux/Mac: /
@@ -1162,7 +1177,7 @@ const handlers = {
 
             const results = [];
             let matchCount = 0;
-            const MAX_SCANNED = 5000; 
+            const MAX_SCANNED = 5000;
             const MAX_RESULTS_LINES = 1000; // 强制防线3：限制最大返回结果数，防止 Token 爆炸
             let scanned = 0;
 
@@ -1186,7 +1201,7 @@ const handlers = {
 
                 try {
                     const stats = await fs.promises.stat(filePath);
-                    if (stats.size > 1024 * 1024) continue; 
+                    if (stats.size > 1024 * 1024) continue;
 
                     const content = await fs.promises.readFile(filePath, { encoding: 'utf-8', signal });
 
@@ -1208,20 +1223,20 @@ const handlers = {
 
                                 const offset = m.index;
                                 const lineNum = content.substring(0, offset).split(/\r?\n/).length;
-                                
+
                                 let previewText = m[0].replace(/\r?\n/g, ' ').trim();
                                 if (previewText.length > 150) {
                                     previewText = previewText.substring(0, 150) + '...';
                                 } else if (previewText.length < 10) {
                                     previewText = lines[lineNum - 1].trim().substring(0, 150);
                                 }
-                                
+
                                 results.push(`${filePath}:${lineNum}: ${previewText}`);
                             }
                         }
                     }
                 } catch (readErr) { /* ignore */ }
-                
+
                 // 文件级熔断退出
                 if (output_mode !== 'count' && results.length >= MAX_RESULTS_LINES) {
                     results.push(`\n[System Warning] Output truncated. Reached maximum of ${MAX_RESULTS_LINES} result lines. Please use a more specific pattern.`);
@@ -1465,7 +1480,7 @@ const handlers = {
 
             if (line_number !== undefined && line_number !== null) {
                 const lines = fileContent.split(/\r?\n/);
-                const targetIndex = parseInt(line_number) - 1; 
+                const targetIndex = parseInt(line_number) - 1;
 
                 if (isNaN(targetIndex) || targetIndex < 0 || targetIndex > lines.length) {
                     return `Error: Line number ${line_number} is out of bounds (File has ${lines.length} lines).`;
@@ -1578,7 +1593,7 @@ const handlers = {
                 // 解码辅助函数：增强版，支持 Windows GBK 回退
                 const decodeBuffer = (buf) => {
                     if (!buf || buf.length === 0) return "";
-                    
+
                     // 1. 尝试 UTF-8
                     const utf8Decoder = new TextDecoder('utf-8', { fatal: false });
                     const utf8Str = utf8Decoder.decode(buf);
@@ -1802,28 +1817,60 @@ const handlers = {
         return `Available Agents:\n${agentStr}`;
     },
 
-    list_tasks: async () => {
+    list_tasks: async ({ task_name_or_id }) => {
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
         const tasks = configData.config.tasks || {};
         
         if (Object.keys(tasks).length === 0) return "No tasks found.";
 
-        const taskList = Object.entries(tasks).map(([id, task]) => {
-            let scheduleInfo = "";
-            if (task.triggerType === 'interval') scheduleInfo = `Every ${task.intervalMinutes} mins`;
-            else if (task.triggerType === 'daily') scheduleInfo = `Daily at ${task.dailyTime}`;
-            else if (task.triggerType === 'weekly') scheduleInfo = `Weekly at ${task.weeklyTime}`;
-            else if (task.triggerType === 'monthly') scheduleInfo = `Monthly on day ${task.monthlyDay} at ${task.monthlyTime}`;
+        // 1. 如果指定了 ID 或名称，返回详细信息
+        if (task_name_or_id) {
+            let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+            if (!targetId) {
+                const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+                if (entry) targetId = entry[0];
+            }
 
-            return `- [${task.enabled ? 'ENABLED' : 'DISABLED'}] Name: "${task.name}" (ID: ${id})\n  Agent: ${task.promptKey}\n  Schedule: ${scheduleInfo}\n  Instruction: ${task.description.substring(0, 50)}${task.description.length > 50 ? '...' : ''}`;
+            if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+            
+            const task = tasks[targetId];
+            let details = `### Task Details\n`;
+            details += `- ID: ${targetId}\n`;
+            details += `- Name: ${task.name}\n`;
+            details += `- Enabled: ${task.enabled}\n`;
+            details += `- Agent: ${task.promptKey}\n`;
+            details += `- Schedule Type: ${task.triggerType}\n`;
+            
+            if (task.triggerType === 'interval') {
+                details += `- Interval: Every ${task.intervalMinutes} mins\n`;
+                if (task.intervalStartTime) details += `- Daily Start Check: ${task.intervalStartTime}\n`;
+                if (task.intervalTimeRanges && task.intervalTimeRanges.length > 0) {
+                    const rangesStr = task.intervalTimeRanges.map(r => r.join('-')).join(', ');
+                    details += `- Active Ranges: [${rangesStr}]\n`;
+                } else {
+                    details += `- Active Ranges: All Day (24h)\n`;
+                }
+            } else if (task.triggerType === 'daily') {
+                details += `- Daily Time: ${task.dailyTime}\n`;
+            } else if (task.triggerType === 'weekly') {
+                details += `- Weekly Time: ${task.weeklyTime} on days [${task.weeklyDays.join(',')}]\n`;
+            }
+            
+            details += `\n**Instruction:**\n${task.description}`;
+            return details;
+        }
+
+        // 2. 默认返回摘要列表
+        const taskList = Object.entries(tasks).map(([id, task]) => {
+            return `- [${task.enabled ? 'ON' : 'OFF'}] ${task.name} (ID: ${id})`;
         });
 
-        return "Current Scheduled Tasks:\n" + taskList.join('\n\n');
+        return "Current Tasks (Summary):\n" + taskList.join('\n') + "\n\n(Tip: Use 'task_name_or_id' argument to see full details of a specific task)";
     },
 
-    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true }) => {
-        const unlock = await acquireLock('config_tasks'); // 加锁
+    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, interval_time_ranges }) => {
+        const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
             const configData = await getConfig();
@@ -1850,11 +1897,17 @@ const handlers = {
                 promptKey: targetPromptKey,
                 triggerType: schedule_type === 'daily' ? 'daily' : 'interval',
                 enabled: enabled,
-                intervalMinutes: 60, intervalStartTime: '00:00', dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyTime: '12:00',
+                intervalMinutes: 60, intervalStartTime: '00:00', 
+                intervalTimeRanges: [], // 初始化为空
+                dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyTime: '12:00',
                 extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
-                // 【修复Bug】：新建任务时如果是启用状态，立即打上时间戳
                 lastRunTime: enabled ? Date.now() : 0
             };
+
+            // 解析时间段参数
+            if (interval_time_ranges && Array.isArray(interval_time_ranges)) {
+                newTask.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
+            }
 
             if (configData.config.mcpServers) {
                 newTask.extraMcp = Object.entries(configData.config.mcpServers).filter(([_, s]) => s.type === 'builtin').map(([id]) => id);
@@ -1875,12 +1928,12 @@ const handlers = {
 
             return `Task "${name}" created successfully.`;
         } finally {
-            unlock(); // 释放锁
+            unlock();
         }
     },
 
-    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param }) => {
-        const unlock = await acquireLock('config_tasks'); // 加锁
+    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, interval_time_ranges }) => {
+        const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
             const configData = await getConfig();
@@ -1920,6 +1973,15 @@ const handlers = {
             let timeChanged = false;
             if (schedule_type) { task.triggerType = schedule_type; timeChanged = true; }
 
+            // 解析时间段修改
+            if (interval_time_ranges !== undefined) {
+                if (Array.isArray(interval_time_ranges)) {
+                    task.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
+                } else {
+                    task.intervalTimeRanges = []; // 传入非数组（如null）时清空
+                }
+            }
+
             if (time_param) {
                 const currentType = schedule_type || task.triggerType;
                 if (currentType === 'daily') {
@@ -1932,7 +1994,6 @@ const handlers = {
                 }
             }
 
-            // 【修复Bug】如果AI修改了正在运行任务的时间规则，必须重置 lastRunTime
             if (timeChanged && task.enabled) {
                 task.lastRunTime = Date.now();
             }
@@ -1940,9 +2001,9 @@ const handlers = {
             configData.config.tasks = tasks;
             await updateConfigWithoutFeatures({ config: configData.config });
 
-            return `Task updated successfully.\nCurrent State:\n- Name: ${task.name}\n- Agent: ${task.promptKey}\n- Type: ${task.triggerType}`;
+            return `Task updated successfully.`;
         } finally {
-            unlock(); // 释放锁
+            unlock();
         }
     },
 
@@ -1963,10 +2024,10 @@ const handlers = {
             if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
 
             tasks[targetId].enabled = enable;
-            
+
             // Reset last run time if enabling, so it doesn't trigger immediately if missed
             if (enable) {
-                tasks[targetId].lastRunTime = Date.now(); 
+                tasks[targetId].lastRunTime = Date.now();
             }
 
             await updateConfigWithoutFeatures({ config: configData.config });

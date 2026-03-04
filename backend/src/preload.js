@@ -252,6 +252,44 @@ window.api = {
     const { addTaskHistory } = require('./data.js');
     return await addTaskHistory(taskId, logEntry);
   },
+  runTaskNow: async (taskId) => {
+    const { getConfig, openWindow } = require('./data.js');
+    const configResult = await getConfig();
+    const tasks = configResult.config.tasks || {};
+    const task = tasks[taskId];
+    if (!task) return false;
+
+    const windowConfig = JSON.parse(JSON.stringify(configResult.config));
+    
+    // 处理默认助手的临时配置构造
+    if (task.promptKey === '__DEFAULT__') {
+        if (!windowConfig.prompts) windowConfig.prompts = {};
+        windowConfig.prompts['__DEFAULT__'] = {
+            type: "general",
+            prompt: "", 
+            showMode: "window",
+            model: windowConfig.defaultTaskModel || "", 
+            stream: true, 
+            isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
+            autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
+            window_width: 580,
+            window_height: 740,
+            icon: "" 
+        };
+    }
+
+    const msg = {
+      os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+      code: task.promptKey,
+      type: "task",
+      payload: task.description,
+      taskConfig: { id: taskId, ...task },
+      tempPromptConfig: task.promptKey === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
+    };
+    
+    await openWindow(windowConfig, msg);
+    return true;
+  },
 };
 
 const commandHandlers = {
@@ -545,6 +583,21 @@ setInterval(async () => {
           if (now >= todayTrigger.getTime() && lastRun < todayTrigger.getTime()) {
             shouldTrigger = true;
           }
+        }
+      }
+
+      if (shouldTrigger && task.triggerType === 'interval' && task.intervalTimeRanges && task.intervalTimeRanges.length > 0) {
+        const nowHhMm = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`;
+        const isWithinRange = task.intervalTimeRanges.some(range => {
+            if (Array.isArray(range) && range.length === 2) {
+                return nowHhMm >= range[0] && nowHhMm <= range[1];
+            }
+            return false;
+        });
+        
+        // 如果当前时间不在任何一个设定的时间段内，否决触发
+        if (!isWithinRange) {
+            shouldTrigger = false;
         }
       }
 
