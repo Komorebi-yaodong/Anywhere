@@ -1909,7 +1909,7 @@ const handlers = {
             }
         }
 
-        let timeChanged = false; // 【修复Bug】增加标记
+        let timeChanged = false;
         if (schedule_type) { task.triggerType = schedule_type; timeChanged = true; }
 
         if (time_param) {

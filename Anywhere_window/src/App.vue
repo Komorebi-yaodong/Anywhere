@@ -1267,7 +1267,10 @@ onMounted(async () => {
         }
 
         // 将任务内容直接作为用户的输入，压入历史记录，而不是放到输入框
-        history.value.push({ role: "user", content: data.payload });
+        const system_time = new Date().toLocaleString('sv-SE');
+        const pre_prompt = `## Scheduled Task\n\n**system_time**:${system_time}\n\n`;
+        const suffix_prompt = "\n\nScheduled task triggered! This is a task that you need to execute autonomously without human intervention. Please execute immediately and provide correct feedback.";
+        history.value.push({ role: "user", content: pre_prompt+data.payload+suffix_prompt });
         chat_show.value.push({
           id: messageIdCounter.value++,
           role: "user",

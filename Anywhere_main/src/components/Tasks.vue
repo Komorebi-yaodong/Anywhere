@@ -16,7 +16,7 @@ const availablePrompts = computed(() => {
         .filter(([key, p]) => p.showMode === 'window')
         .map(([key, p]) => ({ label: key, value: key }))
         .sort((a, b) => a.label.localeCompare(b.label));
-    
+
     return [{ label: t('tasks.defaultPromptLabel'), value: '__DEFAULT__' }, ...prompts];
 });
 
@@ -235,8 +235,8 @@ async function clearTaskHistory() {
             currentConfig.value.tasks[activeTaskId.value].history = [];
         }
 
-        const msg = deleteCount > 0 
-            ? t('tasks.historyClearedWithFiles', { count: deleteCount }) 
+        const msg = deleteCount > 0
+            ? t('tasks.historyClearedWithFiles', { count: deleteCount })
             : t('tasks.historyCleared');
         ElMessage.success(msg);
     } catch (e) {
@@ -257,7 +257,7 @@ async function saveTaskSetting(key, value) {
             currentConfig.value.tasks[activeTaskId.value].lastRunTime = Date.now();
         }
     }
-    
+
     atomicSave(config => {
         config.tasks[activeTaskId.value][key] = value;
         // 同步保存到数据库
@@ -280,26 +280,29 @@ const formatTime = (ts) => {
                 <!-- 左侧任务列表 -->
                 <el-aside width="240px" class="tasks-aside">
                     <div class="search-container" style="padding: 10px;">
-                        <el-input v-model="searchQuery" :placeholder="t('tasks.searchPlaceholder')" :prefix-icon="Search" clearable
-                            size="small" />
+                        <el-input v-model="searchQuery" :placeholder="t('tasks.searchPlaceholder')"
+                            :prefix-icon="Search" clearable size="small" />
                     </div>
                     <el-scrollbar class="task-list-scrollbar">
                         <div v-for="task in filteredTasks" :key="task.id" class="task-item"
                             :class="{ 'active': activeTaskId === task.id, 'disabled': !task.enabled }"
                             @click="activeTaskId = task.id">
                             <span class="task-item-name">{{ task.name }}</span>
-                            <el-tag v-if="!task.enabled" type="info" size="small" effect="dark" round>{{ t('tasks.statusDisabled') }}</el-tag>
+                            <el-tag v-if="!task.enabled" type="info" size="small" effect="dark" round>{{
+                                t('tasks.statusDisabled') }}</el-tag>
                         </div>
                         <div v-if="filteredTasks.length === 0" class="no-tasks">
                             {{ t('tasks.noTasks') }}
                         </div>
                     </el-scrollbar>
                     <div class="aside-actions" style="display: flex; gap: 8px;">
-                        <el-button type="primary" :icon="Plus" @click="showAddDialog = true" class="add-task-btn" style="flex: 1; margin: 0;">
+                        <el-button type="primary" :icon="Plus" @click="showAddDialog = true" class="add-task-btn"
+                            style="flex: 1; margin: 0;">
                             {{ t('tasks.addBtn') }}
                         </el-button>
                         <el-tooltip :content="t('tasks.globalSettingsTooltip')" placement="top">
-                            <el-button :icon="SettingIcon" @click="showGlobalSettingDialog = true" style="margin: 0; padding: 8px 12px; border-radius: 6px;" />
+                            <el-button :icon="SettingIcon" @click="showGlobalSettingDialog = true"
+                                style="margin: 0; padding: 8px 12px; border-radius: 6px;" />
                         </el-tooltip>
                     </div>
                 </el-aside>
@@ -316,7 +319,8 @@ const formatTime = (ts) => {
                                     <el-input v-model="selectedTask.name"
                                         @change="(val) => saveTaskSetting('name', val)" class="task-title-input" />
                                     <el-button type="danger" :icon="Delete" circle plain size="small"
-                                        @click="deleteTask" :title="t('tasks.deleteTaskTooltip')" style="margin-left: 12px;" />
+                                        @click="deleteTask" :title="t('tasks.deleteTaskTooltip')"
+                                        style="margin-left: 12px;" />
                                 </div>
                                 <!-- 修改点：开关推到右侧 -->
                                 <div class="task-header-controls">
@@ -340,10 +344,14 @@ const formatTime = (ts) => {
                                             <el-col :span="24" style="margin-bottom: 15px;">
                                                 <el-radio-group v-model="selectedTask.triggerType"
                                                     @change="(val) => saveTaskSetting('triggerType', val)">
-                                                    <el-radio-button value="interval">{{ t('tasks.triggerInterval') }}</el-radio-button>
-                                                    <el-radio-button value="daily">{{ t('tasks.triggerDaily') }}</el-radio-button>
-                                                    <el-radio-button value="weekly">{{ t('tasks.triggerWeekly') }}</el-radio-button>
-                                                    <el-radio-button value="monthly">{{ t('tasks.triggerMonthly') }}</el-radio-button>
+                                                    <el-radio-button value="interval">{{ t('tasks.triggerInterval')
+                                                        }}</el-radio-button>
+                                                    <el-radio-button value="daily">{{ t('tasks.triggerDaily')
+                                                        }}</el-radio-button>
+                                                    <el-radio-button value="weekly">{{ t('tasks.triggerWeekly')
+                                                        }}</el-radio-button>
+                                                    <el-radio-button value="monthly">{{ t('tasks.triggerMonthly')
+                                                        }}</el-radio-button>
                                                 </el-radio-group>
                                             </el-col>
 
@@ -360,7 +368,8 @@ const formatTime = (ts) => {
                                                         <el-time-picker v-model="selectedTask.intervalStartTime"
                                                             format="HH:mm" value-format="HH:mm"
                                                             @change="(val) => saveTaskSetting('intervalStartTime', val)"
-                                                            style="width: 100%;" :placeholder="t('tasks.intervalStartTimePlaceholder')" />
+                                                            style="width: 100%;"
+                                                            :placeholder="t('tasks.intervalStartTimePlaceholder')" />
                                                     </el-form-item>
                                                 </el-col>
                                             </template>
@@ -378,17 +387,25 @@ const formatTime = (ts) => {
 
                                             <template v-if="selectedTask.triggerType === 'weekly'">
                                                 <el-col :span="24">
-                                                    <el-form-item :label="t('tasks.weeklySettingsLabel')" class="compact-form-item">
+                                                    <el-form-item :label="t('tasks.weeklySettingsLabel')"
+                                                        class="compact-form-item">
                                                         <el-checkbox-group v-model="selectedTask.weeklyDays"
                                                             @change="(val) => saveTaskSetting('weeklyDays', val)"
                                                             style="margin-bottom: 10px;">
-                                                            <el-checkbox-button :value="1">{{ t('tasks.weekdays.1') }}</el-checkbox-button>
-                                                            <el-checkbox-button :value="2">{{ t('tasks.weekdays.2') }}</el-checkbox-button>
-                                                            <el-checkbox-button :value="3">{{ t('tasks.weekdays.3') }}</el-checkbox-button>
-                                                            <el-checkbox-button :value="4">{{ t('tasks.weekdays.4') }}</el-checkbox-button>
-                                                            <el-checkbox-button :value="5">{{ t('tasks.weekdays.5') }}</el-checkbox-button>
-                                                            <el-checkbox-button :value="6">{{ t('tasks.weekdays.6') }}</el-checkbox-button>
-                                                            <el-checkbox-button :value="0">{{ t('tasks.weekdays.0') }}</el-checkbox-button>
+                                                            <el-checkbox-button :value="1">{{ t('tasks.weekdays.1')
+                                                                }}</el-checkbox-button>
+                                                            <el-checkbox-button :value="2">{{ t('tasks.weekdays.2')
+                                                                }}</el-checkbox-button>
+                                                            <el-checkbox-button :value="3">{{ t('tasks.weekdays.3')
+                                                                }}</el-checkbox-button>
+                                                            <el-checkbox-button :value="4">{{ t('tasks.weekdays.4')
+                                                                }}</el-checkbox-button>
+                                                            <el-checkbox-button :value="5">{{ t('tasks.weekdays.5')
+                                                                }}</el-checkbox-button>
+                                                            <el-checkbox-button :value="6">{{ t('tasks.weekdays.6')
+                                                                }}</el-checkbox-button>
+                                                            <el-checkbox-button :value="0">{{ t('tasks.weekdays.0')
+                                                                }}</el-checkbox-button>
                                                         </el-checkbox-group>
                                                     </el-form-item>
                                                 </el-col>
@@ -445,7 +462,8 @@ const formatTime = (ts) => {
                                                     :label="item.label" :value="item.value" />
                                             </el-select>
                                         </el-form-item>
-                                        <el-form-item :label="t('tasks.promptContentLabel')" class="task-desc-form-item">
+                                        <el-form-item :label="t('tasks.promptContentLabel')"
+                                            class="task-desc-form-item">
                                             <el-scrollbar max-height="220px" class="task-textarea-scrollbar">
                                                 <el-input v-model="selectedTask.description" type="textarea"
                                                     :autosize="{ minRows: 4 }" resize="none"
@@ -469,8 +487,10 @@ const formatTime = (ts) => {
                                             <el-col :span="12">
                                                 <el-form-item :label="t('tasks.overrideMcpLabel')">
                                                     <el-select v-model="selectedTask.extraMcp" multiple filterable
+                                                        clearable :reserve-keyword="false"
                                                         @change="(val) => saveTaskSetting('extraMcp', val)"
-                                                        style="width: 100%;" :placeholder="t('tasks.overrideMcpPlaceholder')">
+                                                        style="width: 100%;"
+                                                        :placeholder="t('tasks.overrideMcpPlaceholder')">
                                                         <el-option v-for="mcp in availableMcpServers" :key="mcp.value"
                                                             :label="mcp.label" :value="mcp.value" />
                                                     </el-select>
@@ -479,8 +499,10 @@ const formatTime = (ts) => {
                                             <el-col :span="12">
                                                 <el-form-item :label="t('tasks.overrideSkillsLabel')">
                                                     <el-select v-model="selectedTask.extraSkills" multiple filterable
+                                                        clearable :reserve-keyword="false"
                                                         @change="(val) => saveTaskSetting('extraSkills', val)"
-                                                        style="width: 100%;" :placeholder="t('tasks.overrideSkillsPlaceholder')">
+                                                        style="width: 100%;"
+                                                        :placeholder="t('tasks.overrideSkillsPlaceholder')">
                                                         <el-option v-for="skill in availableSkills" :key="skill.name"
                                                             :label="skill.name" :value="skill.name" />
                                                     </el-select>
@@ -520,24 +542,28 @@ const formatTime = (ts) => {
 
                                         <!-- 修改点：添加了并排的刷新与清空按钮 -->
                                         <div style="display: flex; gap: 10px;">
-                                            <el-button size="small" :icon="Refresh"
-                                                @click="refreshTasksConfig">{{ t('tasks.refreshHistoryBtn') }}</el-button>
+                                            <el-button size="small" :icon="Refresh" @click="refreshTasksConfig">{{
+                                                t('tasks.refreshHistoryBtn')
+                                                }}</el-button>
                                             <el-button size="small" type="danger" plain :icon="Delete"
-                                                @click="clearTaskHistory">{{ t('tasks.clearHistoryBtn') }}</el-button>
+                                                @click="clearTaskHistory">{{
+                                                t('tasks.clearHistoryBtn') }}</el-button>
                                         </div>
 
                                     </div>
                                     <div class="task-card-body" style="padding-top: 10px;">
                                         <div class="history-list">
                                             <div v-if="!selectedTask.history || selectedTask.history.length === 0"
-                                                class="no-history">{{ t('tasks.noExecutionHistory') }}</div>
+                                                class="no-history">{{
+                                                t('tasks.noExecutionHistory') }}</div>
                                             <div v-else class="history-item"
                                                 v-for="(log, i) in selectedTask.history.slice(0, 8)" :key="i">
                                                 <span class="log-time">{{ formatTime(log.time) }}</span>
                                                 <el-tag size="small"
                                                     :type="log.status === 'success' ? 'success' : 'danger'"
                                                     class="log-status">{{
-                                                        log.status === 'success' ? t('tasks.statusSuccess') : t('tasks.statusFail') }}</el-tag>
+                                                        log.status === 'success' ? t('tasks.statusSuccess') :
+                                                    t('tasks.statusFail') }}</el-tag>
                                                 <span class="log-file" :title="log.file">
                                                     <el-icon style="margin-right: 4px; vertical-align: middle;">
                                                         <Document />
@@ -561,10 +587,12 @@ const formatTime = (ts) => {
         <el-button class="refresh-fab-button" :icon="Refresh" type="primary" circle @click="refreshTasksConfig"
             :title="t('tasks.refreshFabTitle')" />
 
-        <el-dialog v-model="showAddDialog" :title="t('tasks.addDialogTitle')" width="400px" :close-on-click-modal="false">
+        <el-dialog v-model="showAddDialog" :title="t('tasks.addDialogTitle')" width="400px"
+            :close-on-click-modal="false">
             <el-form :model="addTaskForm" @submit.prevent="handleAddTask">
                 <el-form-item :label="t('tasks.addDialogNameLabel')" required>
-                    <el-input v-model="addTaskForm.name" :placeholder="t('tasks.addDialogNamePlaceholder')" @keyup.enter="handleAddTask" />
+                    <el-input v-model="addTaskForm.name" :placeholder="t('tasks.addDialogNamePlaceholder')"
+                        @keyup.enter="handleAddTask" />
                 </el-form-item>
             </el-form>
             <template #footer>
@@ -574,15 +602,20 @@ const formatTime = (ts) => {
         </el-dialog>
 
         <!-- 默认助手设置弹窗 -->
-        <el-dialog v-model="showGlobalSettingDialog" :title="t('tasks.globalSettingsDialogTitle')" width="400px" :close-on-click-modal="false">
+        <el-dialog v-model="showGlobalSettingDialog" :title="t('tasks.globalSettingsDialogTitle')" width="400px"
+            :close-on-click-modal="false">
             <el-form label-position="top">
                 <el-form-item>
                     <template #label>
                         {{ t('tasks.executionModelLabel') }}
-                        <el-tooltip :content="t('tasks.executionModelTooltip')"><el-icon><InfoFilled /></el-icon></el-tooltip>
+                        <el-tooltip :content="t('tasks.executionModelTooltip')"><el-icon>
+                                <InfoFilled />
+                            </el-icon></el-tooltip>
                     </template>
-                    <el-select v-model="currentConfig.defaultTaskModel" filterable style="width: 100%;" @change="saveGlobalTaskModel">
-                        <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
+                    <el-select v-model="currentConfig.defaultTaskModel" filterable style="width: 100%;"
+                        @change="saveGlobalTaskModel">
+                        <el-option v-for="item in availableModels" :key="item.value" :label="item.label"
+                            :value="item.value" />
                     </el-select>
                 </el-form-item>
             </el-form>
@@ -905,27 +938,30 @@ const formatTime = (ts) => {
 html.dark .task-form :deep(.el-input__wrapper),
 html.dark .task-form :deep(.el-select__wrapper),
 html.dark .task-form :deep(.el-textarea__inner) {
-    background-color: var(--bg-secondary) !important; /* 使用更深的背景色产生层级感 */
+    background-color: var(--bg-secondary) !important;
+    /* 使用更深的背景色产生层级感 */
     box-shadow: 0 0 0 1px var(--border-primary) inset !important;
 }
 
 html.dark .task-form :deep(.el-input__wrapper.is-focus),
 html.dark .task-form :deep(.el-select__wrapper.is-focused),
 html.dark .task-form :deep(.el-textarea__inner:focus) {
-    box-shadow: 0 0 0 1px var(--text-primary) inset !important; /* 聚焦时高亮边框 */
+    box-shadow: 0 0 0 1px var(--text-primary) inset !important;
+    /* 聚焦时高亮边框 */
 }
 
 .task-textarea-scrollbar {
     width: 100%;
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-md);
-    background-color: var(--bg-primary); 
+    background-color: var(--bg-primary);
     transition: all 0.2s;
     box-sizing: border-box;
 }
 
 html.dark .task-textarea-scrollbar {
-    background-color: var(--bg-secondary); /* 深色模式使用更深的背景模拟下凹 */
+    background-color: var(--bg-secondary);
+    /* 深色模式使用更深的背景模拟下凹 */
 }
 
 .task-textarea-scrollbar:focus-within {
