@@ -44,7 +44,11 @@ const formatBytes = (bytes, decimals = 2) => {
 
 
 onMounted(() => {
-  selectedLanguage.value = locale.value;
+  if (['ja', 'ru'].includes(locale.value)) {
+    handleLanguageChange('zh');
+  } else {
+    selectedLanguage.value = locale.value;
+  }
 });
 
 // 新的、更精确的保存函数
@@ -576,8 +580,6 @@ async function selectLocalChatPath() {
             <el-select v-model="selectedLanguage" @change="handleLanguageChange" size="default" style="width: 120px;">
               <el-option :label="t('setting.language.chinese')" value="zh"></el-option>
               <el-option :label="t('setting.language.english')" value="en"></el-option>
-              <el-option :label="t('setting.language.japanese')" value="ja"></el-option>
-              <el-option :label="t('setting.language.russian')" value="ru"></el-option>
             </el-select>
           </div>
           <div class="setting-option-item">

@@ -317,4 +317,8 @@ window.api = {
     },
     // 暴露 path.join 
     pathJoin: (...args) => require('path').join(...args),
+    addTaskHistory: async (taskId, logEntry) => {
+        const { addTaskHistory } = require('./data.js');
+        return await addTaskHistory(taskId, logEntry);
+    },
 };

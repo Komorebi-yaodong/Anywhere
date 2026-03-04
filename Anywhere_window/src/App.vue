@@ -101,6 +101,7 @@ const modelMap = ref({});
 const model = ref("");
 const isAlwaysOnTop = ref(true);
 const currentOS = ref('win');
+const currentTaskConfig = ref(null);
 
 const currentProviderID = ref(defaultConfig.config.providerOrder[0]);
 const base_url = ref("");
@@ -391,17 +392,17 @@ const fetchSkillsList = async () => {
     try {
       const skills = await window.api.listSkills(path);
       allSkillsList.value = skills.filter(s => !s.disabled).sort((a, b) => a.name.localeCompare(b.name));
-      
+
       const validSkillNames = allSkillsList.value.map(s => s.name);
-      
+
       const validSessionSkills = sessionSkillIds.value.filter(name => validSkillNames.includes(name));
       if (validSessionSkills.length !== sessionSkillIds.value.length) {
-          sessionSkillIds.value = validSessionSkills;
+        sessionSkillIds.value = validSessionSkills;
       }
-      
+
       const validTempSkills = tempSessionSkillIds.value.filter(name => validSkillNames.includes(name));
       if (validTempSkills.length !== tempSessionSkillIds.value.length) {
-          tempSessionSkillIds.value = validTempSkills;
+        tempSessionSkillIds.value = validTempSkills;
       }
     } catch (e) {
       console.error("Fetch skills failed:", e);
@@ -1153,6 +1154,11 @@ onMounted(async () => {
     try {
       const configData = await window.api.getConfig();
       currentConfig.value = configData.config;
+
+      if (data?.tempPromptConfig && data?.code) {
+        if (!currentConfig.value.prompts) currentConfig.value.prompts = {};
+        currentConfig.value.prompts[data.code] = data.tempPromptConfig;
+      }
     } catch (err) {
       currentConfig.value = defaultConfig.config;
       showDismissibleMessage.error('加载用户配置失败，使用默认配置。');
@@ -1247,7 +1253,31 @@ onMounted(async () => {
     if (data) {
       basic_msg.value = { code: data.code, type: data.type, payload: data.payload };
       if (data.filename) defaultConversationName.value = data.filename.replace(/\.json$/i, '');
+      if (data.type === "task") {
+        currentTaskConfig.value = data.taskConfig;
 
+        // 覆盖 MCP 与 Skill 配置
+        if (data.taskConfig.extraMcp) {
+          sessionMcpServerIds.value = [...data.taskConfig.extraMcp];
+          tempSessionMcpServerIds.value = [...data.taskConfig.extraMcp];
+        }
+        if (data.taskConfig.extraSkills) {
+          sessionSkillIds.value = [...data.taskConfig.extraSkills];
+          tempSessionSkillIds.value = [...data.taskConfig.extraSkills];
+        }
+
+        // 将任务内容直接作为用户的输入，压入历史记录，而不是放到输入框
+        history.value.push({ role: "user", content: data.payload });
+        chat_show.value.push({
+          id: messageIdCounter.value++,
+          role: "user",
+          content: [{ type: "text", text: data.payload }],
+          timestamp: new Date().toLocaleString('sv-SE')
+        });
+
+        // 标记需要直接发送
+        shouldDirectSend = true;
+      }
       if (data.type === "over" && data.payload) {
         let sessionLoaded = false;
         try {
@@ -1304,26 +1334,26 @@ onMounted(async () => {
 
     if (!isSessionRestored) {
       const defaultMcpServers = currentPromptConfig.defaultMcpServers || [];
-      let mcpServersToLoad = [...defaultMcpServers];
 
-      // 如果存在 Skill，强制合并内置 MCP 服务
+      let mcpServersToLoad = [...new Set([...defaultMcpServers, ...sessionMcpServerIds.value])];
+
       if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
         const builtinIds = Object.entries(currentConfig.value.mcpServers)
           .filter(([, server]) => server.type === 'builtin')
           .map(([id]) => id);
-        // 去重合并
         mcpServersToLoad = [...new Set([...mcpServersToLoad, ...builtinIds])];
       }
 
       if (mcpServersToLoad.length > 0) {
-        // 过滤出有效的 ID
         const validIds = mcpServersToLoad.filter(id =>
           currentConfig.value.mcpServers && currentConfig.value.mcpServers[id]
         );
 
-        sessionMcpServerIds.value = [...validIds];
-        tempSessionMcpServerIds.value = [...validIds];
-        await applyMcpTools(false);
+        if (validIds.length > 0) {
+          sessionMcpServerIds.value = [...validIds];
+          tempSessionMcpServerIds.value = [...validIds];
+          await applyMcpTools(false);
+        }
       }
     }
 
@@ -1384,26 +1414,26 @@ onMounted(async () => {
 
         // 2. 校验并清理已删除或被禁用的 MCP 服务
         if (newConfig.mcpServers) {
-           let mcpChanged = false;
-           // 筛选当前真正有效的选中 ID
-           const validMcpIds = sessionMcpServerIds.value.filter(id => {
-             const server = newConfig.mcpServers[id];
-             return server && server.isActive; // 必须存在且启用
-           });
-           
-           if (validMcpIds.length !== sessionMcpServerIds.value.length) {
-             sessionMcpServerIds.value = validMcpIds;
-             tempSessionMcpServerIds.value = tempSessionMcpServerIds.value.filter(id => {
-                const server = newConfig.mcpServers[id];
-                return server && server.isActive;
-             });
-             mcpChanged = true;
-           }
+          let mcpChanged = false;
+          // 筛选当前真正有效的选中 ID
+          const validMcpIds = sessionMcpServerIds.value.filter(id => {
+            const server = newConfig.mcpServers[id];
+            return server && server.isActive; // 必须存在且启用
+          });
 
-           // 如果发现存在失效的 MCP 服务，通知后端重新加载客户端
-           if (mcpChanged && !loading.value) {
-             applyMcpTools(false);
-           }
+          if (validMcpIds.length !== sessionMcpServerIds.value.length) {
+            sessionMcpServerIds.value = validMcpIds;
+            tempSessionMcpServerIds.value = tempSessionMcpServerIds.value.filter(id => {
+              const server = newConfig.mcpServers[id];
+              return server && server.isActive;
+            });
+            mcpChanged = true;
+          }
+
+          // 如果发现存在失效的 MCP 服务，通知后端重新加载客户端
+          if (mcpChanged && !loading.value) {
+            applyMcpTools(false);
+          }
         }
       }
     });
@@ -1414,10 +1444,10 @@ onMounted(async () => {
       try {
         const cache = await window.api.getMcpToolCache() || {};
         mcpToolCache.value = cache;
-        
+
         // 如果被修改具体工具启停的 MCP 正在被当前对话使用，并且没有在生成消息，重载工具
         if (sessionMcpServerIds.value.includes(serverId) && !loading.value) {
-            applyMcpTools(false);
+          applyMcpTools(false);
         }
       } catch (error) {
         console.error("Auto refresh MCP cache failed:", error);
@@ -2365,7 +2395,7 @@ const saveSessionAsImage = async () => {
               const chunkContainer = document.createElement('div');
               chunkContainer.style.display = 'flex';
               chunkContainer.style.flexDirection = 'column';
-              
+
               const chunkImages = [];
 
               for (const node of chunkNodes) {
@@ -2428,7 +2458,7 @@ const saveSessionAsImage = async () => {
             // ================== 上下拼接与背景合成 ==================
             renderWrapper.innerHTML = '';
             renderWrapper.style.padding = '0'; // 消除内边距避免组装缝隙
-            
+
             const finalContainer = document.createElement('div');
             finalContainer.style.width = '100%';
             finalContainer.style.display = 'flex';
@@ -2464,7 +2494,7 @@ const saveSessionAsImage = async () => {
               useCORS: true,
               allowTaint: true,
               backgroundColor: themeBgColor,
-              scale: 2, 
+              scale: 2,
               logging: false
             });
 
@@ -3600,7 +3630,46 @@ const askAI = async (forceSend = false) => {
     }
     await nextTick();
     chatInputRef.value?.focus({ cursor: 'end' });
-    autoSaveSession();
+
+    if (currentTaskConfig.value) {
+      let savedFileName = '未保存';
+      try {
+        if (currentTaskConfig.value.autoSave && currentConfig.value.webdav?.localChatPath) {
+          // 构造文件名：任务名-时间
+          const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/[\/ :]/g, '-').replace(/,/g, '');
+          defaultConversationName.value = `${currentTaskConfig.value.name}-${timeStr}`;
+          const sessionData = getSessionDataAsObject();
+          const jsonString = JSON.stringify(sessionData, null, 2);
+
+          const separator = currentOS.value === 'win' ? '\\' : '/';
+          const filePath = `${currentConfig.value.webdav.localChatPath}${separator}${defaultConversationName.value}.json`;
+
+          await window.api.writeLocalFile(filePath, jsonString);
+          savedFileName = `${defaultConversationName.value}.json`;
+        }
+        // 将历史记录写入主配置
+        await window.api.addTaskHistory(currentTaskConfig.value.id, {
+          time: Date.now(),
+          status: 'success',
+          file: savedFileName
+        });
+
+        // 自动关闭窗口
+        if (currentTaskConfig.value.autoClose) {
+          window.api.windowControl('close-window');
+        }
+      } catch (taskErr) {
+        console.error("Task Finalize Error:", taskErr);
+        await window.api.addTaskHistory(currentTaskConfig.value.id, {
+          time: Date.now(),
+          status: 'error',
+          file: '报错'
+        });
+      }
+      currentTaskConfig.value = null; // 清空标记，避免后续手动问答也触发
+    } else {
+      autoSaveSession(); // 普通对话的自动保存
+    }
   }
 };
 

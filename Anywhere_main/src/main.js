@@ -10,18 +10,16 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 // 导入所有语言文件
 import en from './locales/en.json'
 import zh from './locales/zh.json'
-import ja from './locales/ja.json'
-import ru from './locales/ru.json'
 
 
 // 获取初始语言
 const getInitialLocale = () => {
   const savedLanguage = localStorage.getItem('language');
-  if (savedLanguage && ['en', 'zh', 'ja', 'ru'].includes(savedLanguage)) {
+  if (savedLanguage && ['en', 'zh'].includes(savedLanguage)) {
     return savedLanguage;
   }
   const browserLanguage = navigator.language.split('-')[0];
-  if (['zh', 'en', 'ja', 'ru'].includes(browserLanguage)) {
+  if (['zh', 'en'].includes(browserLanguage)) {
     return browserLanguage;
   }
   return 'zh'; // 默认回退到中文
@@ -32,12 +30,10 @@ const initialLocale = getInitialLocale();
 const i18n = createI18n({
   legacy: false,
   locale: initialLocale,
-  fallbackLocale: 'en',
+  fallbackLocale: 'zh',
   messages: {
     en: en,
-    zh: zh,
-    ja: ja,
-    ru: ru
+    zh: zh
   }
 });
 

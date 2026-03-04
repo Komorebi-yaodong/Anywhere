@@ -545,6 +545,11 @@ function savePrompt() {
   const oldKey = editingPrompt.originalKey;
   if (!newKey) { ElMessage.warning(t('prompts.alerts.promptKeyEmpty')); return; }
 
+  if (newKey === '__DEFAULT__') {
+      ElMessage.warning(t('prompts.alerts.promptKeyRejected'));
+      return;
+  }
+
   atomicSave(config => {
     if (newKey !== oldKey && config.prompts[newKey]) {
       ElMessage.warning(t('prompts.alerts.promptKeyExists', { newKey }));

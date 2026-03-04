@@ -231,6 +231,16 @@ const BUILTIN_SERVERS = {
         tags: ["agent"],
         logoUrl: "https://s2.loli.net/2026/01/22/tTsJjkpiOYAeGdy.png"
     },
+    "builtin_tasks": {
+        id: "builtin_tasks",
+        name: "Task Manager",
+        description: "管理 Anywhere 的定时任务。可以检索、创建、启用、禁用和删除定时任务。",
+        type: "builtin",
+        isActive: true,
+        isPersistent: false,
+        tags: ["task", "schedule", "cron"],
+        logoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Un1.svg/1024px-Un1.svg.png"
+    },
 };
 
 const BUILTIN_TOOLS = {
@@ -457,6 +467,76 @@ Note: Long-running commands will be terminated after timeout.`,
                     }
                 },
                 required: ["task", "tools"]
+            }
+        }
+    ],
+    "builtin_tasks": [
+        {
+            name: "list_agents",
+            description: "List all available Agents (Quick Prompts). Use this to find the exact 'agent_name' for creating or editing tasks.",
+            inputSchema: { type: "object", properties: {} }
+        },
+        {
+            name: "list_tasks",
+            description: "List all scheduled tasks with their status, schedule, and agent details.",
+            inputSchema: { type: "object", properties: {} }
+        },
+        {
+            name: "create_task",
+            description: "Create a new scheduled task.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    name: { type: "string", description: "Unique name for the task." },
+                    instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
+                    agent_name: { type: "string", description: "Optional. Name of the Quick Prompt to use. Defaults to '__DEFAULT__'." },
+                    schedule_type: { 
+                        type: "string", enum: ["interval", "daily"], 
+                        description: "Type of schedule. 'interval' for recurring every X mins, 'daily' for fixed time." 
+                    },
+                    time_param: { type: "string", description: "For 'interval': number of minutes. For 'daily': HH:mm format." },
+                    enabled: { type: "boolean", description: "Enable immediately. Defaults to true.", default: true }
+                },
+                required: ["name", "instruction", "schedule_type", "time_param"]
+            }
+        },
+        {
+            name: "edit_task",
+            description: "Edit specific parameters of an existing scheduled task.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    task_name_or_id: { type: "string" },
+                    new_name: { type: "string" },
+                    instruction: { type: "string",description: "Optional. New prompt content. Provide a highly detailed, self-contained instruction for autonomous execution (explicitly stating tools to use, goals, and output formats)." },
+                    agent_name: { type: "string", description: "Use '__DEFAULT__' for the global default agent." },
+                    schedule_type: { type: "string", enum: ["interval", "daily"] },
+                    time_param: { type: "string" }
+                },
+                required: ["task_name_or_id"]
+            }
+        },
+        {
+            name: "control_task",
+            description: "Enable or disable an existing task by its name or ID.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    task_name_or_id: { type: "string", description: "The name or ID of the task." },
+                    enable: { type: "boolean", description: "True to enable, False to disable." }
+                },
+                required: ["task_name_or_id", "enable"]
+            }
+        },
+        {
+            name: "delete_task",
+            description: "Delete a task permanently.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    task_name_or_id: { type: "string", description: "The name or ID of the task to delete." }
+                },
+                required: ["task_name_or_id"]
             }
         }
     ],
@@ -1706,7 +1786,192 @@ const handlers = {
             return "Error: Sub-Agent requires global context(should be in a chat session).";
         }
         return await runSubAgent(args, globalContext, signal);
-    }
+    },
+
+    // --- Task Management Handlers ---
+    list_agents: async () => {
+        const { getConfig } = require('./data.js');
+        const configData = await getConfig();
+        const prompts = configData.config.prompts || {};
+
+        let agentStr = "- __DEFAULT__ (The global default agent with empty prompt. Recommended for general tasks)\n";
+        Object.entries(prompts).filter(([_, p]) => p.showMode === 'window').forEach(([key]) => {
+            agentStr += `- ${key}\n`;
+        });
+
+        return `Available Agents:\n${agentStr}`;
+    },
+
+    list_tasks: async () => {
+        const { getConfig } = require('./data.js');
+        const configData = await getConfig();
+        const tasks = configData.config.tasks || {};
+        
+        if (Object.keys(tasks).length === 0) return "No tasks found.";
+
+        const taskList = Object.entries(tasks).map(([id, task]) => {
+            let scheduleInfo = "";
+            if (task.triggerType === 'interval') scheduleInfo = `Every ${task.intervalMinutes} mins`;
+            else if (task.triggerType === 'daily') scheduleInfo = `Daily at ${task.dailyTime}`;
+            else if (task.triggerType === 'weekly') scheduleInfo = `Weekly at ${task.weeklyTime}`;
+            else if (task.triggerType === 'monthly') scheduleInfo = `Monthly on day ${task.monthlyDay} at ${task.monthlyTime}`;
+
+            return `- [${task.enabled ? 'ENABLED' : 'DISABLED'}] Name: "${task.name}" (ID: ${id})\n  Agent: ${task.promptKey}\n  Schedule: ${scheduleInfo}\n  Instruction: ${task.description.substring(0, 50)}${task.description.length > 50 ? '...' : ''}`;
+        });
+
+        return "Current Scheduled Tasks:\n" + taskList.join('\n\n');
+    },
+
+    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true }) => {
+        const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+        const configData = await getConfig();
+        const tasks = configData.config.tasks || {};
+        const prompts = configData.config.prompts || {};
+
+        if (Object.values(tasks).some(t => t.name === name)) return `Error: A task with name "${name}" already exists.`;
+
+        let targetPromptKey = '__DEFAULT__';
+        if (agent_name && agent_name !== '__DEFAULT__') {
+            const exactMatch = Object.keys(prompts).find(k => k === agent_name);
+            if (exactMatch) targetPromptKey = exactMatch;
+            else {
+                const fuzzyMatch = Object.keys(prompts).find(k => k.toLowerCase().includes(agent_name.toLowerCase()));
+                if (fuzzyMatch) targetPromptKey = fuzzyMatch;
+                else return `Error: Agent "${agent_name}" not found. Try using list_agents.`;
+            }
+        }
+
+        const taskId = `task_${Date.now()}`;
+        const newTask = {
+            name: name,
+            description: instruction || "",
+            promptKey: targetPromptKey,
+            triggerType: schedule_type === 'daily' ? 'daily' : 'interval',
+            enabled: enabled,
+            intervalMinutes: 60, intervalStartTime: '00:00', dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyTime: '12:00',
+            extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: []
+        };
+
+        if (configData.config.mcpServers) {
+            newTask.extraMcp = Object.entries(configData.config.mcpServers).filter(([_, s]) => s.type === 'builtin').map(([id]) => id);
+        }
+
+        if (schedule_type === 'daily') {
+            if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) newTask.dailyTime = time_param;
+            else return "Error: Invalid time format. Use HH:mm.";
+        } else {
+            const minutes = parseInt(time_param);
+            if (!isNaN(minutes) && minutes > 0) newTask.intervalMinutes = minutes;
+            else return "Error: Invalid interval minutes.";
+        }
+
+        tasks[taskId] = newTask;
+        configData.config.tasks = tasks;
+        await updateConfigWithoutFeatures({ config: configData.config });
+
+        return `Task "${name}" created successfully.`;
+    },
+
+    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param }) => {
+        const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+        const configData = await getConfig();
+        const tasks = configData.config.tasks || {};
+        const prompts = configData.config.prompts || {};
+
+        let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+        if (!targetId) {
+            const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+            if (entry) targetId = entry[0];
+        }
+
+        if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+        const task = tasks[targetId];
+
+        if (new_name && new_name !== task.name) {
+            if (Object.values(tasks).some(t => t.name === new_name)) return `Error: Task name "${new_name}" already exists.`;
+            task.name = new_name;
+        }
+
+        if (instruction !== undefined) task.description = instruction;
+
+        if (agent_name) {
+            if (agent_name === '__DEFAULT__') {
+                task.promptKey = '__DEFAULT__';
+            } else {
+                const exactMatch = Object.keys(prompts).find(k => k === agent_name);
+                if (exactMatch) task.promptKey = exactMatch;
+                else {
+                    const fuzzyMatch = Object.keys(prompts).find(k => k.toLowerCase().includes(agent_name.toLowerCase()));
+                    if (fuzzyMatch) task.promptKey = fuzzyMatch;
+                    else return `Error: Agent "${agent_name}" not found. Edit cancelled.`;
+                }
+            }
+        }
+
+        if (schedule_type) task.triggerType = schedule_type;
+
+        if (time_param) {
+            const currentType = schedule_type || task.triggerType;
+            if (currentType === 'daily') {
+                if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) task.dailyTime = time_param;
+                else return "Error: Invalid time format for daily schedule. Use HH:mm.";
+            } else if (currentType === 'interval') {
+                const minutes = parseInt(time_param);
+                if (!isNaN(minutes) && minutes > 0) task.intervalMinutes = minutes;
+                else return "Error: Invalid interval minutes.";
+            }
+        }
+
+        configData.config.tasks = tasks;
+        await updateConfigWithoutFeatures({ config: configData.config });
+
+        return `Task updated successfully.\nCurrent State:\n- Name: ${task.name}\n- Agent: ${task.promptKey}\n- Type: ${task.triggerType}`;
+    },
+
+    control_task: async ({ task_name_or_id, enable }) => {
+        const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+        const configData = await getConfig();
+        const tasks = configData.config.tasks || {};
+
+        let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+        if (!targetId) {
+            // Try finding by name
+            const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+            if (entry) targetId = entry[0];
+        }
+
+        if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+
+        tasks[targetId].enabled = enable;
+        
+        // Reset last run time if enabling, so it doesn't trigger immediately if missed
+        if (enable) {
+            tasks[targetId].lastRunTime = Date.now(); 
+        }
+
+        await updateConfigWithoutFeatures({ config: configData.config });
+        return `Task "${tasks[targetId].name}" has been ${enable ? 'ENABLED' : 'DISABLED'}.`;
+    },
+
+    delete_task: async ({ task_name_or_id }) => {
+        const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
+        const configData = await getConfig();
+        const tasks = configData.config.tasks || {};
+
+        let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
+        if (!targetId) {
+            const entry = Object.entries(tasks).find(([_, t]) => t.name === task_name_or_id);
+            if (entry) targetId = entry[0];
+        }
+
+        if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
+
+        const deletedName = tasks[targetId].name;
+        delete tasks[targetId];
+
+        await updateConfigWithoutFeatures({ config: configData.config });
+        return `Task "${deletedName}" deleted successfully.`;
+    },
 };
 
 // --- Exports ---

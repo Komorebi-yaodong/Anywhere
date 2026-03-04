@@ -13,6 +13,8 @@ const {
 // 默认配置 (保持不变)
 const defaultConfig = {
   config: {
+    defaultTaskModel: "",
+    tasks: {},
     providers: {
       "0": {
         name: "default",
@@ -130,45 +132,14 @@ function getLocalConfigId() {
  * 增加了 localConfigPart 用于存储设备特定的路径配置
  */
 function splitConfigForStorage(fullConfig) {
-  // 深拷贝一份以避免修改原对象影响后续逻辑
-  const configCopy = JSON.parse(JSON.stringify(fullConfig));
-  
-  const { prompts, providers, mcpServers, ...restOfConfig } = configCopy;
-
-  // 提取本地配置
-  const localConfigPart = {
-    skillPath: restOfConfig.skillPath || "",
-    localChatPath: restOfConfig.webdav?.localChatPath || ""
-  };
-
-  // 从共享配置中移除本地特定的字段，防止污染云端同步
-  delete restOfConfig.skillPath;
-  if (restOfConfig.webdav) {
-    delete restOfConfig.webdav.localChatPath;
-  }
-
-  return {
-    baseConfigPart: { config: restOfConfig },
-    promptsPart: prompts,
-    providersPart: providers,
-    mcpServersPart: mcpServers,
-    localConfigPart: localConfigPart // 新增返回部分
-  };
-}
-
-/**
- * 拆分完整的 config 对象以便于分块存储
- * @param {object} fullConfig - 包含 prompts 和 providers 的完整 config 对象
- * @returns {{baseConfigPart: object, promptsPart: object, providersPart: object, mcpServersPart: object}} - 拆分后的四部分
- */
-function splitConfigForStorage(fullConfig) {
   // 1. 安全检查：如果传入为空，使用空对象防止崩溃
   const source = fullConfig || {};
   
   // 2. 深拷贝
   const configCopy = JSON.parse(JSON.stringify(source));
   
-  const { prompts, providers, mcpServers, ...restOfConfig } = configCopy;
+  // 【新增】剥离出 tasks
+  const { prompts, providers, mcpServers, tasks, ...restOfConfig } = configCopy;
 
   // 3. 提取本地配置 (增加安全访问)
   const localConfigPart = {
@@ -187,6 +158,7 @@ function splitConfigForStorage(fullConfig) {
     promptsPart: prompts,
     providersPart: providers,
     mcpServersPart: mcpServers,
+    tasksPart: tasks || {},
     localConfigPart: localConfigPart
   };
 }
@@ -283,14 +255,16 @@ async function getConfig() {
   const fullConfigData = configDoc.data || { config: {} };
   if (!fullConfigData.config) fullConfigData.config = {};
 
-  const [promptsDoc, providersDoc, mcpServersDoc] = await Promise.all([
+  const [promptsDoc, providersDoc, mcpServersDoc, tasksDoc] = await Promise.all([
     utools.db.promises.get("prompts"),
     utools.db.promises.get("providers"),
-    utools.db.promises.get("mcpServers")
+    utools.db.promises.get("mcpServers"),
+    utools.db.promises.get("tasks")
   ]);
 
   fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig.config.prompts;
   fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig.config.providers;
+  fullConfigData.config.tasks = tasksDoc ? tasksDoc.data : (defaultConfig.config.tasks || {});
   
   // 注入本地路径 (再次确保安全性)
   const currentLocalData = (localDoc && localDoc.data) ? localDoc.data : {};
@@ -381,6 +355,15 @@ function checkConfig(config) {
     if (config[key] === undefined) { config[key] = val; flag = true; }
   }
 
+  if (!config.defaultTaskModel && config.providers) {
+      const firstProvId = config.providerOrder?.[0];
+      const firstModel = config.providers?.[firstProvId]?.modelList?.[0];
+      if (firstProvId && firstModel) {
+          config.defaultTaskModel = `${firstProvId}|${firstModel}`;
+          flag = true;
+      }
+  }
+
   // --- 3. WebDAV 检查 ---
   if (!config.webdav) {
     config.webdav = { url: "", username: "", password: "", path: "/anywhere", data_path: "/anywhere_data", localChatPath: "" };
@@ -404,6 +387,10 @@ function checkConfig(config) {
 
   // --- 4. Prompts (快捷助手) 检查 ---
   if (config.prompts) {
+    if (config.prompts['__DEFAULT__']) {
+      delete config.prompts['__DEFAULT__'];
+      flag = true;
+    }
     const promptDefaults = {
       enable: true, stream: true, showMode: 'window', type: "general",
       isTemperature: false, temperature: 0.7,
@@ -640,10 +627,10 @@ function updateConfigWithoutFeatures(newConfig) {
       plainConfig.mcpServers = serverToSave;
   }
 
-  // 使用新的拆分逻辑，获取 localConfigPart
-  const { baseConfigPart, promptsPart, providersPart, mcpServersPart, localConfigPart } = splitConfigForStorage(plainConfig);
 
-  // 1. 更新基础配置 (config) - 此时已移除 path
+  const { baseConfigPart, promptsPart, providersPart, mcpServersPart, tasksPart, localConfigPart } = splitConfigForStorage(plainConfig);
+
+  // 1. 更新基础配置 (config)
   let configDoc = utools.db.get("config");
   utools.db.put({
     _id: "config",
@@ -675,7 +662,15 @@ function updateConfigWithoutFeatures(newConfig) {
     _rev: mcpServersDoc ? mcpServersDoc._rev : undefined,
   });
 
-  // 5. 更新本地特定配置
+  // 5. 将 tasks 存入独立文档
+  let tasksDoc = utools.db.get("tasks");
+  utools.db.put({
+    _id: "tasks",
+    data: tasksPart,
+    _rev: tasksDoc ? tasksDoc._rev : undefined,
+  });
+
+  // 6. 更新本地特定配置
   const localId = getLocalConfigId();
   let localDoc = utools.db.get(localId);
   utools.db.put({
@@ -684,12 +679,16 @@ function updateConfigWithoutFeatures(newConfig) {
     _rev: localDoc ? localDoc._rev : undefined
   });
 
-  // 6. 广播配置更新
+  // 7. 广播配置更新
   const fullConfigForFrontend = JSON.parse(JSON.stringify(newConfig.config));
   for (const windowInstance of windowMap.values()) {
     if (!windowInstance.isDestroyed()) {
       windowInstance.webContents.send('config-updated', fullConfigForFrontend);
     }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('local-config-updated', { detail: fullConfigForFrontend }));
   }
 
   cleanUpBackgroundCache(newConfig);
@@ -775,7 +774,7 @@ function getUser() {
   return utools.getUser();
 }
 
-function getPosition(config, promptCode) {
+function getPosition(config, promptCode, msg = null) {
   const promptConfig = config.prompts[promptCode];
   const OVERFLOW_ALLOWANCE = 10;
 
@@ -785,37 +784,53 @@ function getPosition(config, promptCode) {
   let windowX = 0, windowY = 0;
 
   const primaryDisplay = utools.getPrimaryDisplay();
+  // 优先使用 workArea (工作区)，这样会自动避开 Windows 任务栏或 macOS Dock/顶部菜单栏
+  const baseBounds = primaryDisplay.workArea || primaryDisplay.bounds;
+  
   let currentDisplay;
 
-  const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
+  // --- 如果是定时任务，强制右上角 (不贴边) ---
+  if (msg && msg.type === 'task') {
+    const padding = 30; // 距离屏幕边缘的距离
+    
+    // 计算 X: 屏幕最右侧 - 窗口宽度 - 边距
+    windowX = baseBounds.x + baseBounds.width - width - padding;
+    
+    // 计算 Y: 屏幕最顶部 + 边距
+    windowY = baseBounds.y + padding;
+    
+    currentDisplay = primaryDisplay;
+  } 
+  // --- 原有逻辑：固定位置 或 跟随鼠标 ---
+  else {
+    const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
 
-  if (hasFixedPosition) {
-    let set_position = { x: Number(promptConfig.position_x), y: Number(promptConfig.position_y) };
-    currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
-    windowX = Math.floor(set_position.x);
-    windowY = Math.floor(set_position.y);
-  } else {
-    const mouse_position = utools.getCursorScreenPoint();
-    currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
-    windowX = Math.floor(mouse_position.x - (width / 2));
-    windowY = Math.floor(mouse_position.y);
+    if (hasFixedPosition) {
+      let set_position = { x: Number(promptConfig.position_x), y: Number(promptConfig.position_y) };
+      currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
+      windowX = Math.floor(set_position.x);
+      windowY = Math.floor(set_position.y);
+    } else {
+      const mouse_position = utools.getCursorScreenPoint();
+      currentDisplay = utools.getDisplayNearestPoint(mouse_position) || primaryDisplay;
+      windowX = Math.floor(mouse_position.x - (width / 2));
+      windowY = Math.floor(mouse_position.y);
+    }
   }
 
+  // --- 边界溢出检查 (保持不变，防止计算出的位置跑出屏幕) ---
   if (currentDisplay) {
     const display = currentDisplay.bounds;
 
-    if (width > display.width) {
-      width = display.width;
-    }
-    if (height > display.height) {
-      height = display.height;
-    }
+    if (width > display.width) width = display.width;
+    if (height > display.height) height = display.height;
 
     const minX = display.x - OVERFLOW_ALLOWANCE;
     const maxX = display.x + display.width - width + OVERFLOW_ALLOWANCE;
     const minY = display.y - OVERFLOW_ALLOWANCE;
     const maxY = display.y + display.height - height + OVERFLOW_ALLOWANCE;
 
+    // 如果完全跑出去了，重置到屏幕中心 (兜底)
     if (
       (windowX + width < display.x) || (windowX > display.x + display.width) ||
       (windowY + height < display.y) || (windowY > display.y + display.height)
@@ -823,6 +838,7 @@ function getPosition(config, promptCode) {
       windowX = display.x + (display.width - width) / 2;
       windowY = display.y + (display.height - height) / 2;
     } else {
+      // 贴边修正
       if (windowX < minX) windowX = minX;
       if (windowX > maxX) windowX = maxX;
       if (windowY < minY) windowY = minY;
@@ -889,7 +905,7 @@ async function openWindow(config, msg) {
   }
 
   const promptCode = msg.originalCode || msg.code;
-  const { x, y, width, height } = getPosition(config, promptCode);
+  const { x, y, width, height } = getPosition(config, promptCode, msg); 
   const promptConfig = config.prompts[promptCode];
   const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
   let channel = "window";
@@ -1398,6 +1414,23 @@ function broadcastEvent(channel, payload) {
   }
 }
 
+async function addTaskHistory(taskId, logEntry) {
+  let doc = await utools.db.promises.get("tasks");
+  if (doc && doc.data && doc.data[taskId]) {
+    if (!doc.data[taskId].history) doc.data[taskId].history = [];
+    doc.data[taskId].history.unshift(logEntry);
+    if (doc.data[taskId].history.length > 50) {
+        doc.data[taskId].history = doc.data[taskId].history.slice(0, 50);
+    }
+    const result = await utools.db.promises.put({ _id: "tasks", data: doc.data, _rev: doc._rev });
+    
+    if (result.ok) { 
+      const fullConfig = await getConfig();
+      broadcastEvent('config-updated', fullConfig.config);
+    }
+  }
+}
+
 module.exports = {
   getConfig,
   checkConfig,
@@ -1420,4 +1453,5 @@ module.exports = {
   getCachedBackgroundImage,
   cacheBackgroundImage,
   broadcastEvent,
+  addTaskHistory,
 };
