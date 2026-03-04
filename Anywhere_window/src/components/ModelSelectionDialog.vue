@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { ElDialog, ElButton, ElInput, ElScrollbar, ElIcon } from 'element-plus';
-import { Search, Check, Cpu } from '@element-plus/icons-vue';
+import { Search, Check } from '@element-plus/icons-vue';
 
 const props = defineProps({
     modelValue: Boolean, // for v-model
@@ -18,19 +18,6 @@ const handleOpened = () => {
     if (searchInputRef.value) {
         searchInputRef.value.focus();
     }
-};
-
-// 字符串转颜色函数 (保持与其他组件风格一致)
-const stringToColor = (str) => {
-    if (!str) return '#3b82f6';
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const h = Math.abs(hash) % 360;
-    const s = 60 + (Math.abs(hash) % 20);
-    const l = 50 + (Math.abs(hash) % 10);
-    return `hsl(${h}, ${s}%, ${l}%)`;
 };
 
 // 计算分组后的模型列表
@@ -63,7 +50,6 @@ const groupedModels = computed(() => {
 
     return groupOrder.map(name => ({
         name: name,
-        color: stringToColor(name),
         models: groups[name]
     }));
 });
@@ -110,6 +96,7 @@ const handleClose = () => {
                 />
             </div>
             
+            <!-- 列表区域：max-height 控制高度自适应 -->
             <el-scrollbar max-height="50vh" class="model-list-scrollbar">
                 <div v-if="groupedModels.length === 0" class="empty-state">
                     暂无匹配模型
@@ -128,10 +115,6 @@ const handleClose = () => {
                                 @click="(e) => onModelClick(model, e)"
                                 :title="model.value === currentModel ? '当前模型 (点击保存为默认)' : '切换到此模型'"
                             >
-                                <div class="model-icon" :style="{ color: group.color, backgroundColor: group.color + '15' }">
-                                    <el-icon><Cpu /></el-icon>
-                                </div>
-                                
                                 <div class="model-info">
                                     <span class="model-name">{{ model.displayName }}</span>
                                 </div>
@@ -165,7 +148,6 @@ const handleClose = () => {
 .dialog-content-wrapper {
     display: flex;
     flex-direction: column;
-    /* 高度由内容撑开，最大由 scrollbar 限制 */
 }
 
 .model-search-container {
@@ -197,7 +179,7 @@ const handleClose = () => {
     font-size: 13px;
     color: var(--el-text-color-placeholder);
     margin-bottom: 8px;
-    padding-left: 4px;
+    padding-left: 12px; /* 与列表项文字对齐 */
     font-weight: 500;
 }
 
@@ -210,7 +192,7 @@ const handleClose = () => {
 .model-item {
     display: flex;
     align-items: center;
-    padding: 10px 12px;
+    padding: 12px 16px; /* 增加内边距，让文字排版更舒适 */
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -232,18 +214,6 @@ html.dark .model-item.is-active {
     border-color: rgba(64, 158, 255, 0.3);
 }
 
-.model-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 12px;
-    font-size: 16px;
-    flex-shrink: 0;
-}
-
 .model-info {
     flex-grow: 1;
     overflow: hidden;
@@ -252,7 +222,7 @@ html.dark .model-item.is-active {
 .model-name {
     font-size: 14px;
     color: var(--el-text-color-primary);
-    font-weight: 500;
+    font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -261,7 +231,6 @@ html.dark .model-item.is-active {
 
 .model-item.is-active .model-name {
     color: var(--el-color-primary);
-    font-weight: 600;
 }
 
 .model-status {
@@ -269,6 +238,7 @@ html.dark .model-item.is-active {
     display: flex;
     align-items: center;
     justify-content: center;
+    margin-left: 10px;
 }
 
 .empty-state {
