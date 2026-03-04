@@ -28,6 +28,7 @@
     "titles": {
       "ai": "快捷助手",
       "chat": "历史对话",
+      "task": "定时任务",
       "mcp": "MCP 服务",
       "skill": "Skill 技能",
       "provider": "服务商",

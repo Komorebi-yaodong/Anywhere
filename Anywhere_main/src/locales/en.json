@@ -26,6 +26,7 @@
     "titles": {
       "ai": "Agent Prompts",
       "chat": "Chat History",
+      "task": "Scheduled Task",
       "mcp": "MCP Servers",
       "skill": "Skill Library",
       "provider": "Providers",

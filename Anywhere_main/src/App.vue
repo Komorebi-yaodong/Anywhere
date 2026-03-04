@@ -107,6 +107,7 @@ const activeDocIndex = ref('0');
 // 文档列表配置，增加 i18nKey 用于动态标题，lastUpdated 动态获取
 const docList = ref([
   { i18nKey: 'doc.titles.chat', file: 'chat_doc.md', lastUpdated: null },
+  { i18nKey: 'doc.titles.task', file: 'task_doc.md', lastUpdated: null },
   { i18nKey: 'doc.titles.ai', file: 'ai_doc.md', lastUpdated: null },
   { i18nKey: 'doc.titles.mcp', file: 'mcp_doc.md', lastUpdated: null },
   { i18nKey: 'doc.titles.skill', file: 'skill_doc.md', lastUpdated: null },
@@ -128,26 +129,58 @@ const loadReadStatus = () => {
   }
 };
 
+// 定义源地址常量
+const GITHUB_BASE = 'https://raw.githubusercontent.com/Komorebi-yaodong/Anywhere/main/';
+const GITEE_BASE = 'https://gitee.com/Komorebi-yaodong/Anywhere/raw/main/';
+
+/**
+ * 尝试从 GitHub 获取，失败则回退到 Gitee
+ * @param {string} relativePath 相对路径 (e.g. 'docs/chat_doc.md')
+ * @returns {Promise<{text: string, source: 'github'|'gitee'}>}
+ */
+const fetchWithFallback = async (relativePath) => {
+  // 1. 尝试 GitHub (设置 3秒 超时，避免国内网络长时间卡顿)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
+    const response = await fetch(`${GITHUB_BASE}${relativePath}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      return { text: await response.text(), source: 'github' };
+    }
+  } catch (e) {
+    console.warn(`GitHub fetch failed for ${relativePath}, trying Gitee...`, e);
+  }
+
+  // 2. 尝试 Gitee (无特殊超时，作为兜底)
+  try {
+    const response = await fetch(`${GITEE_BASE}${relativePath}`);
+    if (response.ok) {
+      return { text: await response.text(), source: 'gitee' };
+    }
+  } catch (e) {
+    console.warn(`Gitee fetch failed for ${relativePath}`, e);
+  }
+
+  throw new Error('Failed to fetch from both GitHub and Gitee');
+};
+
 // 预取所有文档的元数据（更新时间）
 const fetchAllDocsMetadata = async () => {
-  // 使用镜像代理
-  const baseUrl = 'https://raw.githubusercontent.com/Komorebi-yaodong/Anywhere/main/docs/';
-  // 正则匹配：**文档更新时间：2026年1月28日**
   const dateRegex = /\*\*文档更新时间：(\d{4})年(\d{1,2})月(\d{1,2})日\*\*/;
 
   const promises = docList.value.map(async (doc) => {
     try {
-      const response = await fetch(`${baseUrl}${doc.file}`);
-      if (!response.ok) return;
-      const text = await response.text();
-
+      const { text } = await fetchWithFallback(`docs/${doc.file}`);
+      
       const match = text.match(dateRegex);
       if (match) {
         // 转换为兼容格式 YYYY/MM/DD 00:00:00
         const year = match[1];
         const month = match[2];
         const day = match[3];
-        // 假设更新时间为当天的开始，确保只要用户在当天任意时刻阅读过，updatedTime(00:00) <= readTime(XX:XX) 就会不显示红点
         doc.lastUpdated = `${year}/${month}/${day} 00:00:00`;
       }
     } catch (e) {
@@ -156,6 +189,37 @@ const fetchAllDocsMetadata = async () => {
   });
 
   await Promise.all(promises);
+};
+
+const fetchAndParseDoc = async (filename) => {
+  // 标记当前文档为已读
+  markDocAsRead(filename);
+
+  docLoading.value = true;
+  try {
+    // 使用双源获取策略
+    const { text: rawText, source } = await fetchWithFallback(`docs/${filename}`);
+    let text = rawText;
+
+    // 根据数据源决定图片的 Base URL
+    const imgBaseUrl = source === 'gitee' 
+      ? `${GITEE_BASE}image/` 
+      : `${GITHUB_BASE}image/`;
+
+    // 图片路径修正逻辑
+    // 替换 Windows 风格反斜杠路径 (..\image\) 和 Unix 风格路径 (../image/)
+    text = text.replace(/!\[(.*?)\]\((\.\.[\\/])?image[\\/](.*?)\)/g, (match, alt, prefix, imgFilename) => {
+      // 对文件名进行 encodeURI 处理，防止中文乱码
+      return `![${alt}](${imgBaseUrl}${encodeURIComponent(imgFilename)})`;
+    });
+
+    currentDocContent.value = marked.parse(text);
+  } catch (error) {
+    console.error('Failed to load doc:', error);
+    currentDocContent.value = `<h3>${t('doc.loadFailed')}</h3><p>${t('doc.checkNetwork')}</p><p style="font-size:12px; color:#888;">(Github & Gitee sources both unreachable)</p>`;
+  } finally {
+    docLoading.value = false;
+  }
 };
 
 // 检查是否有更新
@@ -199,37 +263,6 @@ const markDocAsRead = async (filename) => {
     await window.api.saveSetting('docReadStatus', JSON.parse(JSON.stringify(config.value.docReadStatus)));
   } catch (e) {
     console.error("保存阅读状态失败:", e);
-  }
-};
-
-const fetchAndParseDoc = async (filename) => {
-  // 标记当前文档为已读
-  markDocAsRead(filename);
-
-  docLoading.value = true;
-  try {
-    // 使用 GitHub 镜像代理地址
-    const baseUrl = 'https://raw.githubusercontent.com/Komorebi-yaodong/Anywhere/main/docs/';
-    const response = await fetch(`${baseUrl}${filename}`);
-    if (!response.ok) throw new Error('Network response was not ok');
-
-    let text = await response.text();
-
-    // 图片路径修正逻辑 (同样使用镜像)
-    const imgBaseUrl = 'https://raw.githubusercontent.com/Komorebi-yaodong/Anywhere/main/image/';
-
-    // 替换 Windows 风格反斜杠路径 (..\image\) 和 Unix 风格路径 (../image/)
-    text = text.replace(/!\[(.*?)\]\((\.\.[\\/])?image[\\/](.*?)\)/g, (match, alt, prefix, filename) => {
-      // 对文件名进行 encodeURI 处理，防止中文乱码
-      return `![${alt}](${imgBaseUrl}${encodeURIComponent(filename)})`;
-    });
-
-    currentDocContent.value = marked.parse(text);
-  } catch (error) {
-    console.error('Failed to load doc:', error);
-    currentDocContent.value = `<h3>${t('doc.loadFailed')}</h3><p>${t('doc.checkNetwork')}</p>`;
-  } finally {
-    docLoading.value = false;
   }
 };
 

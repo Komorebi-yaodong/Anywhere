@@ -149,4 +149,5 @@ Skill 支持两种运行模式，适用于不同复杂度的任务：
 **如需更多帮助，请访问我们的开源社区或联系开发者。祝您使用愉快！顺便求个Star🌟>.Q**
 
 [GITHUB开源项目 AI Anywhere](https://github.com/Komorebi-yaodong/Anywhere)
+[GITEE开源项目 AI Anywhere](https://gitee.com/Komorebi-yaodong/anywhere)
 QQ群：1065512489
