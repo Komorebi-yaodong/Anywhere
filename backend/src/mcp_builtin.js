@@ -239,7 +239,7 @@ const BUILTIN_SERVERS = {
         isActive: true,
         isPersistent: false,
         tags: ["task", "schedule", "cron"],
-        logoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Un1.svg/1024px-Un1.svg.png"
+        logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4a/Commons-logo.svg"
     },
 };
 
