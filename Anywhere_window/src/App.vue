@@ -1274,7 +1274,7 @@ onMounted(async () => {
         chat_show.value.push({
           id: messageIdCounter.value++,
           role: "user",
-          content: [{ type: "text", text: data.payload }],
+          content: [{ type: "text", text: pre_prompt+data.payload+suffix_prompt }],
           timestamp: new Date().toLocaleString('sv-SE')
         });
 
