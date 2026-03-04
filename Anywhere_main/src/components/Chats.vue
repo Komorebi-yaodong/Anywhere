@@ -92,11 +92,33 @@ onMounted(async () => {
         ElMessage.error(t('chats.alerts.configError')); 
     }
     window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('keydown', handleKeyDown);
 });
 
 onUnmounted(() => {
     window.removeEventListener('focus', handleWindowFocus);
+    window.removeEventListener('keydown', handleKeyDown);
 });
+
+const handleKeyDown = (e) => {
+    const activeEl = document.activeElement;
+    const tagName = activeEl.tagName;
+    
+    if (
+        (tagName === 'INPUT' && !['checkbox', 'radio'].includes(activeEl.type)) || 
+        tagName === 'TEXTAREA' || 
+        activeEl.isContentEditable
+    ) {
+        return;
+    }
+
+    if (e.key === 'Delete' || (e.key === 'Backspace' && !e.altKey && !e.ctrlKey && !e.shiftKey)) {
+        if (selectedFiles.value.length > 0) {
+            e.preventDefault();
+            deleteFiles(selectedFiles.value);
+        }
+    }
+};
 
 watch(activeView, async (newView) => {
     if (newView === 'cloud' && !isCloudDataLoaded.value && isWebdavConfigValid.value) {
@@ -113,11 +135,11 @@ async function fetchLocalFiles(silent = false) {
     if (!silent) isTableLoading.value = true;
     try {
         localChatFiles.value = await window.api.listJsonFiles(localChatPath.value);
-    } catch (error) { 
-        ElMessage.error(`读取本地文件列表失败: ${error.message}`); 
-        localChatFiles.value = []; 
-    } finally { 
-        isTableLoading.value = false; 
+    } catch (error) {
+        ElMessage.error(`读取本地文件列表失败: ${error.message}`);
+        localChatFiles.value = [];
+    } finally {
+        isTableLoading.value = false;
     }
 }
 
@@ -131,11 +153,11 @@ async function fetchCloudFiles(silent = false) {
         if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
         const response = await client.getDirectoryContents(remoteDir, { details: true });
         cloudChatFiles.value = response.data.filter(item => item.type === 'file' && item.basename.endsWith('.json')).sort((a, b) => new Date(b.lastmod) - new Date(a.lastmod));
-    } catch (error) { 
-        ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`); 
-        cloudChatFiles.value = []; 
-    } finally { 
-        isTableLoading.value = false; 
+    } catch (error) {
+        ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`);
+        cloudChatFiles.value = [];
+    } finally {
+        isTableLoading.value = false;
     }
 }
 
@@ -598,9 +620,9 @@ const toggleSelectAll = () => {
                 <el-scrollbar v-else v-loading="isTableLoading" view-class="chat-list-view">
                     <div class="chat-list">
                         <div v-for="file in paginatedFiles" :key="file.basename" class="chat-list-item"
-                            :class="{ 'is-selected': isFileSelected(file) }" 
+                            :class="{ 'is-selected': isFileSelected(file) }"
                             @click="toggleFileSelection(file, !isFileSelected(file))">
-                            
+
                             <!-- 左侧：选择框 -->
                             <div class="list-checkbox">
                                 <el-checkbox :model-value="isFileSelected(file)"
@@ -612,46 +634,42 @@ const toggleSelectAll = () => {
                                 <div class="list-title" :title="file.basename">
                                     {{ formatFilenameDisplay(file.basename) }}
                                 </div>
-                            </div>
-
-                            <!-- 右侧容器：包含元数据和操作按钮 -->
-                            <div class="list-right-group">
-                                <!-- 元数据：时间与大小 (紧跟名称) -->
+                                <!-- 元数据现在紧跟标题 -->
                                 <div class="list-meta">
                                     <span class="meta-time">{{ formatDate(file.lastmod) }}</span>
                                     <span class="meta-separator">|</span>
                                     <span class="meta-size">{{ formatBytes(file.size) }}</span>
                                 </div>
+                            </div>
 
-                                <!-- 操作按钮 (靠最右侧) -->
-                                <div class="list-actions">
-                                    <!-- 1. 聊天按钮 (点这个才是开始对话) -->
-                                    <el-tooltip :content="t('chats.actions.chat')" placement="top" :show-after="500">
-                                        <el-button link type="primary" :icon="ChatDotRound" class="action-icon-btn chat-highlight" 
-                                            @click.stop="startChat(file)" />
-                                    </el-tooltip>
+                            <!-- 右侧：仅操作按钮 (移除 list-right-group 容器) -->
+                            <div class="list-actions">
+                                <!-- 1. 聊天按钮 -->
+                                <el-tooltip :content="t('chats.actions.chat')" placement="top" :show-after="500">
+                                    <el-button link type="primary" :icon="ChatDotRound"
+                                        class="action-icon-btn chat-highlight" @click.stop="startChat(file)" />
+                                </el-tooltip>
 
-                                    <!-- 2. 同步按钮 -->
-                                    <el-tooltip
-                                        :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')"
-                                        placement="top" :show-after="500">
-                                        <el-button link type="primary" :icon="Switch" class="action-icon-btn"
-                                            @click.stop="forceSyncFile(file.basename, activeView === 'local' ? 'upload' : 'download')"
-                                            :loading="singleFileSyncing[file.basename]" />
-                                    </el-tooltip>
-                                    
-                                    <!-- 3. 重命名按钮 -->
-                                    <el-tooltip :content="t('chats.actions.rename')" placement="top" :show-after="500">
-                                        <el-button link type="warning" :icon="Edit" class="action-icon-btn"
-                                            @click.stop="renameFile(file)" />
-                                    </el-tooltip>
-                                    
-                                    <!-- 4. 删除按钮 -->
-                                    <el-tooltip :content="t('chats.actions.delete')" placement="top" :show-after="500">
-                                        <el-button link type="danger" :icon="DeleteIcon" class="action-icon-btn"
-                                            @click.stop="deleteFiles([file])" />
-                                    </el-tooltip>
-                                </div>
+                                <!-- 2. 同步按钮 -->
+                                <el-tooltip
+                                    :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')"
+                                    placement="top" :show-after="500">
+                                    <el-button link type="primary" :icon="Switch" class="action-icon-btn"
+                                        @click.stop="forceSyncFile(file.basename, activeView === 'local' ? 'upload' : 'download')"
+                                        :loading="singleFileSyncing[file.basename]" />
+                                </el-tooltip>
+
+                                <!-- 3. 重命名按钮 -->
+                                <el-tooltip :content="t('chats.actions.rename')" placement="top" :show-after="500">
+                                    <el-button link type="warning" :icon="Edit" class="action-icon-btn"
+                                        @click.stop="renameFile(file)" />
+                                </el-tooltip>
+
+                                <!-- 4. 删除按钮 -->
+                                <el-tooltip :content="t('chats.actions.delete')" placement="top" :show-after="500">
+                                    <el-button link type="danger" :icon="DeleteIcon" class="action-icon-btn"
+                                        @click.stop="deleteFiles([file])" />
+                                </el-tooltip>
                             </div>
                         </div>
                     </div>
@@ -660,8 +678,8 @@ const toggleSelectAll = () => {
 
             <div class="footer-bar">
                 <div class="footer-left">
-                    <el-checkbox :model-value="isAllSelected" @change="toggleSelectAll" label="全选" size="large" 
-                        :disabled="paginatedFiles.length === 0"/>
+                    <el-checkbox :model-value="isAllSelected" @change="toggleSelectAll" label="全选" size="large"
+                        :disabled="paginatedFiles.length === 0" />
                     <span v-if="selectedFiles.length > 0" class="selection-count">已选 {{ selectedFiles.length }} 项</span>
                 </div>
                 <div class="footer-center">
@@ -793,7 +811,7 @@ const toggleSelectAll = () => {
 .table-container {
     flex-grow: 1;
     overflow: hidden;
-    padding: 5px 10px 10px 10px;
+    padding: 5px 0px 10px 10px;
 }
 
 /* === 紧凑列表样式 Start === */
@@ -801,7 +819,7 @@ const toggleSelectAll = () => {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding-right: 5px; 
+    padding-right: 10px;
 }
 
 .chat-list-item {
@@ -833,27 +851,33 @@ const toggleSelectAll = () => {
 }
 
 .list-checkbox {
-    margin-right: 12px;
+    width: 0;
+    margin-right: 0;
     display: flex;
     align-items: center;
     opacity: 0;
-    transition: opacity 0.2s ease;
+    overflow: hidden;
+    transition: all 0.2s ease;
     pointer-events: none;
 }
-.chat-list-item:hover .list-checkbox{
+
+.chat-list-item:hover .list-checkbox {
     pointer-events: auto;
 }
+
 .chat-list-item.is-selected .list-checkbox {
+    width: 24px;
+    margin-right: 0px;
     opacity: 1;
     pointer-events: auto;
 }
 
 .list-content {
-    flex: 0 1 auto;
+    flex: 1;
     display: flex;
     align-items: center;
     min-width: 0;
-    margin-right: 12px;
+    margin-right: 8px;
 }
 
 .list-title {
@@ -863,13 +887,8 @@ const toggleSelectAll = () => {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.list-right-group {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    min-width: 0;
+    flex: 0 1 auto;
+    margin-right: 12px;
 }
 
 .list-meta {
@@ -878,8 +897,19 @@ const toggleSelectAll = () => {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-right: 0; 
     white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.list-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex-shrink: 0;
+    
+    opacity: 0;
+    transition: opacity 0.2s;
 }
 
 .meta-separator {
@@ -890,7 +920,7 @@ const toggleSelectAll = () => {
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-left: auto; 
+    margin-left: auto;
     opacity: 0;
     transition: opacity 0.2s;
 }
@@ -913,8 +943,9 @@ const toggleSelectAll = () => {
 }
 
 .action-icon-btn.chat-highlight {
-    color: var(--text-secondary); 
+    color: var(--text-secondary);
 }
+
 .action-icon-btn.chat-highlight:hover {
     color: var(--el-color-primary);
 }
@@ -1109,6 +1140,7 @@ html.dark .sync-buttons-container :deep(.el-badge__content--primary) {
 .custom-clean-scrollbar {
     width: 100%;
 }
+
 .custom-clean-scrollbar :deep(.el-scrollbar__view) {
     display: block;
 }
