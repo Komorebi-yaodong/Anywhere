@@ -76,7 +76,7 @@ const formatBytes = (bytes, decimals = 2) => {
 };
 
 const handleWindowFocus = () => {
-    refreshData();
+    refreshData(true);
 };
 
 onMounted(async () => {
@@ -108,17 +108,22 @@ watch(activeView, async (newView) => {
 });
 
 // --- Main Functions ---
-async function fetchLocalFiles() {
+async function fetchLocalFiles(silent = false) {
     if (!localChatPath.value) return;
-    isTableLoading.value = true;
+    if (!silent) isTableLoading.value = true;
     try {
         localChatFiles.value = await window.api.listJsonFiles(localChatPath.value);
-    } catch (error) { ElMessage.error(`读取本地文件列表失败: ${error.message}`); localChatFiles.value = []; } finally { isTableLoading.value = false; }
+    } catch (error) { 
+        ElMessage.error(`读取本地文件列表失败: ${error.message}`); 
+        localChatFiles.value = []; 
+    } finally { 
+        isTableLoading.value = false; 
+    }
 }
 
-async function fetchCloudFiles() {
+async function fetchCloudFiles(silent = false) {
     if (!isWebdavConfigValid.value) return;
-    isTableLoading.value = true;
+    if (!silent) isTableLoading.value = true;
     try {
         const { url, username, password, data_path } = webdavConfig.value;
         const client = createClient(url, { username, password });
@@ -126,20 +131,27 @@ async function fetchCloudFiles() {
         if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
         const response = await client.getDirectoryContents(remoteDir, { details: true });
         cloudChatFiles.value = response.data.filter(item => item.type === 'file' && item.basename.endsWith('.json')).sort((a, b) => new Date(b.lastmod) - new Date(a.lastmod));
-    } catch (error) { ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`); cloudChatFiles.value = []; } finally { isTableLoading.value = false; }
+    } catch (error) { 
+        ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`); 
+        cloudChatFiles.value = []; 
+    } finally { 
+        isTableLoading.value = false; 
+    }
 }
-async function refreshData() {
+
+async function refreshData(silent = false) {
     if (activeView.value === 'local') {
         if (localChatPath.value) {
-            await fetchLocalFiles();
+            await fetchLocalFiles(silent);
         }
     } else if (activeView.value === 'cloud') {
         if (isWebdavConfigValid.value) {
-            await fetchCloudFiles();
+            await fetchCloudFiles(silent);
             isCloudDataLoaded.value = true;
         }
     }
 }
+
 async function startChat(file) {
     ElMessage.info(t('chats.alerts.loadingChat'));
     try {
@@ -476,6 +488,41 @@ async function executeAutoClean() {
     }
 }
 
+const isFileSelected = (file) => {
+    return selectedFiles.value.some(f => f.basename === file.basename);
+};
+
+const toggleFileSelection = (file, isChecked) => {
+    if (isChecked) {
+        // 避免重复添加
+        if (!isFileSelected(file)) {
+            selectedFiles.value.push(file);
+        }
+    } else {
+        selectedFiles.value = selectedFiles.value.filter(f => f.basename !== file.basename);
+    }
+};
+
+const formatFilenameDisplay = (basename) => {
+    return basename.endsWith('.json') ? basename.slice(0, -5) : basename;
+};
+
+const isAllSelected = computed(() => {
+    if (paginatedFiles.value.length === 0) return false;
+    return paginatedFiles.value.every(f => isFileSelected(f));
+});
+
+const toggleSelectAll = () => {
+    if (isAllSelected.value) {
+        const visibleNames = new Set(paginatedFiles.value.map(f => f.basename));
+        selectedFiles.value = selectedFiles.value.filter(f => !visibleNames.has(f.basename));
+    } else {
+        paginatedFiles.value.forEach(f => {
+            if (!isFileSelected(f)) selectedFiles.value.push(f);
+        });
+    }
+};
+
 </script>
 
 <template>
@@ -520,6 +567,7 @@ async function executeAutoClean() {
             </div>
 
             <div class="table-container">
+                <!-- 空状态：本地未配置 -->
                 <div v-if="activeView === 'local' && !localChatPath" class="config-prompt-small">
                     <el-empty :description="t('chats.configRequired.localPathDescription')">
                         <template #image>
@@ -530,6 +578,7 @@ async function executeAutoClean() {
                     </el-empty>
                 </div>
 
+                <!-- 空状态：云端未配置 -->
                 <div v-else-if="activeView === 'cloud' && !isWebdavConfigValid" class="config-prompt-small">
                     <el-empty :description="t('chats.configRequired.webdavDescription')">
                         <template #image>
@@ -540,57 +589,80 @@ async function executeAutoClean() {
                     </el-empty>
                 </div>
 
-                <el-table v-else :data="paginatedFiles" v-loading="isTableLoading"
-                    @selection-change="handleSelectionChange" style="width: 100%" height="100%" border stripe>
-                    <el-table-column type="selection" width="50" align="center" />
-                    <el-table-column prop="basename" :label="t('chats.table.filename')" sortable show-overflow-tooltip
-                        min-width="120">
-                        <template #default="scope">
-                            <span class="filename-text">{{ scope.row.basename.endsWith('.json') ?
-                                scope.row.basename.slice(0, -5) : scope.row.basename }}</span>
-                        </template>
-                    </el-table-column>
-                    <el-table-column prop="lastmod" :label="t('chats.table.modifiedTime')" width="160" sortable
-                        align="center">
-                        <template #default="scope">{{ formatDate(scope.row.lastmod) }}</template>
-                    </el-table-column>
-                    <el-table-column prop="size" :label="t('chats.table.size')" width="90" sortable align="center">
-                        <template #default="scope">{{ formatBytes(scope.row.size) }}</template>
-                    </el-table-column>
-                    <el-table-column :label="t('chats.table.actions')" width="300" align="center">
-                        <template #default="scope">
-                            <div class="action-buttons-container">
-                                <el-button link type="primary" :icon="ChatDotRound" @click="startChat(scope.row)">{{
-                                    t('chats.actions.chat') }}</el-button>
-                                <el-divider direction="vertical" />
-                                <el-tooltip
-                                    :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')"
-                                    placement="top">
-                                    <el-button link type="primary" :icon="Switch"
-                                        @click="forceSyncFile(scope.row.basename, activeView === 'local' ? 'upload' : 'download')"
-                                        :loading="singleFileSyncing[scope.row.basename]">
-                                        {{ t('chats.actions.forceSync') }}
-                                    </el-button>
-                                </el-tooltip>
-                                <el-divider direction="vertical" />
-                                <el-button link type="warning" :icon="Edit" @click="renameFile(scope.row)">{{
-                                    t('chats.actions.rename') }}</el-button>
-                                <el-divider direction="vertical" />
-                                <el-button link type="danger" :icon="DeleteIcon" @click="deleteFiles([scope.row])">{{
-                                    t('chats.actions.delete') }}</el-button>
+                <!-- 空状态：无文件 -->
+                <div v-else-if="paginatedFiles.length === 0 && !isTableLoading" class="config-prompt-small">
+                    <el-empty :description="t('common.noFileSelected').replace('选中', '')" :image-size="80" />
+                </div>
+
+                <!-- 列表视图 -->
+                <el-scrollbar v-else v-loading="isTableLoading" view-class="chat-list-view">
+                    <div class="chat-list">
+                        <div v-for="file in paginatedFiles" :key="file.basename" class="chat-list-item"
+                            :class="{ 'is-selected': isFileSelected(file) }" 
+                            @click="toggleFileSelection(file, !isFileSelected(file))">
+                            
+                            <!-- 左侧：选择框 -->
+                            <div class="list-checkbox">
+                                <el-checkbox :model-value="isFileSelected(file)"
+                                    @change="(val) => toggleFileSelection(file, val)" />
                             </div>
-                        </template>
-                    </el-table-column>
-                </el-table>
+
+                            <!-- 中间：名称 -->
+                            <div class="list-content">
+                                <div class="list-title" :title="file.basename">
+                                    {{ formatFilenameDisplay(file.basename) }}
+                                </div>
+                            </div>
+
+                            <!-- 右侧容器：包含元数据和操作按钮 -->
+                            <div class="list-right-group">
+                                <!-- 元数据：时间与大小 (紧跟名称) -->
+                                <div class="list-meta">
+                                    <span class="meta-time">{{ formatDate(file.lastmod) }}</span>
+                                    <span class="meta-separator">|</span>
+                                    <span class="meta-size">{{ formatBytes(file.size) }}</span>
+                                </div>
+
+                                <!-- 操作按钮 (靠最右侧) -->
+                                <div class="list-actions">
+                                    <!-- 1. 聊天按钮 (点这个才是开始对话) -->
+                                    <el-tooltip :content="t('chats.actions.chat')" placement="top" :show-after="500">
+                                        <el-button link type="primary" :icon="ChatDotRound" class="action-icon-btn chat-highlight" 
+                                            @click.stop="startChat(file)" />
+                                    </el-tooltip>
+
+                                    <!-- 2. 同步按钮 -->
+                                    <el-tooltip
+                                        :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')"
+                                        placement="top" :show-after="500">
+                                        <el-button link type="primary" :icon="Switch" class="action-icon-btn"
+                                            @click.stop="forceSyncFile(file.basename, activeView === 'local' ? 'upload' : 'download')"
+                                            :loading="singleFileSyncing[file.basename]" />
+                                    </el-tooltip>
+                                    
+                                    <!-- 3. 重命名按钮 -->
+                                    <el-tooltip :content="t('chats.actions.rename')" placement="top" :show-after="500">
+                                        <el-button link type="warning" :icon="Edit" class="action-icon-btn"
+                                            @click.stop="renameFile(file)" />
+                                    </el-tooltip>
+                                    
+                                    <!-- 4. 删除按钮 -->
+                                    <el-tooltip :content="t('chats.actions.delete')" placement="top" :show-after="500">
+                                        <el-button link type="danger" :icon="DeleteIcon" class="action-icon-btn"
+                                            @click.stop="deleteFiles([file])" />
+                                    </el-tooltip>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </el-scrollbar>
             </div>
 
             <div class="footer-bar">
                 <div class="footer-left">
-                    <el-button :icon="Refresh" @click="refreshData">{{ t('common.refresh') }}</el-button>
-                    <el-button type="danger" :icon="DeleteIcon" @click="deleteFiles(selectedFiles)"
-                        :disabled="selectedFiles.length === 0">
-                        {{ t('common.deleteSelected') }} ({{ selectedFiles.length }})
-                    </el-button>
+                    <el-checkbox :model-value="isAllSelected" @change="toggleSelectAll" label="全选" size="large" 
+                        :disabled="paginatedFiles.length === 0"/>
+                    <span v-if="selectedFiles.length > 0" class="selection-count">已选 {{ selectedFiles.length }} 项</span>
                 </div>
                 <div class="footer-center">
                     <el-pagination v-if="currentFiles.length > 0" v-model:current-page="currentPage"
@@ -598,6 +670,13 @@ async function executeAutoClean() {
                         layout="total, sizes, prev, pager, next, jumper" background size="small" />
                 </div>
                 <div class="footer-right">
+                    <el-tooltip :content="t('common.refresh')" placement="top">
+                        <el-button :icon="Refresh" circle @click="refreshData" />
+                    </el-tooltip>
+                    <el-tooltip :content="t('common.deleteSelected')" placement="top">
+                        <el-button type="danger" :icon="DeleteIcon" circle @click="deleteFiles(selectedFiles)"
+                            :disabled="selectedFiles.length === 0" />
+                    </el-tooltip>
                 </div>
             </div>
         </div>
@@ -717,83 +796,131 @@ async function executeAutoClean() {
     padding: 5px 10px 10px 10px;
 }
 
-.filename-text {
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-:deep(.el-table),
-:deep(.el-table__expanded-cell) {
-    background-color: transparent;
-}
-
-:deep(.el-table .el-table__cell) {
-    color: var(--text-secondary);
-}
-
-:deep(.el-table tr) {
-    background-color: transparent;
-    transition: background-color 0.2s;
-}
-
-:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
-    background-color: var(--bg-primary);
-}
-
-:deep(.el-table--enable-row-hover .el-table__body tr:hover>td.el-table__cell) {
-    background-color: var(--bg-tertiary);
-}
-
-:deep(.el-table__header-wrapper th) {
-    background-color: var(--bg-primary) !important;
-    color: var(--text-secondary);
-    font-weight: 600;
-}
-
-:deep(.el-table__border-left-patch) {
-    border-left: 1px solid var(--border-primary);
-}
-
-:deep(.el-table__border-right-patch) {
-    border-left: 1px solid var(--border-primary);
-}
-
-:deep(.el-table--border .el-table__inner-wrapper::after),
-:deep(.el-table--border::after),
-:deep(.el-table--border::before),
-:deep(.el-table__inner-wrapper::before) {
-    background-color: var(--border-primary);
-}
-
-:deep(.el-table td.el-table__cell),
-:deep(.el-table th.el-table__cell.is-leaf) {
-    border-bottom: 1px solid var(--border-primary);
-    color: var(--text-primary);
-}
-
-:deep(.el-table--border .el-table__cell) {
-    border-right: 1px solid var(--border-primary);
-}
-
-:deep(.el-table__empty-text) {
-    color: var(--text-tertiary);
-}
-
-.action-buttons-container {
+/* === 紧凑列表样式 Start === */
+.chat-list {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 5px; 
+}
+
+.chat-list-item {
+    display: flex;
     align-items: center;
-    gap: 0;
+    padding: 8px 16px;
+    background-color: transparent;
+    border-radius: 16px 8px 8px 16px;
+    transition: background-color 0.2s;
+    cursor: pointer;
+    position: relative;
+    height: 44px;
+    box-sizing: border-box;
+    width: 100%;
 }
 
-.action-buttons-container .el-button {
+.chat-list-item:hover {
+    background-color: var(--bg-tertiary);
+    border-radius: 16px 8px 8px 16px;
+}
+
+.chat-list-item.is-selected {
+    background-color: var(--el-color-primary-light-9);
+}
+
+/* 深色模式下的选中状态 */
+:global(html.dark) .chat-list-item.is-selected {
+    background-color: rgba(64, 158, 255, 0.15);
+}
+
+.list-checkbox {
+    margin-right: 12px;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+.chat-list-item:hover .list-checkbox{
+    pointer-events: auto;
+}
+.chat-list-item.is-selected .list-checkbox {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.list-content {
+    flex: 0 1 auto;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    margin-right: 12px;
+}
+
+.list-title {
+    font-size: 14px;
     font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.action-buttons-container .el-divider--vertical {
-    height: 1em;
-    border-left: 1px solid var(--border-primary);
-    margin: 0 8px;
+.list-right-group {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.list-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 0; 
+    white-space: nowrap;
+}
+
+.meta-separator {
+    opacity: 0.5;
+}
+
+.list-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto; 
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.chat-list-item:hover .list-actions,
+.chat-list-item.is-selected .list-actions {
+    opacity: 1;
+}
+
+.action-icon-btn {
+    font-size: 16px;
+    padding: 6px;
+    margin-left: 0 !important;
+    color: var(--text-secondary);
+}
+
+.action-icon-btn:hover {
+    color: var(--el-color-primary);
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.action-icon-btn.chat-highlight {
+    color: var(--text-secondary); 
+}
+.action-icon-btn.chat-highlight:hover {
+    color: var(--el-color-primary);
+}
+
+:deep(.chat-list-view) {
+    min-height: 100%;
 }
 
 .footer-bar {
@@ -801,7 +928,7 @@ async function executeAutoClean() {
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 10px;
     padding: 10px 15px;
     border-top: 1px solid var(--border-primary);
@@ -809,11 +936,17 @@ async function executeAutoClean() {
     flex-shrink: 0;
 }
 
-.footer-left,
-.footer-right {
+.footer-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+    min-width: 70px;
+}
+
+.selection-count {
+    font-size: 12px;
+    color: var(--el-color-primary);
+    font-weight: 500;
 }
 
 .footer-center {
@@ -823,7 +956,11 @@ async function executeAutoClean() {
 }
 
 .footer-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     justify-content: flex-end;
+    min-width: 70px;
 }
 
 :deep(.el-pagination) {
@@ -871,10 +1008,8 @@ async function executeAutoClean() {
 .sync-buttons-container {
     position: absolute;
     top: 8px;
-    /* 根据视觉效果微调 */
     right: 20px;
     z-index: 10;
-    /* 确保在表格之上 */
     display: flex;
     gap: 8px;
 }
@@ -891,15 +1026,12 @@ async function executeAutoClean() {
     line-height: 16px;
     min-width: 16px;
     border-width: 1px;
-    /* 调整位置 */
     transform: translateY(-50%) translateX(70%);
 }
 
-/* 修复深色模式下 primary 徽章的颜色 */
 html.dark .sync-buttons-container :deep(.el-badge__content--primary) {
     background-color: var(--el-color-primary);
     color: var(--bg-primary);
-    /* 使用深色背景作为文字颜色 */
 }
 
 .info-button-container {
@@ -914,7 +1046,6 @@ html.dark .sync-buttons-container :deep(.el-badge__content--primary) {
     height: 32px;
 }
 
-/* 弹出框内容的样式 */
 .info-popover-content p {
     margin: 0 0 8px 0;
     line-height: 1.6;
@@ -981,7 +1112,6 @@ html.dark .sync-buttons-container :deep(.el-badge__content--primary) {
 .custom-clean-scrollbar :deep(.el-scrollbar__view) {
     display: block;
 }
-
 
 html.dark .custom-clean-scrollbar :deep(.el-scrollbar__thumb) {
     background-color: var(--text-tertiary);
