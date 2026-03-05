@@ -328,6 +328,32 @@ const formatTime = (ts) => {
     if (!ts) return t('tasks.neverExecuted');
     return new Date(ts).toLocaleString('zh-CN'); // 日期时间格式建议保留本地化
 }
+
+async function openTaskChat(logFile) {
+    if (!logFile || !logFile.endsWith('.json')) return;
+
+    const localPath = currentConfig.value.webdav?.localChatPath;
+    if (!localPath) {
+        ElMessage.warning(t('chats.alerts.localPathRequired') || '请先配置本地对话路径');
+        return;
+    }
+
+    let filePath = "";
+    if (window.api && window.api.pathJoin) {
+        filePath = window.api.pathJoin(localPath, logFile);
+    } else {
+        filePath = `${localPath}/${logFile}`.replace(/\\/g, '/').replace(/\/{2,}/g, '/');
+    }
+
+    try {
+        ElMessage.info(t('chats.alerts.loadingChat') || '正在加载对话...');
+        const jsonString = await window.api.readLocalFile(filePath);
+        await window.api.coderedirect(t('chats.alerts.restoreChat') || '恢复聊天', JSON.stringify({ sessionData: jsonString, filename: logFile }));
+        ElMessage.success(t('chats.alerts.restoreInitiated') || '对话已开始');
+    } catch (error) {
+        ElMessage.error((t('chats.alerts.restoreFailed') || '无法打开对话') + `: ${error.message}`);
+    }
+}
 </script>
 
 <template>
@@ -409,7 +435,8 @@ const formatTime = (ts) => {
                                     <div class="task-card-body">
                                         <el-row :gutter="20">
                                             <el-col :span="24" style="margin-bottom: 15px;">
-                                                <el-radio-group v-model="selectedTask.triggerType" class="trigger-type-group"
+                                                <el-radio-group v-model="selectedTask.triggerType"
+                                                    class="trigger-type-group"
                                                     @change="(val) => saveTaskSetting('triggerType', val)">
                                                     <el-radio-button value="single">{{ t('tasks.triggerSingle')
                                                     }}</el-radio-button>
@@ -442,7 +469,7 @@ const formatTime = (ts) => {
                                                     </el-form-item>
                                                 </el-col>
                                             </template>
-                                            
+
                                             <template v-if="selectedTask.triggerType === 'interval'">
                                                 <el-col :span="12">
                                                     <el-form-item :label="t('tasks.intervalMinutesLabel')">
@@ -677,7 +704,9 @@ const formatTime = (ts) => {
                                                     class="log-status">{{
                                                         log.status === 'success' ? t('tasks.statusSuccess') :
                                                             t('tasks.statusFail') }}</el-tag>
-                                                <span class="log-file" :title="log.file">
+                                                <span class="log-file" :title="log.file"
+                                                    :class="{ 'clickable': log.file && log.file.endsWith('.json') }"
+                                                    @click="openTaskChat(log.file)">
                                                     <el-icon style="margin-right: 4px; vertical-align: middle;">
                                                         <Document />
                                                     </el-icon>
@@ -1052,6 +1081,19 @@ const formatTime = (ts) => {
     overflow: hidden;
     text-overflow: ellipsis;
     opacity: 0.9;
+}
+
+.log-file.clickable {
+    color: var(--el-color-primary);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.2s, color 0.2s;
+}
+
+.log-file.clickable:hover {
+    text-decoration-color: var(--el-color-primary);
+    opacity: 1;
 }
 
 /* 悬浮刷新按钮 */
