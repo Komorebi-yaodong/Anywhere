@@ -1,9 +1,9 @@
 <script setup>
-import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
 import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, ElProgress, ElScrollbar } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n();
 
@@ -30,9 +30,21 @@ const syncAbortController = ref(null);
 
 // --- 自动清理功能状态 ---
 const showCleanDialog = ref(false);
-const cleanDaysOption = ref(30); // 默认30天
+const cleanDaysOption = ref(30); 
 const cleanCustomDays = ref(60);
 const isCleaning = ref(false);
+
+// --- 框选功能状态 ---
+const isDragActive = ref(false); // 视觉上的选框是否显示
+const selectionBox = ref({ top: 0, left: 0, width: 0, height: 0 });
+const chatListRef = ref(null);
+
+let startX = 0;
+let startY = 0;
+let isMouseDown = false;
+let hasMoved = false; 
+// 记录拖拽开始前哪些文件是选中的 (Set<Basename>)
+let initialSelectionSnap = new Set(); 
 
 // --- Computed Properties ---
 const getFileMap = (fileList) => new Map(fileList.map(f => [f.basename, f]));
@@ -93,12 +105,153 @@ onMounted(async () => {
     }
     window.addEventListener('focus', handleWindowFocus);
     window.addEventListener('keydown', handleKeyDown);
+    
+    // 全局鼠标监听
+    window.addEventListener('mouseup', onGlobalMouseUp);
+    window.addEventListener('mousemove', onGlobalMouseMove);
 });
 
 onUnmounted(() => {
     window.removeEventListener('focus', handleWindowFocus);
     window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('mouseup', onGlobalMouseUp);
+    window.removeEventListener('mousemove', onGlobalMouseMove);
 });
+
+// --- 框选核心逻辑 ---
+
+const onMouseDown = (e) => {
+    if (e.button !== 0) return; // 仅左键
+
+    // 排除特定交互元素（避免点复选框或按钮时触发选框）
+    if (e.target.closest('.list-checkbox') || e.target.closest('.list-actions') || e.target.closest('.el-button')) {
+        return;
+    }
+
+    isMouseDown = true;
+    hasMoved = false;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    // 快照：记录当前已选中的文件ID
+    initialSelectionSnap = new Set(selectedFiles.value.map(f => f.basename));
+
+    selectionBox.value = { left: startX, top: startY, width: 0, height: 0 };
+    
+    // 不在此处 preventDefault，以便支持点击事件冒泡
+};
+
+const onGlobalMouseMove = (e) => {
+    if (!isMouseDown) return;
+
+    const currentX = e.clientX;
+    const currentY = e.clientY;
+
+    // 移动阈值判定，防止点击时的微小抖动被误判为拖拽
+    if (!hasMoved && (Math.abs(currentX - startX) > 5 || Math.abs(currentY - startY) > 5)) {
+        hasMoved = true;
+        isDragActive.value = true; 
+        // 拖拽开始，清除浏览器默认的文本选择
+        window.getSelection()?.removeAllRanges();
+    }
+
+    if (hasMoved) {
+        e.preventDefault(); // 阻止后续默认行为
+        
+        // 计算选框几何
+        const left = Math.min(startX, currentX);
+        const top = Math.min(startY, currentY);
+        const width = Math.abs(currentX - startX);
+        const height = Math.abs(currentY - startY);
+
+        selectionBox.value = { left, top, width, height };
+
+        // 实时更新选中状态 (XOR 逻辑)
+        updateSelectionInvert();
+    }
+};
+
+const updateSelectionInvert = () => {
+    if (!chatListRef.value) return;
+
+    const items = chatListRef.value.querySelectorAll('.chat-list-item');
+    const boxRect = {
+        left: selectionBox.value.left,
+        top: selectionBox.value.top,
+        right: selectionBox.value.left + selectionBox.value.width,
+        bottom: selectionBox.value.top + selectionBox.value.height
+    };
+
+    const currentInBox = new Set();
+
+    // 1. 找出当前所有在框内的文件
+    items.forEach((item, index) => {
+        const itemRect = item.getBoundingClientRect();
+        
+        // AABB 碰撞检测
+        const isIntersecting = !(
+            boxRect.left > itemRect.right ||
+            boxRect.right < itemRect.left ||
+            boxRect.top > itemRect.bottom ||
+            boxRect.bottom < itemRect.top
+        );
+
+        if (isIntersecting) {
+            const file = paginatedFiles.value[index];
+            if (file) currentInBox.add(file.basename);
+        }
+    });
+
+    // 2. 应用反转逻辑 (XOR)
+    // 最终状态 = 初始状态 XOR 框选状态
+    // - 原来已选 && 在框内 -> 变未选
+    // - 原来已选 && 不在框内 -> 保持已选
+    // - 原来未选 && 在框内 -> 变已选
+    // - 原来未选 && 不在框内 -> 保持未选
+    
+    selectedFiles.value = paginatedFiles.value.filter(file => {
+        const wasSelected = initialSelectionSnap.has(file.basename);
+        const isInBox = currentInBox.has(file.basename);
+
+        if (isInBox) {
+            return !wasSelected; // 反转
+        } else {
+            return wasSelected;  // 保持
+        }
+    });
+};
+
+const onGlobalMouseUp = (e) => {
+    if (isMouseDown) {
+        // 如果没有发生拖拽，且没有按住 Ctrl/Shift，且点击的是空白处（不是列表项），则清空选择
+        // 这是为了符合“点击空白处取消选择”的直觉
+        if (!hasMoved && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+            if (!e.target.closest('.chat-list-item')) {
+                selectedFiles.value = [];
+            }
+        }
+    }
+
+    isMouseDown = false;
+    
+    if (isDragActive.value) {
+        isDragActive.value = false;
+        // 延时重置 hasMoved，防止触发 click 事件
+        setTimeout(() => { hasMoved = false; }, 0);
+    } else {
+        hasMoved = false;
+    }
+    
+    selectionBox.value = { top: 0, left: 0, width: 0, height: 0 };
+};
+
+// 列表项点击处理 (保持原有逻辑)
+const handleItemClick = (file) => {
+    // 如果刚刚发生了拖拽，则忽略此次点击（避免抬起鼠标时触发 click 导致状态再次反转）
+    if (hasMoved) return;
+
+    toggleFileSelection(file, !isFileSelected(file));
+};
 
 const handleKeyDown = (e) => {
     const activeEl = document.activeElement;
@@ -109,6 +262,13 @@ const handleKeyDown = (e) => {
         tagName === 'TEXTAREA' || 
         activeEl.isContentEditable
     ) {
+        return;
+    }
+
+    // Ctrl+A 全选
+    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        toggleSelectAll();
         return;
     }
 
@@ -127,6 +287,7 @@ watch(activeView, async (newView) => {
     } else if (newView === 'local' && localChatPath.value) {
         await fetchLocalFiles();
     }
+    selectedFiles.value = []; 
 });
 
 // --- Main Functions ---
@@ -475,11 +636,8 @@ async function executeAutoClean() {
 
     isCleaning.value = true;
     try {
-        // 为了安全起见，批量清理仅删除当前视图的文件，不进行双向同步删除询问
-        // 直接复用底层的删除 API
         const client = isWebdavConfigValid.value ? createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password }) : null;
 
-        // 并发处理
         const tasks = filesToDelete.map(file => async () => {
             if (activeView.value === 'local') {
                 await window.api.deleteLocalFile(file.path);
@@ -490,7 +648,6 @@ async function executeAutoClean() {
             }
         });
 
-        // 简单的并发控制器
         const batchSize = 5;
         for (let i = 0; i < tasks.length; i += batchSize) {
             const batch = tasks.slice(i, i + batchSize);
@@ -500,7 +657,6 @@ async function executeAutoClean() {
         ElMessage.success(t('chats.clean.success', { count: filesToDelete.length }));
         await refreshData();
         showCleanDialog.value = false;
-        // 清空选择，防止残留
         selectedFiles.value = [];
 
     } catch (error) {
@@ -516,7 +672,6 @@ const isFileSelected = (file) => {
 
 const toggleFileSelection = (file, isChecked) => {
     if (isChecked) {
-        // 避免重复添加
         if (!isFileSelected(file)) {
             selectedFiles.value.push(file);
         }
@@ -589,6 +744,14 @@ const toggleSelectAll = () => {
             </div>
 
             <div class="table-container">
+                <!-- 拖拽选框 -->
+                <div v-show="isDragActive" class="selection-box" :style="{
+                    top: selectionBox.top + 'px',
+                    left: selectionBox.left + 'px',
+                    width: selectionBox.width + 'px',
+                    height: selectionBox.height + 'px'
+                }"></div>
+
                 <!-- 空状态：本地未配置 -->
                 <div v-if="activeView === 'local' && !localChatPath" class="config-prompt-small">
                     <el-empty :description="t('chats.configRequired.localPathDescription')">
@@ -618,15 +781,16 @@ const toggleSelectAll = () => {
 
                 <!-- 列表视图 -->
                 <el-scrollbar v-else v-loading="isTableLoading" view-class="chat-list-view">
-                    <div class="chat-list">
+                    <!-- 绑定 mousedown 启动框选 -->
+                    <div class="chat-list" ref="chatListRef" @mousedown="onMouseDown">
                         <div v-for="file in paginatedFiles" :key="file.basename" class="chat-list-item"
                             :class="{ 'is-selected': isFileSelected(file) }"
-                            @click="toggleFileSelection(file, !isFileSelected(file))">
+                            @click="handleItemClick(file)">
 
                             <!-- 左侧：选择框 -->
                             <div class="list-checkbox">
                                 <el-checkbox :model-value="isFileSelected(file)"
-                                    @change="(val) => toggleFileSelection(file, val)" />
+                                    @change="(val) => toggleFileSelection(file, val)" @click.stop />
                             </div>
 
                             <!-- 中间：名称 -->
@@ -755,6 +919,21 @@ const toggleSelectAll = () => {
 </template>
 
 <style scoped>
+/* 框选矩形样式 */
+.selection-box {
+    position: fixed; /* 使用 fixed 定位，直接基于视口 */
+    background-color: rgba(24, 24, 27, 0.1); /* Panda Black 10% */
+    border: 1px solid rgba(24, 24, 27, 0.2); /* Panda Black 20% */
+    z-index: 9999;
+    pointer-events: none; /* 确保不阻挡鼠标事件 */
+}
+
+/* 深色模式下的选框 */
+:global(html.dark) .selection-box {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 .view-selector {
     padding: 5px 15px 0px 0px;
     text-align: center;
@@ -812,6 +991,8 @@ const toggleSelectAll = () => {
     flex-grow: 1;
     overflow: hidden;
     padding: 5px 0px 10px 10px;
+    position: relative; /* 为选框提供定位上下文 (虽然我们用了 fixed，但保持结构清晰) */
+    user-select: none;  /* 防止拖拽时选中文本 */
 }
 
 /* === 紧凑列表样式 Start === */
@@ -820,6 +1001,8 @@ const toggleSelectAll = () => {
     flex-direction: column;
     gap: 2px;
     padding-right: 10px;
+    min-height: 100%; /* 确保拖拽空白处也能触发 */
+    cursor: default;  /* 默认鼠标 */
 }
 
 .chat-list-item {
