@@ -1893,7 +1893,7 @@ const handlers = {
             } else if (task.triggerType === 'weekly') {
                 details += `- Weekly Time: ${task.weeklyTime} on days [${task.weeklyDays.join(',')}]\n`;
             } else if (task.triggerType === 'monthly') {
-                const mDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [task.monthlyDay];
+                const mDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
                 details += `- Monthly Time: ${task.monthlyTime} on dates [${mDays.join(',')}]\n`;
             }
             
@@ -1940,7 +1940,7 @@ const handlers = {
                 triggerType: schedule_type,
                 enabled: enabled,
                 intervalMinutes: 60, intervalStartTime: '00:00', intervalTimeRanges: [], 
-                dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyDays: [1], monthlyTime: '12:00',
+                dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDays: [1], monthlyTime: '12:00',
                 extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
                 lastRunTime: enabled ? Date.now() : 0
             };

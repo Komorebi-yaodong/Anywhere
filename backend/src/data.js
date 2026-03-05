@@ -470,6 +470,23 @@ function checkConfig(config) {
     }
   }
 
+  if (config.tasks) {
+    for (const taskId in config.tasks) {
+      const task = config.tasks[taskId];
+      if (task.monthlyDay !== undefined) {
+        if (!task.monthlyDays || !Array.isArray(task.monthlyDays)) {
+          task.monthlyDays = [task.monthlyDay];
+        }
+        delete task.monthlyDay; // 彻底迁移并删除旧字段
+        flag = true;
+      }
+      if (!task.monthlyDays) {
+        task.monthlyDays = [1];
+        flag = true;
+      }
+    }
+  }
+
   if (flag) {
     updateConfig({ "config": config });
   }

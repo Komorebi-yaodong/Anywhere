@@ -160,7 +160,6 @@ function handleAddTask() {
             dailyTime: '12:00',
             weeklyDays: [1, 2, 3, 4, 5],
             weeklyTime: '12:00',
-            monthlyDay: 1,
             monthlyDays: [1],
             monthlyTime: '12:00',
             promptKey: '__DEFAULT__',
@@ -201,7 +200,7 @@ function handleRenameTask() {
     }
 
     saveTaskSetting('name', newName);
-    
+
     showRenameDialog.value = false;
     ElMessage.success(t('common.saveSuccess'));
 }
@@ -315,7 +314,7 @@ const handleGlobalKeyDown = (e) => {
 
     const activeEl = document.activeElement;
     const isInput = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable;
-    
+
     if (isInput) return;
 
     if (e.key === 'Delete' || (e.key === 'Backspace' && !e.ctrlKey && !e.metaKey)) {
@@ -411,13 +410,13 @@ const formatTime = (ts) => {
                                                 <el-radio-group v-model="selectedTask.triggerType"
                                                     @change="(val) => saveTaskSetting('triggerType', val)">
                                                     <el-radio-button value="interval">{{ t('tasks.triggerInterval')
-                                                        }}</el-radio-button>
+                                                    }}</el-radio-button>
                                                     <el-radio-button value="daily">{{ t('tasks.triggerDaily')
-                                                        }}</el-radio-button>
+                                                    }}</el-radio-button>
                                                     <el-radio-button value="weekly">{{ t('tasks.triggerWeekly')
-                                                        }}</el-radio-button>
+                                                    }}</el-radio-button>
                                                     <el-radio-button value="monthly">{{ t('tasks.triggerMonthly')
-                                                        }}</el-radio-button>
+                                                    }}</el-radio-button>
                                                 </el-radio-group>
                                             </el-col>
 
@@ -482,19 +481,19 @@ const formatTime = (ts) => {
                                                             @change="(val) => saveTaskSetting('weeklyDays', val)"
                                                             style="margin-bottom: 10px;">
                                                             <el-checkbox-button :value="1">{{ t('tasks.weekdays.1')
-                                                                }}</el-checkbox-button>
+                                                            }}</el-checkbox-button>
                                                             <el-checkbox-button :value="2">{{ t('tasks.weekdays.2')
-                                                                }}</el-checkbox-button>
+                                                            }}</el-checkbox-button>
                                                             <el-checkbox-button :value="3">{{ t('tasks.weekdays.3')
-                                                                }}</el-checkbox-button>
+                                                            }}</el-checkbox-button>
                                                             <el-checkbox-button :value="4">{{ t('tasks.weekdays.4')
-                                                                }}</el-checkbox-button>
+                                                            }}</el-checkbox-button>
                                                             <el-checkbox-button :value="5">{{ t('tasks.weekdays.5')
-                                                                }}</el-checkbox-button>
+                                                            }}</el-checkbox-button>
                                                             <el-checkbox-button :value="6">{{ t('tasks.weekdays.6')
-                                                                }}</el-checkbox-button>
+                                                            }}</el-checkbox-button>
                                                             <el-checkbox-button :value="0">{{ t('tasks.weekdays.0')
-                                                                }}</el-checkbox-button>
+                                                            }}</el-checkbox-button>
                                                         </el-checkbox-group>
                                                     </el-form-item>
                                                 </el-col>
@@ -511,14 +510,12 @@ const formatTime = (ts) => {
                                             <template v-if="selectedTask.triggerType === 'monthly'">
                                                 <el-col :span="12">
                                                     <el-form-item :label="t('tasks.monthlyDayLabel')">
-                                                        <el-select 
-                                                            :model-value="selectedTask.monthlyDays || (selectedTask.monthlyDay ? [selectedTask.monthlyDay] : [])" 
-                                                            multiple 
-                                                            clearable
-                                                            placeholder="请选择触发日期 (可多选)"
+                                                        <el-select :model-value="selectedTask.monthlyDays || []"
+                                                            multiple clearable placeholder="请选择触发日期 (可多选)"
                                                             @change="(val) => { selectedTask.monthlyDays = val; saveTaskSetting('monthlyDays', val) }"
                                                             style="width: 100%;">
-                                                            <el-option v-for="day in 31" :key="day" :label="`${day}日`" :value="day" />
+                                                            <el-option v-for="day in 31" :key="day" :label="`${day}日`"
+                                                                :value="day" />
                                                         </el-select>
                                                     </el-form-item>
                                                 </el-col>
@@ -637,7 +634,7 @@ const formatTime = (ts) => {
                                         <div style="display: flex; gap: 10px;">
                                             <el-button size="small" :icon="Refresh" @click="refreshTasksConfig">{{
                                                 t('tasks.refreshHistoryBtn')
-                                                }}</el-button>
+                                            }}</el-button>
                                             <el-button size="small" type="danger" plain :icon="Delete"
                                                 @click="clearTaskHistory">{{
                                                     t('tasks.clearHistoryBtn') }}</el-button>
@@ -868,14 +865,14 @@ const formatTime = (ts) => {
     border-bottom: 1px solid var(--border-primary);
     padding-bottom: 15px;
     margin-bottom: 20px;
-    overflow: hidden; 
+    overflow: hidden;
 }
 
 .task-title-actions {
     display: flex;
     align-items: center;
     flex: 1;
-    min-width: 0; 
+    min-width: 0;
     margin-right: 15px;
 }
 
@@ -889,7 +886,7 @@ const formatTime = (ts) => {
     align-items: center;
     flex: 1;
     min-width: 0;
-    
+
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

@@ -568,7 +568,7 @@ setInterval(async () => {
       } else if (task.triggerType === 'monthly' && task.monthlyTime) {
         const [hours, minutes] = task.monthlyTime.split(':').map(Number);
         const currentMonthDay = new Date().getDate();
-        const validDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : (task.monthlyDay ? [task.monthlyDay] : []);
+        const validDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
         
         if (validDays.includes(currentMonthDay)) {
           if (currentH === hours && currentM === minutes && safeCooldown) {
