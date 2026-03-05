@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
 import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar, ElSwitch } from 'element-plus';
 import { createClient } from "webdav/web";
-import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning, Cpu, ArrowUp, ArrowDown } from '@element-plus/icons-vue';
+import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning, Cpu, ArrowUp, ArrowDown, Refresh } from '@element-plus/icons-vue';
 
 import TitleBar from './components/TitleBar.vue';
 import ChatHeader from './components/ChatHeader.vue';
@@ -229,6 +229,7 @@ const openaiFormattedTools = ref([]);
 const mcpSearchQuery = ref('');
 const isMcpLoading = ref(false);
 const mcpFilter = ref('all');
+const isRefreshingMcp = ref(false);
 const mcpToolCache = ref({});
 const expandedMcpServers = ref(new Set());
 
@@ -237,6 +238,50 @@ const toggleMcpServerExpansion = (serverId) => {
     expandedMcpServers.value.delete(serverId);
   } else {
     expandedMcpServers.value.add(serverId);
+  }
+};
+
+const refreshSelectedMcpServers = async () => {
+  if (tempSessionMcpServerIds.value.length === 0) {
+    showDismissibleMessage.warning('请先勾选需要刷新的 MCP 服务');
+    return;
+  }
+  isRefreshingMcp.value = true;
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const id of tempSessionMcpServerIds.value) {
+    const serverConf = currentConfig.value.mcpServers[id];
+    if (!serverConf || serverConf.type === 'builtin') continue; 
+
+    const configToTest = {
+      id: id,
+      type: serverConf.type,
+      command: serverConf.command,
+      baseUrl: serverConf.baseUrl,
+      env: serverConf.env,
+      headers: serverConf.headers,
+      args: serverConf.args
+    };
+
+    const res = await window.api.testMcpConnection(configToTest);
+    if (res.success) {
+      successCount++;
+    } else {
+      failCount++;
+    }
+  }
+
+  // 刷新完毕后，重新拉取最新的缓存以渲染 UI
+  mcpToolCache.value = await window.api.getMcpToolCache() || {};
+  isRefreshingMcp.value = false;
+
+  if (failCount === 0 && successCount > 0) {
+    showDismissibleMessage.success(`成功刷新 ${successCount} 个服务的工具缓存`);
+  } else if (failCount > 0) {
+    showDismissibleMessage.warning(`刷新完成: ${successCount} 成功, ${failCount} 失败`);
+  } else {
+    showDismissibleMessage.info(`选中的皆为内置服务，无需手动刷新`);
   }
 };
 
@@ -4194,17 +4239,18 @@ const scrollToMessageByIndex = (index) => {
     </template>
     <div class="mcp-dialog-content">
       <div class="mcp-dialog-toolbar">
-        <el-button-group>
-          <el-button :type="mcpFilter === 'all' ? 'primary' : ''" @click="mcpFilter = 'all'">全部</el-button>
-          <el-button :type="mcpFilter === 'selected' ? 'primary' : ''" @click="mcpFilter = 'selected'">已选
-          </el-button>
-          <el-button :type="mcpFilter === 'unselected' ? 'primary' : ''" @click="mcpFilter = 'unselected'">未选
-          </el-button>
-        </el-button-group>
-        <el-button-group>
-          <el-button @click="selectAllMcpServers">全选</el-button>
-          <el-button @click="clearMcpTools">清空</el-button>
-        </el-button-group>
+        <div class="filter-tags">
+          <span class="filter-tag" :class="{ active: mcpFilter === 'all' }" @click="mcpFilter = 'all'">全部</span>
+          <span class="filter-tag" :class="{ active: mcpFilter === 'selected' }" @click="mcpFilter = 'selected'">已选</span>
+          <span class="filter-tag" :class="{ active: mcpFilter === 'unselected' }" @click="mcpFilter = 'unselected'">未选</span>
+        </div>
+        <div class="action-tags">
+          <span class="action-tag" @click="refreshSelectedMcpServers" title="强制重新拉取选中服务的最新工具配置">
+            <el-icon :class="{ 'is-loading': isRefreshingMcp }"><Refresh /></el-icon>
+          </span>
+          <span class="action-tag" @click="selectAllMcpServers">全选</span>
+          <span class="action-tag" @click="clearMcpTools">清空</span>
+        </div>
       </div>
       <div class="mcp-server-list custom-scrollbar">
         <div v-for="server in filteredMcpServers" :key="server.id" class="mcp-server-item-wrapper">
@@ -4300,17 +4346,18 @@ const scrollToMessageByIndex = (index) => {
             <el-tooltip placement="top">
               <template #content>
                 持久连接各占1个名额<br>
-                所有临时连接共占1个名额
+                所有临时连接共占1个名额<br>
+                内置MCP不占用名额
               </template>
               <el-icon style="vertical-align: middle; margin-left: 4px; cursor: help;">
                 <QuestionFilled />
               </el-icon>
             </el-tooltip>
           </span>
-          <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" style="margin-left: 40px; margin-right: 0;" />
+          <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" class="bw-checkbox" style="margin-left: 40px; margin-right: 0;" />
         </div>
         <div>
-          <el-button type="primary"
+          <el-button type="primary" class="bw-btn"
             @click="sessionMcpServerIds = [...tempSessionMcpServerIds]; applyMcpTools();">应用</el-button>
         </div>
       </div>
@@ -4323,19 +4370,16 @@ const scrollToMessageByIndex = (index) => {
     </template>
 
     <div class="mcp-dialog-content">
-      <!-- 顶部工具栏 -->
       <div class="mcp-dialog-toolbar">
-        <el-button-group>
-          <el-button :type="skillFilter === 'all' ? 'primary' : ''" @click="skillFilter = 'all'">全部</el-button>
-          <el-button :type="skillFilter === 'selected' ? 'primary' : ''"
-            @click="skillFilter = 'selected'">已选</el-button>
-          <el-button :type="skillFilter === 'unselected' ? 'primary' : ''"
-            @click="skillFilter = 'unselected'">未选</el-button>
-        </el-button-group>
-        <el-button-group>
-          <el-button @click="selectAllSkills">全选</el-button>
-          <el-button @click="clearSkills">清空</el-button>
-        </el-button-group>
+        <div class="filter-tags">
+          <span class="filter-tag" :class="{ active: skillFilter === 'all' }" @click="skillFilter = 'all'">全部</span>
+          <span class="filter-tag" :class="{ active: skillFilter === 'selected' }" @click="skillFilter = 'selected'">已选</span>
+          <span class="filter-tag" :class="{ active: skillFilter === 'unselected' }" @click="skillFilter = 'unselected'">未选</span>
+        </div>
+        <div class="action-tags">
+          <span class="action-tag" @click="selectAllSkills">全选</span>
+          <span class="action-tag" @click="clearSkills">清空</span>
+        </div>
       </div>
 
       <!-- 列表区域 -->
@@ -4405,7 +4449,7 @@ const scrollToMessageByIndex = (index) => {
             Skill 依赖内置 MCP 服务，请勿禁用
           </span>
         </div>
-        <el-button type="primary" @click="handleSkillSelectionConfirm">确定</el-button>
+        <el-button type="primary" class="bw-btn" @click="handleSkillSelectionConfirm">确定</el-button>
       </div>
     </template>
   </el-dialog>
@@ -4825,9 +4869,47 @@ html.dark .mcp-dialog-footer-search {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   flex-shrink: 0;
-  padding: 0 5px;
+  padding: 0 4px;
+}
+
+.filter-tags, .action-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-tag, .action-tag {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.5, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--el-fill-color-light);
+  color: var(--el-text-color-regular);
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.filter-tag:hover, .action-tag:hover {
+  background-color: var(--el-fill-color-darker);
+  color: var(--el-text-color-primary);
+}
+
+.filter-tag.active {
+  background-color: var(--el-text-color-primary);
+  color: var(--el-bg-color);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+html.dark .filter-tag.active {
+  box-shadow: 0 2px 6px rgba(255, 255, 255, 0.15);
 }
 
 .mcp-server-list {
@@ -5823,5 +5905,105 @@ html.dark .app-container.has-bg :deep(.tool-call-details .tool-detail-section pr
 /* 确保深色模式下样式正常 */
 html.dark .subagent-toggle-btn-small:hover {
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+.bw-btn.el-button--primary {
+  /* 浅色下变黑底，深色下变白底 */
+  background-color: var(--el-text-color-primary) !important;
+  border-color: var(--el-text-color-primary) !important;
+  /* 浅色下变白字，深色下变黑字 */
+  color: var(--el-bg-color) !important;
+  font-weight: 600;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.bw-btn.el-button--primary:hover {
+  opacity: 0.85;
+}
+
+.bw-btn.el-button--primary:active {
+  transform: scale(0.96);
+}
+
+.bw-checkbox :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--el-text-color-primary) !important;
+  border-color: var(--el-text-color-primary) !important;
+}
+
+.bw-checkbox :deep(.el-checkbox__input.is-checked .el-checkbox__inner::after) {
+  border-color: var(--el-bg-color) !important;
+}
+
+.bw-checkbox :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
+  color: var(--el-text-color-primary) !important;
+  font-weight: 600;
+}
+
+.bw-checkbox :deep(.el-checkbox__inner:hover) {
+  border-color: var(--el-text-color-primary) !important;
+}
+
+.mcp-server-item-wrapper:has(.mcp-server-item.is-checked) {
+  border-color: var(--el-text-color-primary) !important; /* 黑/白边框 */
+  background-color: var(--el-fill-color-light) !important; /* 浅灰背景 */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); /* 轻微浮起感 */
+}
+
+.mcp-server-item-wrapper:hover {
+  border-color: var(--el-text-color-primary) !important;
+  background-color: var(--el-fill-color) !important;
+}
+
+.mcp-server-item.is-checked {
+  background-color: transparent !important; /* 让位给外层容器 */
+}
+
+.mcp-server-item :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--el-text-color-primary) !important;
+  border-color: var(--el-text-color-primary) !important;
+}
+
+.mcp-server-item :deep(.el-checkbox__input.is-checked .el-checkbox__inner::after) {
+  border-color: var(--el-bg-color) !important;
+}
+
+.mcp-server-item .el-tag {
+  background-color: transparent !important;
+  border-color: var(--el-border-color-darker) !important;
+  color: var(--el-text-color-secondary) !important;
+  transition: all 0.2s;
+}
+
+.mcp-server-item :deep(.el-checkbox__input.is-focus .el-checkbox__inner),
+.mcp-server-item :deep(.el-checkbox__inner:hover) {
+  border-color: var(--el-text-color-primary) !important;
+}
+
+.mcp-server-item :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  background-color: var(--el-text-color-primary) !important;
+  border-color: var(--el-text-color-primary) !important;
+}
+.mcp-server-item :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner::before) {
+  background-color: var(--el-bg-color) !important;
+}
+
+.mcp-server-item.is-checked .el-tag,
+.mcp-server-item-wrapper:hover .el-tag {
+  border-color: var(--el-text-color-primary) !important;
+  color: var(--el-text-color-primary) !important;
+  font-weight: 500;
+}
+
+.mcp-server-item .el-tag.type-tag {
+  background-color: var(--el-fill-color) !important;
+}
+
+html.dark .mcp-server-item-wrapper:has(.mcp-server-item.is-checked) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  box-shadow: none;
+}
+
+html.dark .mcp-server-item .el-tag {
+  border-color: #4C4D4F !important;
 }
 </style>

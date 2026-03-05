@@ -39,6 +39,7 @@ const {
   initializeMcpClient, 
   invokeMcpTool,
   closeMcpClient,
+  connectAndFetchTools,
 } = require('./mcp.js');
 
 const {
@@ -159,6 +160,45 @@ window.api = {
         } catch (e) {
             console.error("[WindowPreload] Error loading MCP cache:", e);
             return await initializeMcpClient(activeServerConfigs, {}, saveMcpToolCache);
+        }
+    },
+    testMcpConnection: async (serverConfig) => {
+        try {
+            // 连接并获取最新工具
+            const rawTools = await connectAndFetchTools(serverConfig.id, {
+                transport: serverConfig.type,
+                command: serverConfig.command,
+                args: serverConfig.args,
+                url: serverConfig.baseUrl,
+                env: serverConfig.env,
+                headers: serverConfig.headers,
+            });
+
+            const sanitizedTools = rawTools.map(tool => ({
+                name: tool.name,
+                description: tool.description,
+                inputSchema: tool.inputSchema || tool.schema || {}
+            }));
+
+            // 读取旧缓存以继承启用/禁用状态
+            const oldCacheMap = await getMcpToolCache();
+            const oldTools = oldCacheMap ? (oldCacheMap[serverConfig.id] || []) : [];
+
+            const mergedTools = sanitizedTools.map(newTool => {
+                const oldTool = oldTools.find(t => t.name === newTool.name);
+                return {
+                    ...newTool,
+                    enabled: oldTool ? (oldTool.enabled ?? true) : true
+                };
+            });
+
+            const cleanTools = JSON.parse(JSON.stringify(mergedTools));
+            // 覆盖保存最新缓存
+            await saveMcpToolCache(serverConfig.id, cleanTools);
+            return { success: true, tools: cleanTools };
+        } catch (error) {
+            console.error("[WindowPreload] MCP Refresh Error:", error);
+            return { success: false, error: String(error.message || error) };
         }
     },
     invokeMcpTool: async (toolName, toolArgs, signal, context = null) => {
