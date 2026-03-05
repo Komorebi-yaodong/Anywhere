@@ -478,6 +478,11 @@ Note: Long-running commands will be terminated after timeout.`,
             inputSchema: { type: "object", properties: {} }
         },
         {
+            name: "list_mcp_servers",
+            description: "List all MCP servers with their IDs and descriptions available for scheduled tasks. Use this to find the exact 'id' for assigning 'extra_mcp' to a scheduled task.",
+            inputSchema: { type: "object", properties: {} }
+        },
+        {
             name: "list_tasks",
             description: "List scheduled tasks. By default, it returns a summary (ID and Name). If 'task_name_or_id' is provided, it returns full details for that specific task.",
             inputSchema: { 
@@ -516,7 +521,17 @@ Note: Long-running commands will be terminated after timeout.`,
                         items: { type: "integer" },
                         description: "Optional. Required for 'monthly'. Array of dates in month (1-31). e.g. [1, 15, 28]."
                     },
-                    enabled: { type: "boolean", description: "Enable immediately. Defaults to true.", default: true }
+                    enabled: { type: "boolean", description: "Enable immediately. Defaults to true.", default: true },
+                    extra_mcp: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Optional. Array of MCP server IDs to enable for this task. By default, all built-in MCP servers are automatically assigned. Only specify this if you need 3rd-party MCPs."
+                    },
+                    extra_skills: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Optional. Array of Skill names to enable for this task. Defaults to empty. You should only assign skills that are relevant to the task."
+                    }
                 },
                 required: ["name", "instruction", "schedule_type", "time_param"]
             }
@@ -535,7 +550,9 @@ Note: Long-running commands will be terminated after timeout.`,
                     time_param: { type: "string" },
                     interval_time_ranges: { type: "array", items: { type: "string" } },
                     weekly_days: { type: "array", items: { type: "integer" } },
-                    monthly_days: { type: "array", items: { type: "integer" } }
+                    monthly_days: { type: "array", items: { type: "integer" } },
+                    extra_mcp: { type: "array", items: { type: "string" } },
+                    extra_skills: { type: "array", items: { type: "string" } }
                 },
                 required: ["task_name_or_id"]
             }
@@ -1826,6 +1843,18 @@ const handlers = {
         return `Available Agents:\n${agentStr}`;
     },
 
+    list_mcp_servers: async () => {
+        const { getConfig } = require('./data.js');
+        const configData = await getConfig();
+        const mcpServers = configData.config.mcpServers || {};
+        
+        let mcpStr = "Available MCP Servers (ID - Name: Description):\n";
+        Object.entries(mcpServers).filter(([_, s]) => s.isActive).forEach(([id, s]) => {
+            mcpStr += `- ID: [${id}] - Name: [${s.name}] - Desc: ${s.description || 'No description'}\n`;
+        });
+        return mcpStr;
+    },
+
     list_tasks: async ({ task_name_or_id }) => {
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
@@ -1868,6 +1897,9 @@ const handlers = {
                 details += `- Monthly Time: ${task.monthlyTime} on dates [${mDays.join(',')}]\n`;
             }
             
+            if (task.extraMcp && task.extraMcp.length > 0) details += `- Extra MCPs: [${task.extraMcp.join(', ')}]\n`;
+            if (task.extraSkills && task.extraSkills.length > 0) details += `- Extra Skills: [${task.extraSkills.join(', ')}]\n`;
+            
             details += `\n**Instruction:**\n${task.description}`;
             return details;
         }
@@ -1879,7 +1911,7 @@ const handlers = {
         return "Current Tasks (Summary):\n" + taskList.join('\n') + "\n\n(Tip: Use 'task_name_or_id' argument to see full details of a specific task)";
     },
 
-    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, interval_time_ranges, weekly_days, monthly_days }) => {
+    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills }) => {
         const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
@@ -1916,8 +1948,17 @@ const handlers = {
             if (interval_time_ranges && Array.isArray(interval_time_ranges)) {
                 newTask.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
             }
-            if (configData.config.mcpServers) {
+            
+            // --- MCP / SKill 逻辑 ---
+            if (extra_mcp && Array.isArray(extra_mcp)) {
+                newTask.extraMcp = extra_mcp;
+            } else if (configData.config.mcpServers) {
+                // 如果没传，默认挂载所有内置服务
                 newTask.extraMcp = Object.entries(configData.config.mcpServers).filter(([_, s]) => s.type === 'builtin').map(([id]) => id);
+            }
+            
+            if (extra_skills && Array.isArray(extra_skills)) {
+                newTask.extraSkills = extra_skills;
             }
 
             if (schedule_type === 'daily' || schedule_type === 'weekly' || schedule_type === 'monthly') {
@@ -1953,7 +1994,7 @@ const handlers = {
         }
     },
 
-    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, interval_time_ranges, weekly_days, monthly_days }) => {
+    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills }) => {
         const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
@@ -1989,6 +2030,17 @@ const handlers = {
                         else return `Error: Agent "${agent_name}" not found. Edit cancelled.`;
                     }
                 }
+            }
+
+            // --- 修改 MCP 和 Skill 逻辑 ---
+            if (extra_mcp !== undefined) {
+                if (Array.isArray(extra_mcp)) task.extraMcp = extra_mcp;
+                else return "Error: extra_mcp must be an array of strings.";
+            }
+
+            if (extra_skills !== undefined) {
+                if (Array.isArray(extra_skills)) task.extraSkills = extra_skills;
+                else return "Error: extra_skills must be an array of strings.";
             }
 
             let timeChanged = false;
