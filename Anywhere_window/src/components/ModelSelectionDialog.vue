@@ -73,11 +73,10 @@ const handleClose = () => {
     <el-dialog 
         :model-value="modelValue" 
         @update:model-value="handleClose" 
-        width="80%"
+        width="70%"
         custom-class="model-dialog no-header-dialog adaptive-dialog" 
         @opened="handleOpened"
         :show-close="false"
-        top="8vh"
     >
         <template #header>
             <div style="display: none;"></div>
@@ -97,7 +96,7 @@ const handleClose = () => {
             </div>
             
             <!-- 列表区域：max-height 控制高度自适应 -->
-            <el-scrollbar max-height="50vh" class="model-list-scrollbar">
+            <el-scrollbar max-height="42vh" class="model-list-scrollbar">
                 <div v-if="groupedModels.length === 0" class="empty-state">
                     暂无匹配模型
                 </div>
@@ -175,6 +174,10 @@ const handleClose = () => {
     margin-bottom: 20px;
 }
 
+.provider-group:last-child {
+    margin-bottom: 0;
+}
+
 .provider-title {
     font-size: 13px;
     color: var(--el-text-color-placeholder);
@@ -186,7 +189,7 @@ const handleClose = () => {
 .model-grid {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 0px;
 }
 
 .model-item {
