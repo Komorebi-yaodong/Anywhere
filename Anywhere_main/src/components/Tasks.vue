@@ -162,6 +162,8 @@ function handleAddTask() {
             weeklyTime: '12:00',
             monthlyDays: [1],
             monthlyTime: '12:00',
+            singleDate: new Date().toLocaleDateString('sv-SE'),
+            singleTime: '12:00',
             promptKey: '__DEFAULT__',
             description: '',
             extraMcp: builtinIds,
@@ -409,6 +411,8 @@ const formatTime = (ts) => {
                                             <el-col :span="24" style="margin-bottom: 15px;">
                                                 <el-radio-group v-model="selectedTask.triggerType"
                                                     @change="(val) => saveTaskSetting('triggerType', val)">
+                                                    <el-radio-button value="single">{{ t('tasks.triggerSingle')
+                                                    }}</el-radio-button>
                                                     <el-radio-button value="interval">{{ t('tasks.triggerInterval')
                                                     }}</el-radio-button>
                                                     <el-radio-button value="daily">{{ t('tasks.triggerDaily')
@@ -420,6 +424,25 @@ const formatTime = (ts) => {
                                                 </el-radio-group>
                                             </el-col>
 
+                                            <template v-if="selectedTask.triggerType === 'single'">
+                                                <el-col :span="12">
+                                                    <el-form-item :label="t('tasks.singleDateLabel')">
+                                                        <el-date-picker v-model="selectedTask.singleDate" type="date"
+                                                            value-format="YYYY-MM-DD"
+                                                            @change="(val) => saveTaskSetting('singleDate', val)"
+                                                            style="width: 100%;" :clearable="false" />
+                                                    </el-form-item>
+                                                </el-col>
+                                                <el-col :span="12">
+                                                    <el-form-item :label="t('tasks.singleTimeLabel')">
+                                                        <el-time-picker v-model="selectedTask.singleTime" format="HH:mm"
+                                                            value-format="HH:mm"
+                                                            @change="(val) => saveTaskSetting('singleTime', val)"
+                                                            style="width: 100%;" :clearable="false" />
+                                                    </el-form-item>
+                                                </el-col>
+                                            </template>
+                                            
                                             <template v-if="selectedTask.triggerType === 'interval'">
                                                 <el-col :span="12">
                                                     <el-form-item :label="t('tasks.intervalMinutesLabel')">

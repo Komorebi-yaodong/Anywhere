@@ -502,7 +502,7 @@ Note: Long-running commands will be terminated after timeout.`,
                     instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
                     agent_name: { type: "string", description: "Optional. Name of the Quick Prompt to use. Defaults to '__DEFAULT__'." },
                     schedule_type: { 
-                        type: "string", enum: ["interval", "daily", "weekly", "monthly"], 
+                        type: "string", enum: ["interval", "daily", "weekly", "monthly", "single"], 
                         description: "Type of schedule. 'interval'(every X mins), 'daily'(fixed time), 'weekly'(fixed days in week), 'monthly'(fixed dates in month)." 
                     },
                     time_param: { type: "string", description: "For 'interval': number of minutes. For others: HH:mm format." },
@@ -520,6 +520,10 @@ Note: Long-running commands will be terminated after timeout.`,
                         type: "array",
                         items: { type: "integer" },
                         description: "Optional. Required for 'monthly'. Array of dates in month (1-31). e.g. [1, 15, 28]."
+                    },
+                    single_date: { 
+                        type: "string", 
+                        description: "Optional. Required for 'single'. Format: YYYY-MM-DD (e.g. 2026-03-05). Defaults to today if omitted." 
                     },
                     enabled: { type: "boolean", description: "Enable immediately. Defaults to true.", default: true },
                     extra_mcp: {
@@ -546,8 +550,9 @@ Note: Long-running commands will be terminated after timeout.`,
                     new_name: { type: "string" },
                     instruction: { type: "string",description: "New prompt content. Provide a highly detailed, self-contained instruction for autonomous execution (explicitly stating tools to use, goals, and output formats)." },
                     agent_name: { type: "string" },
-                    schedule_type: { type: "string", enum: ["interval", "daily", "weekly", "monthly"] },
+                    schedule_type: { type: "string", enum: ["interval", "daily", "weekly", "monthly", "single"] },
                     time_param: { type: "string" },
+                    single_date: { type: "string", description: "Format: YYYY-MM-DD" },
                     interval_time_ranges: { type: "array", items: { type: "string" } },
                     weekly_days: { type: "array", items: { type: "integer" } },
                     monthly_days: { type: "array", items: { type: "integer" } },
@@ -1895,6 +1900,8 @@ const handlers = {
             } else if (task.triggerType === 'monthly') {
                 const mDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
                 details += `- Monthly Time: ${task.monthlyTime} on dates [${mDays.join(',')}]\n`;
+            } else if (task.triggerType === 'single') {
+                details += `- Single Run: ${task.singleDate} at ${task.singleTime}\n`;
             }
             
             if (task.extraMcp && task.extraMcp.length > 0) details += `- Extra MCPs: [${task.extraMcp.join(', ')}]\n`;
@@ -1911,7 +1918,7 @@ const handlers = {
         return "Current Tasks (Summary):\n" + taskList.join('\n') + "\n\n(Tip: Use 'task_name_or_id' argument to see full details of a specific task)";
     },
 
-    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills }) => {
+    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, single_date, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills, }) => {
         const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
@@ -1942,7 +1949,9 @@ const handlers = {
                 intervalMinutes: 60, intervalStartTime: '00:00', intervalTimeRanges: [], 
                 dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDays: [1], monthlyTime: '12:00',
                 extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
-                lastRunTime: enabled ? Date.now() : 0
+                lastRunTime: enabled ? Date.now() : 0,
+                singleDate: single_date || new Date().toISOString().split('T')[0],
+                singleTime: '12:00',
             };
 
             if (interval_time_ranges && Array.isArray(interval_time_ranges)) {
@@ -1961,11 +1970,12 @@ const handlers = {
                 newTask.extraSkills = extra_skills;
             }
 
-            if (schedule_type === 'daily' || schedule_type === 'weekly' || schedule_type === 'monthly') {
+            if (schedule_type === 'daily' || schedule_type === 'weekly' || schedule_type === 'monthly' || schedule_type === 'single') {
                 if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) {
                     if (schedule_type === 'daily') newTask.dailyTime = time_param;
                     if (schedule_type === 'weekly') newTask.weeklyTime = time_param;
                     if (schedule_type === 'monthly') newTask.monthlyTime = time_param;
+                    if (schedule_type === 'single') newTask.singleTime = time_param;
                 } else return "Error: Invalid time format. Use HH:mm.";
 
                 if (schedule_type === 'weekly') {
@@ -1975,6 +1985,18 @@ const handlers = {
                 if (schedule_type === 'monthly') {
                     if (Array.isArray(monthly_days)) newTask.monthlyDays = monthly_days;
                     else return "Error: monthly_days array is required for monthly schedule.";
+                }
+                if (schedule_type === 'single') {
+                    if (single_date) {
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(single_date)) {
+                            newTask.singleDate = single_date;
+                        } else {
+                            return "Error: single_date must be YYYY-MM-DD.";
+                        }
+                    } else {
+                        const nowD = new Date();
+                        newTask.singleDate = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
+                    }
                 }
             } else if (schedule_type === 'interval') {
                 const minutes = parseInt(time_param);
@@ -1994,7 +2016,7 @@ const handlers = {
         }
     },
 
-    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills }) => {
+    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, single_date, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills }) => {
         const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
@@ -2056,11 +2078,12 @@ const handlers = {
             }
 
             if (time_param) {
-                if (currentType === 'daily' || currentType === 'weekly' || currentType === 'monthly') {
+                if (currentType === 'daily' || currentType === 'weekly' || currentType === 'monthly' || currentType === 'single') {
                     if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) { 
                         if (currentType === 'daily') task.dailyTime = time_param; 
                         if (currentType === 'weekly') task.weeklyTime = time_param; 
-                        if (currentType === 'monthly') task.monthlyTime = time_param; 
+                        if (currentType === 'monthly') task.monthlyTime = time_param;
+                        if (currentType === 'single') task.singleTime = time_param; 
                         timeChanged = true; 
                     }
                     else return "Error: Invalid time format. Use HH:mm.";
@@ -2079,6 +2102,11 @@ const handlers = {
             if (monthly_days !== undefined) {
                 if (Array.isArray(monthly_days)) { task.monthlyDays = monthly_days; timeChanged = true; }
                 else return "Error: monthly_days must be an array.";
+            }
+
+            if (single_date !== undefined) {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(single_date)) { task.singleDate = single_date; timeChanged = true; }
+                else return "Error: single_date must be YYYY-MM-DD.";
             }
 
             if (timeChanged && task.enabled) {

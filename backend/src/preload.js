@@ -575,6 +575,15 @@ setInterval(async () => {
             shouldTrigger = true;
           }
         }
+      } else if (task.triggerType === 'single' && task.singleDate && task.singleTime) {
+        const nowD = new Date();
+        const currentYMD = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
+        const [hours, minutes] = task.singleTime.split(':').map(Number);
+        
+        if (currentYMD === task.singleDate && currentH === hours && currentM === minutes && safeCooldown) {
+          shouldTrigger = true;
+          task.enabled = false; 
+        }
       }
 
       if (shouldTrigger && task.triggerType === 'interval' && task.intervalTimeRanges && task.intervalTimeRanges.length > 0) {
