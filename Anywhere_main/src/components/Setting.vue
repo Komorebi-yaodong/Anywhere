@@ -1,9 +1,10 @@
 <script setup>
-import { ref, onMounted, computed, inject, h } from 'vue'
+import { ref, onMounted, computed, inject, h, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
-import { Upload, FolderOpened, Refresh, Delete as DeleteIcon, Download, Plus, ArrowRight,  } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, ElInput, ElCollapseTransition } from 'element-plus'
+import { Upload, FolderOpened, Refresh, Delete as DeleteIcon, Download, Plus, ArrowRight, Check } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, ElInput } from 'element-plus'
+import draggable from 'vuedraggable'
 
 const { t, locale } = useI18n()
 
@@ -11,17 +12,50 @@ const currentConfig = inject('config');
 const selectedLanguage = ref(locale.value);
 
 const collapsedCards = ref({
-  general: true,
-  voice: true,
-  data: true,
-  webdav: true
+  general: false,
+  voice: false,
+  data: false,
+  webdav: false
 });
+
+const cardDefinitions = {
+  general: { id: 'general', titleKey: 'setting.title' },
+  voice: { id: 'voice', titleKey: 'setting.voice.title' },
+  data: { id: 'data', titleKey: 'setting.dataManagement.title' },
+  webdav: { id: 'webdav', titleKey: null, staticTitle: 'WebDAV' }
+};
+
+const settingsCards = ref([]);
+
+function initCardOrder() {
+  if (currentConfig.value && currentConfig.value.settingsCardOrder) {
+    const order = currentConfig.value.settingsCardOrder;
+    settingsCards.value = order
+      .map(id => cardDefinitions[id])
+      .filter(Boolean); 
+    
+    const missingIds = Object.keys(cardDefinitions).filter(id => !order.includes(id));
+    missingIds.forEach(id => settingsCards.value.push(cardDefinitions[id]));
+  } else {
+    settingsCards.value = [
+      cardDefinitions.general,
+      cardDefinitions.voice,
+      cardDefinitions.data,
+      cardDefinitions.webdav
+    ];
+  }
+}
+
+const onOrderChange = async () => {
+  const newOrder = settingsCards.value.map(card => card.id);
+  currentConfig.value.settingsCardOrder = newOrder;
+  await saveSingleSetting('settingsCardOrder', newOrder);
+};
 
 function toggleCard(cardName) {
   collapsedCards.value[cardName] = !collapsedCards.value[cardName];
 }
 
-// --- 备份管理器状态 ---
 const isBackupManagerVisible = ref(false);
 const backupFiles = ref([]);
 const isTableLoading = ref(false);
@@ -29,14 +63,12 @@ const selectedFiles = ref([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
 
-// --- 计算属性用于分页 ---
 const paginatedFiles = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   const end = start + pageSize.value;
   return backupFiles.value.slice(start, end);
 });
 
-// --- 辅助函数 ---
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
@@ -52,23 +84,28 @@ const formatBytes = (bytes, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-
 onMounted(() => {
   if (['ja', 'ru'].includes(locale.value)) {
     handleLanguageChange('zh');
   } else {
     selectedLanguage.value = locale.value;
   }
+  
+  if (currentConfig.value) {
+    initCardOrder();
+  }
 });
 
-// 新的、更精确的保存函数
+watch(() => currentConfig.value, (newVal) => {
+  if (newVal) {
+    initCardOrder();
+  }
+}, { once: true });
+
 async function saveSingleSetting(keyPath, value) {
   try {
     if (window.api && window.api.saveSetting) {
-      // 调用 preload 暴露的新 API，只传递变更
       await window.api.saveSetting(keyPath, value);
-    } else {
-      console.warn("window.api.saveSetting is not available.");
     }
   } catch (error) {
     console.error(`Error saving setting for ${keyPath}:`, error);
@@ -76,17 +113,12 @@ async function saveSingleSetting(keyPath, value) {
   }
 }
 
-//  保存整个配置的函数，仅用于语音列表等复杂操作
 async function saveFullConfig() {
   if (!currentConfig.value) return;
   try {
     const configToSave = { config: JSON.parse(JSON.stringify(currentConfig.value)) };
-    // 注意：这里我们仍然使用旧的保存方式，因为它适用于整个列表的修改
-    // 更好的做法是也为列表创建增删改的原子操作，但为了节省工作量，这里暂时保留
     if (window.api && window.api.updateConfigWithoutFeatures) {
       await window.api.updateConfigWithoutFeatures(configToSave);
-    } else {
-      console.warn("window.api.updateConfigWithoutFeatures is not available.");
     }
   } catch (error) {
     console.error("Error saving settings config:", error);
@@ -97,14 +129,11 @@ function handleLanguageChange(lang) {
   locale.value = lang;
   localStorage.setItem('language', lang);
   selectedLanguage.value = lang;
-  // 语言设置不属于config，所以不需要保存到utools数据库
 }
 
-// --- 全局开关处理函数 ---
 async function handleGlobalToggleChange(key, value) {
   if (!currentConfig.value || !currentConfig.value.prompts) return;
 
-  // 1. 更新全局开关自身的状态
   if (key === 'isAlwaysOnTop') {
     currentConfig.value.isAlwaysOnTop_global = value;
   } else if (key === 'autoCloseOnBlur') {
@@ -113,17 +142,13 @@ async function handleGlobalToggleChange(key, value) {
     currentConfig.value.autoSaveChat_global = value;
   }
 
-  // 2. 批量更新所有快捷助手的对应设置
   Object.keys(currentConfig.value.prompts).forEach(promptKey => {
     const prompt = currentConfig.value.prompts[promptKey];
     if (prompt) {
-      // 这里的 key 分别对应 prompts 对象中的属性名：
-      // 'isAlwaysOnTop', 'autoCloseOnBlur', 'autoSaveChat'
       prompt[key] = value;
     }
   });
 
-  // 3. 保存整个更新后的配置
   await saveFullConfig();
   ElMessage.success(t('setting.alerts.saveSuccess'));
 }
@@ -131,15 +156,12 @@ async function handleGlobalToggleChange(key, value) {
 async function exportConfig() {
   if (!currentConfig.value) return;
   try {
-    // 创建配置的深拷贝以进行修改，不影响当前应用的配置
     const configToExport = JSON.parse(JSON.stringify(currentConfig.value));
 
-    // 在导出前移除本地对话路径
     if (configToExport.webdav && configToExport.webdav.localChatPath) {
       delete configToExport.webdav.localChatPath;
     }
 
-    // 在导出前移除 Skill 路径 (不同设备路径不同)
     if (configToExport.skillPath !== undefined) {
       delete configToExport.skillPath;
     }
@@ -154,7 +176,6 @@ async function exportConfig() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    console.log("Configuration exported successfully.");
   } catch (error) {
     console.error("Error exporting config:", error);
   }
@@ -170,9 +191,7 @@ function importConfig() {
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
-          // 在导入新配置前，先保存当前的本地对话路径
           const currentLocalChatPath = currentConfig.value.webdav?.localChatPath;
-          // 保存当前的 Skill 路径
           const currentSkillPath = currentConfig.value.skillPath;
 
           const importedData = JSON.parse(e.target.result);
@@ -180,15 +199,13 @@ function importConfig() {
             throw new Error("Imported file is not a valid configuration object.");
           }
 
-          // 将保存的本地路径写回到即将应用的配置中
           if (currentLocalChatPath) {
             if (!importedData.webdav) {
-              importedData.webdav = {}; // 确保 webdav 对象存在
+              importedData.webdav = {};
             }
             importedData.webdav.localChatPath = currentLocalChatPath;
           }
 
-          // 将保存的 Skill 路径写回
           if (currentSkillPath) {
             importedData.skillPath = currentSkillPath;
           }
@@ -198,9 +215,9 @@ function importConfig() {
             const result = await window.api.getConfig();
             if (result && result.config) {
               currentConfig.value = result.config;
+              initCardOrder();
             }
           }
-          console.log("Configuration imported and replaced successfully.");
           ElMessage.success(t('setting.alerts.importSuccess'));
         } catch (err) {
           console.error("Error importing configuration:", err);
@@ -216,14 +233,11 @@ function importConfig() {
 async function handleThemeChange(mode) {
   if (!currentConfig.value) return;
 
-  // 1. 保存用户选择的模式
   await saveSingleSetting('themeMode', mode);
 
-  // 2. 计算实际的布尔值
   let newIsDarkMode = currentConfig.value.isDarkMode;
 
   if (mode === 'system') {
-    // 检测系统当前主题
     newIsDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
   } else if (mode === 'dark') {
     newIsDarkMode = true;
@@ -231,12 +245,10 @@ async function handleThemeChange(mode) {
     newIsDarkMode = false;
   }
 
-  // 3. 更新本地状态并保存布尔值（为了兼容旧逻辑和其他窗口）
   currentConfig.value.isDarkMode = newIsDarkMode;
   await saveSingleSetting('isDarkMode', newIsDarkMode);
 }
 
-// --- Voice Management (使用 saveFullConfig 因为它修改的是一个数组) ---
 const addNewVoice = () => {
   ElMessageBox.prompt(t('setting.voice.addPromptMessage'), t('setting.voice.addPromptTitle'), {
     confirmButtonText: t('common.confirm'),
@@ -300,8 +312,6 @@ const deleteVoice = (voiceToDelete) => {
   }
 };
 
-
-// --- WebDAV 功能 ---
 async function backupToWebdav() {
   if (!currentConfig.value) return;
   const { url, username, password, path } = currentConfig.value.webdav;
@@ -335,7 +345,7 @@ async function backupToWebdav() {
       confirmButtonText: t('common.confirm'),
       cancelButtonText: t('common.cancel'),
       customClass: 'filename-prompt-dialog',
-      center: true, // 修改处：开启 Element Plus 弹窗居中模式
+      center: true,
       beforeClose: async (action, instance, done) => {
         if (action === 'confirm') {
           let finalBasename = inputValue.value.trim();
@@ -357,12 +367,10 @@ async function backupToWebdav() {
               await client.createDirectory(remoteDir, { recursive: true });
             }
 
-            // 在备份前移除本地路径
             const configToBackup = JSON.parse(JSON.stringify(currentConfig.value));
             if (configToBackup.webdav && configToBackup.webdav.localChatPath) {
               delete configToBackup.webdav.localChatPath;
             }
-            // [新增] 在备份前移除 Skill 路径
             if (configToBackup.skillPath !== undefined) {
               delete configToBackup.skillPath;
             }
@@ -420,7 +428,6 @@ async function fetchBackupFiles() {
     const contents = response.data;
 
     if (!Array.isArray(contents)) {
-      console.error("Failed to fetch backup files: WebDAV response.data is not an array.", response);
       ElMessage.error(t('setting.webdav.manager.fetchFailed') + ': Invalid response structure from server');
       backupFiles.value = [];
       return;
@@ -457,9 +464,7 @@ async function restoreFromWebdav(file) {
 
     ElMessage.info(t('setting.webdav.alerts.restoreInProgress'));
 
-    // 在恢复前保存当前的本地对话路径
     const currentLocalChatPath = currentConfig.value.webdav?.localChatPath;
-    // 保存当前的 Skill 路径
     const currentSkillPath = currentConfig.value.skillPath;
 
     const { url, username, password, path } = currentConfig.value.webdav;
@@ -490,6 +495,7 @@ async function restoreFromWebdav(file) {
       const result = await window.api.getConfig();
       if (result && result.config) {
         currentConfig.value = result.config;
+        initCardOrder();
       }
     }
 
@@ -577,207 +583,218 @@ async function selectLocalChatPath() {
   <div class="settings-page-container">
     <el-scrollbar class="settings-scrollbar-wrapper">
       <div class="settings-content">
-        <!-- 通用设置卡片 -->
-        <div class="settings-card">
-          <div class="card-header" :class="{ 'is-collapsed': collapsedCards.general }" @click="toggleCard('general')">
-            <span>{{ t('setting.title') }}</span>
-            <el-icon class="collapse-icon" :class="{ 'is-expanded': !collapsedCards.general }"><ArrowRight /></el-icon>
-          </div>
-          <el-collapse-transition>
-            <div v-show="!collapsedCards.general">
-              <div class="card-body">
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.language.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.language.selectPlaceholder') }}</span>
-                  </div>
-                  <el-select v-model="selectedLanguage" @change="handleLanguageChange" size="default" style="width: 120px;">
-                    <el-option :label="t('setting.language.chinese')" value="zh"></el-option>
-                    <el-option :label="t('setting.language.english')" value="en"></el-option>
-                  </el-select>
-                </div>
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.darkMode.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.darkMode.description') }}</span>
-                  </div>
-                  <el-select v-model="currentConfig.themeMode" @change="handleThemeChange" size="default"
-                    style="width: 120px;">
-                    <el-option :label="t('setting.darkMode.system')" value="system"></el-option>
-                    <el-option :label="t('setting.darkMode.light')" value="light"></el-option>
-                    <el-option :label="t('setting.darkMode.dark')" value="dark"></el-option>
-                  </el-select>
-                </div>
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.isAlwaysOnTop_global.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.isAlwaysOnTop_global.description') }}</span>
-                  </div>
-                  <el-switch v-model="currentConfig.isAlwaysOnTop_global"
-                    @change="(value) => handleGlobalToggleChange('isAlwaysOnTop', value)" />
-                </div>
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.autoCloseOnBlur_global.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.autoCloseOnBlur_global.description') }}</span>
-                  </div>
-                  <el-switch v-model="currentConfig.autoCloseOnBlur_global"
-                    @change="(value) => handleGlobalToggleChange('autoCloseOnBlur', value)" />
-                </div>
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.autoSaveChat_global.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.autoSaveChat_global.description') }}</span>
-                  </div>
-                  <el-switch v-model="currentConfig.autoSaveChat_global"
-                    @change="(value) => handleGlobalToggleChange('autoSaveChat', value)" />
-                </div>
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.skipLineBreak.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.skipLineBreak.description') }}</span>
-                  </div>
-                  <el-switch v-model="currentConfig.skipLineBreak"
-                    @change="(value) => saveSingleSetting('skipLineBreak', value)" />
-                </div>
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.ctrlEnter.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.ctrlEnter.description') }}</span>
-                  </div>
-                  <el-switch v-model="currentConfig.CtrlEnterToSend"
-                    @change="(value) => saveSingleSetting('CtrlEnterToSend', value)" />
-                </div>
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.notification.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.notification.description') }}</span>
-                  </div>
-                  <el-switch v-model="currentConfig.showNotification"
-                    @change="(value) => saveSingleSetting('showNotification', value)" />
-                </div>
-                <div class="setting-option-item no-border">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.fixPosition.label') }}</span>
-                    <span class="setting-option-description">{{ t('setting.fixPosition.description') }}</span>
-                  </div>
-                  <el-switch v-model="currentConfig.fix_position"
-                    @change="(value) => saveSingleSetting('fix_position', value)" />
-                </div>
+        <draggable 
+          v-model="settingsCards" 
+          item-key="id" 
+          handle=".card-header" 
+          animation="300"
+          ghost-class="sortable-ghost"
+          drag-class="sortable-drag"
+          class="draggable-list"
+          @end="onOrderChange"
+        >
+          <template #item="{ element }">
+            <div class="settings-card">
+              <div class="card-header" :class="{ 'is-collapsed': collapsedCards[element.id] }" @click="toggleCard(element.id)">
+                <span v-if="element.id === 'voice'">
+                  <el-tooltip :content="t('setting.voice.description')" placement="top">
+                    <span>{{ t(element.titleKey) }}</span>
+                  </el-tooltip>
+                </span>
+                <span v-else>{{ element.titleKey ? t(element.titleKey) : element.staticTitle }}</span>
+                <el-icon class="collapse-icon" :class="{ 'is-expanded': !collapsedCards[element.id] }"><ArrowRight /></el-icon>
               </div>
-            </div>
-          </el-collapse-transition>
-        </div>
 
-        <!-- 语音设置卡片 -->
-        <div class="settings-card">
-          <div class="card-header" :class="{ 'is-collapsed': collapsedCards.voice }" @click="toggleCard('voice')">
-            <el-tooltip :content="t('setting.voice.description')" placement="top">
-              <span>{{ t('setting.voice.title') }}</span>
-            </el-tooltip>
-            <el-icon class="collapse-icon" :class="{ 'is-expanded': !collapsedCards.voice }"><ArrowRight /></el-icon>
-          </div>
-          <el-collapse-transition>
-            <div v-show="!collapsedCards.voice">
-              <div class="card-body">
-                <div class="voice-list-container">
-                  <el-tag v-for="voice in currentConfig.voiceList" :key="voice" closable @click="editVoice(voice)"
-                    @close="deleteVoice(voice)" class="voice-tag" size="large">
-                    {{ voice }}
-                  </el-tag>
-                  <el-button class="add-voice-button" type="primary" plain :icon="Plus" @click="addNewVoice">
-                    {{ t('setting.voice.add') }}
-                  </el-button>
-                </div>
-              </div>
-            </div>
-          </el-collapse-transition>
-        </div>
+              <el-collapse-transition>
+                <div v-show="!collapsedCards[element.id]">
+                  
+                  <div v-if="element.id === 'general'" class="card-body">
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.language.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.language.selectPlaceholder') }}</span>
+                      </div>
+                      <el-select v-model="selectedLanguage" @change="handleLanguageChange" size="default" style="width: 120px;">
+                        <el-option :label="t('setting.language.chinese')" value="zh"></el-option>
+                        <el-option :label="t('setting.language.english')" value="en"></el-option>
+                      </el-select>
+                    </div>
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.darkMode.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.darkMode.description') }}</span>
+                      </div>
+                      <el-select v-model="currentConfig.themeMode" @change="handleThemeChange" size="default"
+                        style="width: 120px;">
+                        <el-option :label="t('setting.darkMode.system')" value="system"></el-option>
+                        <el-option :label="t('setting.darkMode.light')" value="light"></el-option>
+                        <el-option :label="t('setting.darkMode.dark')" value="dark"></el-option>
+                      </el-select>
+                    </div>
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.isAlwaysOnTop_global.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.isAlwaysOnTop_global.description') }}</span>
+                      </div>
+                      <el-switch v-model="currentConfig.isAlwaysOnTop_global"
+                        @change="(value) => handleGlobalToggleChange('isAlwaysOnTop', value)" />
+                    </div>
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.autoCloseOnBlur_global.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.autoCloseOnBlur_global.description') }}</span>
+                      </div>
+                      <el-switch v-model="currentConfig.autoCloseOnBlur_global"
+                        @change="(value) => handleGlobalToggleChange('autoCloseOnBlur', value)" />
+                    </div>
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.autoSaveChat_global.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.autoSaveChat_global.description') }}</span>
+                      </div>
+                      <el-switch v-model="currentConfig.autoSaveChat_global"
+                        @change="(value) => handleGlobalToggleChange('autoSaveChat', value)" />
+                    </div>
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.skipLineBreak.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.skipLineBreak.description') }}</span>
+                      </div>
+                      <el-switch v-model="currentConfig.skipLineBreak"
+                        @change="(value) => saveSingleSetting('skipLineBreak', value)" />
+                    </div>
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.ctrlEnter.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.ctrlEnter.description') }}</span>
+                      </div>
+                      <el-switch v-model="currentConfig.CtrlEnterToSend"
+                        @change="(value) => saveSingleSetting('CtrlEnterToSend', value)" />
+                    </div>
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.notification.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.notification.description') }}</span>
+                      </div>
+                      <el-switch v-model="currentConfig.showNotification"
+                        @change="(value) => saveSingleSetting('showNotification', value)" />
+                    </div>
+                    <div class="setting-option-item no-border">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.fixPosition.label') }}</span>
+                        <span class="setting-option-description">{{ t('setting.fixPosition.description') }}</span>
+                      </div>
+                      <el-switch v-model="currentConfig.fix_position"
+                        @change="(value) => saveSingleSetting('fix_position', value)" />
+                    </div>
+                  </div>
 
-        <!-- 数据管理卡片 -->
-        <div class="settings-card">
-          <div class="card-header" :class="{ 'is-collapsed': collapsedCards.data }" @click="toggleCard('data')">
-            <span>{{ t('setting.dataManagement.title') }}</span>
-            <el-icon class="collapse-icon" :class="{ 'is-expanded': !collapsedCards.data }"><ArrowRight /></el-icon>
-          </div>
-          <el-collapse-transition>
-            <div v-show="!collapsedCards.data">
-              <div class="card-body">
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.dataManagement.exportLabel') }}</span>
-                    <span class="setting-option-description">{{ t('setting.dataManagement.exportDesc') }}</span>
+                  <div v-if="element.id === 'voice'" class="card-body">
+                    <div class="voice-list-container">
+                      <el-tag v-for="voice in currentConfig.voiceList" :key="voice" closable @click="editVoice(voice)"
+                        @close="deleteVoice(voice)" class="voice-tag" size="large">
+                        {{ voice }}
+                      </el-tag>
+                      <el-button class="add-voice-button" type="primary" plain :icon="Plus" @click="addNewVoice">
+                        {{ t('setting.voice.add') }}
+                      </el-button>
+                    </div>
                   </div>
-                  <el-button @click="exportConfig" :icon="Download" size="default" plain>{{
-                    t('setting.dataManagement.exportButton')
-                  }}</el-button>
-                </div>
-                <div class="setting-option-item">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.dataManagement.importLabel') }}</span>
-                    <span class="setting-option-description">{{ t('setting.dataManagement.importDesc') }}</span>
-                  </div>
-                  <el-button @click="importConfig" :icon="Upload" size="default" plain>{{
-                    t('setting.dataManagement.importButton')
-                  }}</el-button>
-                </div>
-                <div class="setting-option-item no-border">
-                  <div class="setting-text-content">
-                    <span class="setting-option-label">{{ t('setting.webdav.localChatPath') }}</span>
-                    <span class="setting-option-description">{{ t('setting.webdav.localChatPathPlaceholder') }}</span>
-                  </div>
-                  <el-input v-model="currentConfig.webdav.localChatPath"
-                    @change="(value) => saveSingleSetting('webdav.localChatPath', value)"
-                    :placeholder="t('setting.webdav.localChatPathPlaceholder')" style="width: 320px;">
-                    <template #append>
-                      <el-button @click="selectLocalChatPath">{{ t('setting.webdav.selectFolder') }}</el-button>
-                    </template>
-                  </el-input>
-                </div>
-              </div>
-            </div>
-          </el-collapse-transition>
-        </div>
 
-        <!-- WebDAV 卡片 -->
-        <div class="settings-card">
-          <div class="card-header" :class="{ 'is-collapsed': collapsedCards.webdav }" @click="toggleCard('webdav')">
-            <span>WebDAV</span>
-            <el-icon class="collapse-icon" :class="{ 'is-expanded': !collapsedCards.webdav }"><ArrowRight /></el-icon>
-          </div>
-          <el-collapse-transition>
-            <div v-show="!collapsedCards.webdav">
-              <div class="card-body">
-                <el-form label-width="200px" label-position="left" size="default">
-                  <el-form-item :label="t('setting.webdav.url')"><el-input v-model="currentConfig.webdav.url"
-                      @change="(value) => saveSingleSetting('webdav.url', value)"
-                      :placeholder="t('setting.webdav.urlPlaceholder')" /></el-form-item>
-                  <el-form-item :label="t('setting.webdav.username')"><el-input v-model="currentConfig.webdav.username"
-                      @change="(value) => saveSingleSetting('webdav.username', value)"
-                      :placeholder="t('setting.webdav.usernamePlaceholder')" /></el-form-item>
-                  <el-form-item :label="t('setting.webdav.password')"><el-input v-model="currentConfig.webdav.password"
-                      @change="(value) => saveSingleSetting('webdav.password', value)" type="password" show-password
-                      :placeholder="t('setting.webdav.passwordPlaceholder')" /></el-form-item>
-                  <el-form-item :label="t('setting.webdav.path')"><el-input v-model="currentConfig.webdav.path"
-                      @change="(value) => saveSingleSetting('webdav.path', value)"
-                      :placeholder="t('setting.webdav.pathPlaceholder')" /></el-form-item>
-                  <el-form-item :label="t('setting.webdav.dataPath')"><el-input v-model="currentConfig.webdav.data_path"
-                      @change="(value) => saveSingleSetting('webdav.data_path', value)"
-                      :placeholder="t('setting.webdav.dataPathPlaceholder')" /></el-form-item>
-                  <el-form-item :label="t('setting.webdav.backupRestoreTitle')" class="no-margin-bottom">
-                    <el-button @click="backupToWebdav" :icon="Upload">{{ t('setting.webdav.backupButton') }}</el-button>
-                    <el-button @click="openBackupManager" :icon="FolderOpened">{{ t('setting.webdav.restoreButton')
-                    }}</el-button>
-                  </el-form-item>
-                </el-form>
-              </div>
+                  <div v-if="element.id === 'data'" class="card-body">
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.dataManagement.exportLabel') }}</span>
+                        <span class="setting-option-description">{{ t('setting.dataManagement.exportDesc') }}</span>
+                      </div>
+                      <el-button @click="exportConfig" :icon="Download" size="default" plain>{{
+                        t('setting.dataManagement.exportButton')
+                      }}</el-button>
+                    </div>
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.dataManagement.importLabel') }}</span>
+                        <span class="setting-option-description">{{ t('setting.dataManagement.importDesc') }}</span>
+                      </div>
+                      <el-button @click="importConfig" :icon="Upload" size="default" plain>{{
+                        t('setting.dataManagement.importButton')
+                      }}</el-button>
+                    </div>
+                    <div class="setting-option-item no-border">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.webdav.localChatPath') }}</span>
+                        <span class="setting-option-description">{{ t('setting.webdav.localChatPathPlaceholder') }}</span>
+                      </div>
+                      <el-input v-model="currentConfig.webdav.localChatPath"
+                        @change="(value) => saveSingleSetting('webdav.localChatPath', value)"
+                        :placeholder="t('setting.webdav.localChatPathPlaceholder')" style="width: 320px;">
+                        <template #append>
+                          <el-button @click="selectLocalChatPath">{{ t('setting.webdav.selectFolder') }}</el-button>
+                        </template>
+                      </el-input>
+                    </div>
+                  </div>
+
+                  <div v-if="element.id === 'webdav'" class="card-body">
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.webdav.url') }}</span>
+                      </div>
+                      <el-input v-model="currentConfig.webdav.url" @change="(value) => saveSingleSetting('webdav.url', value)"
+                        :placeholder="t('setting.webdav.urlPlaceholder')" style="width: 320px;" />
+                    </div>
+                    
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.webdav.username') }}</span>
+                      </div>
+                      <el-input v-model="currentConfig.webdav.username" @change="(value) => saveSingleSetting('webdav.username', value)"
+                        :placeholder="t('setting.webdav.usernamePlaceholder')" style="width: 320px;" />
+                    </div>
+
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.webdav.password') }}</span>
+                      </div>
+                      <el-input v-model="currentConfig.webdav.password" @change="(value) => saveSingleSetting('webdav.password', value)" type="password" show-password
+                        :placeholder="t('setting.webdav.passwordPlaceholder')" style="width: 320px;" />
+                    </div>
+
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.webdav.path') }}</span>
+                      </div>
+                      <el-input v-model="currentConfig.webdav.path" @change="(value) => saveSingleSetting('webdav.path', value)"
+                        :placeholder="t('setting.webdav.pathPlaceholder')" style="width: 320px;" />
+                    </div>
+
+                    <div class="setting-option-item">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.webdav.dataPath') }}</span>
+                      </div>
+                      <el-input v-model="currentConfig.webdav.data_path" @change="(value) => saveSingleSetting('webdav.data_path', value)"
+                        :placeholder="t('setting.webdav.dataPathPlaceholder')" style="width: 320px;" />
+                    </div>
+
+                    <div class="setting-option-item no-border">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.webdav.backupRestoreTitle') }}</span>
+                      </div>
+                      <div class="webdav-actions" style="display: flex; gap: 12px;">
+                        <el-button @click="backupToWebdav" :icon="Upload" plain>{{ t('setting.webdav.backupButton') }}</el-button>
+                        <el-button @click="openBackupManager" :icon="FolderOpened" plain>{{ t('setting.webdav.restoreButton') }}</el-button>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </el-collapse-transition>
             </div>
-          </el-collapse-transition>
-        </div>
+          </template>
+        </draggable>
       </div>
     </el-scrollbar>
 
-    <!-- [修改] 备份数据管理弹窗 -->
     <el-dialog v-model="isBackupManagerVisible" :title="t('setting.webdav.manager.title')" width="700px" top="10vh"
       :destroy-on-close="true" style="max-width: 90vw;" class="backup-manager-dialog">
       <el-table :data="paginatedFiles" v-loading="isTableLoading" @selection-change="handleSelectionChange"
@@ -829,37 +846,34 @@ async function selectLocalChatPath() {
 </template>
 
 <style scoped>
-.voice-list-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 15px 0;
-}
-
-.voice-tag {
-  font-size: 14px;
-  height: 32px;
-  padding: 0 12px;
-  cursor: pointer;
-  transition: transform 0.2s ease-in-out, filter 0.2s ease-in-out;
-}
-
-.voice-tag:hover {
-  transform: scale(1.05);
-  filter: brightness(1.2);
-}
-
-.add-voice-button {
-  border-style: dashed;
-}
-
 .settings-page-container {
+  --panda-bg: #F4F4F5; 
+  --panda-card-bg: #FFFFFF;
+  --panda-text-main: #18181B;
+  --panda-text-sub: #71717A;
+  --panda-accent: #18181B;
+  --panda-border: #E4E4E7;
+  --panda-hover: #F4F4F5;
+  --panda-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  
   height: 100%;
   width: 100%;
-  background-color: var(--bg-primary);
+  background-color: var(--panda-bg);
   display: flex;
   justify-content: center;
   overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+html.dark .settings-page-container {
+  --panda-bg: #000000;
+  --panda-card-bg: #18181B;
+  --panda-text-main: #FFFFFF;
+  --panda-text-sub: #A1A1AA;
+  --panda-accent: #FFFFFF;
+  --panda-border: #27272A;
+  --panda-hover: #27272A;
+  --panda-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 .settings-scrollbar-wrapper {
@@ -869,32 +883,62 @@ async function selectLocalChatPath() {
 }
 
 .settings-content {
-  padding: 20px;
+  padding: 20px 20px 60px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+}
+
+.draggable-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sortable-ghost {
+  opacity: 0.4;
+  background-color: var(--panda-bg);
+  border: 1px dashed var(--panda-text-sub);
+  box-shadow: none;
+}
+
+.sortable-drag {
+  cursor: grabbing;
+  opacity: 1;
+  background-color: var(--panda-card-bg);
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.15);
+  transform: scale(1.01);
 }
 
 .settings-card {
-  border: 1px solid var(--border-primary);
-  background-color: var(--bg-secondary);
-  border-radius: var(--radius-lg);
+  background-color: var(--panda-card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--panda-border);
+  box-shadow: var(--panda-shadow);
   overflow: hidden;
-  transition: border-color 0.2s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 12px -3px rgba(0, 0, 0, 0.08);
 }
 
 .card-header {
-  padding: 15px 25px;
-  font-size: 18px;
-  color: var(--text-primary);
+  padding: 14px 20px;
+  font-size: 15px;
+  color: var(--panda-text-main);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  cursor: pointer;
+  cursor: grab;
   user-select: none;
   background-color: transparent;
   transition: background-color 0.2s;
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--panda-border);
+}
+
+.card-header:active {
+  cursor: grabbing;
 }
 
 .card-header.is-collapsed {
@@ -902,93 +946,223 @@ async function selectLocalChatPath() {
 }
 
 .card-header:hover {
-  background-color: var(--bg-tertiary);
+  background-color: var(--panda-hover);
 }
 
 .card-header > span,
 .card-header :deep(span) {
   font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .collapse-icon {
-  color: var(--text-secondary);
-  transition: transform 0.3s;
+  color: var(--panda-text-sub);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   font-size: 16px;
+  background-color: var(--panda-bg);
+  border-radius: 50%;
+  padding: 4px;
+  width: 24px;
+  height: 24px;
 }
 
 .collapse-icon.is-expanded {
   transform: rotate(90deg);
+  background-color: var(--panda-accent);
+  color: var(--panda-card-bg);
 }
 
 .card-body {
-  padding: 5px 25px 15px 25px;
+  padding: 4px 20px 20px 20px;
 }
 
 .setting-option-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border-primary);
-  gap: 20px;
-  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 2px;
+  border-radius: 8px;
+  background-color: transparent;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  gap: 16px;
+}
+
+.setting-option-item:hover {
+  background-color: var(--panda-hover);
 }
 
 .setting-option-item:last-child,
 .setting-option-item.no-border {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .setting-text-content {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
   flex: 1;
   min-width: 0;
 }
 
 .setting-option-label {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--panda-text-main);
 }
 
 .setting-option-description {
-  font-size: 13px;
-  color: var(--text-tertiary);
-  line-height: 1.4;
+  font-size: 12px;
+  color: var(--panda-text-sub);
+  line-height: 1.3;
+}
+
+.voice-list-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.voice-tag {
+  font-size: 12px;
+  height: 30px;
+  padding: 0 14px;
+  cursor: pointer;
+  border-radius: 15px;
+  border: 1px solid var(--panda-border);
+  background-color: var(--panda-card-bg);
+  color: var(--panda-text-main);
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.5, 1);
+  display: inline-flex;
+  align-items: center;
+}
+
+.voice-tag:hover {
+  transform: scale(1.03);
+  border-color: var(--panda-accent);
+  background-color: var(--panda-accent);
+  color: var(--panda-card-bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.add-voice-button {
+  border: 1px dashed var(--panda-text-sub) !important;
+  color: var(--panda-text-sub) !important;
+  height: 30px;
+  border-radius: 15px;
+  padding: 0 16px;
+  background-color: transparent !important;
+  transition: all 0.2s;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.add-voice-button:hover {
+  border-color: var(--panda-accent) !important;
+  color: var(--panda-accent) !important;
+  background-color: var(--panda-hover) !important;
 }
 
 .el-switch {
-  --el-switch-on-color: var(--bg-accent);
+  --el-switch-on-color: var(--panda-accent);
+  --el-switch-off-color: var(--panda-border);
+  height: 20px;
   flex-shrink: 0;
+}
+:deep(.el-switch__core) {
+  border: 2px solid transparent;
+  background-color: var(--panda-border);
+  min-width: 36px;
+  height: 20px;
+}
+:deep(.el-switch.is-checked .el-switch__core) {
+  background-color: var(--panda-accent);
+  border-color: var(--panda-accent);
+}
+:deep(.el-switch__action) {
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
 .el-select,
-.el-button,
+.el-input,
 .el-input-number {
   flex-shrink: 0;
 }
 
-:deep(.el-form-item__label) {
-  line-height: 1.5;
-  color: var(--text-secondary);
+:deep(.el-input__wrapper),
+:deep(.el-select__wrapper) {
+  background-color: var(--panda-bg);
+  box-shadow: none !important;
+  border: 1px solid var(--panda-border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  height: 30px;
+  transition: all 0.2s ease;
+}
+
+:deep(.el-input__inner) {
+  color: var(--panda-text-main);
   font-weight: 500;
+  font-size: 13px;
+  height: 30px;
+}
+
+:deep(.el-input__wrapper.is-focus),
+:deep(.el-select__wrapper.is-focused) {
+  background-color: var(--panda-card-bg);
+  border-color: var(--panda-accent);
+  box-shadow: 0 0 0 1px var(--panda-accent) inset !important;
+}
+
+.el-button {
+  border-radius: 8px;
+  font-weight: 600;
+  border: 1px solid var(--panda-border);
+  color: var(--panda-text-main);
+  background-color: var(--panda-card-bg);
+  height: 30px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.el-button:hover {
+  background-color: var(--panda-hover);
+  border-color: var(--panda-text-sub);
+  color: var(--panda-text-main);
+}
+
+.el-button--primary,
+.el-button--primary.is-plain {
+  background-color: var(--panda-accent) !important;
+  border-color: var(--panda-accent) !important;
+  color: var(--panda-card-bg) !important;
+}
+
+.el-button--primary:hover,
+.el-button--primary.is-plain:hover {
+  opacity: 0.85;
+}
+
+.webdav-actions .el-button {
+  height: 32px;
+  padding: 0 16px;
 }
 
 .action-buttons-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 0;
 }
 
 .action-buttons-container .el-divider--vertical {
-  height: 1em;
-  border-left: 1px solid var(--border-primary);
-  margin: 0 8px;
+  border-color: var(--panda-border);
 }
 
 .dialog-footer {
@@ -996,70 +1170,66 @@ async function selectLocalChatPath() {
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  flex-wrap: wrap;
-  gap: 10px;
   padding-top: 10px;
 }
 
-.footer-left,
-.footer-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+:deep(.el-table) {
+  --el-table-border-color: var(--panda-border);
+  --el-table-header-bg-color: var(--panda-bg);
+  --el-table-tr-bg-color: var(--panda-card-bg);
+  --el-table-text-color: var(--panda-text-main);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--panda-border);
 }
 
-.footer-center {
-  flex-grow: 1;
-  display: flex;
-  justify-content: center;
-}
-
-:deep(.el-pagination.is-background .el-pager li),
-:deep(.el-pagination.is-background .btn-prev),
-:deep(.el-pagination.is-background .btn-next) {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-:deep(.el-pagination.is-background .el-pager li:not(.is-disabled).is-active) {
-  background-color: var(--bg-accent);
-  color: var(--text-on-accent);
-}
-
-:deep(.el-table__header-wrapper th) {
-  background-color: var(--bg-primary) !important;
-  color: var(--text-secondary);
+:deep(.el-table th.el-table__cell) {
+  background-color: var(--panda-bg);
+  color: var(--panda-text-sub);
   font-weight: 600;
+  padding: 8px 0;
 }
 
-:deep(.el-table),
-:deep(.el-table tr) {
-  background-color: var(--bg-secondary);
+:deep(.el-table td.el-table__cell) {
+  padding: 8px 0;
 }
 
-:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
-  background-color: var(--bg-primary);
+:deep(.el-pagination.is-background .el-pager li) {
+  background-color: var(--panda-bg);
+  color: var(--panda-text-sub);
+  border-radius: 6px;
+  min-width: 28px;
+  height: 28px;
 }
 
-:deep(.el-table td.el-table__cell),
-:deep(.el-table th.el-table__cell.is-leaf) {
-  border-bottom: 1px solid var(--border-primary);
-  color: var(--text-primary);
+:deep(.el-pagination.is-background .el-pager li.is-active) {
+  background-color: var(--panda-accent);
+  color: var(--panda-card-bg);
 }
 
-:deep(.el-table--border .el-table__cell) {
-  border-right: 1px solid var(--border-primary);
+:deep(.el-dialog) {
+  background-color: var(--panda-card-bg);
+  border-radius: 16px;
+  border: 1px solid var(--panda-border);
+}
+
+:deep(.el-dialog__title) {
+  color: var(--panda-text-main);
+  font-weight: 700;
 }
 
 :deep(.backup-manager-dialog .el-dialog__header) {
-  padding: 5px !important;
+  padding: 16px 20px !important;
+  border-bottom: 1px solid var(--panda-border);
 }
 
 :deep(.backup-manager-dialog .el-dialog__body) {
-  padding: 15px 20px 10px 20px !important;
+  padding: 16px 20px !important;
 }
 
 :deep(.backup-manager-dialog .el-dialog__footer) {
-  padding: 5px;
+  padding: 12px 20px;
+  background-color: var(--panda-bg);
+  border-top: 1px solid var(--panda-border);
 }
 </style>

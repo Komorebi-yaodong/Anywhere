@@ -55,6 +55,7 @@ const defaultConfig = {
         autoSaveChat: false,
       },
     },
+    settingsCardOrder: ['general', 'voice', 'data', 'webdav'], 
     fastWindowPosition: { x: 0, y: 0 },
     mcpServers: {},
     skillPath: "",
@@ -362,6 +363,11 @@ function checkConfig(config) {
           config.defaultTaskModel = `${firstProvId}|${firstModel}`;
           flag = true;
       }
+  }
+  
+  if (!config.settingsCardOrder || !Array.isArray(config.settingsCardOrder)) {
+    config.settingsCardOrder = ['general', 'voice', 'data', 'webdav'];
+    flag = true;
   }
 
   // --- 3. WebDAV 检查 ---
