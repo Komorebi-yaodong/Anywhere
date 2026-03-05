@@ -286,7 +286,7 @@ const preprocessKatex = (text) => {
   processedText = processedText.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
 
   // 3. 将 \( ... \) 转换为 $ ... $ (行内公式)
-  processedText = processedText.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$');
+  processedText = processedText.replace(/\\\(\s*([\s\S]*?)\s*\\\)/g, '$$$1$');
 
   // 4. 将 {align} 和 {equation} 替换为 {aligned}
   // KaTeX 在 $$...$$ 内部通常不支持 align 环境（它是顶级环境）。
@@ -300,6 +300,13 @@ const preprocessKatex = (text) => {
   // 由于 aligned 环境不支持原生 \tag，或者 Markdown 渲染器会吞掉反斜杠，
   // 将其替换为右侧间距 + 文本的形式： \qquad \text{(...)}
   processedText = processedText.replace(/(?<!\\)\\tag\s*\{([^{}]+)\}/g, '\\qquad \\text{($1)}');
+
+  processedText = processedText.replace(/(?<!\\)(\$)([^$]+?)(?<!\\)(\$)/g, (match, p1, p2, p3) => {
+    if (/[，。、！？：“”【】（）\u4e00-\u9fa5]/.test(p2) || p2.includes('\n\n') || p2.length > 200) {
+      return `$${p2}$`;
+    }
+    return match;
+  });
 
   return processedText;
 };
