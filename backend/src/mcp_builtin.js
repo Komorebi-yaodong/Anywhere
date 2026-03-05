@@ -241,6 +241,16 @@ const BUILTIN_SERVERS = {
         tags: ["task", "schedule", "cron"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4a/Commons-logo.svg"
     },
+    "builtin_time": {
+        id: "builtin_time",
+        name: "Time Service",
+        description: "获取当前系统时间或指定时区的时间。",
+        type: "builtin",
+        isActive: true,
+        isPersistent: false,
+        tags: ["time", "clock"],
+        logoUrl: "https://api.iconify.design/lucide:clock.svg"
+    },
 };
 
 const BUILTIN_TOOLS = {
@@ -583,6 +593,21 @@ Note: Long-running commands will be terminated after timeout.`,
                     task_name_or_id: { type: "string", description: "The name or ID of the task to delete." }
                 },
                 required: ["task_name_or_id"]
+            }
+        }
+    ],
+    "builtin_time": [
+        {
+            name: "get_current_time",
+            description: "Get the current time and date. You can optionally specify a timezone. Returns current time, date, and day of the week.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    timezone: { 
+                        type: "string", 
+                        description: "Optional. The timezone to get the time for, e.g., 'Asia/Shanghai', 'America/New_York', 'UTC'. If omitted, returns the local system time." 
+                    }
+                }
             }
         }
     ],
@@ -2174,6 +2199,37 @@ const handlers = {
             return `Task "${deletedName}" deleted successfully.`;
         } finally {
             unlock(); // 释放锁
+        }
+    },
+
+    // Time Handler
+    get_current_time: async ({ timezone }) => {
+        try {
+            const options = {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            };
+            if (timezone) {
+                options.timeZone = timezone;
+            }
+            
+            const now = new Date();
+            const dateStr = new Intl.DateTimeFormat('zh-CN', options).format(now).replace(/\//g, '-');
+            const weekdayStr = new Intl.DateTimeFormat('en-US', { 
+                weekday: 'long', 
+                ...(timezone ? { timeZone: timezone } : {}) 
+            }).format(now);
+            
+            const tzDisplay = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Local System Time";
+
+            return `Current Time (${tzDisplay}):\nDate & Time: ${dateStr}\nDay of Week: ${weekdayStr}`;
+        } catch (e) {
+            return `Error getting time: ${e.message}. Please ensure the timezone string is valid (e.g., 'Asia/Shanghai').`;
         }
     },
 };
