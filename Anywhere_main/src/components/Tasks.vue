@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, reactive, onMounted, computed, inject } from 'vue'
+import { ref, watch, reactive, onMounted, onBeforeUnmount, computed, inject } from 'vue'
 import { Plus, Delete, Document, Edit, Search, InfoFilled, Refresh, Clock, Setting as SettingIcon, List, VideoPlay } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -61,6 +61,11 @@ onMounted(async () => {
             availableSkills.value = skills.sort((a, b) => a.name.localeCompare(b.name));
         } catch (e) { console.error(e); }
     }
+    window.addEventListener('keydown', handleGlobalKeyDown);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleGlobalKeyDown);
 });
 
 watch(() => currentConfig.value?.tasks, (newTasks) => {
@@ -304,6 +309,19 @@ async function runTaskNow() {
         console.error(error);
     }
 }
+
+const handleGlobalKeyDown = (e) => {
+    if (!activeTaskId.value) return;
+
+    const activeEl = document.activeElement;
+    const isInput = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable;
+    
+    if (isInput) return;
+
+    if (e.key === 'Delete' || (e.key === 'Backspace' && !e.ctrlKey && !e.metaKey)) {
+        deleteTask();
+    }
+};
 
 const formatTime = (ts) => {
     if (!ts) return t('tasks.neverExecuted');
@@ -850,11 +868,15 @@ const formatTime = (ts) => {
     border-bottom: 1px solid var(--border-primary);
     padding-bottom: 15px;
     margin-bottom: 20px;
+    overflow: hidden; 
 }
 
 .task-title-actions {
     display: flex;
     align-items: center;
+    flex: 1;
+    min-width: 0; 
+    margin-right: 15px;
 }
 
 .task-name-display {
@@ -865,7 +887,9 @@ const formatTime = (ts) => {
     cursor: pointer;
     display: flex;
     align-items: center;
-    max-width: 400px;
+    flex: 1;
+    min-width: 0;
+    
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

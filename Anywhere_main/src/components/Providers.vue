@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, computed, inject } from 'vue'
+import { ref, reactive, onMounted, computed, inject, onBeforeUnmount } from 'vue'
 import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove, Search, Folder, FolderOpened, FolderAdd } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -24,6 +24,11 @@ onMounted(() => {
   } else {
     provider_key.value = null;
   }
+  window.addEventListener('keydown', handleGlobalKeyDown);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleGlobalKeyDown);
 });
 
 const selectedProvider = computed(() => {
@@ -200,26 +205,52 @@ function set_provider_folder(folderId) {
 
 function delete_provider() {
   if (!provider_key.value) return;
+  
+  const currentName = selectedProvider.value?.name || t('providers.unnamedProvider');
 
-  atomicSave(config => {
-    const keyToDelete = provider_key.value;
-    const index = config.providerOrder.indexOf(keyToDelete);
-
-    delete config.providers[keyToDelete];
-    config.providerOrder = config.providerOrder.filter(key => key !== keyToDelete);
-
-    // 更新 provider_key 以选择一个新的服务商
-    if (config.providerOrder.length > 0) {
-      if (index > 0 && index <= config.providerOrder.length) {
-        provider_key.value = config.providerOrder[index - 1];
-      } else {
-        provider_key.value = config.providerOrder[0];
-      }
-    } else {
-      provider_key.value = null;
+  ElMessageBox.confirm(
+    t('providers.alerts.deleteConfirmText', { name: currentName }), // 动态注入名称
+    t('providers.alerts.deleteConfirmTitle'),
+    { 
+        confirmButtonText: t('common.confirm'), 
+        cancelButtonText: t('common.cancel'), 
+        type: 'warning' 
     }
+  ).then(() => {
+    atomicSave(config => {
+      const keyToDelete = provider_key.value;
+      const index = config.providerOrder.indexOf(keyToDelete);
+
+      delete config.providers[keyToDelete];
+      config.providerOrder = config.providerOrder.filter(key => key !== keyToDelete);
+
+      if (config.providerOrder.length > 0) {
+        if (index > 0 && index <= config.providerOrder.length) {
+          provider_key.value = config.providerOrder[index - 1];
+        } else {
+          provider_key.value = config.providerOrder[0];
+        }
+      } else {
+        provider_key.value = null;
+      }
+    });
+    ElMessage.success(t('common.deleteSuccess'));
+  }).catch(() => {
   });
 }
+
+const handleGlobalKeyDown = (e) => {
+    if (!provider_key.value) return;
+
+    const activeEl = document.activeElement;
+    const isInput = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable;
+    
+    if (isInput) return;
+
+    if (e.key === 'Delete' || (e.key === 'Backspace' && !e.ctrlKey && !e.metaKey)) {
+        delete_provider();
+    }
+};
 
 const addProvider_page = ref(false);
 const addprovider_form = reactive({ name: "" });

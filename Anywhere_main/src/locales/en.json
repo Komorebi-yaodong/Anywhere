@@ -537,8 +537,8 @@
     "deleteProviderTooltip": "Delete Provider",
     "apiTypeTooltip": "Select API Protocol",
     "apiTypes": {
-        "chatCompletions": "OpenAI-Chat",
-        "responses": "OpenAI-Response"
+      "chatCompletions": "OpenAI-Chat",
+      "responses": "OpenAI-Response"
     },
     "apiKeyLabel": "API Key",
     "apiKeyPlaceholder": "Enter API Key (multiple can be entered, separated by commas)",
@@ -583,6 +583,8 @@
     "addModelTooltip": "Add Model",
     "removeModelTooltip": "Remove Model",
     "alerts": {
+      "deleteConfirmTitle": "Confirm Deletion",
+      "deleteConfirmText": "Are you sure you want to delete the provider '{name}'?",
       "providerUrlNotSet": "Provider URL is not set.",
       "fetchModelsError": "Error {status}: {message}",
       "fetchModelsFailedDefault": "Failed to fetch models.",

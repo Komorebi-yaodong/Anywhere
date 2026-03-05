@@ -540,8 +540,8 @@
     "deleteProviderTooltip": "删除服务商",
     "apiTypeTooltip": "选择 API 协议类型",
     "apiTypes": {
-        "chatCompletions": "OpenAI-Chat",
-        "responses": "OpenAI-Response"
+      "chatCompletions": "OpenAI-Chat",
+      "responses": "OpenAI-Response"
     },
     "apiKeyLabel": "API 密钥",
     "apiKeyPlaceholder": "输入 API 密钥 (可输入多个，用逗号分隔)",
@@ -586,6 +586,8 @@
     "addModelTooltip": "添加模型",
     "removeModelTooltip": "移除模型",
     "alerts": {
+      "deleteConfirmTitle": "确认删除",
+      "deleteConfirmText": "您确定要删除服务商 “{name}” 吗？",
       "providerUrlNotSet": "服务商 URL 未设置",
       "fetchModelsError": "错误 {status}: {message}",
       "fetchModelsFailedDefault": "获取模型失败",
