@@ -888,7 +888,7 @@ html.dark .chat-message .ai-bubble {
 
   :deep(.chat-audio-player) {
     width: 100%;
-    min-width: 40vw;
+    min-width: 60vw;
     height: 48px;
     accent-color: var(--text-primary);
 
