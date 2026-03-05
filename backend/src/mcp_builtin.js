@@ -12,7 +12,7 @@ const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform =
 // --- Bash Session State ---
 let bashCwd = os.homedir();
 
-const MAX_READ = 512 * 1000; // 512k characters
+const MAX_READ = 256 * 1000; // 512k characters
 
 // 数据提取函数 (提取标题、作者、简介)
 function extractMetadata(html) {
@@ -1197,19 +1197,17 @@ const handlers = {
         }
     },
 
-    // 2. Grep Search
+    // 2. Grep Search (优化版：提供详细上下文、行号、列号)
     grep_search: async ({ pattern, path: searchPath, glob, output_mode = 'content', multiline = false }, context, signal) => {
         try {
             if (!searchPath) {
                 return "Error: You MUST provide a 'path' argument to specify the directory.";
             }
             if (!pattern) {
-                return "Error: You MUST provide a 'pattern' argument. Do not put it inside a 'description' field.";
+                return "Error: You MUST provide a 'pattern' argument.";
             }
 
             const rootDir = resolvePath(searchPath);
-
-            // 安全检查：禁止扫描根目录
             const parsed = path.parse(rootDir);
             if (parsed.root === rootDir && rootDir.length <= 3) {
                 return `Error: Grep searching the system root directory ('${rootDir}') is not allowed. Please specify a project directory.`;
@@ -1224,9 +1222,9 @@ const handlers = {
             } catch (e) { return `Invalid Regex: ${e.message}`; }
 
             if (searchRegex.test("")) {
-                return `Error: The regex pattern '${pattern}' matches empty strings (e.g., .* or \\s*). This will match every character boundary and crash the search. Please use a more specific pattern (e.g., .+ instead of .*).`;
+                return `Error: The regex pattern '${pattern}' matches empty strings.`;
             }
-            searchRegex.lastIndex = 0; // 重置正则状态
+            searchRegex.lastIndex = 0;
 
             const globRegex = glob ? globToRegex(glob) : null;
             const normalizedRoot = normalizePath(rootDir);
@@ -1234,7 +1232,7 @@ const handlers = {
             const results = [];
             let matchCount = 0;
             const MAX_SCANNED = 5000;
-            const MAX_RESULTS_LINES = 1000; // 强制防线3：限制最大返回结果数，防止 Token 爆炸
+            const MAX_RESULTS_BLOCKS = 100;
             let scanned = 0;
 
             for await (const filePath of walkDir(rootDir, 20, 0, signal)) {
@@ -1248,7 +1246,6 @@ const handlers = {
                     const normalizedFilePath = normalizePath(filePath);
                     let relativePath = normalizedFilePath.replace(normalizedRoot, '');
                     if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
-
                     if (!globRegex.test(relativePath) && !globRegex.test(path.basename(filePath))) continue;
                 }
 
@@ -1257,7 +1254,7 @@ const handlers = {
 
                 try {
                     const stats = await fs.promises.stat(filePath);
-                    if (stats.size > 1024 * 1024) continue;
+                    if (stats.size > 2 * 1024 * 1024) continue;
 
                     const content = await fs.promises.readFile(filePath, { encoding: 'utf-8', signal });
 
@@ -1265,7 +1262,7 @@ const handlers = {
                         if (searchRegex.test(content)) {
                             results.push(filePath);
                             searchRegex.lastIndex = 0;
-                            if (results.length >= MAX_RESULTS_LINES) break; // 熔断
+                            if (results.length >= MAX_RESULTS_BLOCKS) break;
                         }
                     } else {
                         const matches = [...content.matchAll(searchRegex)];
@@ -1274,28 +1271,53 @@ const handlers = {
                             if (output_mode === 'count') continue;
 
                             const lines = content.split(/\r?\n/);
+                            
                             for (const m of matches) {
-                                if (results.length >= MAX_RESULTS_LINES) break; // 熔断
+                                if (results.length >= MAX_RESULTS_BLOCKS) break;
 
                                 const offset = m.index;
-                                const lineNum = content.substring(0, offset).split(/\r?\n/).length;
+                                const matchLen = m[0].length;
+                                
+                                // 计算行号 (1-based)
+                                const preMatch = content.substring(0, offset);
+                                const lineNum = preMatch.split(/\r?\n/).length;
+                                
+                                // 计算列号 (1-based)
+                                const lastNewLinePos = preMatch.lastIndexOf('\n');
+                                const colNum = offset - lastNewLinePos; 
 
-                                let previewText = m[0].replace(/\r?\n/g, ' ').trim();
-                                if (previewText.length > 150) {
-                                    previewText = previewText.substring(0, 150) + '...';
-                                } else if (previewText.length < 10) {
-                                    previewText = lines[lineNum - 1].trim().substring(0, 150);
+                                // 计算匹配结束行号 (处理多行匹配)
+                                const matchText = m[0];
+                                const newLinesInMatch = (matchText.match(/\n/g) || []).length;
+                                const endLineNum = lineNum + newLinesInMatch;
+
+                                // 获取上下文 (前后 20 行)
+                                const contextLines = 20;
+                                const startLineIdx = Math.max(0, lineNum - 1 - contextLines);
+                                const endLineIdx = Math.min(lines.length, endLineNum - 1 + 1 + contextLines);
+                                
+                                let contextBlock = "";
+                                for (let i = startLineIdx; i < endLineIdx; i++) {
+                                    const currentLineNum = i + 1;
+                                    const lineContent = lines[i];
+                                    // 使用 '>' 标记匹配覆盖的行
+                                    const marker = (currentLineNum >= lineNum && currentLineNum <= endLineNum) ? ">" : " ";
+                                    contextBlock += `${currentLineNum.toString().padEnd(4)} |${marker} ${lineContent}\n`;
                                 }
 
-                                results.push(`${filePath}:${lineNum}: ${previewText}`);
+                                const block = `[Match] ${filePath}
+Location: Line ${lineNum}, Col ${colNum} (Start Offset: ${offset})
+Context:
+${contextBlock}
+--------------------------------------------------`;
+                                results.push(block);
                             }
                         }
                     }
                 } catch (readErr) { /* ignore */ }
 
-                // 文件级熔断退出
-                if (output_mode !== 'count' && results.length >= MAX_RESULTS_LINES) {
-                    results.push(`\n[System Warning] Output truncated. Reached maximum of ${MAX_RESULTS_LINES} result lines. Please use a more specific pattern.`);
+                if (output_mode !== 'count' && results.length >= MAX_RESULTS_BLOCKS) {
+                    results.push(`\n[System Warning] Output truncated. Reached maximum of ${MAX_RESULTS_BLOCKS} result blocks. Please use a more specific pattern.`);
                     break;
                 }
             }
@@ -1307,7 +1329,6 @@ const handlers = {
             return `Grep error: ${e.message}`;
         }
     },
-
     // 3. Read File
     read_file: async ({ file_path, offset = 0, length = MAX_READ }, context, signal) => {
         try {
@@ -1580,16 +1601,15 @@ const handlers = {
         return new Promise((resolve) => {
             const trimmedCmd = command.trim();
 
-            // 高危命令简单拦截 (保持原有逻辑)
             const dangerousPatterns = [
-                /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i, // rm -rf / (防止误删根目录)
-                />\s*\/dev\/sd/i,     // 写入设备
-                /\bmkfs\b/i,          // mkfs 格式化
-                /\bdd\s+/i,           // dd
-                /\bwget\s+/i,         // wget 下载
-                /\bcurl\s+.*\|\s*sh/i,// curl | sh 管道执行
-                /\bchmod\s+777/i,     // chmod 777
-                /\bcat\s+.*id_rsa/i   // 读取私钥
+                /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i,
+                />\s*\/dev\/sd/i,
+                /\bmkfs\b/i,
+                /\bdd\s+/i,
+                /\bwget\s+/i,
+                /\bcurl\s+.*\|\s*sh/i,
+                /\bchmod\s+777/i,
+                /\bcat\s+.*id_rsa/i
             ];
 
             if (dangerousPatterns.some(p => p.test(trimmedCmd))) {
@@ -1598,7 +1618,6 @@ const handlers = {
 
             if (trimmedCmd.startsWith('cd ')) {
                 let targetDir = trimmedCmd.substring(3).trim();
-                // 简单的去引号处理
                 if ((targetDir.startsWith('"') && targetDir.endsWith('"')) || (targetDir.startsWith("'") && targetDir.endsWith("'"))) {
                     targetDir = targetDir.substring(1, targetDir.length - 1);
                 }
@@ -1619,7 +1638,7 @@ const handlers = {
 
             let shellOptions = {
                 cwd: bashCwd,
-                encoding: 'buffer', // 关键：使用 buffer 以便手动解码
+                encoding: 'buffer',
                 maxBuffer: 1024 * 1024 * 10,
                 timeout: validTimeout
             };
@@ -1629,41 +1648,31 @@ const handlers = {
 
             if (isWin) {
                 shellToUse = 'powershell.exe';
-                // Windows 编码配置
-                // 注意：语法错误会导致这部分代码不执行，因此后续解码逻辑需要兼容 GBK
                 const preamble = `
-                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
-                    $OutputEncoding = [System.Text.Encoding]::UTF8;
+                    $OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
                     $PSDefaultParameterValues['*:Encoding'] = 'utf8';
-                `.replace(/\s+/g, ' ');
-
+                `;
+                
                 finalCommand = `${preamble} ${command}`;
+                
                 shellOptions.shell = shellToUse;
             } else {
                 shellToUse = '/bin/bash';
                 shellOptions.shell = shellToUse;
             }
 
-            // 保存子进程引用
             const child = exec(finalCommand, shellOptions, (error, stdout, stderr) => {
-                // 解码辅助函数：增强版，支持 Windows GBK 回退
                 const decodeBuffer = (buf) => {
                     if (!buf || buf.length === 0) return "";
-
-                    // 1. 尝试 UTF-8
                     const utf8Decoder = new TextDecoder('utf-8', { fatal: false });
                     const utf8Str = utf8Decoder.decode(buf);
 
-                    // 2. 如果在 Windows 上，且 UTF-8 解码出现了大量替换字符()，或者 stderr 报错（解析错误通常是系统默认编码 GBK），尝试 GBK
                     if (isWin && (utf8Str.includes('') || error)) {
                         try {
-                            // Node.js 的 TextDecoder 支持 gbk (依赖系统 ICU，Electron 环境通常支持)
                             const gbkDecoder = new TextDecoder('gbk', { fatal: false });
-                            const gbkStr = gbkDecoder.decode(buf);
-                            // 简单的启发式判断：如果 GBK 解码结果看起来更正常（这里简单返回 GBK 结果）
-                            return gbkStr;
+                            return gbkDecoder.decode(buf);
                         } catch (e) {
-                            return utf8Str; // 不支持 gbk 则回退
+                            return utf8Str;
                         }
                     }
                     return utf8Str;
@@ -1674,17 +1683,20 @@ const handlers = {
                 const errStr = decodeBuffer(stderr);
 
                 if (outStr) result += outStr;
-                if (errStr) result += `\n[Stderr]: ${errStr}`;
+                
+                if (errStr) {
+                    result += `\n[Stderr/Warning]:\n${errStr}`;
+                }
 
                 if (error) {
                     if (error.signal === 'SIGTERM') {
-                        result += `\n[System Note]: Command timed out after ${validTimeout / 1000}s and was terminated.`;
+                        result += `\n\n[System Note]: Command timed out after ${validTimeout / 1000}s and was terminated.`;
                     } else if (error.killed) {
-                        result += `\n[System Note]: Command was aborted by user.`;
+                        result += `\n\n[System Note]: Command was aborted by user.`;
                     } else {
-                        result += `\n[Error Code]: ${error.code}`;
-                        // 避免重复显示 message，因为 message 通常包含 stderr
-                        if (error.message && !errStr && !outStr) result += `\n[Message]: ${error.message}`;
+                        if (!errStr && error.message) {
+                            result += `\n\n[Execution Error]: ${error.message}`;
+                        }
                     }
                 }
 
@@ -1692,10 +1704,9 @@ const handlers = {
                 resolve(`[CWD: ${bashCwd}]\n${result}`);
             });
 
-            // 响应中断信号
             if (signal) {
                 signal.addEventListener('abort', () => {
-                    child.kill(); // 杀死子进程
+                    child.kill();
                 });
             }
         });
