@@ -409,7 +409,7 @@ const formatTime = (ts) => {
                                     <div class="task-card-body">
                                         <el-row :gutter="20">
                                             <el-col :span="24" style="margin-bottom: 15px;">
-                                                <el-radio-group v-model="selectedTask.triggerType"
+                                                <el-radio-group v-model="selectedTask.triggerType" class="trigger-type-group"
                                                     @change="(val) => saveTaskSetting('triggerType', val)">
                                                     <el-radio-button value="single">{{ t('tasks.triggerSingle')
                                                     }}</el-radio-button>
@@ -1139,5 +1139,23 @@ html.dark .task-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
 
 .test-run-btn:active {
     transform: scale(0.95);
+}
+
+.trigger-type-group {
+    display: flex;
+    width: 100%;
+}
+
+.trigger-type-group :deep(.el-radio-button) {
+    flex: 1;
+}
+
+.trigger-type-group :deep(.el-radio-button__inner) {
+    width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 </style>
