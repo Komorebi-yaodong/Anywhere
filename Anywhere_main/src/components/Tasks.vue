@@ -156,6 +156,7 @@ function handleAddTask() {
             weeklyDays: [1, 2, 3, 4, 5],
             weeklyTime: '12:00',
             monthlyDay: 1,
+            monthlyDays: [1],
             monthlyTime: '12:00',
             promptKey: '__DEFAULT__',
             description: '',
@@ -492,11 +493,15 @@ const formatTime = (ts) => {
                                             <template v-if="selectedTask.triggerType === 'monthly'">
                                                 <el-col :span="12">
                                                     <el-form-item :label="t('tasks.monthlyDayLabel')">
-                                                        <el-input-number v-model="selectedTask.monthlyDay" :min="1"
-                                                            :max="31"
-                                                            @change="(val) => saveTaskSetting('monthlyDay', val)"
-                                                            style="width: 100%;" controls-position="right"
-                                                            :placeholder="t('tasks.monthlyDayPlaceholder')" />
+                                                        <el-select 
+                                                            :model-value="selectedTask.monthlyDays || (selectedTask.monthlyDay ? [selectedTask.monthlyDay] : [])" 
+                                                            multiple 
+                                                            clearable
+                                                            placeholder="请选择触发日期 (可多选)"
+                                                            @change="(val) => { selectedTask.monthlyDays = val; saveTaskSetting('monthlyDays', val) }"
+                                                            style="width: 100%;">
+                                                            <el-option v-for="day in 31" :key="day" :label="`${day}日`" :value="day" />
+                                                        </el-select>
                                                     </el-form-item>
                                                 </el-col>
                                                 <el-col :span="12">

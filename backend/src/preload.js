@@ -526,26 +526,27 @@ setInterval(async () => {
       let shouldTrigger = false;
       const lastRun = task.lastRunTime || 0;
 
+      // 获取当前的具体时分
+      const currentH = new Date().getHours();
+      const currentM = new Date().getMinutes();
+      // 防抖：确保同一分钟内不会因为重复判断而触发两次
+      const safeCooldown = (now - lastRun) > 60000;
+
       if (task.triggerType === 'interval') {
         if (task.intervalStartTime) {
           const [hours, minutes] = task.intervalStartTime.split(':').map(Number);
-          const todayStart = new Date();
-          todayStart.setHours(hours, minutes, 0, 0);
-          let startTimeMs = todayStart.getTime();
+          const currentTotalMins = currentH * 60 + currentM;
+          const startTotalMins = hours * 60 + minutes;
+          const intervalMins = Math.max(task.intervalMinutes || 1, 1);
 
-          if (now < startTimeMs) {
-            startTimeMs -= 24 * 60 * 60 * 1000;
-          }
-
-          const elapsed = now - startTimeMs;
-          const intervalMs = Math.max(task.intervalMinutes || 1, 1) * 60000;
-          const currentIntervalPeriods = Math.floor(elapsed / intervalMs);
-          const expectedRunTime = startTimeMs + currentIntervalPeriods * intervalMs;
-
-          if (lastRun < expectedRunTime) {
-            shouldTrigger = true;
+          if (currentTotalMins >= startTotalMins) {
+            const diffMins = currentTotalMins - startTotalMins;
+            if (diffMins % intervalMins === 0 && safeCooldown) {
+              shouldTrigger = true;
+            }
           }
         } else {
+          // 纯间隔触发（无特定时间点），由于没有对齐的时钟点，仅依据与上一次触发的时间差来定
           const intervalMs = Math.max(task.intervalMinutes || 1, 1) * 60000;
           if (now - lastRun >= intervalMs) {
             shouldTrigger = true;
@@ -553,34 +554,24 @@ setInterval(async () => {
         }
       } else if (task.triggerType === 'daily' && task.dailyTime) {
         const [hours, minutes] = task.dailyTime.split(':').map(Number);
-        const todayTrigger = new Date();
-        todayTrigger.setHours(hours, minutes, 0, 0);
-
-        if (now >= todayTrigger.getTime() && lastRun < todayTrigger.getTime()) {
+        if (currentH === hours && currentM === minutes && safeCooldown) {
           shouldTrigger = true;
         }
       } else if (task.triggerType === 'weekly' && task.weeklyTime && task.weeklyDays) {
         const [hours, minutes] = task.weeklyTime.split(':').map(Number);
-        const todayTrigger = new Date();
-        todayTrigger.setHours(hours, minutes, 0, 0);
-        const currentDay = todayTrigger.getDay();
-
+        const currentDay = new Date().getDay();
         if (task.weeklyDays.includes(currentDay)) {
-          if (now >= todayTrigger.getTime() && lastRun < todayTrigger.getTime()) {
+          if (currentH === hours && currentM === minutes && safeCooldown) {
             shouldTrigger = true;
           }
         }
-      }
-
-      else if (task.triggerType === 'monthly' && task.monthlyDay && task.monthlyTime) {
+      } else if (task.triggerType === 'monthly' && task.monthlyTime) {
         const [hours, minutes] = task.monthlyTime.split(':').map(Number);
-        const todayTrigger = new Date();
-        todayTrigger.setHours(hours, minutes, 0, 0);
-        const currentMonthDay = todayTrigger.getDate(); // 获取今天是几号
-
-        // 只有当“今天是设定的几号”时才触发
-        if (currentMonthDay === task.monthlyDay) {
-          if (now >= todayTrigger.getTime() && lastRun < todayTrigger.getTime()) {
+        const currentMonthDay = new Date().getDate();
+        const validDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : (task.monthlyDay ? [task.monthlyDay] : []);
+        
+        if (validDays.includes(currentMonthDay)) {
+          if (currentH === hours && currentM === minutes && safeCooldown) {
             shouldTrigger = true;
           }
         }

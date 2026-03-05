@@ -470,6 +470,7 @@ Note: Long-running commands will be terminated after timeout.`,
             }
         }
     ],
+    // 大约在第 380 行附近，找到 "builtin_tasks" 的定义，替换为以下代码：
     "builtin_tasks": [
         {
             name: "list_agents",
@@ -493,17 +494,27 @@ Note: Long-running commands will be terminated after timeout.`,
                 type: "object",
                 properties: {
                     name: { type: "string", description: "Unique name for the task." },
-                    instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers." },
+                    instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
                     agent_name: { type: "string", description: "Optional. Name of the Quick Prompt to use. Defaults to '__DEFAULT__'." },
                     schedule_type: { 
-                        type: "string", enum: ["interval", "daily"], 
-                        description: "Type of schedule. 'interval' for recurring every X mins, 'daily' for fixed time." 
+                        type: "string", enum: ["interval", "daily", "weekly", "monthly"], 
+                        description: "Type of schedule. 'interval'(every X mins), 'daily'(fixed time), 'weekly'(fixed days in week), 'monthly'(fixed dates in month)." 
                     },
-                    time_param: { type: "string", description: "For 'interval': number of minutes. For 'daily': HH:mm format." },
+                    time_param: { type: "string", description: "For 'interval': number of minutes. For others: HH:mm format." },
                     interval_time_ranges: { 
                         type: "array", 
                         items: { type: "string" }, 
-                        description: "Optional. Active time ranges for 'interval' schedule only. Format: ['HH:mm-HH:mm']. E.g., ['09:00-12:00', '14:30-17:30']. If omitted, runs 24h." 
+                        description: "Optional. Active time ranges for 'interval' only. Format: ['HH:mm-HH:mm']. If omitted, runs 24h." 
+                    },
+                    weekly_days: {
+                        type: "array",
+                        items: { type: "integer" },
+                        description: "Optional. Required for 'weekly'. Array of weekdays (0-6, 0=Sunday). e.g. [1,2,3,4,5] for weekdays."
+                    },
+                    monthly_days: {
+                        type: "array",
+                        items: { type: "integer" },
+                        description: "Optional. Required for 'monthly'. Array of dates in month (1-31). e.g. [1, 15, 28]."
                     },
                     enabled: { type: "boolean", description: "Enable immediately. Defaults to true.", default: true }
                 },
@@ -518,15 +529,13 @@ Note: Long-running commands will be terminated after timeout.`,
                 properties: {
                     task_name_or_id: { type: "string" },
                     new_name: { type: "string" },
-                    instruction: { type: "string" },
+                    instruction: { type: "string",description: "New prompt content. Provide a highly detailed, self-contained instruction for autonomous execution (explicitly stating tools to use, goals, and output formats)." },
                     agent_name: { type: "string" },
-                    schedule_type: { type: "string", enum: ["interval", "daily"] },
+                    schedule_type: { type: "string", enum: ["interval", "daily", "weekly", "monthly"] },
                     time_param: { type: "string" },
-                    interval_time_ranges: { 
-                        type: "array", 
-                        items: { type: "string" }, 
-                        description: "Optional. New time ranges array. Pass empty array [] to clear restrictions."
-                    }
+                    interval_time_ranges: { type: "array", items: { type: "string" } },
+                    weekly_days: { type: "array", items: { type: "integer" } },
+                    monthly_days: { type: "array", items: { type: "integer" } }
                 },
                 required: ["task_name_or_id"]
             }
@@ -1824,7 +1833,6 @@ const handlers = {
         
         if (Object.keys(tasks).length === 0) return "No tasks found.";
 
-        // 1. 如果指定了 ID 或名称，返回详细信息
         if (task_name_or_id) {
             let targetId = tasks[task_name_or_id] ? task_name_or_id : null;
             if (!targetId) {
@@ -1855,13 +1863,15 @@ const handlers = {
                 details += `- Daily Time: ${task.dailyTime}\n`;
             } else if (task.triggerType === 'weekly') {
                 details += `- Weekly Time: ${task.weeklyTime} on days [${task.weeklyDays.join(',')}]\n`;
+            } else if (task.triggerType === 'monthly') {
+                const mDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [task.monthlyDay];
+                details += `- Monthly Time: ${task.monthlyTime} on dates [${mDays.join(',')}]\n`;
             }
             
             details += `\n**Instruction:**\n${task.description}`;
             return details;
         }
 
-        // 2. 默认返回摘要列表
         const taskList = Object.entries(tasks).map(([id, task]) => {
             return `- [${task.enabled ? 'ON' : 'OFF'}] ${task.name} (ID: ${id})`;
         });
@@ -1869,7 +1879,7 @@ const handlers = {
         return "Current Tasks (Summary):\n" + taskList.join('\n') + "\n\n(Tip: Use 'task_name_or_id' argument to see full details of a specific task)";
     },
 
-    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, interval_time_ranges }) => {
+    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, interval_time_ranges, weekly_days, monthly_days }) => {
         const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
@@ -1895,31 +1905,42 @@ const handlers = {
                 name: name,
                 description: instruction || "",
                 promptKey: targetPromptKey,
-                triggerType: schedule_type === 'daily' ? 'daily' : 'interval',
+                triggerType: schedule_type,
                 enabled: enabled,
-                intervalMinutes: 60, intervalStartTime: '00:00', 
-                intervalTimeRanges: [], // 初始化为空
-                dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyTime: '12:00',
+                intervalMinutes: 60, intervalStartTime: '00:00', intervalTimeRanges: [], 
+                dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDay: 1, monthlyDays: [1], monthlyTime: '12:00',
                 extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
                 lastRunTime: enabled ? Date.now() : 0
             };
 
-            // 解析时间段参数
             if (interval_time_ranges && Array.isArray(interval_time_ranges)) {
                 newTask.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
             }
-
             if (configData.config.mcpServers) {
                 newTask.extraMcp = Object.entries(configData.config.mcpServers).filter(([_, s]) => s.type === 'builtin').map(([id]) => id);
             }
 
-            if (schedule_type === 'daily') {
-                if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) newTask.dailyTime = time_param;
-                else return "Error: Invalid time format. Use HH:mm.";
-            } else {
+            if (schedule_type === 'daily' || schedule_type === 'weekly' || schedule_type === 'monthly') {
+                if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) {
+                    if (schedule_type === 'daily') newTask.dailyTime = time_param;
+                    if (schedule_type === 'weekly') newTask.weeklyTime = time_param;
+                    if (schedule_type === 'monthly') newTask.monthlyTime = time_param;
+                } else return "Error: Invalid time format. Use HH:mm.";
+
+                if (schedule_type === 'weekly') {
+                    if (Array.isArray(weekly_days)) newTask.weeklyDays = weekly_days;
+                    else return "Error: weekly_days array is required for weekly schedule.";
+                }
+                if (schedule_type === 'monthly') {
+                    if (Array.isArray(monthly_days)) newTask.monthlyDays = monthly_days;
+                    else return "Error: monthly_days array is required for monthly schedule.";
+                }
+            } else if (schedule_type === 'interval') {
                 const minutes = parseInt(time_param);
                 if (!isNaN(minutes) && minutes > 0) newTask.intervalMinutes = minutes;
                 else return "Error: Invalid interval minutes.";
+            } else {
+                return "Error: Unknown schedule_type.";
             }
 
             tasks[taskId] = newTask;
@@ -1932,7 +1953,7 @@ const handlers = {
         }
     },
 
-    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, interval_time_ranges }) => {
+    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, interval_time_ranges, weekly_days, monthly_days }) => {
         const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
@@ -1972,26 +1993,40 @@ const handlers = {
 
             let timeChanged = false;
             if (schedule_type) { task.triggerType = schedule_type; timeChanged = true; }
+            const currentType = schedule_type || task.triggerType;
 
-            // 解析时间段修改
             if (interval_time_ranges !== undefined) {
                 if (Array.isArray(interval_time_ranges)) {
                     task.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
                 } else {
-                    task.intervalTimeRanges = []; // 传入非数组（如null）时清空
+                    task.intervalTimeRanges = [];
                 }
             }
 
             if (time_param) {
-                const currentType = schedule_type || task.triggerType;
-                if (currentType === 'daily') {
-                    if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) { task.dailyTime = time_param; timeChanged = true; }
-                    else return "Error: Invalid time format for daily schedule. Use HH:mm.";
+                if (currentType === 'daily' || currentType === 'weekly' || currentType === 'monthly') {
+                    if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) { 
+                        if (currentType === 'daily') task.dailyTime = time_param; 
+                        if (currentType === 'weekly') task.weeklyTime = time_param; 
+                        if (currentType === 'monthly') task.monthlyTime = time_param; 
+                        timeChanged = true; 
+                    }
+                    else return "Error: Invalid time format. Use HH:mm.";
                 } else if (currentType === 'interval') {
                     const minutes = parseInt(time_param);
                     if (!isNaN(minutes) && minutes > 0) { task.intervalMinutes = minutes; timeChanged = true; }
                     else return "Error: Invalid interval minutes.";
                 }
+            }
+
+            if (weekly_days !== undefined) {
+                if (Array.isArray(weekly_days)) { task.weeklyDays = weekly_days; timeChanged = true; }
+                else return "Error: weekly_days must be an array.";
+            }
+
+            if (monthly_days !== undefined) {
+                if (Array.isArray(monthly_days)) { task.monthlyDays = monthly_days; timeChanged = true; }
+                else return "Error: monthly_days must be an array.";
             }
 
             if (timeChanged && task.enabled) {
