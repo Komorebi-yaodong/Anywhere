@@ -508,7 +508,7 @@ Note: Long-running commands will be terminated after timeout.`,
             inputSchema: {
                 type: "object",
                 properties: {
-                    name: { type: "string", description: "Unique name for the task." },
+                    name: { type: "string", description: "Task name: concise, clear, and unique." },
                     instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
                     agent_name: { type: "string", description: "Optional. Name of the Quick Prompt to use. Defaults to '__DEFAULT__'." },
                     schedule_type: { 
