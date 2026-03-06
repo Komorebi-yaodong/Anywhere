@@ -1121,7 +1121,7 @@ html.dark .settings-page-container {
   box-shadow: 0 0 0 1px var(--panda-accent) inset !important;
 }
 
-.el-button {
+.el-button:not(.is-link) {
   border-radius: 8px;
   font-weight: 600;
   border: 1px solid var(--panda-border);
@@ -1132,21 +1132,21 @@ html.dark .settings-page-container {
   font-size: 13px;
 }
 
-.el-button:hover {
+.el-button:not(.is-link):hover {
   background-color: var(--panda-hover);
   border-color: var(--panda-text-sub);
   color: var(--panda-text-main);
 }
 
-.el-button--primary,
-.el-button--primary.is-plain {
+.el-button--primary:not(.is-link),
+.el-button--primary.is-plain:not(.is-link) {
   background-color: var(--panda-accent) !important;
   border-color: var(--panda-accent) !important;
   color: var(--panda-card-bg) !important;
 }
 
-.el-button--primary:hover,
-.el-button--primary.is-plain:hover {
+.el-button--primary:not(.is-link):hover,
+.el-button--primary.is-plain:not(.is-link):hover {
   opacity: 0.85;
 }
 
