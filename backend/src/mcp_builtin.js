@@ -578,7 +578,7 @@ IMPORTANT:
         },
         {
             name: "summon_agent",
-            description: "Summon a specific ai agent (from list_agents) in a NEW window and send an initial task. Returns a 'window_id' immediately. The target agent will start generating a response in the background. You can do other things or immediately call 'read_agent_chats' to wait for its result.",
+            description: "Summon a specific ai agent (from list_agents) in a NEW window with a BLANK history, and send an initial task. Returns a 'window_id' immediately.\n\nThe target agent will start generating a response in the background. You can do other things or immediately call 'read_agent_chats' to wait for its result. \n\n Use 'summon_agent' ONLY when you explicitly need a brand-new, isolated conversation.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -591,7 +591,7 @@ IMPORTANT:
         },
         {
             name: "list_agent_chats",
-            description: "【Collaboration Info】List all CURRENTLY ACTIVE standalone agent windows and their 'window_id's. It also marks which window_id belongs to YOU.",
+            description: "【Collaboration Info】List all CURRENTLY ACTIVE standalone agent windows and their 'window_id's. \n\nBEST PRACTICE: Always check this list to see if an agent is already open. If so, REUSE it via 'continue_agent_chats' instead of summoning a new one. It also marks which window_id belongs to YOU.",
             inputSchema: { type: "object", properties: {} }
         },
         {
@@ -610,7 +610,7 @@ IMPORTANT:
         },
         {
             name: "continue_agent_chats",
-            description: "Send follow-up messages to an ALREADY OPEN agent window. Returns immediately. The agent starts generating in background. You can do other things or immediately call 'read_agent_chats' with index=-1 to wait for its result.",
+            description: "Send follow-up messages to an ALREADY OPEN agent window. \n\nUse this tool to REUSE an existing agent's context instead of creating a new window. Returns immediately. The agent starts generating in background. You can do other things or immediately call 'read_agent_chats' with index=-1 to wait for its result.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -2287,25 +2287,31 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
     },
 
     read_agent_chats: async (args, context, signal) => {
-        if (isChildWindow()) return await callParentShell('read_agent_chats', args, signal);
+        // 传递 callerId 到主进程
+        if (isChildWindow()) {
+            args._callerId = context?.senderId;
+            return await callParentShell('read_agent_chats', args, signal);
+        }
 
+        const callerId = args._callerId || context?.senderId;
         const { window_id, message_index, offset = 0, length = 128000 } = args;
+
+        if (window_id === callerId) {
+            return `[System Error]: You cannot use this tool to read your own window (Window ID: ${window_id}). You already have your own chat history in your current context.`;
+        }
+
         const { windowMap } = require('./data.js');
         const win = windowMap.get(window_id);
         
         if (!win || win.isDestroyed()) return `[System Notice]: Target Window (ID: ${window_id}) is already closed or does not exist.`;
 
         try {
-            // --- 步骤 1: 判断是否需要等待 ---
             const chatLength = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getChatLength() : 0');
             
             let shouldWait = false;
-            // 只有当明确请求了某条消息，并且该消息是最新的一条时，才进行等待
             if (message_index !== undefined && message_index !== null) {
                 let actualIndex = parseInt(message_index);
-                // 转换负数索引 (例如 -1 代表最新)
                 if (actualIndex < 0) actualIndex = chatLength + actualIndex;
-                
                 if (actualIndex >= chatLength - 1) {
                     shouldWait = true;
                 }
@@ -2328,16 +2334,13 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 }
             }
 
-            // --- 步骤 2: 获取最新大纲 ---
             const outline = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getOutline() : "Error: API not ready."');
             const outlineSection = `### Current Conversation Outline (Window ${window_id})${timeoutMsg}\n${outline}\n`;
 
-            // --- 步骤 3: 若只求大纲，立刻返回 ---
             if (message_index === undefined || message_index === null) {
                 return `${outlineSection}\n[System]: To read a specific message detail, use 'read_agent_chats' WITH the 'message_index'.`;
             } 
 
-            // --- 步骤 4: 获取具体消息详情 ---
             const content = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.getMessage(${message_index}) : "Error: API not ready."`);
 
             if (content.startsWith("Error:")) {
@@ -2368,16 +2371,26 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
     },
 
     continue_agent_chats: async (args, context, signal) => {
-        if (isChildWindow()) return await callParentShell('continue_agent_chats', args, signal);
+        // 传递 callerId 到主进程
+        if (isChildWindow()) {
+            args._callerId = context?.senderId;
+            return await callParentShell('continue_agent_chats', args, signal);
+        }
 
+        const callerId = args._callerId || context?.senderId;
         const { window_id, text, file_paths } = args;
+
+        if (window_id === callerId) {
+            return `[System Error]: You cannot send messages to yourself (Window ID: ${window_id}). If you need to reason or take multiple steps, use the 'sub_agent' tool or just respond normally in the chat.`;
+        }
+
         const { windowMap } = require('./data.js');
         const win = windowMap.get(window_id);
         if (!win || win.isDestroyed()) return `Error: Window ID ${window_id} not found or closed.`;
 
         try {
             const res = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.sendMessage(${JSON.stringify(text)}, ${JSON.stringify(file_paths || [])}) : Promise.reject("API not ready")`);
-            return res; // 返回发送状态
+            return res; 
         } catch (e) {
              return `Error sending message: ${e.message}`;
         }
