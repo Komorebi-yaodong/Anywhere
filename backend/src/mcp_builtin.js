@@ -2187,18 +2187,49 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
         const prompts = configData.config.prompts || {};
+        const allMcpServers = configData.config.mcpServers || {};
 
         if (args && args.agent_name) {
             const agent = prompts[args.agent_name];
             if (!agent) return `Error: Agent "${args.agent_name}" not found.`;
-            return `Agent: ${args.agent_name}\nType: ${agent.type}\nModel: ${agent.model}\nSystem Prompt:\n${agent.prompt || 'None'}`;
+            
+            // --- 解析能力信息 (MCP & Skills) ---
+            
+            // 1. 获取并映射 MCP 名称
+            const mcpIds = agent.defaultMcpServers || [];
+            const mcpNames = mcpIds.map(id => {
+                const server = allMcpServers[id];
+                // 如果能找到配置则显示名称，否则显示ID
+                return server ? server.name : id;
+            });
+            const mcpDisplay = mcpNames.length > 0 ? `[${mcpNames.join(', ')}]` : "None";
+
+            // 2. 获取 Skills 列表
+            const skills = agent.defaultSkills || [];
+            const skillDisplay = skills.length > 0 ? `[${skills.join(', ')}]` : "None";
+
+            // --- 构建详情 ---
+            let detail = `Agent: ${args.agent_name}\n`;
+            detail += `Type: ${agent.type}\n`;
+            detail += `Model: ${agent.model}\n`;
+            detail += `Enabled: ${agent.enable}\n`;
+            detail += `\n[Capabilities]\n`;
+            detail += `- Bound MCP Tools: ${mcpDisplay}\n`;
+            detail += `- Bound Skills: ${skillDisplay}\n`;
+            detail += `\n[System Prompt]\n${agent.prompt || 'None'}`;
+            
+            return detail;
         }
 
         let agentStr = "- __DEFAULT__ (The global default agent)\n";
-        Object.entries(prompts).filter(([_, p]) => p.showMode === 'window').forEach(([key]) => {
-            agentStr += `- ${key}\n`;
-        });
-        return `Available Agents (Standalone Window Mode):\n${agentStr}`;
+        // 筛选 Standalone Window 模式 且 已启用 的 Agent
+        Object.entries(prompts)
+            .filter(([_, p]) => p.showMode === 'window' && p.enable)
+            .forEach(([key]) => {
+                agentStr += `- ${key}\n`;
+            });
+            
+        return `Available Agents (Standalone Window Mode & Enabled):\n${agentStr}`;
     },
 
     summon_agent: async (args, context, signal) => {
@@ -2705,9 +2736,9 @@ function getBuiltinTools(serverId) {
             const promptsDoc = utools.db.get("prompts");
             const prompts = promptsDoc ? promptsDoc.data : {};
             
-            // 筛选 Standalone Window 模式的 Agent (只有这种才能被召唤)
+            // 筛选 Standalone Window 模式 且 已启用 的 Agent (只有这种才能被召唤)
             const agentNames = Object.entries(prompts)
-                .filter(([_, p]) => p.showMode === 'window')
+                .filter(([_, p]) => p.showMode === 'window' && p.enable)
                 .map(([k]) => k)
                 .sort();
                 
