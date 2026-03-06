@@ -475,7 +475,7 @@ IMPORTANT:
         },
         {
             name: "list_background_shells",
-            description: "List all currently running background shell processes started by this agent.",
+            description: "List all currently running background shell processes started by this agent's tool.",
             inputSchema: { type: "object", properties: {} }
         },
         {
@@ -1699,36 +1699,81 @@ ${contextBlock}
             return `[Security Block] The command contains potentially destructive operations and has been blocked.`;
         }
 
-        // --- 1. 后台运行模式 ---
-        if (background) {
-            // 如果是子窗口，委托给父进程执行
-            if (isChildWindow()) {
-                try {
-                    return await callParentShell('start', { command });
-                } catch (e) {
-                    return `Error starting background task via parent: ${e.message}`;
-                }
+        if (background && isChildWindow()) {
+            try {
+                return await callParentShell('start', { command });
+            } catch (e) {
+                return `Error starting background task via parent: ${e.message}`;
             }
+        }
 
-            // [主进程逻辑] 实际执行 Spawn
-            return new Promise((resolve, reject) => {
-                const shellId = `shell_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-                let shellToUse, spawnArgs;
+        const crypto = require('crypto');
+        const scriptId = crypto.randomBytes(4).toString('hex');
+        const tempDir = os.tmpdir();
+        
+        let tempFile = '';
+        let shellToUse = '';
+        let spawnArgs = [];
+        let execCmd = '';
 
-                if (isWin) {
-                    shellToUse = 'powershell.exe';
-                    const preamble = `$OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $PSDefaultParameterValues['*:Encoding'] = 'utf8';`;
-                    spawnArgs = ['-Command', `${preamble} ${command}`];
-                } else {
-                    shellToUse = '/bin/bash';
-                    spawnArgs = ['-c', command];
+        if (isWin) {
+            tempFile = path.join(tempDir, `anywhere_cmd_${Date.now()}_${scriptId}.ps1`);
+            const preamble = `
+$OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+$PSDefaultParameterValues['*:Encoding'] = 'utf8';
+`;
+            // 添加 UTF-8 BOM (\uFEFF)，解决 PowerShell 5.1 默认按 ANSI 读取导致的 Unicode 乱码和引号配对破坏问题
+            fs.writeFileSync(tempFile, '\uFEFF' + preamble + '\n' + command, { encoding: 'utf8' });
+            shellToUse = 'powershell.exe';
+            spawnArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tempFile];
+            execCmd = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`;
+        } else {
+            tempFile = path.join(tempDir, `anywhere_cmd_${Date.now()}_${scriptId}.sh`);
+            fs.writeFileSync(tempFile, command, { encoding: 'utf8' });
+            shellToUse = '/bin/bash';
+            spawnArgs = [tempFile];
+            execCmd = `"/bin/bash" "${tempFile}"`;
+        }
+
+        const cleanupTempFile = () => {
+            try {
+                if (fs.existsSync(tempFile)) {
+                    fs.unlinkSync(tempFile);
                 }
+            } catch (e) {
+                console.error("Failed to clean up temp script:", e);
+            }
+        };
 
+        if (!background && trimmedCmd.startsWith('cd ') && trimmedCmd.split('\n').length === 1) {
+            let targetDir = trimmedCmd.substring(3).trim();
+            if ((targetDir.startsWith('"') && targetDir.endsWith('"')) || (targetDir.startsWith("'") && targetDir.endsWith("'"))) {
+                targetDir = targetDir.substring(1, targetDir.length - 1);
+            }
+            try {
+                const newPath = path.resolve(bashCwd, targetDir);
+                if (fs.existsSync(newPath) && fs.statSync(newPath).isDirectory()) {
+                    bashCwd = newPath;
+                    cleanupTempFile();
+                    return `Directory changed to: ${bashCwd}`;
+                } else {
+                    cleanupTempFile();
+                    return `Error: Directory not found: ${newPath}`;
+                }
+            } catch (e) {
+                cleanupTempFile();
+                return `Error changing directory: ${e.message}`;
+            }
+        }
+
+        if (background) {
+            return new Promise((resolve) => {
+                const shellId = `shell_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                
                 try {
                     const child = require('child_process').spawn(shellToUse, spawnArgs, {
                         cwd: bashCwd,
                         env: { ...process.env, FORCE_COLOR: '1' },
-                        // Unix下分离进程组，以便 kill 掉整个树
                         detached: !isWin 
                     });
 
@@ -1748,12 +1793,14 @@ ${contextBlock}
                         appendBgLog(shellId, `\n[System Error]: ${err.message}\n`);
                         const proc = backgroundShells.get(shellId);
                         if(proc) proc.active = false;
+                        cleanupTempFile();
                     });
 
                     child.on('close', (code) => {
                         appendBgLog(shellId, `\n[System]: Process exited with code ${code}\n`);
                         const proc = backgroundShells.get(shellId);
                         if(proc) proc.active = false;
+                        cleanupTempFile();
                     });
 
                     try {
@@ -1761,13 +1808,11 @@ ${contextBlock}
                         const targetPid = child.pid;
                         
                         if (isWin) {
-                            // Windows: 使用 PowerShell 的 Wait-Process 阻塞等待父进程消失，然后执行 taskkill 杀进程树
                             const watcherCmd = `Wait-Process -Id ${parentPid} -ErrorAction SilentlyContinue; taskkill /pid ${targetPid} /T /F 2>$null`;
                             require('child_process').spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', watcherCmd], {
                                 detached: true, stdio: 'ignore', windowsHide: true
                             }).unref();
                         } else {
-                            // Unix/macOS: 循环检测父进程存活状态，一旦消失，杀掉以该子进程为首的整个进程组
                             const watcherCmd = `while kill -0 ${parentPid} 2>/dev/null; do sleep 1; done; kill -9 -${targetPid} 2>/dev/null || kill -9 ${targetPid} 2>/dev/null`;
                             require('child_process').spawn('sh', ['-c', watcherCmd], {
                                 detached: true, stdio: 'ignore'
@@ -1779,31 +1824,13 @@ ${contextBlock}
 
                     resolve(`Background process started successfully.\nID: ${shellId}\nPID: ${child.pid}\n\nUse 'read_background_shell_output' to view logs.`);
                 } catch (e) {
+                    cleanupTempFile();
                     resolve(`Failed to start background process: ${e.message}`);
                 }
             });
         }
 
-        // --- 2. 前台运行模式 ---
         return new Promise((resolve) => {
-            if (trimmedCmd.startsWith('cd ')) {
-                let targetDir = trimmedCmd.substring(3).trim();
-                if ((targetDir.startsWith('"') && targetDir.endsWith('"')) || (targetDir.startsWith("'") && targetDir.endsWith("'"))) {
-                    targetDir = targetDir.substring(1, targetDir.length - 1);
-                }
-                try {
-                    const newPath = path.resolve(bashCwd, targetDir);
-                    if (fs.existsSync(newPath) && fs.statSync(newPath).isDirectory()) {
-                        bashCwd = newPath;
-                        return resolve(`Directory changed to: ${bashCwd}`);
-                    } else {
-                        return resolve(`Error: Directory not found: ${newPath}`);
-                    }
-                } catch (e) {
-                    return resolve(`Error changing directory: ${e.message}`);
-                }
-            }
-
             const validTimeout = (typeof timeout === 'number' && timeout > 0) ? timeout : 15000;
 
             let shellOptions = {
@@ -1813,29 +1840,15 @@ ${contextBlock}
                 timeout: validTimeout
             };
 
-            let finalCommand = command;
-            let shellToUse;
-
-            if (isWin) {
-                shellToUse = 'powershell.exe';
-                const preamble = `
-                    $OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
-                    $PSDefaultParameterValues['*:Encoding'] = 'utf8';
-                `;
-                finalCommand = `${preamble} ${command}`;
-                shellOptions.shell = shellToUse;
-            } else {
-                shellToUse = '/bin/bash';
-                shellOptions.shell = shellToUse;
-            }
-
-            const child = require('child_process').exec(finalCommand, shellOptions, (error, stdout, stderr) => {
+            const child = require('child_process').exec(execCmd, shellOptions, (error, stdout, stderr) => {
+                cleanupTempFile();
+                
                 const decodeBuffer = (buf) => {
                     if (!buf || buf.length === 0) return "";
                     const utf8Decoder = new TextDecoder('utf-8', { fatal: false });
                     const utf8Str = utf8Decoder.decode(buf);
 
-                    if (isWin && (utf8Str.includes('') || error)) {
+                    if (isWin && (utf8Str.includes('\uFFFD') || error)) {
                         try {
                             const gbkDecoder = new TextDecoder('gbk', { fatal: false });
                             return gbkDecoder.decode(buf);
@@ -1875,6 +1888,7 @@ ${contextBlock}
             if (signal) {
                 signal.addEventListener('abort', () => {
                     child.kill();
+                    cleanupTempFile();
                 });
             }
         });
