@@ -41,6 +41,8 @@ const {
 
 const {
   invokeBuiltinTool,
+  handleBgShellRequest,
+  killAllBackgroundShells,
 } = require('./mcp_builtin.js');
 
 const {
@@ -462,6 +464,16 @@ utools.onPluginEnter(async (action) => {
   }
 });
 
+utools.onPluginOut((isKill) => {
+  if (isKill) {
+    try {
+      killAllBackgroundShells();
+    } catch (e) {
+      console.error("Error during background shells cleanup:", e);
+    }
+  }
+});
+
 const { ipcRenderer } = require('electron');
 const { windowMap } = require('./data.js');
 
@@ -643,4 +655,39 @@ setInterval(async () => {
   } catch (e) {
     console.error("Task Scheduler Error:", e);
   }
-}, 1000); // 【修改】将 30000 改为 1000，每秒轮询一次，保证精准执行
+}, 1000); // 每秒轮询一次，保证精准执行
+
+ipcRenderer.on('background-shell-request', async (e, { requestId, action, payload }) => {
+    try {
+        const result = await handleBgShellRequest(action, payload);
+        
+        // 广播结果给所有存活的窗口，让发起者认领
+        for (const win of windowMap.values()) {
+            if (!win.isDestroyed()) {
+                win.webContents.send('background-shell-reply', {
+                    requestId,
+                    data: result
+                });
+            }
+        }
+    } catch (err) {
+        for (const win of windowMap.values()) {
+            if (!win.isDestroyed()) {
+                win.webContents.send('background-shell-reply', {
+                    requestId,
+                    error: err.message
+                });
+            }
+        }
+    }
+});
+
+// ================= 窗口彻底关闭/刷新时的清理 =================
+window.addEventListener('beforeunload', () => {
+    try {
+        const { killAllBackgroundShells } = require('./mcp_builtin.js');
+        killAllBackgroundShells();
+    } catch (e) {
+        console.error("Cleanup on beforeunload failed:", e);
+    }
+});

@@ -12,6 +12,57 @@ const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform =
 // --- Bash Session State ---
 let bashCwd = os.homedir();
 
+const backgroundShells = new Map();
+const MAX_BG_LOG_SIZE = 1024 * 1024; // 1MB 日志上限
+
+function appendBgLog(id, text) {
+    const proc = backgroundShells.get(id);
+    if (!proc) return;
+    proc.logs += text;
+    if (proc.logs.length > MAX_BG_LOG_SIZE) {
+        proc.logs = "[...Logs Truncated...]\n" + proc.logs.slice(proc.logs.length - (MAX_BG_LOG_SIZE / 2));
+    }
+}
+
+// 引入 IPC 用于子窗口通信
+let ipcRenderer = null;
+try { ipcRenderer = require('electron').ipcRenderer; } catch (e) {}
+
+// 判断是否为独立窗口 (通过 location 判断或 API 特征)
+function isChildWindow() {
+    if (typeof utools !== 'undefined' && typeof utools.getWindowType === 'function') {
+        return utools.getWindowType() === 'browser';
+    }
+    return false;
+}
+
+// 子窗口呼叫父进程的 Promise 包装器
+async function callParentShell(action, payload) {
+    return new Promise((resolve, reject) => {
+        const requestId = Math.random().toString(36).substr(2);
+        
+        // 监听一次性回复
+        const handler = (event, response) => {
+            if (response.requestId === requestId) {
+                ipcRenderer.off('background-shell-reply', handler);
+                if (response.error) reject(new Error(response.error));
+                else resolve(response.data);
+            }
+        };
+        
+        ipcRenderer.on('background-shell-reply', handler);
+        
+        // 发送请求给 preload.js
+        utools.sendToParent('background-shell-request', { requestId, action, payload });
+        
+        // 30s 超时
+        setTimeout(() => {
+            ipcRenderer.off('background-shell-reply', handler);
+            reject(new Error("Timeout waiting for background shell response"));
+        }, 30000); 
+    });
+}
+
 const MAX_READ = 256 * 1000; // 512k characters
 
 // 数据提取函数 (提取标题、作者、简介)
@@ -396,26 +447,59 @@ const BUILTIN_TOOLS = {
     "builtin_bash": [
         {
             name: "execute_bash_command",
-            description: `Execute a shell command on the current ${currentOS} system.
-IMPORTANT: The underlying shell is **${isWin ? "PowerShell" : "Bash"}**.
-- If on Windows: You MUST use PowerShell syntax (e.g., 'New-Item -ItemType Directory', 'if (Test-Path path) {}'). DO NOT use CMD/Batch syntax (like 'if exist') unless you explicitly wrap it in 'cmd /c'.
-- If on Linux/macOS: Use standard Bash syntax.
-Note: Long-running commands will be terminated after timeout.`,
+            description: `Execute a shell command.
+IMPORTANT:
+1. The underlying shell is **${currentOS}**:**${isWin ? "PowerShell" : "Bash"}**. Adjust syntax accordingly.
+2. **Long-running processes**: For servers (e.g. 'npm run dev', 'python server.py') or tasks taking >15s, YOU MUST set 'background': true.
+3. When 'background': true, you will receive a 'shell_id' immediately. Use 'read_background_shell_output' to check logs and 'kill_background_shell' to stop it.`,
             inputSchema: {
                 type: "object",
                 properties: {
                     command: {
                         type: "string",
-                        // 在参数描述中再次强调环境
-                        description: `The command to execute. Ensure syntax matches ${isWin ? 'PowerShell' : 'Bash'}.`
+                        description: `The command to execute.`
+                    },
+                    background: {
+                        type: "boolean",
+                        description: "Set to true for long-running tasks, servers, or watchers. Returns a shell_id immediately.",
+                        default: false
                     },
                     timeout: {
                         type: "integer",
-                        description: "Optional. Timeout in milliseconds. Default is 15000 (15 seconds). Set higher (e.g., 300000 for 5 mins) for long-running tasks like installations.",
+                        description: "Only for foreground tasks (background=false). Timeout in ms. Default 15000.",
                         default: 15000
                     }
                 },
                 required: ["command"]
+            }
+        },
+        {
+            name: "list_background_shells",
+            description: "List all currently running background shell processes started by this agent.",
+            inputSchema: { type: "object", properties: {} }
+        },
+        {
+            name: "read_background_shell_output",
+            description: "Read stdout/stderr logs from a background shell process. Supports pagination.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    shell_id: { type: "string", description: "The ID returned when starting the background task." },
+                    offset: { type: "integer", description: "Character offset to start reading from (for scrolling logs).", default: 0 },
+                    length: { type: "integer", description: "Number of characters to read.", default: MAX_READ }
+                },
+                required: ["shell_id"]
+            }
+        },
+        {
+            name: "kill_background_shell",
+            description: "Terminate a background shell process.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    shell_id: { type: "string", description: "The ID of the process to kill." }
+                },
+                required: ["shell_id"]
             }
         }
     ],
@@ -1597,25 +1681,111 @@ ${contextBlock}
     },
 
     // Bash / PowerShell
-    execute_bash_command: async ({ command, timeout = 15000 }, context, signal) => {
-        return new Promise((resolve) => {
-            const trimmedCmd = command.trim();
+    execute_bash_command: async ({ command, background = false, timeout = 15000 }, context, signal) => {
+        const trimmedCmd = command.trim();
 
-            const dangerousPatterns = [
-                /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i,
-                />\s*\/dev\/sd/i,
-                /\bmkfs\b/i,
-                /\bdd\s+/i,
-                /\bwget\s+/i,
-                /\bcurl\s+.*\|\s*sh/i,
-                /\bchmod\s+777/i,
-                /\bcat\s+.*id_rsa/i
-            ];
+        const dangerousPatterns = [
+            /(^|[;&|\s])rm\s+(-rf|-r|-f)\s+\/($|[;&|\s])/i,
+            />\s*\/dev\/sd/i,
+            /\bmkfs\b/i,
+            /\bdd\s+/i,
+            /\bwget\s+/i,
+            /\bcurl\s+.*\|\s*sh/i,
+            /\bchmod\s+777/i,
+            /\bcat\s+.*id_rsa/i
+        ];
 
-            if (dangerousPatterns.some(p => p.test(trimmedCmd))) {
-                return resolve(`[Security Block] The command contains potentially destructive operations and has been blocked.`);
+        if (dangerousPatterns.some(p => p.test(trimmedCmd))) {
+            return `[Security Block] The command contains potentially destructive operations and has been blocked.`;
+        }
+
+        // --- 1. 后台运行模式 ---
+        if (background) {
+            // 如果是子窗口，委托给父进程执行
+            if (isChildWindow()) {
+                try {
+                    return await callParentShell('start', { command });
+                } catch (e) {
+                    return `Error starting background task via parent: ${e.message}`;
+                }
             }
 
+            // [主进程逻辑] 实际执行 Spawn
+            return new Promise((resolve, reject) => {
+                const shellId = `shell_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                let shellToUse, spawnArgs;
+
+                if (isWin) {
+                    shellToUse = 'powershell.exe';
+                    const preamble = `$OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $PSDefaultParameterValues['*:Encoding'] = 'utf8';`;
+                    spawnArgs = ['-Command', `${preamble} ${command}`];
+                } else {
+                    shellToUse = '/bin/bash';
+                    spawnArgs = ['-c', command];
+                }
+
+                try {
+                    const child = require('child_process').spawn(shellToUse, spawnArgs, {
+                        cwd: bashCwd,
+                        env: { ...process.env, FORCE_COLOR: '1' },
+                        // Unix下分离进程组，以便 kill 掉整个树
+                        detached: !isWin 
+                    });
+
+                    backgroundShells.set(shellId, {
+                        process: child,
+                        command: command,
+                        startTime: new Date().toISOString(),
+                        logs: "",
+                        pid: child.pid,
+                        active: true
+                    });
+
+                    child.stdout.on('data', (data) => appendBgLog(shellId, data.toString()));
+                    child.stderr.on('data', (data) => appendBgLog(shellId, data.toString()));
+
+                    child.on('error', (err) => {
+                        appendBgLog(shellId, `\n[System Error]: ${err.message}\n`);
+                        const proc = backgroundShells.get(shellId);
+                        if(proc) proc.active = false;
+                    });
+
+                    child.on('close', (code) => {
+                        appendBgLog(shellId, `\n[System]: Process exited with code ${code}\n`);
+                        const proc = backgroundShells.get(shellId);
+                        if(proc) proc.active = false;
+                    });
+
+                    try {
+                        const parentPid = process.pid;
+                        const targetPid = child.pid;
+                        
+                        if (isWin) {
+                            // Windows: 使用 PowerShell 的 Wait-Process 阻塞等待父进程消失，然后执行 taskkill 杀进程树
+                            const watcherCmd = `Wait-Process -Id ${parentPid} -ErrorAction SilentlyContinue; taskkill /pid ${targetPid} /T /F 2>$null`;
+                            require('child_process').spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', watcherCmd], {
+                                detached: true, stdio: 'ignore', windowsHide: true
+                            }).unref();
+                        } else {
+                            // Unix/macOS: 循环检测父进程存活状态，一旦消失，杀掉以该子进程为首的整个进程组
+                            const watcherCmd = `while kill -0 ${parentPid} 2>/dev/null; do sleep 1; done; kill -9 -${targetPid} 2>/dev/null || kill -9 ${targetPid} 2>/dev/null`;
+                            require('child_process').spawn('sh', ['-c', watcherCmd], {
+                                detached: true, stdio: 'ignore'
+                            }).unref();
+                        }
+                    } catch (watcherErr) {
+                        console.error("Failed to start process watcher:", watcherErr);
+                    }
+
+                    resolve(`Background process started successfully.\nID: ${shellId}\nPID: ${child.pid}\n\nUse 'read_background_shell_output' to view logs.`);
+                } catch (e) {
+                    resolve(`Failed to start background process: ${e.message}`);
+                }
+            });
+        }
+
+        // --- 2. 前台运行模式 ---
+        return new Promise((resolve) => {
             if (trimmedCmd.startsWith('cd ')) {
                 let targetDir = trimmedCmd.substring(3).trim();
                 if ((targetDir.startsWith('"') && targetDir.endsWith('"')) || (targetDir.startsWith("'") && targetDir.endsWith("'"))) {
@@ -1652,16 +1822,14 @@ ${contextBlock}
                     $OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
                     $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 `;
-                
                 finalCommand = `${preamble} ${command}`;
-                
                 shellOptions.shell = shellToUse;
             } else {
                 shellToUse = '/bin/bash';
                 shellOptions.shell = shellToUse;
             }
 
-            const child = exec(finalCommand, shellOptions, (error, stdout, stderr) => {
+            const child = require('child_process').exec(finalCommand, shellOptions, (error, stdout, stderr) => {
                 const decodeBuffer = (buf) => {
                     if (!buf || buf.length === 0) return "";
                     const utf8Decoder = new TextDecoder('utf-8', { fatal: false });
@@ -1690,7 +1858,7 @@ ${contextBlock}
 
                 if (error) {
                     if (error.signal === 'SIGTERM') {
-                        result += `\n\n[System Note]: Command timed out after ${validTimeout / 1000}s and was terminated.`;
+                        result += `\n\n[System Note]: Command timed out after ${validTimeout / 1000}s. For long tasks, set 'background': true.`;
                     } else if (error.killed) {
                         result += `\n\n[System Note]: Command was aborted by user.`;
                     } else {
@@ -1710,6 +1878,82 @@ ${contextBlock}
                 });
             }
         });
+    },
+
+    list_background_shells: async () => {
+        if (isChildWindow()) return await callParentShell('list', {});
+
+        if (backgroundShells.size === 0) return "No active background shells.";
+        
+        let output = "ID | PID | Status | Start Time | Command\n";
+        output += "--- | --- | --- | --- | ---\n";
+        
+        backgroundShells.forEach((proc, id) => {
+            const status = proc.active ? "Running" : "Exited";
+            const cmdDisplay = proc.command.length > 30 ? proc.command.substring(0, 30) + '...' : proc.command;
+            output += `${id} | ${proc.pid} | ${status} | ${proc.startTime} | ${cmdDisplay}\n`;
+        });
+        
+        return output;
+    },
+
+    read_background_shell_output: async ({ shell_id, offset = 0, length = 5000 }) => {
+        if (isChildWindow()) return await callParentShell('read', { shell_id, offset, length });
+
+        const proc = backgroundShells.get(shell_id);
+        if (!proc) return `Error: Shell ID '${shell_id}' not found.`;
+
+        const fullLogs = proc.logs;
+        const totalLength = fullLogs.length;
+        const safeOffset = Math.max(0, offset);
+        const safeLength = Math.min(length, MAX_READ);
+
+        const chunk = fullLogs.substring(safeOffset, safeOffset + safeLength);
+        const nextOffset = safeOffset + chunk.length;
+        
+        let statusInfo = `[Process State: ${proc.active ? 'Running' : 'Exited'}]`;
+        let footer = "";
+        
+        if (nextOffset < totalLength) {
+            footer = `\n\n[System]: More output available (${totalLength - nextOffset} chars remaining). Call tool again with offset=${nextOffset}.`;
+        }
+
+        return `${statusInfo}\n(Showing chars ${safeOffset}-${nextOffset} of ${totalLength})\n----------------------------------------\n${chunk}${footer}`;
+    },
+
+    kill_background_shell: async ({ shell_id }) => {
+        if (isChildWindow()) return await callParentShell('kill', { shell_id });
+
+        const proc = backgroundShells.get(shell_id);
+        if (!proc) return `Error: Shell ID '${shell_id}' not found.`;
+
+        if (!proc.active) {
+            backgroundShells.delete(shell_id);
+            return `Process '${shell_id}' was already exited. Removed from history.`;
+        }
+
+        try {
+            const pid = proc.pid;
+            if (isWin) {
+                // Windows Tree Kill (/T)
+                require('child_process').exec(`taskkill /pid ${pid} /T /F`, (err) => {
+                    if (err) console.log('Taskkill ignored error:', err.message);
+                });
+            } else {
+                // Unix Group Kill (使用 -pid)
+                try {
+                    process.kill(-pid, 'SIGKILL'); 
+                } catch (e) {
+                    try { process.kill(pid, 'SIGKILL'); } catch(e2){}
+                }
+            }
+            
+            proc.active = false;
+            appendBgLog(shell_id, `\n[System]: Process terminated by user request (Tree Kill).\n`);
+            return `Successfully sent tree kill signal to process ${pid} (${shell_id}).`;
+        } catch (e) {
+            return `Error killing process: ${e.message}`;
+        }
     },
 
     // Web Search Handler
@@ -2268,8 +2512,56 @@ async function invokeBuiltinTool(toolName, args, signal = null, context = null) 
     throw new Error(`Built-in tool '${toolName}' not found.`);
 }
 
+function killAllBackgroundShells() {
+    if (backgroundShells.size === 0) return;
+    const { execSync } = require('child_process');
+    
+    backgroundShells.forEach((proc, shell_id) => {
+        if (proc.active && proc.pid) {
+            try {
+                if (isWin) {
+                    // 使用同步阻塞执行，确保在插件进程死亡前把子进程杀干净
+                    execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'ignore' });
+                } else {
+                    try { process.kill(-proc.pid, 'SIGKILL'); } 
+                    catch (e) { try { process.kill(proc.pid, 'SIGKILL'); } catch(e2){} }
+                }
+            } catch (e) {
+                // 忽略错误，强制执行
+            }
+            proc.active = false;
+        }
+    });
+    backgroundShells.clear();
+}
+
+// 绑定 Node.js 原生系统级死亡信号，确保即使被系统强杀也能带走子进程
+process.on('exit', killAllBackgroundShells);
+process.on('SIGINT', () => { killAllBackgroundShells(); process.exit(); });
+process.on('SIGTERM', () => { killAllBackgroundShells(); process.exit(); });
+
+// 供 preload.js 调用的统一入口
+function handleBgShellRequest(action, payload) {
+    const fnMap = {
+        'start': handlers.execute_bash_command,
+        'list': handlers.list_background_shells,
+        'read': handlers.read_background_shell_output,
+        'kill': handlers.kill_background_shell
+    };
+    
+    const fn = fnMap[action];
+    if (!fn) throw new Error("Unknown action: " + action);
+    
+    if (action === 'start') {
+        return fn({ command: payload.command, background: true }, null, null);
+    }
+    return fn(payload, null, null);
+}
+
 module.exports = {
     getBuiltinServers,
     getBuiltinTools,
-    invokeBuiltinTool
+    invokeBuiltinTool,
+    handleBgShellRequest,
+    killAllBackgroundShells
 };
