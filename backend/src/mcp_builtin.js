@@ -2296,35 +2296,48 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (!win || win.isDestroyed()) return `[System Notice]: Target Window (ID: ${window_id}) is already closed or does not exist.`;
 
         try {
-            // --- 步骤 1: 始终先获取最新的大纲 ---
-            // 无论是否请求具体消息，都提供大纲，帮助 AI 维持全局上下文感知
-            const outline = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getOutline() : "Error: API not ready."');
-            const outlineSection = `### Current Conversation Outline (Window ${window_id})\n${outline}\n`;
+            // --- 步骤 1: 判断是否需要等待 ---
+            const chatLength = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getChatLength() : 0');
+            
+            let shouldWait = false;
+            // 只有当明确请求了某条消息，并且该消息是最新的一条时，才进行等待
+            if (message_index !== undefined && message_index !== null) {
+                let actualIndex = parseInt(message_index);
+                // 转换负数索引 (例如 -1 代表最新)
+                if (actualIndex < 0) actualIndex = chatLength + actualIndex;
+                
+                if (actualIndex >= chatLength - 1) {
+                    shouldWait = true;
+                }
+            }
 
-            // --- 步骤 2: 如果只请求大纲，直接返回 ---
+            let timeoutMsg = "";
+            if (shouldWait) {
+                let waitCount = 0;
+                while (!win.isDestroyed() && waitCount < 1200) {
+                    const isBusy = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.isBusy() : false').catch(() => false);
+                    if (!isBusy) break; 
+                    await new Promise(r => setTimeout(r, 100));
+                    waitCount++;
+                }
+
+                if (win.isDestroyed()) return `[System Notice]: The target window was CLOSED by the user while waiting for the response. Operation aborted.`;
+                
+                if (waitCount >= 1200) {
+                    timeoutMsg = `\n[System Warning]: The request timed out after 120s. The agent is still generating, so the following content may be incomplete.`;
+                }
+            }
+
+            // --- 步骤 2: 获取最新大纲 ---
+            const outline = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getOutline() : "Error: API not ready."');
+            const outlineSection = `### Current Conversation Outline (Window ${window_id})${timeoutMsg}\n${outline}\n`;
+
+            // --- 步骤 3: 若只求大纲，立刻返回 ---
             if (message_index === undefined || message_index === null) {
                 return `${outlineSection}\n[System]: To read a specific message detail, use 'read_agent_chats' WITH the 'message_index'.`;
             } 
 
-            // --- 步骤 3: 获取具体消息详情 (带智能等待) ---
-            
-            // 智能轮询等待逻辑，解决窗口关闭导致的卡死问题
-            let waitCount = 0;
-            while (!win.isDestroyed() && waitCount < 1200) {
-                // 读取目标窗口当前的 Busy 状态
-                const isBusy = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.isBusy() : false').catch(() => false);
-                if (!isBusy) break; // 已闲置，退出轮询
-                
-                // 等待 100ms
-                await new Promise(r => setTimeout(r, 100));
-                waitCount++;
-            }
-
-            // 轮询结束后的状态校验
-            if (win.isDestroyed()) return `[System Notice]: The target window was CLOSED by the user while waiting for the response. Operation aborted.`;
-            if (waitCount >= 1200) return `[System Notice]: The request timed out after 120s. The agent is still generating.`;
-
-            // 此时确认窗口存活且不忙碌，直接读取数据
+            // --- 步骤 4: 获取具体消息详情 ---
             const content = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.getMessage(${message_index}) : "Error: API not ready."`);
 
             if (content.startsWith("Error:")) {
@@ -2341,15 +2354,12 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             let footer = "";
             
             if (currentEndPos < totalChars) {
-                // 情况 A: 内容被截断
                 const remaining = totalChars - currentEndPos;
                 footer = `\n\n--- [SYSTEM: CONTENT TRUNCATED] ---\n(Showing chars ${safeOffset}-${currentEndPos} of ${totalChars})\nRemaining: ${remaining} chars.\n>>> ACTION REQUIRED: Call 'read_agent_chats' again with offset=${currentEndPos} to read the rest.`;
             } else {
-                // 情况 B: 内容读取完毕
                 footer = `\n\n--- [SYSTEM: END OF MESSAGE] ---\n(Total length: ${totalChars} chars)`;
             }
 
-            // --- 步骤 4: 组合返回 (大纲 + 分割线 + 详情) ---
             return `${outlineSection}\n========================================\n### Detailed Message Content (Index: ${message_index})\n${chunk}${footer}`;
 
         } catch (e) {

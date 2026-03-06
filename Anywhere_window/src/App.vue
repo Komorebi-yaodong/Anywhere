@@ -1179,24 +1179,54 @@ onMounted(async () => {
   window.__AGENT_API__ = {
     isBusy: () => loading.value,
     
+    getChatLength: () => chat_show.value.length,
+
     getOutline: () => {
       const isBusy = loading.value;
-      const statusLine = isBusy ? "Current State: ⏳ [Busy: Thinking or Generating...]" : "Current State: ✅ [Idle: Ready]";
+      const statusLine = isBusy ? "Current State: [Busy: Thinking or Generating...]" : "Current State: [Idle: Ready]";
       
       const outlineStr = chat_show.value.map((msg, idx) => {
         if (msg.role === 'system') return null;
         let type = msg.role === 'user' ? 'User' : (msg.role === 'assistant' ? 'AI' : 'Tool');
         let prev = '';
+        
         if (msg.role === 'user' || msg.role === 'assistant') {
+          // 提取文本内容
+          let textContent = '';
           if (typeof msg.content === 'string') {
-            prev = msg.content.substring(0, 40).replace(/\n/g, ' ');
+            textContent = msg.content;
           } else if (Array.isArray(msg.content)) {
             const txt = msg.content.find(p => p.type === 'text');
-            if (txt) prev = txt.text.substring(0, 40).replace(/\n/g, ' ');
-            else prev = '[Media/Files Attached]';
+            if (txt && txt.text) textContent = txt.text;
           }
-        } else if (msg.role === 'tool') {
-          prev = `Used Tool: ${msg.name}`;
+
+          // 优先级 1: 显示文本内容
+          if (textContent && textContent.trim()) {
+              prev = textContent.trim().substring(0, 40).replace(/\n/g, ' ');
+          } 
+          // 优先级 2: 文本为空，但有工具调用
+          else if (msg.tool_calls && msg.tool_calls.length > 0) {
+              const tools = msg.tool_calls.map(t => t.name).join(', ');
+              prev = `[Calling Tool: ${tools}]`;
+          } 
+          // 优先级 3: 有附件(图片/文件)
+          else if (Array.isArray(msg.content) && msg.content.length > 0) {
+              prev = '[Media/Files Attached]';
+          } 
+          // 优先级 4: 真正的空消息或正在生成
+          else {
+              if (msg.role === 'assistant') {
+                   // 结合全局 loading 状态判断是否正在生成
+                   if (isBusy && idx === chat_show.value.length - 1) {
+                       if (msg.status === 'thinking') prev = '[Thinking...]';
+                       else prev = '[Generating...]';
+                   } else {
+                       prev = '[Empty Response]';
+                   }
+              } else {
+                   prev = '[Empty Message]';
+              }
+          }
         }
         return `[Index ${idx}] ${type}: ${prev}...`;
       }).filter(Boolean).join('\n');
