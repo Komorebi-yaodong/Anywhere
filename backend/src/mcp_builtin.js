@@ -36,14 +36,15 @@ function isChildWindow() {
     return false;
 }
 
-// 子窗口呼叫父进程的 Promise 包装器
-async function callParentShell(action, payload) {
+// 子窗口呼叫父进程的 Promise 包装器 (支持中断)
+async function callParentShell(action, payload, signal = null) {
     return new Promise((resolve, reject) => {
         const requestId = Math.random().toString(36).substr(2);
+        let isDone = false;
         
-        // 监听一次性回复
         const handler = (event, response) => {
             if (response.requestId === requestId) {
+                isDone = true;
                 ipcRenderer.off('background-shell-reply', handler);
                 if (response.error) reject(new Error(response.error));
                 else resolve(response.data);
@@ -51,15 +52,29 @@ async function callParentShell(action, payload) {
         };
         
         ipcRenderer.on('background-shell-reply', handler);
-        
-        // 发送请求给 preload.js
         utools.sendToParent('background-shell-request', { requestId, action, payload });
         
-        // 并且超时不报错，而是返回友好提示
+        // 监听前端的取消操作
+        if (signal) {
+            const abortHandler = () => {
+                if (isDone) return;
+                isDone = true;
+                ipcRenderer.off('background-shell-reply', handler);
+                // 抛出标准的 AbortError，前端即可终止 loading 状态
+                const err = new Error("Tool execution cancelled by user");
+                err.name = "AbortError";
+                reject(err);
+            };
+            if (signal.aborted) abortHandler();
+            else signal.addEventListener('abort', abortHandler);
+        }
+        
+        // 超时保护
         setTimeout(() => {
+            if (isDone) return;
+            isDone = true;
             ipcRenderer.off('background-shell-reply', handler);
-            // 不要 reject，而是 resolve 一个提示信息，防止 Agent 以为工具坏了
-            resolve(`[System Notice]: The request timed out after 60s. The target Agent is likely still generating a complex response or executing a long task.\n\nYou can continue to do other things and use 'read_agent_chats' again later to check the result.`);
+            resolve(`[System Notice]: The request timed out after 60s. The target Agent is likely still generating. You can check again later.`);
         }, 60000); 
     });
 }
@@ -2166,8 +2181,8 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
     },
 
     // --- Agent Collaboration Handlers ---
-    list_agents: async (args, context) => {
-        if (isChildWindow()) return await callParentShell('list_agents', args);
+    list_agents: async (args, context, signal) => {
+        if (isChildWindow()) return await callParentShell('list_agents', args, signal);
         
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
@@ -2176,7 +2191,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (args && args.agent_name) {
             const agent = prompts[args.agent_name];
             if (!agent) return `Error: Agent "${args.agent_name}" not found.`;
-            return `Agent: ${args.agent_name}\nType: ${agent.type}\nSystem Prompt:\n${agent.prompt || 'None'}`;
+            return `Agent: ${args.agent_name}\nType: ${agent.type}\nModel: ${agent.model}\nSystem Prompt:\n${agent.prompt || 'None'}`;
         }
 
         let agentStr = "- __DEFAULT__ (The global default agent)\n";
@@ -2186,8 +2201,8 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         return `Available Agents (Standalone Window Mode):\n${agentStr}`;
     },
 
-    summon_agent: async (args, context) => {
-        if (isChildWindow()) return await callParentShell('summon_agent', args);
+    summon_agent: async (args, context, signal) => {
+        if (isChildWindow()) return await callParentShell('summon_agent', args, signal);
         
         const { agent_name, text, file_paths } = args;
         const { getConfig, openWindow } = require('./data.js');
@@ -2215,8 +2230,8 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         return `Agent summoned successfully. Window ID: ${senderId}`;
     },
 
-    list_agent_chats: async (args, context) => {
-        if (isChildWindow()) return await callParentShell('list_agent_chats', { _callerId: context?.senderId });
+    list_agent_chats: async (args, context, signal) => {
+        if (isChildWindow()) return await callParentShell('list_agent_chats', { _callerId: context?.senderId }, signal);
         
         const { windowMap } = require('./data.js');
         let result = "Active Agent Windows:\n";
@@ -2233,39 +2248,59 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         return result;
     },
 
-    read_agent_chats: async (args, context) => {
-        if (isChildWindow()) return await callParentShell('read_agent_chats', args);
+    read_agent_chats: async (args, context, signal) => {
+        if (isChildWindow()) return await callParentShell('read_agent_chats', args, signal);
 
-        const { window_id, message_index, offset = 0, length = 2000 } = args;
+        const { window_id, message_index, offset = 0, length = 128000 } = args;
         const { windowMap } = require('./data.js');
         const win = windowMap.get(window_id);
-        if (!win || win.isDestroyed()) return `Error: Window ID ${window_id} not found or closed.`;
+        
+        if (!win || win.isDestroyed()) return `[System Notice]: Target Window (ID: ${window_id}) is already closed or does not exist.`;
 
         try {
             if (message_index === undefined || message_index === null) {
+                // 读取大纲 (无需等待，极速返回)
                 const outline = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getOutline() : "Error: API not ready."');
                 return `Chat Outline for Window ${window_id}:\n${outline}\n\nTo read a specific message, use read_agent_chats WITH the message_index.`;
             } else {
+                // 【核心优化】后端的智能轮询等待逻辑，彻底解决窗口关闭导致的卡死问题
+                let waitCount = 0;
+                while (!win.isDestroyed() && waitCount < 1200) {
+                    // 读取目标窗口当前的 Busy 状态
+                    const isBusy = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.isBusy() : false').catch(() => false);
+                    if (!isBusy) break; // 已闲置，退出轮询
+                    
+                    // 等待 100ms
+                    await new Promise(r => setTimeout(r, 100));
+                    waitCount++;
+                }
+
+                // 轮询结束后的状态校验
+                if (win.isDestroyed()) return `[System Notice]: The target window was CLOSED by the user while waiting for the response. Operation aborted.`;
+                if (waitCount >= 1200) return `[System Notice]: The request timed out after 120s. The agent is still generating.`;
+
+                // 此时确认窗口存活且不忙碌，直接读取数据
                 const content = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.getMessage(${message_index}) : "Error: API not ready."`);
+
                 if (content.startsWith("Error:")) return content;
 
                 const totalChars = content.length;
                 const safeOffset = Math.max(0, offset);
-                const safeLength = Math.min(length, 5000); 
+                const safeLength = Math.min(length, 128000); 
                 const chunk = content.substring(safeOffset, safeOffset + safeLength);
                 let footer = "";
                 if (safeOffset + chunk.length < totalChars) {
                     footer = `\n\n--- [TRUNCATED] --- \nRemaining chars: ${totalChars - (safeOffset + chunk.length)}. Call read_agent_chats again with offset=${safeOffset + chunk.length} to read more.`;
                 }
-                return `Message [${message_index}]:\n${chunk}${footer}`;
+                return `Message Detail:\n${chunk}${footer}`;
             }
         } catch (e) {
             return `Error communicating with window: ${e.message}`;
         }
     },
 
-    continue_agent_chats: async (args, context) => {
-        if (isChildWindow()) return await callParentShell('continue_agent_chats', args);
+    continue_agent_chats: async (args, context, signal) => {
+        if (isChildWindow()) return await callParentShell('continue_agent_chats', args, signal);
 
         const { window_id, text, file_paths } = args;
         const { windowMap } = require('./data.js');
@@ -2273,8 +2308,8 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (!win || win.isDestroyed()) return `Error: Window ID ${window_id} not found or closed.`;
 
         try {
-            await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.sendMessage(${JSON.stringify(text)}, ${JSON.stringify(file_paths || [])}) : Promise.reject("API not ready")`);
-            return `Message sent successfully to Window ID: ${window_id}. You can use read_agent_chats to check its response outline.`;
+            const res = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.sendMessage(${JSON.stringify(text)}, ${JSON.stringify(file_paths || [])}) : Promise.reject("API not ready")`);
+            return res; // 返回发送状态
         } catch (e) {
              return `Error sending message: ${e.message}`;
         }
