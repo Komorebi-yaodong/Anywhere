@@ -55,15 +55,16 @@ async function callParentShell(action, payload) {
         // 发送请求给 preload.js
         utools.sendToParent('background-shell-request', { requestId, action, payload });
         
-        // 30s 超时
+        // 并且超时不报错，而是返回友好提示
         setTimeout(() => {
             ipcRenderer.off('background-shell-reply', handler);
-            reject(new Error("Timeout waiting for background shell response"));
-        }, 30000); 
+            // 不要 reject，而是 resolve 一个提示信息，防止 Agent 以为工具坏了
+            resolve(`[System Notice]: The request timed out after 60s. The target Agent is likely still generating a complex response or executing a long task.\n\nYou can continue to do other things and use 'read_agent_chats' again later to check the result.`);
+        }, 60000); 
     });
 }
 
-const MAX_READ = 256 * 1000; // 512k characters
+const MAX_READ = 256 * 1000; // 256k characters
 
 // 数据提取函数 (提取标题、作者、简介)
 function extractMetadata(html) {
@@ -272,14 +273,14 @@ const BUILTIN_SERVERS = {
         tags: ["search", "web", "fetch"],
         logoUrl: "https://upload.wikimedia.org/wikipedia/en/9/90/The_DuckDuckGo_Duck.png"
     },
-    "builtin_subagent": {
-        id: "builtin_subagent",
-        name: "Sub-Agent",
-        description: "一个能够自主规划的子智能体。主智能体需显式分配工具给它。",
+    "builtin_superagent": {
+        id: "builtin_superagent",
+        name: "Super-Agent",
+        description: "超级智能体调度中心。包含后台静默执行的子智能体(Sub-Agent)，以及能够召唤、监控、协作其他独立窗口Agent的编排能力。",
         type: "builtin",
         isActive: true,
         isPersistent: false,
-        tags: ["agent"],
+        tags: ["agent", "orchestration"],
         logoUrl: "https://s2.loli.net/2026/01/22/tTsJjkpiOYAeGdy.png"
     },
     "builtin_tasks": {
@@ -534,43 +535,79 @@ IMPORTANT:
             }
         }
     ],
-    "builtin_subagent": [
+    "builtin_superagent": [
         {
             name: "sub_agent",
-            description: "Delegates a complex task to a Sub-Agent. You can assign specific tools, set the planning depth, and provide context. The Sub-Agent will autonomous plan and execute.",
+            description: "【Synchronous Background Worker】Delegates a specific sub-task to a temporary background AI worker. It blocks and waits until the task is fully completed, then returns the final result. Best for step-by-step internal reasoning.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    task: { type: "string", description: "The detailed task description." },
-                    context: { type: "string", description: "Background info, previous conversation summary, code snippets, or user constraints. Do NOT leave empty if the task depends on previous messages." },
-                    tools: {
-                        type: "array",
-                        items: { type: "string" },
-                        description: "List of tool names to grant. You MUST explicitly list the tools required for the task. If omitted or empty, the Sub-Agent will have NO tools."
-                    },
-                    planning_level: {
-                        type: "string",
-                        enum: ["fast", "medium", "high", "custom"],
-                        description: "Complexity level: 'fast'(10 steps), 'medium'(20 steps, default), 'high'(30 steps), or 'custom'."
-                    },
-                    custom_steps: {
-                        type: "integer",
-                        minimum: 10,
-                        maximum: 100,
-                        description: "Only used if planning_level is 'custom'."
-                    }
+                    task: { type: "string", description: "The detailed task description for the worker." },
+                    context: { type: "string", description: "Background info or required variables." },
+                    tools: { type: "array", items: { type: "string" }, description: "Tool names granted to the worker." },
+                    planning_level: { type: "string", enum: ["fast", "medium", "high", "custom"] },
+                    custom_steps: { type: "integer" }
                 },
                 required: ["task", "tools"]
             }
-        }
-    ],
-    // 大约在第 380 行附近，找到 "builtin_tasks" 的定义，替换为以下代码：
-    "builtin_tasks": [
+        },
         {
             name: "list_agents",
-            description: "List all available Agents (Quick Prompts). Use this to find the exact 'agent_name' for creating or editing tasks.",
+            description: "List all pre-configured professional Agents (System Prompts). You can optionally provide an 'agent_name' to inspect its system prompt and capabilities before summoning it.",
+            inputSchema: { 
+                type: "object", 
+                properties: {
+                    agent_name: { type: "string", description: "Optional. Name of the agent to inspect." }
+                } 
+            }
+        },
+        {
+            name: "summon_agent",
+            description: "Summon a specific ai agent (from list_agents) in a NEW window and send an initial task. Returns a 'window_id' immediately. The target agent will start generating a response in the background. You can do other things or immediately call 'read_agent_chats' to wait for its result.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    agent_name: { type: "string", description: "The exact name of the agent to summon." },
+                    text: { type: "string", description: "The first message or task description to send to this agent." },
+                    file_paths: { type: "array", items: { type: "string" }, description: "Optional. Array of local absolute paths to send files/images." }
+                },
+                required: ["agent_name", "text"]
+            }
+        },
+        {
+            name: "list_agent_chats",
+            description: "【Collaboration Info】List all CURRENTLY ACTIVE standalone agent windows and their 'window_id's. It also marks which window_id belongs to YOU.",
             inputSchema: { type: "object", properties: {} }
         },
+        {
+            name: "read_agent_chats",
+            description: "Read chat history. \nSMART BLOCKING: If you request the LATEST message (e.g. index=-1) and the agent is currently generating (Busy), this tool will BLOCK and WAIT until the generation is finished, then return the complete response. You don't need to poll repeatedly.\n\nINDEX RULES:\n- 0: System Prompt.\n- 1: First user message.\n- -1: Latest message.\n\nUSAGE:\n1. Call WITHOUT 'message_index' to get the chat outline.\n2. Call WITH 'message_index=-1' to get the latest reply (will auto-wait if busy).",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    window_id: { type: "string", description: "The window_id of the target agent." },
+                    message_index: { type: "integer", description: "Optional. Index of the message. 0=System, 1=First User Msg, -1=Latest. Leave empty for outline." },
+                    offset: { type: "integer", description: "Optional. Character offset.", default: 0 },
+                    length: { type: "integer", description: "Optional. Max characters.", default: 128000 }
+                },
+                required: ["window_id"]
+            }
+        },
+        {
+            name: "continue_agent_chats",
+            description: "Send follow-up messages to an ALREADY OPEN agent window. Returns immediately. The agent starts generating in background. You can do other things or immediately call 'read_agent_chats' with index=-1 to wait for its result.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    window_id: { type: "string", description: "The window_id of the target agent." },
+                    text: { type: "string", description: "The follow-up message to send." },
+                    file_paths: { type: "array", items: { type: "string" }, description: "Optional. Local paths of files/images to attach." }
+                },
+                required: ["window_id", "text"]
+            }
+        }
+    ],
+    "builtin_tasks": [
         {
             name: "list_mcp_servers",
             description: "List all MCP servers with their IDs and descriptions available for scheduled tasks. Use this to find the exact 'id' for assigning 'extra_mcp' to a scheduled task.",
@@ -2128,18 +2165,119 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         return await runSubAgent(args, globalContext, signal);
     },
 
-    // --- Task Management Handlers ---
-    list_agents: async () => {
+    // --- Agent Collaboration Handlers ---
+    list_agents: async (args, context) => {
+        if (isChildWindow()) return await callParentShell('list_agents', args);
+        
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
         const prompts = configData.config.prompts || {};
 
-        let agentStr = "- __DEFAULT__ (The global default agent with empty prompt. Recommended for general tasks)\n";
+        if (args && args.agent_name) {
+            const agent = prompts[args.agent_name];
+            if (!agent) return `Error: Agent "${args.agent_name}" not found.`;
+            return `Agent: ${args.agent_name}\nType: ${agent.type}\nSystem Prompt:\n${agent.prompt || 'None'}`;
+        }
+
+        let agentStr = "- __DEFAULT__ (The global default agent)\n";
         Object.entries(prompts).filter(([_, p]) => p.showMode === 'window').forEach(([key]) => {
             agentStr += `- ${key}\n`;
         });
+        return `Available Agents (Standalone Window Mode):\n${agentStr}`;
+    },
 
-        return `Available Agents:\n${agentStr}`;
+    summon_agent: async (args, context) => {
+        if (isChildWindow()) return await callParentShell('summon_agent', args);
+        
+        const { agent_name, text, file_paths } = args;
+        const { getConfig, openWindow } = require('./data.js');
+        const configData = await getConfig();
+        const windowConfig = JSON.parse(JSON.stringify(configData.config));
+
+        if (agent_name !== '__DEFAULT__' && !windowConfig.prompts[agent_name]) {
+            return `Error: Agent "${agent_name}" not found.`;
+        }
+        if (agent_name === '__DEFAULT__') {
+            if (!windowConfig.prompts) windowConfig.prompts = {};
+            windowConfig.prompts['__DEFAULT__'] = {
+                type: "general", prompt: "", showMode: "window", model: windowConfig.defaultTaskModel || "", stream: true, isAlwaysOnTop: true, autoCloseOnBlur: false, window_width: 580, window_height: 740, icon: ""
+            };
+        }
+
+        const msg = {
+            os: process.platform === 'win32' ? 'win' : (process.platform === 'darwin' ? 'macos' : 'linux'),
+            code: agent_name,
+            type: "summon",
+            summonData: { text, file_paths }
+        };
+
+        const senderId = await openWindow(windowConfig, msg);
+        return `Agent summoned successfully. Window ID: ${senderId}`;
+    },
+
+    list_agent_chats: async (args, context) => {
+        if (isChildWindow()) return await callParentShell('list_agent_chats', { _callerId: context?.senderId });
+        
+        const { windowMap } = require('./data.js');
+        let result = "Active Agent Windows:\n";
+        const callerId = args ? args._callerId : (context ? context.senderId : null);
+
+        for (const [id, win] of windowMap.entries()) {
+            if (!win.isDestroyed()) {
+                const title = win.getTitle(); 
+                const isMe = callerId === id ? "  <-- [This is YOU]" : "";
+                result += `- Window ID: ${id} | Agent: ${title}${isMe}\n`;
+            }
+        }
+        if (windowMap.size === 0) result = "No active agent windows.";
+        return result;
+    },
+
+    read_agent_chats: async (args, context) => {
+        if (isChildWindow()) return await callParentShell('read_agent_chats', args);
+
+        const { window_id, message_index, offset = 0, length = 2000 } = args;
+        const { windowMap } = require('./data.js');
+        const win = windowMap.get(window_id);
+        if (!win || win.isDestroyed()) return `Error: Window ID ${window_id} not found or closed.`;
+
+        try {
+            if (message_index === undefined || message_index === null) {
+                const outline = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getOutline() : "Error: API not ready."');
+                return `Chat Outline for Window ${window_id}:\n${outline}\n\nTo read a specific message, use read_agent_chats WITH the message_index.`;
+            } else {
+                const content = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.getMessage(${message_index}) : "Error: API not ready."`);
+                if (content.startsWith("Error:")) return content;
+
+                const totalChars = content.length;
+                const safeOffset = Math.max(0, offset);
+                const safeLength = Math.min(length, 5000); 
+                const chunk = content.substring(safeOffset, safeOffset + safeLength);
+                let footer = "";
+                if (safeOffset + chunk.length < totalChars) {
+                    footer = `\n\n--- [TRUNCATED] --- \nRemaining chars: ${totalChars - (safeOffset + chunk.length)}. Call read_agent_chats again with offset=${safeOffset + chunk.length} to read more.`;
+                }
+                return `Message [${message_index}]:\n${chunk}${footer}`;
+            }
+        } catch (e) {
+            return `Error communicating with window: ${e.message}`;
+        }
+    },
+
+    continue_agent_chats: async (args, context) => {
+        if (isChildWindow()) return await callParentShell('continue_agent_chats', args);
+
+        const { window_id, text, file_paths } = args;
+        const { windowMap } = require('./data.js');
+        const win = windowMap.get(window_id);
+        if (!win || win.isDestroyed()) return `Error: Window ID ${window_id} not found or closed.`;
+
+        try {
+            await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.sendMessage(${JSON.stringify(text)}, ${JSON.stringify(file_paths || [])}) : Promise.reject("API not ready")`);
+            return `Message sent successfully to Window ID: ${window_id}. You can use read_agent_chats to check its response outline.`;
+        } catch (e) {
+             return `Error sending message: ${e.message}`;
+        }
     },
 
     list_mcp_servers: async () => {
@@ -2510,7 +2648,51 @@ function getBuiltinServers() {
 }
 
 function getBuiltinTools(serverId) {
-    return BUILTIN_TOOLS[serverId] || [];
+    // 必须深拷贝，避免修改原始常量导致叠加污染
+    const tools = JSON.parse(JSON.stringify(BUILTIN_TOOLS[serverId] || []));
+    
+    // [动态注入] Super-Agent 自动枚举所有可用 Agent，消除模型幻觉
+    if (serverId === 'builtin_superagent') {
+        try {
+            // 同步读取数据库获取最新 Agent 列表 (utools.db.get 是同步的，非常适合这里)
+            const promptsDoc = utools.db.get("prompts");
+            const prompts = promptsDoc ? promptsDoc.data : {};
+            
+            // 筛选 Standalone Window 模式的 Agent (只有这种才能被召唤)
+            const agentNames = Object.entries(prompts)
+                .filter(([_, p]) => p.showMode === 'window')
+                .map(([k]) => k)
+                .sort();
+                
+            // 始终包含默认 Agent
+            const allAgents = ['__DEFAULT__', ...agentNames];
+            
+            // 限制展示数量，防止 Description 过长导致 Token 溢出 (虽然一般不会超)
+            const displayAgents = allAgents.slice(0, 100); 
+            const agentListStr = displayAgents.map(n => `"${n}"`).join(', ');
+            const suffix = allAgents.length > 100 ? `...and ${allAgents.length - 100} more` : '';
+            
+            const fullListStr = `${agentListStr}${suffix}`;
+
+            // 1. 注入到 list_agents
+            const listTool = tools.find(t => t.name === 'list_agents');
+            if (listTool) {
+                listTool.description += `\n\n[CURRENTLY AVAILABLE AGENTS]: ${fullListStr}`;
+            }
+            
+            // 2. 同时也注入到 summon_agent，让 AI 在决定召唤时手边就有确切的名单
+            const summonTool = tools.find(t => t.name === 'summon_agent');
+            if (summonTool) {
+                 summonTool.description += `\n\n[VALID TARGET NAMES]: ${fullListStr}`;
+            }
+
+        } catch (e) {
+            // 即使出错也不影响基础功能，只是少了个提示
+            // console.error("Inject agent list failed:", e);
+        }
+    }
+    
+    return tools;
 }
 
 async function invokeBuiltinTool(toolName, args, signal = null, context = null) {
@@ -2557,10 +2739,18 @@ process.on('SIGTERM', () => { killAllBackgroundShells(); process.exit(); });
 // 供 preload.js 调用的统一入口
 function handleBgShellRequest(action, payload) {
     const fnMap = {
+        // 绑定命令行工具命令
         'start': handlers.execute_bash_command,
         'list': handlers.list_background_shells,
         'read': handlers.read_background_shell_output,
-        'kill': handlers.kill_background_shell
+        'kill': handlers.kill_background_shell,
+
+        // 绑定agent协作命令
+        'list_agents': handlers.list_agents,
+        'summon_agent': handlers.summon_agent,
+        'list_agent_chats': handlers.list_agent_chats,
+        'read_agent_chats': handlers.read_agent_chats,
+        'continue_agent_chats': handlers.continue_agent_chats
     };
     
     const fn = fnMap[action];

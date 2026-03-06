@@ -202,7 +202,8 @@ window.api = {
         }
     },
     invokeMcpTool: async (toolName, toolArgs, signal, context = null) => {
-        return await invokeMcpTool(toolName, toolArgs, signal, context);
+        const extContext = context ? { ...context, senderId } : { senderId };
+        return await invokeMcpTool(toolName, toolArgs, signal, extContext);
     },
     saveMcpToolCache,
     closeMcpClient,

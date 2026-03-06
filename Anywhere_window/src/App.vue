@@ -1174,6 +1174,155 @@ onMounted(async () => {
     theme: currentConfig.value?.isDarkMode ? 'dark' : 'light'
   });
 
+  // 暴露给后台MCP调用的 Agent API
+
+  window.__AGENT_API__ = {
+    getOutline: () => {
+      const isBusy = loading.value;
+      const statusLine = isBusy ? "Current State: ⏳ [Busy: Thinking or Generating...]" : "Current State: ✅ [Idle: Ready]";
+      
+      const outlineStr = chat_show.value.map((msg, idx) => {
+        if (msg.role === 'system') return null;
+        let type = msg.role === 'user' ? 'User' : (msg.role === 'assistant' ? 'AI' : 'Tool');
+        let prev = '';
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          if (typeof msg.content === 'string') {
+            prev = msg.content.substring(0, 40).replace(/\n/g, ' ');
+          } else if (Array.isArray(msg.content)) {
+            const txt = msg.content.find(p => p.type === 'text');
+            if (txt) prev = txt.text.substring(0, 40).replace(/\n/g, ' ');
+            else prev = '[Media/Files Attached]';
+          }
+        } else if (msg.role === 'tool') {
+          prev = `Used Tool: ${msg.name}`;
+        }
+        return `[Index ${idx}] ${type}: ${prev}...`;
+      }).filter(Boolean).join('\n');
+
+      return `${statusLine}\n\nMessages Outline:\n${outlineStr}`;
+    },
+    
+    // 支持异步阻塞等待
+    getMessage: async (index) => {
+      let reqIndex = parseInt(index);
+      if (isNaN(reqIndex)) return "Error: Invalid index format.";
+      
+      // 1. 转换索引
+      let actualIndex = reqIndex;
+      if (actualIndex < 0) {
+        actualIndex = chat_show.value.length + actualIndex;
+      }
+      
+      // 2. 智能阻塞逻辑 (Smart Blocking)
+      // 如果请求的是最后一条消息(通常是AI回复)，或者索引超出当前范围(预读下一条)，且当前正在loading
+      // 则进入轮询等待，直到 loading 结束
+      if ((actualIndex === chat_show.value.length - 1 || actualIndex === chat_show.value.length) && loading.value) {
+          // console.log(`[Agent API] Waiting for generation to finish... (Target Index: ${actualIndex})`);
+          
+          // 最多等待 120 秒 (防止死锁)
+          const maxWait = 1200; 
+          let waitCount = 0;
+          while (loading.value && waitCount < maxWait) {
+              await new Promise(r => setTimeout(r, 100)); // 每100ms检查一次
+              waitCount++;
+          }
+          
+          if (loading.value) {
+              return "[SYSTEM TIMEOUT]: The agent is still generating after 120s. Please try reading again later.";
+          }
+          
+          // 等待结束后，重新计算最新索引（因为生成过程中可能插入了新消息，如工具调用链）
+          // 如果用户传的是 -1，重新计算 -1 对应的真实索引
+          if (reqIndex < 0) {
+              actualIndex = chat_show.value.length + reqIndex;
+          }
+      }
+
+      const msg = chat_show.value[actualIndex];
+      if (!msg) return `Error: Message index ${reqIndex} (mapped to ${actualIndex}) out of bounds. Current Total: ${chat_show.value.length}`;
+      
+      // 3. 构建返回头，明确告知索引信息
+      let headerInfo = `[Message Info] Index: ${actualIndex} (Requested: ${reqIndex}) | Role: ${msg.role}\n`;
+      
+      if (msg.role === 'system') {
+        return `${headerInfo}\n[System Prompt]:\n${msg.content}`;
+      }
+      
+      let contentStr = "";
+      if (msg.role === 'user' || msg.role === 'assistant') {
+        // 解析主要内容
+        if (Array.isArray(msg.content)) {
+          contentStr = msg.content.map(p => {
+            if (p.type === 'text') return p.text;
+            if (p.type === 'image_url') return '[Image attachment]';
+            if (p.type === 'file' || p.type === 'input_file') return `[File attachment: ${p.filename || p.name}]`;
+            return '';
+          }).join('\n');
+        } else {
+          contentStr = msg.content || "";
+        }
+        
+        // 如果是 AI 消息
+        if (msg.role === 'assistant') {
+          let extraInfo = "";
+          if (msg.status === 'thinking') extraInfo += "(State: Thinking...)\n";
+          
+          // if (msg.reasoning_content) {
+          //   extraInfo += `[Reasoning Content]:\n${msg.reasoning_content}\n\n`;
+          // }
+
+          if (msg.tool_calls && msg.tool_calls.length > 0) {
+            extraInfo += `\n[Tools Called]:\n`;
+            msg.tool_calls.forEach(tc => {
+                extraInfo += `> Tool: ${tc.name}\n  Args: ${tc.args}\n  Status: ${tc.approvalStatus}\n`;
+                
+                const toolResultMsg = history.value.find(m => m.role === 'tool' && m.tool_call_id === tc.id);
+                
+                if (toolResultMsg) {
+                    let resultPreview = toolResultMsg.content;
+                    // 如果结果是对象/数组，转字符串
+                    if (typeof resultPreview !== 'string') {
+                        try { resultPreview = JSON.stringify(resultPreview, null, 2); } catch(e) {}
+                    }
+                    extraInfo += `  < Result: ${resultPreview}\n`;
+                } else {
+                    extraInfo += `  < Result: (Pending execution or result not in history)\n`;
+                }
+                extraInfo += `\n`;
+            });
+            // 将工具调用过程插在正文之前
+            contentStr = extraInfo + `[Final Response]:\n${contentStr}`;
+          }
+        }
+        return headerInfo + contentStr;
+      } else if (msg.role === 'tool') {
+        // 如果直接读取的是 tool 消息 (通常不需要，因为 Assistant 消息里已经包含了，但为了兼容性保留)
+        return `${headerInfo}\n[Tool Output]:\n${msg.content}`;
+      }
+      return "Unknown message format.";
+    },
+    sendMessage: async (text, filePaths) => {
+      if (loading.value) {
+        return Promise.reject("Error: This agent is currently busy generating a response. Please wait until it becomes Idle.");
+      }
+      if (text) prompt.value = text;
+      
+      let fileMsg = "";
+      if (filePaths && Array.isArray(filePaths) && filePaths.length > 0) {
+        let success = 0;
+        for (const p of filePaths) {
+          try { await processFilePath(p); success++; } catch(e){}
+        }
+        await nextTick();
+        fileMsg = ` (${success} files attached)`;
+      }
+      
+      // 触发发送，不等待
+      askAI(false).catch(err => console.error("Background generation error:", err));
+      return `Message sent successfully${fileMsg}. Agent is now generating response...`;
+    }
+  };
+
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
   window.addEventListener('blur', handleWindowBlur);
@@ -1259,6 +1408,9 @@ onMounted(async () => {
     }
 
     autoCloseOnBlur.value = currentPromptConfig.autoCloseOnBlur ?? false;
+    if (data?.type === "task" || data?.type === "summon") {
+      autoCloseOnBlur.value = false;
+    }
     tempReasoningEffort.value = currentPromptConfig.reasoning_effort || 'default';
     model.value = currentPromptConfig.model || modelList.value[0]?.value || '';
     selectedVoice.value = currentPromptConfig.voice || null;
@@ -1325,6 +1477,16 @@ onMounted(async () => {
 
         // 标记需要直接发送
         shouldDirectSend = true;
+      }if (data.type === "summon") {
+        shouldDirectSend = true;
+        isFileDirectSend = true;
+        if (data.summonData) {
+          const { text, file_paths } = data.summonData;
+          if (text) prompt.value = text;
+          if (file_paths && Array.isArray(file_paths) && file_paths.length > 0) {
+            for (const p of file_paths) await processFilePath(p);
+          }
+        }
       }
       if (data.type === "over" && data.payload) {
         let sessionLoaded = false;

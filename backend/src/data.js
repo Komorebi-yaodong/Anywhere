@@ -332,6 +332,15 @@ function checkConfig(config) {
     if (config[key] !== undefined) { delete config[key]; flag = true; }
   });
 
+  if (config.mcpServers && config.mcpServers['builtin_subagent']) {
+    config.mcpServers['builtin_superagent'] = config.mcpServers['builtin_subagent'];
+    config.mcpServers['builtin_superagent'].id = 'builtin_superagent';
+    config.mcpServers['builtin_superagent'].name = 'Super-Agent';
+    config.mcpServers['builtin_superagent'].description = '超级智能体调度中心。包含后台静默执行的子智能体(Sub-Agent)，以及能够召唤、监控、协作其他独立窗口Agent的编排能力。';
+    delete config.mcpServers['builtin_subagent'];
+    flag = true;
+  }
+
   // 需要补全的默认值
   const rootDefaults = {
     isAlwaysOnTop_global: true,
@@ -812,7 +821,7 @@ function getPosition(config, promptCode, msg = null) {
   
   let currentDisplay;
 
-  // --- 如果是定时任务，强制右上角 (不贴边) ---
+  // --- 1. 定时任务 -> 强制右上角 (不贴边) ---
   if (msg && msg.type === 'task') {
     const padding = 30; // 距离屏幕边缘的距离
     
@@ -824,7 +833,19 @@ function getPosition(config, promptCode, msg = null) {
     
     currentDisplay = primaryDisplay;
   } 
-  // --- 原有逻辑：固定位置 或 跟随鼠标 ---
+  // --- 2. 召唤任务 (Summon) -> 强制右下角 (不贴边) ---
+  else if (msg && msg.type === 'summon') {
+    const padding = 30; // 距离屏幕边缘的距离
+    
+    // 计算 X: 屏幕最右侧 - 窗口宽度 - 边距
+    windowX = baseBounds.x + baseBounds.width - width - padding;
+    
+    // 计算 Y: 屏幕最底部 - 窗口高度 - 边距
+    windowY = baseBounds.y + baseBounds.height - height - padding;
+    
+    currentDisplay = primaryDisplay;
+  }
+  // --- 3. 普通唤起 -> 依据设置 (固定位置 或 跟随鼠标) ---
   else {
     const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
 
@@ -961,8 +982,6 @@ async function openWindow(config, msg) {
     entryPath,
     windowOptions,
     () => {
-      // 将窗口实例存入Map
-      windowMap.set(senderId, ubWindow);
       ubWindow.show();
 
       // 计时结束
@@ -973,9 +992,15 @@ async function openWindow(config, msg) {
       ubWindow.webContents.send(channel, msg);
     }
   );
+  
+  // 提前将窗口实例存入Map，防止同步调用时获取不到
+  windowMap.set(senderId, ubWindow);
+  
   if (utools.isDev()) {
     ubWindow.webContents.openDevTools({ mode: "detach" });
   }
+  
+  return senderId;
 }
 
 async function coderedirect(label, payload) {
