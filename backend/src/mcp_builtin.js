@@ -74,7 +74,7 @@ async function callParentShell(action, payload, signal = null) {
             if (isDone) return;
             isDone = true;
             ipcRenderer.off('background-shell-reply', handler);
-            resolve(`[System Notice]: The request timed out after 60s. The target agent may still be generating. You can try again later, or check previous messages.`);
+            resolve(`[System Notice]: The request timed out after 60s. The target agent may still be generating. You can try again later, or check previous messages which may be useful.`);
         }, 60000); 
     });
 }
@@ -596,7 +596,7 @@ IMPORTANT:
         },
         {
             name: "read_agent_chats",
-            description: "Read chat history. \nSMART BLOCKING: If you request the LATEST message (e.g. index=-1) and the agent is currently generating (Busy), this tool will BLOCK and WAIT until the generation is finished, then return the complete response. You don't need to poll repeatedly.\n\nINDEX RULES:\n- 0: System Prompt（if exists）.\n- 1: First user message.\n- -1: Latest message.\n\nUSAGE:\n1. Call WITHOUT 'message_index' to get the chat outline.\n2. Call WITH 'message_index=-1' to get the latest reply (will auto-wait if busy).",
+            description: "Read chat history. \nSMART BLOCKING: If you request the LATEST message (e.g. index=-1) and the agent is currently generating (Busy), this tool will BLOCK and WAIT until the generation is finished, then return the complete response. You don't need to poll repeatedly.\n\nINDEX RULES:\n- 0: System Prompt（if exists）.\n- 1: First user message.\n- -1: Latest message.\n\nUSAGE:\n1. Call WITHOUT 'message_index' to get the chat outline.\n2. Call WITH 'message_index=-1' to get the latest reply (will auto-wait if busy). AI Agent may return multiple messages (e.g. `message_index` may be `-2`, `-3`, etc.). which can include tool calls or other intermediate process information, so make sure to retrieve the specific message you actually need.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -976,11 +976,12 @@ async function runSubAgent(args, globalContext, signal) {
     const { task, context: userContext, tools: allowedToolNames, planning_level, custom_steps } = args;
     const { apiKey, baseUrl, model, tools: allToolDefinitions, mcpSystemPrompt, onUpdate, apiType } = globalContext;
 
-    // --- 1. 工具权限控制 (最小权限原则) ---
+    // --- 1. 工具直接映射 (Direct Mapping) ---
     let availableTools = [];
     if (allowedToolNames && Array.isArray(allowedToolNames) && allowedToolNames.length > 0) {
         const allowedSet = new Set(allowedToolNames);
         availableTools = (allToolDefinitions || []).filter(t =>
+            // 映射逻辑：只要名字匹配，就授予权限
             allowedSet.has(t.function.name) && t.function.name !== 'sub_agent'
         );
     }
@@ -1054,7 +1055,6 @@ ${userContext || 'No additional context provided.'}
 
             if (currentApiType === 'responses' && response.output) {
                 // Responses API 处理逻辑
-                // 1. 提取文本消息
                 const textItems = response.output.filter(item => item.type === 'message');
                 textItems.forEach(item => {
                     if (item.content) {
@@ -1064,7 +1064,6 @@ ${userContext || 'No additional context provided.'}
                     }
                 });
 
-                // 2. 提取工具调用
                 const functionCallItems = response.output.filter(item => item.type === 'function_call');
                 toolCalls = functionCallItems.map(item => ({
                     id: item.call_id,
@@ -1075,7 +1074,6 @@ ${userContext || 'No additional context provided.'}
                     }
                 }));
 
-                // 3. 构造兼容的 message 对象供后续逻辑使用
                 message = {
                     role: 'assistant',
                     content: messageContent || null,
@@ -1089,7 +1087,6 @@ ${userContext || 'No additional context provided.'}
                 toolCalls = message.tool_calls || [];
             }
 
-            // 将助手回复（或转换后的回复）推入历史
             messages.push(message);
 
             // 3.2 决策
@@ -1161,7 +1158,6 @@ ${userContext || 'No additional context provided.'}
         return report;
     };
 
-    // 达到步数限制后，让 AI 总结
     try {
         log(`[System] Requesting status summary from Sub-Agent...`);
         messages.push({
@@ -1169,7 +1165,6 @@ ${userContext || 'No additional context provided.'}
             content: "SYSTEM ALERT: You have reached the maximum number of steps allowed. Please provide a concise summary of:\n1. What has been successfully completed.\n2. What is the current status/obstacles.\n3. What specific actions remain to be done.\nDo not use any tools, just answer with text."
         });
 
-        // (使用 chat.js)
         const currentApiType = apiType || 'chat_completions';
         const summaryResponse = await createChatCompletion({
             baseUrl: baseUrl,
@@ -2301,42 +2296,62 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (!win || win.isDestroyed()) return `[System Notice]: Target Window (ID: ${window_id}) is already closed or does not exist.`;
 
         try {
+            // --- 步骤 1: 始终先获取最新的大纲 ---
+            // 无论是否请求具体消息，都提供大纲，帮助 AI 维持全局上下文感知
+            const outline = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getOutline() : "Error: API not ready."');
+            const outlineSection = `### Current Conversation Outline (Window ${window_id})\n${outline}\n`;
+
+            // --- 步骤 2: 如果只请求大纲，直接返回 ---
             if (message_index === undefined || message_index === null) {
-                // 读取大纲 (无需等待，极速返回)
-                const outline = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getOutline() : "Error: API not ready."');
-                return `Chat Outline for Window ${window_id}:\n${outline}\n\nTo read a specific message, use read_agent_chats WITH the message_index.`;
-            } else {
-                // 【核心优化】后端的智能轮询等待逻辑，彻底解决窗口关闭导致的卡死问题
-                let waitCount = 0;
-                while (!win.isDestroyed() && waitCount < 1200) {
-                    // 读取目标窗口当前的 Busy 状态
-                    const isBusy = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.isBusy() : false').catch(() => false);
-                    if (!isBusy) break; // 已闲置，退出轮询
-                    
-                    // 等待 100ms
-                    await new Promise(r => setTimeout(r, 100));
-                    waitCount++;
-                }
+                return `${outlineSection}\n[System]: To read a specific message detail, use 'read_agent_chats' WITH the 'message_index'.`;
+            } 
 
-                // 轮询结束后的状态校验
-                if (win.isDestroyed()) return `[System Notice]: The target window was CLOSED by the user while waiting for the response. Operation aborted.`;
-                if (waitCount >= 1200) return `[System Notice]: The request timed out after 120s. The agent is still generating.`;
-
-                // 此时确认窗口存活且不忙碌，直接读取数据
-                const content = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.getMessage(${message_index}) : "Error: API not ready."`);
-
-                if (content.startsWith("Error:")) return content;
-
-                const totalChars = content.length;
-                const safeOffset = Math.max(0, offset);
-                const safeLength = Math.min(length, 128000); 
-                const chunk = content.substring(safeOffset, safeOffset + safeLength);
-                let footer = "";
-                if (safeOffset + chunk.length < totalChars) {
-                    footer = `\n\n--- [TRUNCATED] --- \nRemaining chars: ${totalChars - (safeOffset + chunk.length)}. Call read_agent_chats again with offset=${safeOffset + chunk.length} to read more.`;
-                }
-                return `Message Detail:\n${chunk}${footer}`;
+            // --- 步骤 3: 获取具体消息详情 (带智能等待) ---
+            
+            // 智能轮询等待逻辑，解决窗口关闭导致的卡死问题
+            let waitCount = 0;
+            while (!win.isDestroyed() && waitCount < 1200) {
+                // 读取目标窗口当前的 Busy 状态
+                const isBusy = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.isBusy() : false').catch(() => false);
+                if (!isBusy) break; // 已闲置，退出轮询
+                
+                // 等待 100ms
+                await new Promise(r => setTimeout(r, 100));
+                waitCount++;
             }
+
+            // 轮询结束后的状态校验
+            if (win.isDestroyed()) return `[System Notice]: The target window was CLOSED by the user while waiting for the response. Operation aborted.`;
+            if (waitCount >= 1200) return `[System Notice]: The request timed out after 120s. The agent is still generating.`;
+
+            // 此时确认窗口存活且不忙碌，直接读取数据
+            const content = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.getMessage(${message_index}) : "Error: API not ready."`);
+
+            if (content.startsWith("Error:")) {
+                return `${outlineSection}\n\n[System Error fetching message]: ${content}`;
+            }
+
+            const totalChars = content.length;
+            const safeOffset = Math.max(0, offset);
+            const safeLength = Math.min(length, 128000); 
+            
+            const chunk = content.substring(safeOffset, safeOffset + safeLength);
+            const currentEndPos = safeOffset + chunk.length;
+
+            let footer = "";
+            
+            if (currentEndPos < totalChars) {
+                // 情况 A: 内容被截断
+                const remaining = totalChars - currentEndPos;
+                footer = `\n\n--- [SYSTEM: CONTENT TRUNCATED] ---\n(Showing chars ${safeOffset}-${currentEndPos} of ${totalChars})\nRemaining: ${remaining} chars.\n>>> ACTION REQUIRED: Call 'read_agent_chats' again with offset=${currentEndPos} to read the rest.`;
+            } else {
+                // 情况 B: 内容读取完毕
+                footer = `\n\n--- [SYSTEM: END OF MESSAGE] ---\n(Total length: ${totalChars} chars)`;
+            }
+
+            // --- 步骤 4: 组合返回 (大纲 + 分割线 + 详情) ---
+            return `${outlineSection}\n========================================\n### Detailed Message Content (Index: ${message_index})\n${chunk}${footer}`;
+
         } catch (e) {
             return `Error communicating with window: ${e.message}`;
         }
