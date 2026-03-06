@@ -1216,7 +1216,7 @@ onMounted(async () => {
       const msg = chat_show.value[actualIndex];
       if (!msg) return `Error: Message index ${index} out of bounds (Total: ${chat_show.value.length-1}).`;
       
-      let headerInfo = `[Message Info] Index: ${actualIndex} (Requested: ${index})/Total ${chat_show.value.length} | Role: ${msg.role}\n`;
+      let headerInfo = `[Message Info] Index: ${actualIndex} (Requested: ${index})/Total ${chat_show.value.length} messages | Role: ${msg.role}\n`;
       
       // 如果还在生成中，追加提示
       if (actualIndex === chat_show.value.length - 1 && loading.value) {

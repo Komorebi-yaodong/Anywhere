@@ -74,7 +74,7 @@ async function callParentShell(action, payload, signal = null) {
             if (isDone) return;
             isDone = true;
             ipcRenderer.off('background-shell-reply', handler);
-            resolve(`[System Notice]: The request timed out after 60s. The target Agent is likely still generating. You can check again later.`);
+            resolve(`[System Notice]: The request timed out after 60s. The target agent may still be generating. You can try again later, or check previous messages.`);
         }, 60000); 
     });
 }
@@ -596,7 +596,7 @@ IMPORTANT:
         },
         {
             name: "read_agent_chats",
-            description: "Read chat history. \nSMART BLOCKING: If you request the LATEST message (e.g. index=-1) and the agent is currently generating (Busy), this tool will BLOCK and WAIT until the generation is finished, then return the complete response. You don't need to poll repeatedly.\n\nINDEX RULES:\n- 0: System Prompt.\n- 1: First user message.\n- -1: Latest message.\n\nUSAGE:\n1. Call WITHOUT 'message_index' to get the chat outline.\n2. Call WITH 'message_index=-1' to get the latest reply (will auto-wait if busy).",
+            description: "Read chat history. \nSMART BLOCKING: If you request the LATEST message (e.g. index=-1) and the agent is currently generating (Busy), this tool will BLOCK and WAIT until the generation is finished, then return the complete response. You don't need to poll repeatedly.\n\nINDEX RULES:\n- 0: System Prompt（if exists）.\n- 1: First user message.\n- -1: Latest message.\n\nUSAGE:\n1. Call WITHOUT 'message_index' to get the chat outline.\n2. Call WITH 'message_index=-1' to get the latest reply (will auto-wait if busy).",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -2237,14 +2237,26 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         let result = "Active Agent Windows:\n";
         const callerId = args ? args._callerId : (context ? context.senderId : null);
 
+        const deadIds = []; // 收集已死亡的窗口ID用于清理
+
         for (const [id, win] of windowMap.entries()) {
-            if (!win.isDestroyed()) {
-                const title = win.getTitle(); 
-                const isMe = callerId === id ? "  <-- [This is YOU]" : "";
-                result += `- Window ID: ${id} | Agent: ${title}${isMe}\n`;
+            if (win.isDestroyed()) {
+                deadIds.push(id);
+                continue;
             }
+            const title = win.getTitle(); 
+            // 标题依然是默认的 "Anywhere" 代表渲染未完成或已成死区
+            if (title === "Anywhere") {
+                continue; 
+            }
+            const isMe = callerId === id ? "  <-- [This is YOU]" : "";
+            result += `- Window ID: ${id} | Agent: ${title}${isMe}\n`;
         }
-        if (windowMap.size === 0) result = "No active agent windows.";
+
+        // 执行垃圾回收
+        deadIds.forEach(id => windowMap.delete(id));
+
+        if (result === "Active Agent Windows:\n") result = "No active agent windows.";
         return result;
     },
 

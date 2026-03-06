@@ -940,6 +940,8 @@ function copyText(content) {
   utools.copyText(content);
 }
 
+let windowCreationQueue = Promise.resolve(); // 新增：窗口创建队列
+
 async function openWindow(config, msg) {
   // 计时开始
   let startTime;
@@ -978,29 +980,47 @@ async function openWindow(config, msg) {
     },
   };
   const entryPath = config.isDarkMode ? "./window/index.html?dark=1" : "./window/index.html";
-  const ubWindow = utools.createBrowserWindow(
-    entryPath,
-    windowOptions,
-    () => {
-      ubWindow.show();
 
-      // 计时结束
-      if (utools.isDev()) {
-        const windowShownTime = performance.now();
-        console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
-      }
-      ubWindow.webContents.send(channel, msg);
-    }
-  );
-  
-  // 提前将窗口实例存入Map，防止同步调用时获取不到
-  windowMap.set(senderId, ubWindow);
-  
-  if (utools.isDev()) {
-    ubWindow.webContents.openDevTools({ mode: "detach" });
-  }
-  
-  return senderId;
+  // 使用 Promise 队列序列化窗口创建，防止 uTools 底层并发崩溃
+  return new Promise((resolve) => {
+    windowCreationQueue = windowCreationQueue.then(() => {
+      return new Promise((nextInQueue) => {
+        let isResolved = false;
+        const releaseQueue = () => {
+          if (!isResolved) {
+            isResolved = true;
+            nextInQueue(); // 释放队列，允许创建下一个窗口
+          }
+        };
+
+        const ubWindow = utools.createBrowserWindow(
+          entryPath,
+          windowOptions,
+          () => {
+            ubWindow.show();
+            if (utools.isDev()) {
+              const windowShownTime = performance.now();
+              console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+            }
+            ubWindow.webContents.send(channel, msg);
+            releaseQueue(); 
+          }
+        );
+        
+        windowMap.set(senderId, ubWindow);
+        resolve(senderId);
+        
+        if (utools.isDev()) {
+          ubWindow.webContents.openDevTools({ mode: "detach" });
+        }
+
+        setTimeout(releaseQueue, 1500);
+      });
+    }).catch((err) => {
+      console.error("Window creation queue error:", err);
+      resolve(senderId); 
+    });
+  });
 }
 
 async function coderedirect(label, payload) {
