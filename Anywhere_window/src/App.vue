@@ -252,7 +252,7 @@ const refreshSelectedMcpServers = async () => {
 
   for (const id of tempSessionMcpServerIds.value) {
     const serverConf = currentConfig.value.mcpServers[id];
-    if (!serverConf || serverConf.type === 'builtin') continue; 
+    if (!serverConf || serverConf.type === 'builtin') continue;
 
     const configToTest = {
       id: id,
@@ -1119,21 +1119,20 @@ const saveSystemPrompt = async () => {
   systemPromptDialogVisible.value = false;
 };
 
-const closePage = async () => {
+const closePage = async (force_save = false) => {
   // 1. 如果是为了打开文件选择器而失去焦点，拦截关闭
   if (isFilePickerOpen.value) return;
 
   // 条件：配置了本地存储路径 且 当前对话已有名称
-  if (currentConfig.value?.webdav?.localChatPath && defaultConversationName.value) {
+  if (currentConfig.value?.webdav?.localChatPath && (defaultConversationName.value || force_save)) {
     try {
-      await autoSaveSession();
+      await autoSaveSession(force_save);
     } catch (e) {
       console.error("关闭时自动保存失败:", e);
     }
   }
 
   // 3. 关闭窗口
-  // window.close();
   window.api.windowControl('close-window');
 };
 
@@ -1178,18 +1177,18 @@ onMounted(async () => {
 
   window.__AGENT_API__ = {
     isBusy: () => loading.value,
-    
+
     getChatLength: () => chat_show.value.length,
 
     getOutline: () => {
       const isBusy = loading.value;
       const statusLine = isBusy ? "Current State: [Busy: Thinking or Generating...]" : "Current State: [Idle: Ready]";
-      
+
       const outlineStr = chat_show.value.map((msg, idx) => {
         if (msg.role === 'system') return null;
         let type = msg.role === 'user' ? 'User' : (msg.role === 'assistant' ? 'AI' : 'Tool');
         let prev = '';
-        
+
         if (msg.role === 'user' || msg.role === 'assistant') {
           // 提取文本内容
           let textContent = '';
@@ -1202,30 +1201,30 @@ onMounted(async () => {
 
           // 优先级 1: 显示文本内容
           if (textContent && textContent.trim()) {
-              prev = textContent.trim().substring(0, 40).replace(/\n/g, ' ');
-          } 
+            prev = textContent.trim().substring(0, 40).replace(/\n/g, ' ');
+          }
           // 优先级 2: 文本为空，但有工具调用
           else if (msg.tool_calls && msg.tool_calls.length > 0) {
-              const tools = msg.tool_calls.map(t => t.name).join(', ');
-              prev = `[Calling Tool: ${tools}]`;
-          } 
+            const tools = msg.tool_calls.map(t => t.name).join(', ');
+            prev = `[Calling Tool: ${tools}]`;
+          }
           // 优先级 3: 有附件(图片/文件)
           else if (Array.isArray(msg.content) && msg.content.length > 0) {
-              prev = '[Media/Files Attached]';
-          } 
+            prev = '[Media/Files Attached]';
+          }
           // 优先级 4: 真正的空消息或正在生成
           else {
-              if (msg.role === 'assistant') {
-                   // 结合全局 loading 状态判断是否正在生成
-                   if (isBusy && idx === chat_show.value.length - 1) {
-                       if (msg.status === 'thinking') prev = '[Thinking...]';
-                       else prev = '[Generating...]';
-                   } else {
-                       prev = '[Empty Response]';
-                   }
+            if (msg.role === 'assistant') {
+              // 结合全局 loading 状态判断是否正在生成
+              if (isBusy && idx === chat_show.value.length - 1) {
+                if (msg.status === 'thinking') prev = '[Thinking...]';
+                else prev = '[Generating...]';
               } else {
-                   prev = '[Empty Message]';
+                prev = '[Empty Response]';
               }
+            } else {
+              prev = '[Empty Message]';
+            }
           }
         }
         return `[Index ${idx}] ${type}: ${prev}...`;
@@ -1233,21 +1232,21 @@ onMounted(async () => {
 
       return `${statusLine}\n\nMessages Outline:\n${outlineStr}`;
     },
-    
+
     getMessage: (index) => {
       let actualIndex = parseInt(index);
       if (isNaN(actualIndex)) return "Error: Invalid index format.";
-      
+
       // 转换负数索引
       if (actualIndex < 0) {
         actualIndex = chat_show.value.length + actualIndex;
       }
-      
+
       const msg = chat_show.value[actualIndex];
-      if (!msg) return `Error: Message index ${index} out of bounds (Total: ${chat_show.value.length-1}).`;
-      
+      if (!msg) return `Error: Message index ${index} out of bounds (Total: ${chat_show.value.length - 1}).`;
+
       let headerInfo = `[Message Info] Index: ${actualIndex} (Requested: ${index})/Total ${chat_show.value.length} messages | Role: ${msg.role}\n`;
-      
+
       // 如果还在生成中，追加提示
       if (actualIndex === chat_show.value.length - 1 && loading.value) {
         headerInfo += "[SYSTEM NOTICE]: This message is currently being generated. Content may be incomplete.\n";
@@ -1256,7 +1255,7 @@ onMounted(async () => {
       if (msg.role === 'system') {
         return `${headerInfo}\n[System Prompt]:\n${msg.content}`;
       }
-      
+
       let contentStr = "";
       if (msg.role === 'user' || msg.role === 'assistant') {
         if (Array.isArray(msg.content)) {
@@ -1269,7 +1268,7 @@ onMounted(async () => {
         } else {
           contentStr = msg.content || "";
         }
-        
+
         if (msg.role === 'assistant') {
           let extraInfo = "";
           if (msg.status === 'thinking') extraInfo += "(State: Thinking...)\n";
@@ -1277,18 +1276,18 @@ onMounted(async () => {
           if (msg.tool_calls && msg.tool_calls.length > 0) {
             extraInfo += `\n[Tools Execution History]:\n`;
             msg.tool_calls.forEach(tc => {
-                extraInfo += `> Tool: ${tc.name}\n  Args: ${tc.args}\n  Status: ${tc.approvalStatus}\n`;
-                const toolResultMsg = history.value.find(m => m.role === 'tool' && m.tool_call_id === tc.id);
-                if (toolResultMsg) {
-                    let resultPreview = toolResultMsg.content;
-                    if (typeof resultPreview !== 'string') {
-                        try { resultPreview = JSON.stringify(resultPreview, null, 2); } catch(e) {}
-                    }
-                    extraInfo += `  < Result: ${resultPreview}\n`;
-                } else {
-                    extraInfo += `  < Result: (Pending or not in history)\n`;
+              extraInfo += `> Tool: ${tc.name}\n  Args: ${tc.args}\n  Status: ${tc.approvalStatus}\n`;
+              const toolResultMsg = history.value.find(m => m.role === 'tool' && m.tool_call_id === tc.id);
+              if (toolResultMsg) {
+                let resultPreview = toolResultMsg.content;
+                if (typeof resultPreview !== 'string') {
+                  try { resultPreview = JSON.stringify(resultPreview, null, 2); } catch (e) { }
                 }
-                extraInfo += `\n`;
+                extraInfo += `  < Result: ${resultPreview}\n`;
+              } else {
+                extraInfo += `  < Result: (Pending or not in history)\n`;
+              }
+              extraInfo += `\n`;
             });
             contentStr = extraInfo + `[Final Response Text]:\n${contentStr}`;
           }
@@ -1304,19 +1303,23 @@ onMounted(async () => {
         return Promise.reject("Error: This agent is currently busy generating a response. Please wait until it becomes Idle.");
       }
       if (text) prompt.value = text;
-      
+
       let fileMsg = "";
       if (filePaths && Array.isArray(filePaths) && filePaths.length > 0) {
         let success = 0;
         for (const p of filePaths) {
-          try { await processFilePath(p); success++; } catch(e){}
+          try { await processFilePath(p); success++; } catch (e) { }
         }
         await nextTick();
         fileMsg = ` (${success} files attached)`;
       }
-      
+
       askAI(false).catch(err => console.error("Background generation error:", err));
       return `Message sent successfully${fileMsg}. Agent is now generating response...`;
+    },
+    closeWindow: async () => {
+      await closePage(true);
+      return "Window closing initiated.";
     }
   };
 
@@ -1464,17 +1467,17 @@ onMounted(async () => {
         const system_time = new Date().toLocaleString('sv-SE');
         const pre_prompt = `## Scheduled Task\n\n**system_time**:${system_time}\n\n`;
         const suffix_prompt = "\n\nScheduled task triggered! This is a task that you need to execute autonomously without human intervention. Please execute immediately and provide correct feedback.";
-        history.value.push({ role: "user", content: pre_prompt+data.payload+suffix_prompt });
+        history.value.push({ role: "user", content: pre_prompt + data.payload + suffix_prompt });
         chat_show.value.push({
           id: messageIdCounter.value++,
           role: "user",
-          content: [{ type: "text", text: pre_prompt+data.payload+suffix_prompt }],
+          content: [{ type: "text", text: pre_prompt + data.payload + suffix_prompt }],
           timestamp: new Date().toLocaleString('sv-SE')
         });
 
         // 标记需要直接发送
         shouldDirectSend = true;
-      }if (data.type === "summon") {
+      } if (data.type === "summon") {
         shouldDirectSend = true;
         isFileDirectSend = true;
         if (data.summonData) {
@@ -1670,8 +1673,8 @@ onMounted(async () => {
   }
 });
 
-const autoSaveSession = async () => {
-  if (loading.value || !currentConfig.value?.webdav?.localChatPath) {
+const autoSaveSession = async (force = false) => {
+  if ((loading.value && !force) || !currentConfig.value?.webdav?.localChatPath) {
     return;
   }
 
@@ -1679,7 +1682,7 @@ const autoSaveSession = async () => {
   const promptConfig = currentConfig.value?.prompts?.[CODE.value];
   const isAutoSaveConfigEnabled = promptConfig?.autoSaveChat ?? true;
 
-  if (!defaultConversationName.value && !isAutoSaveConfigEnabled) {
+  if (!defaultConversationName.value && !isAutoSaveConfigEnabled && !force) {
     return;
   }
 
@@ -4400,12 +4403,16 @@ const scrollToMessageByIndex = (index) => {
       <div class="mcp-dialog-toolbar">
         <div class="filter-tags">
           <span class="filter-tag" :class="{ active: mcpFilter === 'all' }" @click="mcpFilter = 'all'">全部</span>
-          <span class="filter-tag" :class="{ active: mcpFilter === 'selected' }" @click="mcpFilter = 'selected'">已选</span>
-          <span class="filter-tag" :class="{ active: mcpFilter === 'unselected' }" @click="mcpFilter = 'unselected'">未选</span>
+          <span class="filter-tag" :class="{ active: mcpFilter === 'selected' }"
+            @click="mcpFilter = 'selected'">已选</span>
+          <span class="filter-tag" :class="{ active: mcpFilter === 'unselected' }"
+            @click="mcpFilter = 'unselected'">未选</span>
         </div>
         <div class="action-tags">
           <span class="action-tag" @click="refreshSelectedMcpServers" title="强制重新拉取选中服务的最新工具配置">
-            <el-icon :class="{ 'is-loading': isRefreshingMcp }"><Refresh /></el-icon>
+            <el-icon :class="{ 'is-loading': isRefreshingMcp }">
+              <Refresh />
+            </el-icon>
           </span>
           <span class="action-tag" @click="selectAllMcpServers">全选</span>
           <span class="action-tag" @click="clearMcpTools">清空</span>
@@ -4513,7 +4520,8 @@ const scrollToMessageByIndex = (index) => {
               </el-icon>
             </el-tooltip>
           </span>
-          <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" class="bw-checkbox" style="margin-left: 40px; margin-right: 0;" />
+          <el-checkbox v-model="isAutoApproveTools" label="自动批准工具调用" class="bw-checkbox"
+            style="margin-left: 40px; margin-right: 0;" />
         </div>
         <div>
           <el-button type="primary" class="bw-btn"
@@ -4532,8 +4540,10 @@ const scrollToMessageByIndex = (index) => {
       <div class="mcp-dialog-toolbar">
         <div class="filter-tags">
           <span class="filter-tag" :class="{ active: skillFilter === 'all' }" @click="skillFilter = 'all'">全部</span>
-          <span class="filter-tag" :class="{ active: skillFilter === 'selected' }" @click="skillFilter = 'selected'">已选</span>
-          <span class="filter-tag" :class="{ active: skillFilter === 'unselected' }" @click="skillFilter = 'unselected'">未选</span>
+          <span class="filter-tag" :class="{ active: skillFilter === 'selected' }"
+            @click="skillFilter = 'selected'">已选</span>
+          <span class="filter-tag" :class="{ active: skillFilter === 'unselected' }"
+            @click="skillFilter = 'unselected'">未选</span>
         </div>
         <div class="action-tags">
           <span class="action-tag" @click="selectAllSkills">全选</span>
@@ -5033,13 +5043,15 @@ html.dark .mcp-dialog-footer-search {
   padding: 0 4px;
 }
 
-.filter-tags, .action-tags {
+.filter-tags,
+.action-tags {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.filter-tag, .action-tag {
+.filter-tag,
+.action-tag {
   font-size: 12px;
   padding: 4px 12px;
   border-radius: 14px;
@@ -5055,7 +5067,8 @@ html.dark .mcp-dialog-footer-search {
   border: 1px solid transparent;
 }
 
-.filter-tag:hover, .action-tag:hover {
+.filter-tag:hover,
+.action-tag:hover {
   background-color: var(--el-fill-color-darker);
   color: var(--el-text-color-primary);
 }
@@ -6103,9 +6116,12 @@ html.dark .subagent-toggle-btn-small:hover {
 }
 
 .mcp-server-item-wrapper:has(.mcp-server-item.is-checked) {
-  border-color: var(--el-text-color-primary) !important; /* 黑/白边框 */
-  background-color: var(--el-fill-color-light) !important; /* 浅灰背景 */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); /* 轻微浮起感 */
+  border-color: var(--el-text-color-primary) !important;
+  /* 黑/白边框 */
+  background-color: var(--el-fill-color-light) !important;
+  /* 浅灰背景 */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  /* 轻微浮起感 */
 }
 
 .mcp-server-item-wrapper:hover {
@@ -6114,7 +6130,8 @@ html.dark .subagent-toggle-btn-small:hover {
 }
 
 .mcp-server-item.is-checked {
-  background-color: transparent !important; /* 让位给外层容器 */
+  background-color: transparent !important;
+  /* 让位给外层容器 */
 }
 
 .mcp-server-item :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
@@ -6142,6 +6159,7 @@ html.dark .subagent-toggle-btn-small:hover {
   background-color: var(--el-text-color-primary) !important;
   border-color: var(--el-text-color-primary) !important;
 }
+
 .mcp-server-item :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner::before) {
   background-color: var(--el-bg-color) !important;
 }

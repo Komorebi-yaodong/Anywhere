@@ -591,7 +591,7 @@ IMPORTANT:
         },
         {
             name: "list_agent_chats",
-            description: "【Collaboration Info】List all CURRENTLY ACTIVE standalone agent windows and their 'window_id's. \n\nBEST PRACTICE: Always check this list to see if an agent is already open. If so, REUSE it via 'continue_agent_chats' instead of summoning a new one. It also marks which window_id belongs to YOU.",
+            description: "【Collaboration Info】List all CURRENTLY ACTIVE standalone agent windows and their 'window_id's（including your own）. \n\nBEST PRACTICE: Always check this list to see if an agent is already open. If so, REUSE it via 'continue_agent_chats' instead of summoning a new one. It also marks which window_id belongs to YOU.",
             inputSchema: { type: "object", properties: {} }
         },
         {
@@ -609,16 +609,14 @@ IMPORTANT:
             }
         },
         {
-            name: "continue_agent_chats",
-            description: "Send follow-up messages to an ALREADY OPEN agent window. \n\nUse this tool to REUSE an existing agent's context instead of creating a new window. Returns immediately. The agent starts generating in background. You can do other things or immediately call 'read_agent_chats' with index=-1 to wait for its result.",
+            name: "close_agent_window",
+            description: "Close an active agent window using its 'window_id'(get window_id from 'list_agent_chats'). The system will automatically generate a name and save the chat history before closing. HIGH PRIVILEGE OPERATION: please use this function with caution, ensuring the task of that window is complete before closing the Agent window.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    window_id: { type: "string", description: "The window_id of the target agent." },
-                    text: { type: "string", description: "The follow-up message to send." },
-                    file_paths: { type: "array", items: { type: "string" }, description: "Optional. Local paths of files/images to attach." }
+                    window_id: { type: "string", description: "The window_id of the target agent to close." }
                 },
-                required: ["window_id", "text"]
+                required: ["window_id"]
             }
         }
     ],
@@ -2396,6 +2394,31 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         }
     },
 
+    close_agent_window: async (args, context, signal) => {
+        // 传递 callerId 到主进程
+        if (isChildWindow()) {
+            args._callerId = context?.senderId;
+            return await callParentShell('close_agent_window', args, signal);
+        }
+
+        const { window_id } = args;
+        const { windowMap } = require('./data.js');
+        const win = windowMap.get(window_id);
+        
+        if (!win || win.isDestroyed()) return `Error: Window ID ${window_id} not found or already closed.`;
+
+        try {
+            await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.closeWindow() : Promise.reject("API not ready")`);
+            return `Successfully saved and closed agent window (ID: ${window_id}).`;
+        } catch (e) {
+            // 如果 AI 关闭的是自己，窗口销毁会导致 IPC 断连报错，这里做无感捕获处理
+            if (e.message.includes('Object has been destroyed')) {
+                 return `Successfully saved and closed agent window (ID: ${window_id}).`;
+            }
+            return `Error closing window: ${e.message}`;
+        }
+    },
+
     list_mcp_servers: async () => {
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
@@ -2866,7 +2889,8 @@ function handleBgShellRequest(action, payload) {
         'summon_agent': handlers.summon_agent,
         'list_agent_chats': handlers.list_agent_chats,
         'read_agent_chats': handlers.read_agent_chats,
-        'continue_agent_chats': handlers.continue_agent_chats
+        'continue_agent_chats': handlers.continue_agent_chats,
+        'close_agent_window': handlers.close_agent_window,
     };
     
     const fn = fnMap[action];
