@@ -52,7 +52,7 @@ const fileHandlers = {
         handler: async (file) => ({ type: "text", text: `file name:${file.name}\nfile content:\n${await parseExcel(file.url)}\nfile end` })
     },
     image: {
-        extensions: ['.png', '.jpg', '.jpeg', '.webp'],
+        extensions: ['.png', '.jpg', '.jpeg', '.webp', '.gif'],
         handler: async (file) => ({ type: "image_url", image_url: { url: file.url } })
     },
     audio: {
@@ -148,6 +148,7 @@ const extensionToMimeType = {
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.webp': 'image/webp',
+    '.gif': 'image/gif',
 
     // 音频
     '.mp3': 'audio/mpeg',

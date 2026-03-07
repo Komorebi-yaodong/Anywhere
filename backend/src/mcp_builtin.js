@@ -1517,7 +1517,7 @@ ${contextBlock}
                 const base64String = fileBuffer.toString('base64');
                 const ext = path.extname(safePath).toLowerCase();
                 // 简单的 mime 推断
-                const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf' }[ext] || 'application/octet-stream';
+                const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf', '.gif': 'image/gif' }[ext] || 'application/octet-stream';
                 const dataUrl = `data:${mime};base64,${base64String}`;
 
                 fileForHandler = {
