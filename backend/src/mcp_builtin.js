@@ -1759,7 +1759,6 @@ ${contextBlock}
         let tempFile = '';
         let shellToUse = '';
         let spawnArgs = [];
-        let execCmd = '';
 
         if (isWin) {
             tempFile = path.join(tempDir, `anywhere_cmd_${Date.now()}_${scriptId}.ps1`);
@@ -1767,27 +1766,18 @@ ${contextBlock}
 $OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
 $PSDefaultParameterValues['*:Encoding'] = 'utf8';
 `;
-            // 添加 UTF-8 BOM (\uFEFF)，解决 PowerShell 5.1 默认按 ANSI 读取导致的 Unicode 乱码和引号配对破坏问题
             fs.writeFileSync(tempFile, '\uFEFF' + preamble + '\n' + command, { encoding: 'utf8' });
             shellToUse = 'powershell.exe';
             spawnArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tempFile];
-            execCmd = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`;
         } else {
             tempFile = path.join(tempDir, `anywhere_cmd_${Date.now()}_${scriptId}.sh`);
             fs.writeFileSync(tempFile, command, { encoding: 'utf8' });
             shellToUse = '/bin/bash';
             spawnArgs = [tempFile];
-            execCmd = `"/bin/bash" "${tempFile}"`;
         }
 
         const cleanupTempFile = () => {
-            try {
-                if (fs.existsSync(tempFile)) {
-                    fs.unlinkSync(tempFile);
-                }
-            } catch (e) {
-                console.error("Failed to clean up temp script:", e);
-            }
+            try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) {}
         };
 
         if (!background && trimmedCmd.startsWith('cd ') && trimmedCmd.split('\n').length === 1) {
@@ -1814,128 +1804,120 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (background) {
             return new Promise((resolve) => {
                 const shellId = `shell_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-                
                 try {
                     const child = require('child_process').spawn(shellToUse, spawnArgs, {
                         cwd: bashCwd,
                         env: { ...process.env, FORCE_COLOR: '1' },
                         detached: !isWin 
                     });
-
                     backgroundShells.set(shellId, {
-                        process: child,
-                        command: command,
-                        startTime: new Date().toISOString(),
-                        logs: "",
-                        pid: child.pid,
-                        active: true
+                        process: child, command: command, startTime: new Date().toISOString(),
+                        logs: "", pid: child.pid, active: true
                     });
-
                     child.stdout.on('data', (data) => appendBgLog(shellId, data.toString()));
                     child.stderr.on('data', (data) => appendBgLog(shellId, data.toString()));
-
-                    child.on('error', (err) => {
-                        appendBgLog(shellId, `\n[System Error]: ${err.message}\n`);
-                        const proc = backgroundShells.get(shellId);
-                        if(proc) proc.active = false;
-                        cleanupTempFile();
-                    });
-
                     child.on('close', (code) => {
-                        appendBgLog(shellId, `\n[System]: Process exited with code ${code}\n`);
                         const proc = backgroundShells.get(shellId);
                         if(proc) proc.active = false;
                         cleanupTempFile();
                     });
-
-                    try {
-                        const parentPid = process.pid;
-                        const targetPid = child.pid;
-                        
-                        if (isWin) {
-                            const watcherCmd = `Wait-Process -Id ${parentPid} -ErrorAction SilentlyContinue; taskkill /pid ${targetPid} /T /F 2>$null`;
-                            require('child_process').spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', watcherCmd], {
-                                detached: true, stdio: 'ignore', windowsHide: true
-                            }).unref();
-                        } else {
-                            const watcherCmd = `while kill -0 ${parentPid} 2>/dev/null; do sleep 1; done; kill -9 -${targetPid} 2>/dev/null || kill -9 ${targetPid} 2>/dev/null`;
-                            require('child_process').spawn('sh', ['-c', watcherCmd], {
-                                detached: true, stdio: 'ignore'
-                            }).unref();
-                        }
-                    } catch (watcherErr) {
-                        console.error("Failed to start process watcher:", watcherErr);
-                    }
-
-                    resolve(`Background process started successfully.\nID: ${shellId}\nPID: ${child.pid}\n\nUse 'read_background_shell_output' to view logs.`);
-                } catch (e) {
-                    cleanupTempFile();
-                    resolve(`Failed to start background process: ${e.message}`);
-                }
+                    resolve(`Background process started successfully.\nID: ${shellId}\nUse 'read_background_shell_output' to view logs.`);
+                } catch (e) { cleanupTempFile(); resolve(`Failed: ${e.message}`); }
             });
         }
 
         return new Promise((resolve) => {
             const validTimeout = (typeof timeout === 'number' && timeout > 0) ? timeout : 15000;
+            const MAX_BUFFER = 1024 * 1024 * 10;
+            let isResolved = false;
 
-            let shellOptions = {
+            const child = require('child_process').spawn(shellToUse, spawnArgs, {
                 cwd: bashCwd,
-                encoding: 'buffer',
-                maxBuffer: 1024 * 1024 * 10,
-                timeout: validTimeout
+                env: process.env,
+                detached: !isWin
+            });
+
+            let outChunks = [];
+            let errChunks = [];
+            let totalLength = 0;
+
+            const killProcess = (pid) => {
+                try {
+                    if (isWin) {
+                        require('child_process').execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' });
+                    } else {
+                        process.kill(-pid, 'SIGKILL'); 
+                    }
+                } catch (e) {
+                    try { child.kill('SIGKILL'); } catch (e2) {}
+                }
             };
 
-            const child = require('child_process').exec(execCmd, shellOptions, (error, stdout, stderr) => {
-                cleanupTempFile();
-                
-                const decodeBuffer = (buf) => {
-                    if (!buf || buf.length === 0) return "";
-                    const utf8Decoder = new TextDecoder('utf-8', { fatal: false });
-                    const utf8Str = utf8Decoder.decode(buf);
-
-                    if (isWin && (utf8Str.includes('\uFFFD') || error)) {
-                        try {
-                            const gbkDecoder = new TextDecoder('gbk', { fatal: false });
-                            return gbkDecoder.decode(buf);
-                        } catch (e) {
-                            return utf8Str;
-                        }
-                    }
-                    return utf8Str;
-                };
-
-                let result = "";
-                const outStr = decodeBuffer(stdout);
-                const errStr = decodeBuffer(stderr);
-
-                if (outStr) result += outStr;
-                
-                if (errStr) {
-                    result += `\n[Stderr/Warning]:\n${errStr}`;
-                }
-
-                if (error) {
-                    if (error.signal === 'SIGTERM') {
-                        result += `\n\n[System Note]: Command timed out after ${validTimeout / 1000}s. For long tasks, set 'background': true.`;
-                    } else if (error.killed) {
-                        result += `\n\n[System Note]: Command was aborted by user.`;
-                    } else {
-                        if (!errStr && error.message) {
-                            result += `\n\n[Execution Error]: ${error.message}`;
-                        }
-                    }
-                }
-
-                if (!result.trim()) result = "Command executed successfully (no output).";
-                resolve(`[CWD: ${bashCwd}]\n${result}`);
-            });
+            const timer = setTimeout(() => {
+                if (isResolved) return;
+                killProcess(child.pid);
+                isResolved = true;
+                resolve(`[System Note]: Command timed out after ${validTimeout / 1000}s.`);
+            }, validTimeout);
 
             if (signal) {
                 signal.addEventListener('abort', () => {
-                    child.kill();
-                    cleanupTempFile();
+                    if (isResolved) return;
+                    clearTimeout(timer);
+                    killProcess(child.pid);
+                    isResolved = true;
+                    resolve(`[System Note]: Command was aborted by user.`);
                 });
             }
+
+            const handleData = (data, targetArray) => {
+                targetArray.push(data);
+                totalLength += data.length;
+                if (totalLength > MAX_BUFFER) {
+                    killProcess(child.pid);
+                    if (!isResolved) {
+                        isResolved = true;
+                        clearTimeout(timer);
+                        cleanupTempFile();
+                        resolve(`[Execution Error]: Max buffer size (10MB) exceeded. Process killed.`);
+                    }
+                }
+            };
+
+            child.stdout.on('data', (data) => handleData(data, outChunks));
+            child.stderr.on('data', (data) => handleData(data, errChunks));
+
+            child.on('close', (code) => {
+                if (isResolved) return;
+                isResolved = true;
+                clearTimeout(timer);
+                cleanupTempFile();
+
+                const decode = (bufArray) => {
+                    if (bufArray.length === 0) return "";
+                    const buf = Buffer.concat(bufArray);
+                    const str = new TextDecoder('utf-8', { fatal: false }).decode(buf);
+                    if (isWin && str.includes('\uFFFD')) { // 乱码回退 GBK
+                        try { return new TextDecoder('gbk', { fatal: false }).decode(buf); } catch(e) { return str; }
+                    }
+                    return str;
+                };
+
+                let result = decode(outChunks);
+                const errorStr = decode(errChunks);
+                if (errorStr) result += `\n[Stderr]:\n${errorStr}`;
+                
+                if (!result.trim()) result = "Command executed successfully.";
+                resolve(`[CWD: ${bashCwd}]\n${result}`);
+            });
+
+            child.on('error', (err) => {
+                if (isResolved) return;
+                isResolved = true;
+                clearTimeout(timer);
+                cleanupTempFile();
+                resolve(`Execution error: ${err.message}`);
+            });
         });
     },
 
