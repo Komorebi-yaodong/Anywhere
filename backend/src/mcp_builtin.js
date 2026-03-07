@@ -388,13 +388,16 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "read_file",
-            description: "Read content from a local file path or a remote file. Supports text, code, and document parsing. For large files, use 'offset' and 'length' to read in chunks.",
+            description: "Read content from a local file path or a remote file. \nIMPORTANT RULES FOR READING:\n1. You must use EITHER ('offset' and 'length' for character-based reading) OR ('start_line' and 'end_line' for line-based reading). DO NOT use both simultaneously.\n2. If you want to use offset, set 'start_line' and 'end_line' to 0 or leave them empty.",
             inputSchema: {
                 type: "object",
                 properties: {
                     file_path: { type: "string", description: "Absolute path to the local file OR a valid HTTP/HTTPS URL." },
-                    offset: { type: "integer", description: "Optional. The character position to start reading from. Defaults to 0.", default: 0 },
-                    length: { type: "integer", description: `Optional. Number of characters to read. Defaults to ${MAX_READ}.`, default: MAX_READ }
+                    offset: { type: "integer", description: "Optional. Character offset. Defaults to 0.", default: 0 },
+                    length: { type: "integer", description: `Optional. Characters to read. Defaults to ${MAX_READ}.`, default: MAX_READ },
+                    start_line: { type: "integer", description: "Optional. The line number to start reading from (1-based). Set to 0 to use 'offset' mode." },
+                    end_line: { type: "integer", description: "Optional. The line number to end reading at (inclusive). Set to 0 to use 'offset' mode." },
+                    show_line_numbers: { type: "boolean", description: "Optional. Whether to prefix each line with its line number. Defaults to true.", default: true }
                 },
                 required: ["file_path"]
             }
@@ -1326,7 +1329,7 @@ const handlers = {
         }
     },
 
-    // 2. Grep Search (优化版：提供详细上下文、行号、列号)
+    // 2. Grep Search
     grep_search: async ({ pattern, path: searchPath, glob, output_mode = 'content', multiline = false }, context, signal) => {
         try {
             if (!searchPath) {
@@ -1429,9 +1432,9 @@ const handlers = {
                                 for (let i = startLineIdx; i < endLineIdx; i++) {
                                     const currentLineNum = i + 1;
                                     const lineContent = lines[i];
-                                    // 使用 '>' 标记匹配覆盖的行
-                                    const marker = (currentLineNum >= lineNum && currentLineNum <= endLineNum) ? ">" : " ";
-                                    contextBlock += `${currentLineNum.toString().padEnd(4)} |${marker} ${lineContent}\n`;
+                                    const isMatch = (currentLineNum >= lineNum && currentLineNum <= endLineNum);
+                                    const marker = isMatch ? "=>" : "  ";
+                                    contextBlock += `${marker} ${String(currentLineNum).padStart(4)} | ${lineContent}\n`;
                                 }
 
                                 const block = `[Match] ${filePath}
@@ -1458,22 +1461,20 @@ ${contextBlock}
             return `Grep error: ${e.message}`;
         }
     },
+
     // 3. Read File
-    read_file: async ({ file_path, offset = 0, length = MAX_READ }, context, signal) => {
+    read_file: async ({ file_path, offset = 0, length = MAX_READ, start_line, end_line, show_line_numbers = true }, context, signal) => {
         try {
             const MAX_SINGLE_READ = MAX_READ;
             const readLength = Math.min(length, MAX_SINGLE_READ);
             let fileForHandler;
 
             if (file_path.startsWith('http://') || file_path.startsWith('https://')) {
-                // 处理 URL
                 try {
-                    // [修改] 传递 signal
                     const response = await fetch(file_path, { signal });
                     if (!response.ok) {
                         return `Error fetching URL: ${response.status} ${response.statusText}`;
                     }
-                    // ... (后续逻辑保持不变)
                     const arrayBuffer = await response.arrayBuffer();
                     const buffer = Buffer.from(arrayBuffer);
                     const base64String = buffer.toString('base64');
@@ -1496,7 +1497,6 @@ ${contextBlock}
                     return `Network error: ${fetchErr.message}`;
                 }
             } else {
-                // 处理本地文件
                 const safePath = resolvePath(file_path);
                 if (!isPathSafe(safePath)) {
                     return `[Security Block] Access to sensitive system file '${path.basename(safePath)}' is restricted.`;
@@ -1504,7 +1504,6 @@ ${contextBlock}
 
                 if (!fs.existsSync(safePath)) return `Error: File not found at ${safePath}`;
 
-                // 传递 signal 给 readFile (Node v14.17+ 支持)
                 const fileBuffer = await fs.promises.readFile(safePath, { signal });
                 const stats = await fs.promises.stat(safePath);
 
@@ -1512,11 +1511,8 @@ ${contextBlock}
                     return `Error: File is too large for processing (>200MB).`;
                 }
 
-                // 构造 File 对象逻辑简化，避免依赖前端对象
-                // 这里直接用 buffer 处理
                 const base64String = fileBuffer.toString('base64');
                 const ext = path.extname(safePath).toLowerCase();
-                // 简单的 mime 推断
                 const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf', '.gif': 'image/gif' }[ext] || 'application/octet-stream';
                 const dataUrl = `data:${mime};base64,${base64String}`;
 
@@ -1534,29 +1530,102 @@ ${contextBlock}
             let fullText = "";
             if (result.type === 'text' && result.text) {
                 fullText = result.text;
+                
+                const prefixRegex = /^file name:.*?\nfile content:\n/;
+                const suffixRegex = /\nfile end$/;
+                fullText = fullText.replace(prefixRegex, '').replace(suffixRegex, '');
+                
             } else {
                 const typeInfo = result.type === 'image_url' ? 'Image' : 'Binary/PDF';
                 return `[System] File '${fileForHandler.name}' detected as ${typeInfo}. \nContent extraction is currently NOT supported via this tool for binary formats in this context.`;
             }
 
-            // --- 分页读取逻辑 ---
-            const totalChars = fullText.length;
-            const startPos = Math.max(0, offset);
-            const contentChunk = fullText.substring(startPos, startPos + readLength);
-            const remainingChars = totalChars - (startPos + contentChunk.length);
+            // --- 分页与按行读取逻辑 ---
+            let output = "";
+            const useLineMode = (start_line !== undefined && start_line > 0) || (end_line !== undefined && end_line > 0);
 
-            let output = contentChunk;
+            if (useLineMode) {
+                // 按行读取模式
+                const lines = fullText.split(/\r?\n/);
+                const totalLines = lines.length;
+                
+                let startIdx = 0;
+                let endIdx = totalLines - 1;
+                
+                if (start_line !== undefined && start_line > 0) startIdx = Math.max(0, parseInt(start_line) - 1);
+                if (end_line !== undefined && end_line > 0) endIdx = Math.min(totalLines - 1, parseInt(end_line) - 1);
+                
+                if (startIdx > endIdx || startIdx >= totalLines) {
+                    return `Error: Invalid line range. The file has ${totalLines} lines.`;
+                }
 
-            if (remainingChars > 0) {
-                const nextOffset = startPos + contentChunk.length;
-                output += `\n\n--- [SYSTEM NOTE: CONTENT TRUNCATED] ---\n`;
-                output += `Total characters in file: ${totalChars}\n`;
-                output += `Current chunk: ${startPos} to ${nextOffset}\n`;
-                output += `Remaining unread characters: ${remainingChars}\n`;
-                output += `To read more, call read_file with offset: ${nextOffset}\n`;
-                output += `---------------------------------------`;
-            } else if (startPos > 0) {
-                output += `\n\n--- [SYSTEM NOTE: END OF FILE REACHED] ---`;
+                let currentLength = 0;
+                let safeEndIdx = startIdx;
+                let chunkLinesArray = [];
+
+                for (let i = startIdx; i <= endIdx; i++) {
+                    let lineContent = lines[i];
+                    if (show_line_numbers) {
+                        const lineNumStr = String(i + 1).padStart(4);
+                        lineContent = `${lineNumStr} | ${lineContent}`;
+                    }
+                    
+                    const lineLen = lineContent.length + 1; // +1 for '\n'
+                    if (currentLength + lineLen > MAX_READ && i > startIdx) {
+                        break;
+                    }
+                    currentLength += lineLen;
+                    safeEndIdx = i;
+                    chunkLinesArray.push(lineContent);
+                }
+                endIdx = safeEndIdx;
+
+                output = chunkLinesArray.join('\n');
+
+                if (endIdx < totalLines - 1) {
+                    const nextLine = endIdx + 2; // 1-based next line
+                    output += `\n\n--- [SYSTEM NOTE: CONTENT TRUNCATED] ---\n`;
+                    output += `Total lines in file: ${totalLines}\n`;
+                    output += `Current chunk: lines ${startIdx + 1} to ${endIdx + 1}\n`;
+                    output += `Remaining unread lines: ${totalLines - endIdx - 1}\n`;
+                    output += `To read more, call read_file with start_line: ${nextLine}, end_line: 0\n`;
+                    output += `---------------------------------------`;
+                } else if (startIdx > 0) {
+                    output += `\n\n--- [SYSTEM NOTE: END OF FILE REACHED] ---`;
+                }
+            } else {
+                // 默认的按字符偏移读取模式
+                const totalChars = fullText.length;
+                const startPos = Math.max(0, offset);
+                let contentChunk = fullText.substring(startPos, startPos + readLength);
+                const actualReadLength = contentChunk.length; // 记录原始读取的字符长度
+                const remainingChars = totalChars - (startPos + actualReadLength);
+
+                if (show_line_numbers) {
+                    const preText = fullText.substring(0, startPos);
+                    let lineNum = (preText.match(/\n/g) || []).length + 1;
+                    const chunkLines = contentChunk.split('\n');
+                    let numberedLines = [];
+                    for(let i = 0; i < chunkLines.length; i++) {
+                        const lineNumStr = String(lineNum + i).padStart(4);
+                        numberedLines.push(`${lineNumStr} | ${chunkLines[i]}`);
+                    }
+                    contentChunk = numberedLines.join('\n');
+                }
+
+                output = contentChunk;
+
+                if (remainingChars > 0) {
+                    const nextOffset = startPos + actualReadLength;
+                    output += `\n\n--- [SYSTEM NOTE: CONTENT TRUNCATED] ---\n`;
+                    output += `Total characters in file: ${totalChars}\n`;
+                    output += `Current chunk: ${startPos} to ${nextOffset}\n`;
+                    output += `Remaining unread characters: ${remainingChars}\n`;
+                    output += `To read more, call read_file with offset: ${nextOffset}\n`;
+                    output += `---------------------------------------`;
+                } else if (startPos > 0) {
+                    output += `\n\n--- [SYSTEM NOTE: END OF FILE REACHED] ---`;
+                }
             }
 
             return output;
