@@ -214,7 +214,7 @@
   },
   "prompts": {
     "allPrompts": "ALL",
-    "searchPlaceholder": "Search name or content...",
+    "searchPlaceholder": "Search name, content, model or provider...",
     "noPrompts": "No prompts defined yet.",
     "noPromptsInTag": "No prompts in this tag.",
     "addExistingPrompt": "Add Existing Prompt",

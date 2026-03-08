@@ -216,7 +216,7 @@
   },
   "prompts": {
     "allPrompts": "全部",
-    "searchPlaceholder": "搜索名称或内容...",
+    "searchPlaceholder": "搜索名称、内容、模型或服务商...",
     "noPrompts": "尚未定义任何快捷助手",
     "noPromptsInTag": "此标签下没有快捷助手",
     "addExistingPrompt": "添加已有快捷助手",

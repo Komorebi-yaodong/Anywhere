@@ -87,10 +87,28 @@ function getFilteredPrompts(prompts, query) {
     return prompts;
   }
   const lowerCaseQuery = query.toLowerCase();
-  return prompts.filter(item =>
-    (item.key && item.key.toLowerCase().includes(lowerCaseQuery)) ||
-    (item.prompt && item.prompt.toLowerCase().includes(lowerCaseQuery))
-  );
+  return prompts.filter(item => {
+    let modelName = '';
+    let providerName = '';
+    
+    if (item.model) {
+      const parts = item.model.split('|');
+      if (parts.length >= 2) {
+        const providerId = parts[0];
+        modelName = parts.slice(1).join('|');
+        if (currentConfig.value && currentConfig.value.providers && currentConfig.value.providers[providerId]) {
+          providerName = currentConfig.value.providers[providerId].name || '';
+        }
+      } else {
+        modelName = item.model;
+      }
+    }
+
+    return (item.key && item.key.toLowerCase().includes(lowerCaseQuery)) ||
+           (item.prompt && item.prompt.toLowerCase().includes(lowerCaseQuery)) ||
+           (modelName && modelName.toLowerCase().includes(lowerCaseQuery)) ||
+           (providerName && providerName.toLowerCase().includes(lowerCaseQuery));
+  });
 }
 
 const showPromptEditDialog = ref(false);
