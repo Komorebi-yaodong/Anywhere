@@ -301,40 +301,9 @@ const commandHandlers = {
     const { type, payload } = action;
     utools.hideMainWindow();
 
-    const { windowMap, openAppendSelectorWindow } = require('./data.js'); // 引入封装好的函数
+    const { windowMap, openAppendSelectorWindow } = require('./data.js');
     
-    const features = utools.getFeatures().filter(f => f.code.startsWith('append_to_') && windowMap.has(f.code.replace('append_to_', '')));
-
-    if (features.length === 0) {
-      utools.showNotification("当前没有打开的独立对话窗口");
-      utools.outPlugin();
-      return;
-    }
-
-    // 如果只有一个窗口，直接跳过选择，智能追加
-    if (features.length === 1) {
-      const senderId = features[0].code.replace('append_to_', '');
-      const win = windowMap.get(senderId);
-      if (win && !win.isDestroyed()) {
-        win.show();
-        if (win.focus) win.focus();
-        win.webContents.send('window-append-msg', { type, payload });
-      }
-      utools.outPlugin();
-      return;
-    }
-
-    openAppendSelectorWindow(features, payload, type);
-    utools.outPlugin();
-  },
-
-  'append_global': async (action) => {
-    const { type, payload } = action;
-    utools.hideMainWindow();
-
-    const { windowMap, openAppendSelectorWindow } = require('./data.js'); // 引入封装好的函数
-    
-    // 过滤前清理掉已经被强制关闭（原生关闭等）导致 isDestroyed() === true 的残留窗口和指令
+    // 清理僵尸窗口逻辑(保持你上一步修改的内容)
     for (const [sid, win] of windowMap.entries()) {
       if (win.isDestroyed()) {
         windowMap.delete(sid);
@@ -355,8 +324,11 @@ const commandHandlers = {
       const senderId = features[0].code.replace('append_to_', '');
       const win = windowMap.get(senderId);
       if (win && !win.isDestroyed()) {
-        win.show();
-        if (win.focus) win.focus();
+        // [修复] 智能唤醒：防止破坏用户的贴边/最大化状态
+        if (win.isMinimized()) win.restore();
+        if (!win.isVisible()) win.show();
+        win.focus();
+        
         win.webContents.send('window-append-msg', { type, payload });
       }
       utools.outPlugin();
@@ -364,6 +336,30 @@ const commandHandlers = {
     }
 
     openAppendSelectorWindow(features, payload, type);
+    utools.outPlugin();
+  },
+
+  'append_to_window': async (action) => {
+    utools.hideMainWindow();
+    const { type, payload, code } = action;
+    
+    const senderId = code.replace('append_to_', '');
+    const { windowMap } = require('./data.js');
+    const win = windowMap.get(senderId);
+
+    if (!win || win.isDestroyed()) {
+      utools.showNotification("目标窗口已关闭或不存在");
+      utools.removeFeature(code);
+      utools.outPlugin();
+      return;
+    }
+
+    // 智能唤醒：防止破坏用户的贴边/最大化状态
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
+
+    win.webContents.send('window-append-msg', { type, payload });
     utools.outPlugin();
   },
 
@@ -573,12 +569,15 @@ const { ipcRenderer } = require('electron');
 const { windowMap } = require('./data.js');
 
 // 接收来自选择面板的转发消息，触发目标窗口
+// 接收来自选择面板的转发消息，触发目标窗口
 ipcRenderer.on('forward-append-msg', (e, { senderId, type, payload }) => {
   const { windowMap } = require('./data.js');
   const win = windowMap.get(senderId);
   if (win && !win.isDestroyed()) {
-    win.show();
-    if (win.focus) win.focus();
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
+    
     win.webContents.send('window-append-msg', { type, payload });
   }
 });

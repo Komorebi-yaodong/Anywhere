@@ -985,6 +985,13 @@ async function openWindow(config, msg) {
 
   setTimeout(() => {
     try {
+      for (const [s_id, win_instance] of windowMap.entries()) {
+        if (win_instance.isDestroyed()) {
+          windowMap.delete(s_id);
+          utools.removeFeature(`append_to_${s_id}`);
+        }
+      }
+
       // 1. 获取已存在的同名窗口，自动生成不冲突的序号
       const features = utools.getFeatures();
       const existingNames = features
@@ -997,6 +1004,7 @@ async function openWindow(config, msg) {
         displayName = `追问 ${promptCode}-${idx}`;
         idx++;
       }
+
 
       // 2. 动态注册专属“追问”特征指令
       utools.setFeature({
