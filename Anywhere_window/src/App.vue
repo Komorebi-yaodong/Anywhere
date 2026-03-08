@@ -1606,6 +1606,52 @@ onMounted(async () => {
     };
     await initializeWindow(data);
   }
+
+  // 监听来自 uTools 的"追问"内容追加事件
+  if (window.preload && typeof window.preload.onAppendMessage === 'function') {
+    window.preload.onAppendMessage(async (data) => {
+      // 1. 如果 AI 正在生成，立刻中断当前生成
+      if (loading.value) {
+        cancelAskAI();
+        showDismissibleMessage.info('已中断当前生成，开始处理追问');
+        // 等待状态清理和 DOM 更新
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      let isFileDirectSend = false;
+      const nowTime = new Date().toLocaleString('sv-SE');
+
+      // 2. 将收到的数据直接压入聊天历史或文件列表
+      if (data.type === "over" && data.payload) {
+        history.value.push({ role: "user", content: data.payload });
+        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: data.payload }], timestamp: nowTime });
+      } else if (data.type === "img" && data.payload) {
+        history.value.push({ role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
+        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }], timestamp: nowTime });
+      } else if (data.type === "files" && data.payload) {
+        try {
+          const fileProcessingPromises = data.payload.map((fileInfo) => processFilePath(fileInfo.path));
+          await Promise.all(fileProcessingPromises);
+          isFileDirectSend = true;
+        } catch (error) { 
+          console.error(error);
+          showDismissibleMessage.error("处理文件失败: " + error.message);
+          return; // 处理失败则终止发送
+        }
+      }
+
+      // 3. 强制触发自动发送
+      scrollToBottom();
+      if (isFileDirectSend) {
+        // 如果是文件，askAI(false) 会自动收集刚才压入 fileList.value 的文件并发起对话
+        await askAI(false);
+      } else {
+        // 如果是文本/图片，已经压入 history，传入 true 跳过输入框收集，直接向 AI 发送
+        await askAI(true);
+      }
+    });
+  }
+
   if (autoSaveInterval) clearInterval(autoSaveInterval);
   autoSaveInterval = setInterval(autoSaveSession, 15000);
   window.addEventListener('error', handleGlobalImageError, true);

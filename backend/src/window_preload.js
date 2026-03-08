@@ -65,6 +65,11 @@ window.preload = {
                 callback(data);
             }
         });
+    },
+    onAppendMessage: (callback) => {
+        ipcRenderer.on('window-append-msg', (event, data) => {
+            callback(data);
+        });
     }
 }
 

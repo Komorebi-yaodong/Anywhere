@@ -801,6 +801,16 @@ function updateConfig(newConfig) {
   // 移除不再需要的 features
   for (const [code, feature] of featuresMap) {
     if (code === "Anywhere Settings" || code === "Resume Conversation") continue;
+    
+    // 处理追问窗口特征的生命周期 (跳过普通逻辑，只判断窗口存活性)
+    if (code.startsWith('append_to_')) {
+      const sid = code.replace('append_to_', '');
+      if (!windowMap.has(sid)) {
+        utools.removeFeature(code);
+      }
+      continue;
+    }
+
     const promptKey = feature.explain;
     if (!enabledPromptKeys.has(promptKey) ||
       (currentPrompts[promptKey] && (currentPrompts[promptKey].showMode !== "window") && code.endsWith(feature_suffix))
@@ -972,6 +982,38 @@ async function openWindow(config, msg) {
   const senderId = crypto.randomUUID();
   msg.senderId = senderId;
   msg.isAlwaysOnTop = isAlwaysOnTop;
+
+  setTimeout(() => {
+    try {
+      // 1. 获取已存在的同名窗口，自动生成不冲突的序号
+      const features = utools.getFeatures();
+      const existingNames = features
+        .filter(f => f.code.startsWith('append_to_') && f.explain.startsWith(`追问 ${promptCode}`))
+        .map(f => f.explain);
+        
+      let displayName = `追问 ${promptCode}`;
+      let idx = 1;
+      while (existingNames.includes(displayName)) {
+        displayName = `追问 ${promptCode}-${idx}`;
+        idx++;
+      }
+
+      // 2. 动态注册专属“追问”特征指令
+      utools.setFeature({
+        code: `append_to_${senderId}`,
+        explain: displayName,
+        icon: promptConfig?.icon || "logo.png",
+        mainHide: true,
+        cmds: [
+          { type: "over", label: displayName, maxLength: 99999999999 },
+          { type: "img", label: displayName },
+          { type: "files", label: displayName, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|gif|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue|tex|latex|bib|sty|yaml|yml|ini|bat|log|toml)$/i" }
+        ]
+      });
+    } catch (e) {
+      console.error("Async feature registration failed:", e);
+    }
+  }, 500);
 
   const windowOptions = {
     show: false,
@@ -1262,6 +1304,60 @@ async function openFastInputWindow(config, msg) {
   );
 }
 
+async function openAppendSelectorWindow(features, payload, type) {
+  const listData = features.map(f => ({
+    senderId: f.code.replace('append_to_', ''),
+    name: f.explain.replace('追问 ', ''), 
+    icon: f.icon
+  }));
+
+  const isDark = utools.isDarkColors();
+  const count = features.length;
+  // 智能排版：超过 5 个就变成双列
+  const columns = count > 5 ? 2 : 1;
+  const rows = Math.ceil(count / columns);
+  
+  // 根据列数分配宽度：1列 250px，2列 460px
+  const winWidth = columns === 1 ? 250 : 460;
+  // 精确计算高度：阴影留白(30) + 标题栏(36) + (行数 * 单项高46) + 底部留白(12)
+  const winHeight = 30 + 36 + (rows * 46) + 12;
+
+  const mousePos = utools.getCursorScreenPoint();
+  // 边界检测防止弹窗飞出屏幕外
+  const display = utools.getDisplayNearestPoint(mousePos).bounds;
+  let x = mousePos.x;
+  let y = mousePos.y;
+  if (x + winWidth > display.x + display.width) x = display.x + display.width - winWidth;
+  if (y + winHeight > display.y + display.height) y = display.y + display.height - winHeight;
+
+  const selectorWin = utools.createBrowserWindow('./fast_window/append_selector.html', {
+    show: true,
+    width: winWidth,
+    height: winHeight,
+    useContentSize: true,
+    alwaysOnTop: true,
+    x: x,
+    y: y,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000', // 解决方形白底方框的核心属性
+    hasShadow: false,
+    resizable: false,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: "./fast_window_preload.js",
+    }
+  }, () => {
+    selectorWin.webContents.send('init-selector', { 
+      list: listData, 
+      payload, 
+      type, 
+      isDark,
+      columns 
+    });
+  });
+}
+
 /**
  * 保存 MCP 工具列表到缓存文档
  * @param {string} serverId - 服务器 ID
@@ -1527,6 +1623,7 @@ module.exports = {
   windowMap,
   saveFastInputWindowPosition,
   openFastInputWindow,
+  openAppendSelectorWindow,
   saveMcpToolCache,
   getMcpToolCache,
   getCachedBackgroundImage,

@@ -296,6 +296,59 @@ window.api = {
 };
 
 const commandHandlers = {
+
+  'append_global': async (action) => {
+    const { type, payload } = action;
+    utools.hideMainWindow();
+
+    const { windowMap, openAppendSelectorWindow } = require('./data.js'); // 引入封装好的函数
+    
+    const features = utools.getFeatures().filter(f => f.code.startsWith('append_to_') && windowMap.has(f.code.replace('append_to_', '')));
+
+    if (features.length === 0) {
+      utools.showNotification("当前没有打开的独立对话窗口");
+      utools.outPlugin();
+      return;
+    }
+
+    // 如果只有一个窗口，直接跳过选择，智能追加
+    if (features.length === 1) {
+      const senderId = features[0].code.replace('append_to_', '');
+      const win = windowMap.get(senderId);
+      if (win && !win.isDestroyed()) {
+        win.show();
+        if (win.focus) win.focus();
+        win.webContents.send('window-append-msg', { type, payload });
+      }
+      utools.outPlugin();
+      return;
+    }
+
+    openAppendSelectorWindow(features, payload, type);
+    utools.outPlugin();
+  },
+
+  'append_to_window': async (action) => {
+    utools.hideMainWindow();
+    const { type, payload, code } = action;
+    
+    const senderId = code.replace('append_to_', '');
+    const { windowMap } = require('./data.js');
+    const win = windowMap.get(senderId);
+
+    if (!win || win.isDestroyed()) {
+      utools.showNotification("目标窗口已关闭或不存在");
+      utools.removeFeature(code);
+      utools.outPlugin();
+      return;
+    }
+
+    win.show();
+    if (win.focus) win.focus();
+    win.webContents.send('window-append-msg', { type, payload });
+    utools.outPlugin();
+  },
+
   'Anywhere Settings': async () => {
     // 使用 await
     const configResult = await getConfig();
@@ -456,10 +509,26 @@ const commandHandlers = {
 // --- Main Plugin Entry ---
 utools.onPluginEnter(async (action) => {
   const { code } = action;
+  
+  // 启动时顺便清理一下因强制退出等意外残留的僵尸指令
+  const features = utools.getFeatures();
+  const { windowMap } = require('./data.js');
+  features.forEach(f => {
+    if (f.code.startsWith('append_to_')) {
+      const sid = f.code.replace('append_to_', '');
+      if (!windowMap.has(sid)) utools.removeFeature(f.code);
+    }
+  });
+
+  // 分发逻辑加入对追加消息的支持
   if (commandHandlers[code]) {
     await commandHandlers[code](action);
   } else if (code.endsWith(feature_suffix)) { // 打开空白助手
     await commandHandlers.handleAssistant(action);
+  } else if (code === 'append_global') {
+    await commandHandlers['append_global'](action);
+  } else if (code.startsWith('append_to_')) {
+    await commandHandlers['append_to_window'](action);
   } else {  // 根据提示词匹配调用
     await commandHandlers.handlePrompt(action);
   }
@@ -477,6 +546,17 @@ utools.onPluginOut((isKill) => {
 
 const { ipcRenderer } = require('electron');
 const { windowMap } = require('./data.js');
+
+// 接收来自选择面板的转发消息，触发目标窗口
+ipcRenderer.on('forward-append-msg', (e, { senderId, type, payload }) => {
+  const { windowMap } = require('./data.js');
+  const win = windowMap.get(senderId);
+  if (win && !win.isDestroyed()) {
+    win.show();
+    if (win.focus) win.focus();
+    win.webContents.send('window-append-msg', { type, payload });
+  }
+});
 
 ipcRenderer.on('window-event', (e, { senderId, event }) => {
   const bw = windowMap.get(senderId);
@@ -497,6 +577,7 @@ ipcRenderer.on('window-event', (e, { senderId, event }) => {
       case 'close-window': {
         bw.close();
         windowMap.delete(senderId);
+        utools.removeFeature(`append_to_${senderId}`); // 窗口关闭时主动移除对应的追问指令
         break;
       }
       // 最小化

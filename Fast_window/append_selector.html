@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>选择追问目标</title>
+    <style>
+        :root {
+            /* 浅色模式 - 借鉴 fast_input 星星风格 */
+            --bg-color: rgba(255, 255, 255, 0.85);
+            --text-color: #1F2937;
+            --text-muted: #6B7280;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --hover-bg: rgba(0, 0, 0, 0.05);
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0,0,0,0.08);
+        }
+        
+        html.dark {
+            /* 深色模式 - 借鉴 fast_input 灰尘风格 */
+            --bg-color: rgba(30, 30, 30, 0.85);
+            --text-color: #F3F4F6;
+            --text-muted: #9CA3AF;
+            --border-color: rgba(255, 255, 255, 0.12);
+            --hover-bg: rgba(255, 255, 255, 0.1);
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0,0,0,0.3);
+        }
+
+        body {
+            margin: 0; 
+            padding: 15px; /* 给极强的阴影留出防裁剪空间 */
+            font-family: system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            display: flex; 
+            flex-direction: column;
+            height: 100vh; 
+            box-sizing: border-box;
+            user-select: none;
+            background-color: transparent !important; /* 强制背景透明 */
+        }
+
+        #container {
+            background-color: var(--bg-color);
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(25px); 
+            -webkit-backdrop-filter: blur(25px);
+            display: flex; 
+            flex-direction: column;
+            overflow: hidden;
+            height: 100%;
+            animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.96); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .header {
+            padding: 10px 14px 6px 14px;
+            font-size: 12px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .list {
+            overflow: hidden;
+            padding: 6px 10px 10px 10px;
+            flex-grow: 1;
+            /* 采用 Grid 布局，列数由 JS 动态注入 */
+            display: grid;
+            grid-template-columns: repeat(var(--cols, 1), 1fr);
+            gap: 4px 8px;
+            align-content: start;
+        }
+
+        .item {
+            display: flex; 
+            align-items: center;
+            padding: 8px 10px; 
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            border: 1px solid transparent;
+            height: 42px;
+            box-sizing: border-box;
+        }
+
+        .item:hover {
+            background-color: var(--hover-bg);
+        }
+
+        .item:active {
+            transform: scale(0.97);
+        }
+
+        .item img {
+            width: 24px; 
+            height: 24px;
+            border-radius: 6px;
+            margin-right: 10px;
+            object-fit: cover;
+            background-color: var(--border-color); /* 占位背景色 */
+        }
+
+        .item span {
+            font-size: 14px;
+            color: var(--text-color);
+            font-weight: 500;
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="header">发送至以下会话窗口</div>
+        <div class="list" id="window-list"></div>
+    </div>
+
+    <script>
+        let activePayload = null;
+        let activeType = null;
+
+        if (window.preload && window.preload.receiveSelectorInit) {
+            window.preload.receiveSelectorInit((data) => {
+                const { list, payload, type, isDark, columns } = data;
+                activePayload = payload;
+                activeType = type;
+
+                // 注入列数和主题
+                document.documentElement.style.setProperty('--cols', columns || 1);
+                if (isDark) document.documentElement.classList.add('dark');
+
+                const listEl = document.getElementById('window-list');
+                list.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'item';
+                    
+                    let iconSrc = item.icon || 'logo.png';
+                    if (!iconSrc.startsWith('data:') && !iconSrc.startsWith('http') && iconSrc !== 'logo.png') {
+                        iconSrc = 'logo.png';
+                    }
+
+                    div.innerHTML = `<img src="${iconSrc}" onerror="this.src='logo.png'"><span>${item.name}</span>`;
+                    
+                    div.onclick = () => {
+                        window.api.forwardAppendMsg(item.senderId, activeType, activePayload);
+                    };
+                    listEl.appendChild(div);
+                });
+            });
+        }
+
+        // 失焦关闭
+        window.addEventListener('blur', () => {
+            window.api.closeSelector();
+        });
+        
+        // 快捷键 Esc 关闭
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') window.api.closeSelector();
+        });
+    </script>
+</body>
+</html>

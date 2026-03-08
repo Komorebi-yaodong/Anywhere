@@ -12,14 +12,16 @@
 	},
 	"features": [
 		{
-			"code":"Anywhere Settings",
+			"code": "Anywhere Settings",
 			"explain": "设置页面",
-			"cmds":["Anywhere Settings"]
+			"cmds": [
+				"Anywhere Settings"
+			]
 		},
 		{
-			"code":"Resume Conversation",
+			"code": "Resume Conversation",
 			"explain": "恢复聊天",
-			"cmds":[
+			"cmds": [
 				{
 					"type": "files",
 					"label": "恢复聊天",
@@ -33,7 +35,30 @@
 				}
 			],
 			"mainHide": true,
-			"icon":"history.png"
+			"icon": "history.png"
+		},
+		{
+			"code": "append_global",
+			"explain": "追问",
+			"cmds": [
+				{
+					"type": "over",
+					"label": "追问",
+					"maxLength": 99999999999
+				},
+				{
+					"type": "img",
+					"label": "追问"
+				},
+				{
+					"type": "files",
+					"label": "追问",
+					"fileType": "file",
+					"match": "/.*/i"
+				}
+			],
+			"mainHide": true,
+			"icon": "ask.png"
 		}
 	]
 }
