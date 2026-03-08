@@ -328,24 +328,42 @@ const commandHandlers = {
     utools.outPlugin();
   },
 
-  'append_to_window': async (action) => {
+  'append_global': async (action) => {
+    const { type, payload } = action;
     utools.hideMainWindow();
-    const { type, payload, code } = action;
-    
-    const senderId = code.replace('append_to_', '');
-    const { windowMap } = require('./data.js');
-    const win = windowMap.get(senderId);
 
-    if (!win || win.isDestroyed()) {
-      utools.showNotification("目标窗口已关闭或不存在");
-      utools.removeFeature(code);
+    const { windowMap, openAppendSelectorWindow } = require('./data.js'); // 引入封装好的函数
+    
+    // 过滤前清理掉已经被强制关闭（原生关闭等）导致 isDestroyed() === true 的残留窗口和指令
+    for (const [sid, win] of windowMap.entries()) {
+      if (win.isDestroyed()) {
+        windowMap.delete(sid);
+        utools.removeFeature(`append_to_${sid}`);
+      }
+    }
+
+    const features = utools.getFeatures().filter(f => f.code.startsWith('append_to_') && windowMap.has(f.code.replace('append_to_', '')));
+
+    if (features.length === 0) {
+      utools.showNotification("当前没有打开的独立对话窗口");
       utools.outPlugin();
       return;
     }
 
-    win.show();
-    if (win.focus) win.focus();
-    win.webContents.send('window-append-msg', { type, payload });
+    // 如果只有一个窗口，直接跳过选择，智能追加
+    if (features.length === 1) {
+      const senderId = features[0].code.replace('append_to_', '');
+      const win = windowMap.get(senderId);
+      if (win && !win.isDestroyed()) {
+        win.show();
+        if (win.focus) win.focus();
+        win.webContents.send('window-append-msg', { type, payload });
+      }
+      utools.outPlugin();
+      return;
+    }
+
+    openAppendSelectorWindow(features, payload, type);
     utools.outPlugin();
   },
 
@@ -513,6 +531,13 @@ utools.onPluginEnter(async (action) => {
   // 启动时顺便清理一下因强制退出等意外残留的僵尸指令
   const features = utools.getFeatures();
   const { windowMap } = require('./data.js');
+  
+  for (const [sid, win] of windowMap.entries()) {
+    if (win.isDestroyed()) {
+      windowMap.delete(sid);
+    }
+  }
+
   features.forEach(f => {
     if (f.code.startsWith('append_to_')) {
       const sid = f.code.replace('append_to_', '');
