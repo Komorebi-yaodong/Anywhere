@@ -587,7 +587,8 @@ IMPORTANT:
                 properties: {
                     agent_name: { type: "string", description: "The exact name of the agent to summon." },
                     text: { type: "string", description: "The first message or task description to send to this agent." },
-                    file_paths: { type: "array", items: { type: "string" }, description: "Optional. Array of local absolute paths to send files/images." }
+                    file_paths: { type: "array", items: { type: "string" }, description: "Optional. Array of local absolute paths to send files/images." },
+                    enable_tools: { type: "boolean", description: "Optional. If true, the summoned agent will be granted access to all built-in MCP tools (like file system, shell, web search, etc.), thereby expanding its local control capabilities." }
                 },
                 required: ["agent_name", "text"]
             }
@@ -2279,7 +2280,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
     summon_agent: async (args, context, signal) => {
         if (isChildWindow()) return await callParentShell('summon_agent', args, signal);
         
-        const { agent_name, text, file_paths } = args;
+        const { agent_name, text, file_paths, enable_tools } = args;
         const { getConfig, openWindow } = require('./data.js');
         const configData = await getConfig();
         const windowConfig = JSON.parse(JSON.stringify(configData.config));
@@ -2298,7 +2299,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             os: process.platform === 'win32' ? 'win' : (process.platform === 'darwin' ? 'macos' : 'linux'),
             code: agent_name,
             type: "summon",
-            summonData: { text, file_paths }
+            summonData: { text, file_paths, enable_tools }
         };
 
         const senderId = await openWindow(windowConfig, msg);

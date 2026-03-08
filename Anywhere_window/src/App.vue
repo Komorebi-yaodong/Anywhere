@@ -1481,10 +1481,23 @@ onMounted(async () => {
         shouldDirectSend = true;
         isFileDirectSend = true;
         if (data.summonData) {
-          const { text, file_paths } = data.summonData;
+          const { text, file_paths, enable_tools } = data.summonData;
           if (text) prompt.value = text;
           if (file_paths && Array.isArray(file_paths) && file_paths.length > 0) {
             for (const p of file_paths) await processFilePath(p);
+          }
+          if (enable_tools && currentConfig.value.mcpServers) {
+            const builtinIds = Object.entries(currentConfig.value.mcpServers)
+              .filter(([, server]) => server.type === 'builtin')
+              .map(([id]) => id);
+            builtinIds.forEach(id => {
+              if (!sessionMcpServerIds.value.includes(id)) {
+                sessionMcpServerIds.value.push(id);
+              }
+              if (!tempSessionMcpServerIds.value.includes(id)) {
+                tempSessionMcpServerIds.value.push(id);
+              }
+            });
           }
         }
       }
