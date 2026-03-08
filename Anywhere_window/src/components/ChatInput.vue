@@ -648,12 +648,16 @@ defineExpose({ focus, senderRef });
                         <el-divider direction="vertical" />
                         <el-button @click="handleReasoningSelection('default')"
                             :type="tempReasoningEffort === 'default' ? 'primary' : 'default'" round>默认</el-button>
+                        <el-button @click="handleReasoningSelection('none')"
+                            :type="tempReasoningEffort === 'none' ? 'primary' : 'default'" round>关闭</el-button>
                         <el-button @click="handleReasoningSelection('low')"
                             :type="tempReasoningEffort === 'low' ? 'primary' : 'default'" round>快速</el-button>
                         <el-button @click="handleReasoningSelection('medium')"
                             :type="tempReasoningEffort === 'medium' ? 'primary' : 'default'" round>均衡</el-button>
                         <el-button @click="handleReasoningSelection('high')"
                             :type="tempReasoningEffort === 'high' ? 'primary' : 'default'" round>深入</el-button>
+                        <el-button @click="handleReasoningSelection('xhigh')"
+                            :type="tempReasoningEffort === 'xhigh' ? 'primary' : 'default'" round>极深</el-button>
                     </div>
                 </div>
             </el-col>

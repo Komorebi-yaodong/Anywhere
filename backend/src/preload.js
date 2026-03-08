@@ -1,6 +1,4 @@
-const {
-  getRandomItem,
-} = require('./chat.js');
+const { createChatCompletion, getRandomItem } = require('./chat.js');
 
 const {
   getConfig,
@@ -71,6 +69,9 @@ window.api = {
   updateConfigWithoutFeatures,
   getUser,
   getRandomItem,
+  createChatCompletion: async (params) => {
+    return await createChatCompletion(params);
+  },
   copyText,
   handleFilePath,
   sendfileDirect,
@@ -262,22 +263,22 @@ window.api = {
     if (!task) return false;
 
     const windowConfig = JSON.parse(JSON.stringify(configResult.config));
-    
+
     // 处理默认助手的临时配置构造
     if (task.promptKey === '__DEFAULT__') {
-        if (!windowConfig.prompts) windowConfig.prompts = {};
-        windowConfig.prompts['__DEFAULT__'] = {
-            type: "general",
-            prompt: "", 
-            showMode: "window",
-            model: windowConfig.defaultTaskModel || "", 
-            stream: true, 
-            isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
-            autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
-            window_width: 580,
-            window_height: 740,
-            icon: "" 
-        };
+      if (!windowConfig.prompts) windowConfig.prompts = {};
+      windowConfig.prompts['__DEFAULT__'] = {
+        type: "general",
+        prompt: "",
+        showMode: "window",
+        model: windowConfig.defaultTaskModel || "",
+        stream: true,
+        isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
+        autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
+        window_width: 580,
+        window_height: 740,
+        icon: ""
+      };
     }
 
     const msg = {
@@ -288,7 +289,7 @@ window.api = {
       taskConfig: { id: taskId, ...task },
       tempPromptConfig: task.promptKey === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
     };
-    
+
     await openWindow(windowConfig, msg);
     return true;
   },
@@ -581,7 +582,7 @@ setInterval(async () => {
         const [hours, minutes] = task.monthlyTime.split(':').map(Number);
         const currentMonthDay = new Date().getDate();
         const validDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
-        
+
         if (validDays.includes(currentMonthDay)) {
           if (currentH === hours && currentM === minutes && safeCooldown) {
             shouldTrigger = true;
@@ -591,25 +592,25 @@ setInterval(async () => {
         const nowD = new Date();
         const currentYMD = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
         const [hours, minutes] = task.singleTime.split(':').map(Number);
-        
+
         if (currentYMD === task.singleDate && currentH === hours && currentM === minutes && safeCooldown) {
           shouldTrigger = true;
-          task.enabled = false; 
+          task.enabled = false;
         }
       }
 
       if (shouldTrigger && task.triggerType === 'interval' && task.intervalTimeRanges && task.intervalTimeRanges.length > 0) {
         const nowHhMm = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`;
         const isWithinRange = task.intervalTimeRanges.some(range => {
-            if (Array.isArray(range) && range.length === 2) {
-                return nowHhMm >= range[0] && nowHhMm <= range[1];
-            }
-            return false;
+          if (Array.isArray(range) && range.length === 2) {
+            return nowHhMm >= range[0] && nowHhMm <= range[1];
+          }
+          return false;
         });
-        
+
         // 如果当前时间不在任何一个设定的时间段内，否决触发
         if (!isWithinRange) {
-            shouldTrigger = false;
+          shouldTrigger = false;
         }
       }
 
@@ -620,19 +621,19 @@ setInterval(async () => {
         const windowConfig = JSON.parse(JSON.stringify(configResult.config));
 
         if (task.promptKey === '__DEFAULT__') {
-            if (!windowConfig.prompts) windowConfig.prompts = {};
-            windowConfig.prompts['__DEFAULT__'] = {
-                type: "general",
-                prompt: "", 
-                showMode: "window",
-                model: windowConfig.defaultTaskModel || "", 
-                stream: true, 
-                isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
-                autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
-                window_width: 580,
-                window_height: 740,
-                icon: "" 
-            };
+          if (!windowConfig.prompts) windowConfig.prompts = {};
+          windowConfig.prompts['__DEFAULT__'] = {
+            type: "general",
+            prompt: "",
+            showMode: "window",
+            model: windowConfig.defaultTaskModel || "",
+            stream: true,
+            isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
+            autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
+            window_width: 580,
+            window_height: 740,
+            icon: ""
+          };
         }
 
         // 触发独立窗口
@@ -658,36 +659,36 @@ setInterval(async () => {
 }, 1000); // 每秒轮询一次，保证精准执行
 
 ipcRenderer.on('background-shell-request', async (e, { requestId, action, payload }) => {
-    try {
-        const result = await handleBgShellRequest(action, payload);
-        
-        // 广播结果给所有存活的窗口，让发起者认领
-        for (const win of windowMap.values()) {
-            if (!win.isDestroyed()) {
-                win.webContents.send('background-shell-reply', {
-                    requestId,
-                    data: result
-                });
-            }
-        }
-    } catch (err) {
-        for (const win of windowMap.values()) {
-            if (!win.isDestroyed()) {
-                win.webContents.send('background-shell-reply', {
-                    requestId,
-                    error: err.message
-                });
-            }
-        }
+  try {
+    const result = await handleBgShellRequest(action, payload);
+
+    // 广播结果给所有存活的窗口，让发起者认领
+    for (const win of windowMap.values()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('background-shell-reply', {
+          requestId,
+          data: result
+        });
+      }
     }
+  } catch (err) {
+    for (const win of windowMap.values()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('background-shell-reply', {
+          requestId,
+          error: err.message
+        });
+      }
+    }
+  }
 });
 
 // ================= 窗口彻底关闭/刷新时的清理 =================
 window.addEventListener('beforeunload', () => {
-    try {
-        const { killAllBackgroundShells } = require('./mcp_builtin.js');
-        killAllBackgroundShells();
-    } catch (e) {
-        console.error("Cleanup on beforeunload failed:", e);
-    }
+  try {
+    const { killAllBackgroundShells } = require('./mcp_builtin.js');
+    killAllBackgroundShells();
+  } catch (e) {
+    console.error("Cleanup on beforeunload failed:", e);
+  }
 });

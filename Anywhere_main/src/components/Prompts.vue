@@ -1043,9 +1043,11 @@ async function refreshPromptsConfig() {
                     <div class="spacer"></div>
                     <el-select v-model="editingPrompt.reasoning_effort" size="small" style="width: 120px;">
                       <el-option :label="t('prompts.reasoningEffort.default')" value="default" />
+                      <el-option :label="t('prompts.reasoningEffort.none')" value="none" />
                       <el-option :label="t('prompts.reasoningEffort.low')" value="low" />
                       <el-option :label="t('prompts.reasoningEffort.medium')" value="medium" />
                       <el-option :label="t('prompts.reasoningEffort.high')" value="high" />
+                      <el-option :label="t('prompts.reasoningEffort.xhigh')" value="xhigh" />
                     </el-select>
                   </div>
                 </div>

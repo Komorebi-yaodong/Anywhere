@@ -343,9 +343,11 @@
     "reasoningEffortLabel": "思考预算",
     "reasoningEffort": {
       "default": "默认",
+      "none": "关闭",
       "low": "低",
       "medium": "中",
-      "high": "高"
+      "high": "高",
+      "xhigh": "极高"
     },
     "defaultMcpServersLabel": "MCP",
     "defaultMcpServersPlaceholder": "选择此助手默认启用的MCP服务",

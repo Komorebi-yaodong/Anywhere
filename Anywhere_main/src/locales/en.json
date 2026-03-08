@@ -340,9 +340,11 @@
     "reasoningEffortLabel": "Reasoning Effort",
     "reasoningEffort": {
       "default": "Default",
+      "none": "Off",
       "low": "Low",
       "medium": "Medium",
-      "high": "High"
+      "high": "High",
+      "xhigh": "xHigh"
     },
     "defaultMcpServersLabel": "MCP",
     "defaultMcpServersPlaceholder": "Select default MCP services for this assistant",
