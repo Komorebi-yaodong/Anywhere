@@ -55,7 +55,13 @@ const defaultConfig = {
         autoSaveChat: false,
       },
     },
-    settingsCardOrder: ['general', 'voice', 'data', 'webdav'], 
+    settingsCardOrder: ['general', 'voice', 'data', 'webdav'],
+    settingsCardCollapsed: {
+      general: false,
+      voice: false,
+      data: false,
+      webdav: false
+    },
     fastWindowPosition: { x: 0, y: 0 },
     mcpServers: {},
     skillPath: "",
@@ -357,8 +363,13 @@ function checkConfig(config) {
     isDarkMode: false,
     themeMode: "system",
     fastWindowPosition: null,
-    // 直接引用 defaultConfig 中的完整列表，避免代码冗长
-    voiceList: defaultConfig.config.voiceList || []
+    voiceList: defaultConfig.config.voiceList || [],
+    settingsCardCollapsed: {
+      general: false,
+      voice: false,
+      data: false,
+      webdav: false
+    },
   };
 
   for (const [key, val] of Object.entries(rootDefaults)) {

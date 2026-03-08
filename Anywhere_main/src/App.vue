@@ -518,13 +518,15 @@ watch(locale, () => {
     </el-header>
 
     <el-main v-if="config">
-      <Chats v-if="tab === 0" key="chats" />
-      <Tasks v-if="tab === 1" key="tasks" />
-      <Prompts v-if="tab === 2" key="prompts" />
-      <Mcp v-if="tab === 3" key="mcp" />
-      <Skills v-if="tab === 4" key="skills" />
-      <Providers v-if="tab === 5" key="providers" />
-      <Setting v-if="tab === 6" key="settings" />
+      <KeepAlive>
+        <Chats v-if="tab === 0" key="chats" />
+        <Tasks v-else-if="tab === 1" key="tasks" />
+        <Prompts v-else-if="tab === 2" key="prompts" />
+        <Mcp v-else-if="tab === 3" key="mcp" />
+        <Skills v-else-if="tab === 4" key="skills" />
+        <Providers v-else-if="tab === 5" key="providers" />
+        <Setting v-else-if="tab === 6" key="settings" />
+      </KeepAlive>
     </el-main>
 
     <!-- 帮助文档弹窗 -->

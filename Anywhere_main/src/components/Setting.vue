@@ -44,6 +44,13 @@ function initCardOrder() {
       cardDefinitions.webdav
     ];
   }
+  
+  if (currentConfig.value && currentConfig.value.settingsCardCollapsed) {
+    collapsedCards.value = {
+      ...collapsedCards.value,
+      ...currentConfig.value.settingsCardCollapsed
+    };
+  }
 }
 
 const onOrderChange = async () => {
@@ -54,6 +61,13 @@ const onOrderChange = async () => {
 
 function toggleCard(cardName) {
   collapsedCards.value[cardName] = !collapsedCards.value[cardName];
+  
+  if (currentConfig.value) {
+    const plainState = JSON.parse(JSON.stringify(collapsedCards.value));
+    
+    currentConfig.value.settingsCardCollapsed = plainState;
+    saveSingleSetting('settingsCardCollapsed', plainState);
+  }
 }
 
 const isBackupManagerVisible = ref(false);
