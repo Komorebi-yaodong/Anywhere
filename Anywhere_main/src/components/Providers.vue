@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, computed, inject, onBeforeUnmount } from 'vue'
+import { ref, reactive, onMounted, computed, inject, onActivated, onDeactivated } from 'vue'
 import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove, Search, Folder, FolderOpened, FolderAdd } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -24,10 +24,13 @@ onMounted(() => {
   } else {
     provider_key.value = null;
   }
-  window.addEventListener('keydown', handleGlobalKeyDown);
 });
 
-onBeforeUnmount(() => {
+onActivated(() => {
+    window.addEventListener('keydown', handleGlobalKeyDown);
+});
+
+onDeactivated(() => {
     window.removeEventListener('keydown', handleGlobalKeyDown);
 });
 

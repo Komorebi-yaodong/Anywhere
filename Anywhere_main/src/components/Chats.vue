@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted, nextTick, onActivated, onDeactivated } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
 import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush } from '@element-plus/icons-vue'
@@ -21,6 +21,7 @@ const selectedFiles = ref([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const singleFileSyncing = ref({});
+const isDeletingFiles = ref(false);
 
 // --- Sync Progress State ---
 const isSyncing = ref(false);
@@ -103,12 +104,20 @@ onMounted(async () => {
     } catch (error) { 
         ElMessage.error(t('chats.alerts.configError')); 
     }
+});
+
+onActivated(() => {
     window.addEventListener('focus', handleWindowFocus);
     window.addEventListener('keydown', handleKeyDown);
-    
-    // 全局鼠标监听
     window.addEventListener('mouseup', onGlobalMouseUp);
     window.addEventListener('mousemove', onGlobalMouseMove);
+});
+
+onDeactivated(() => {
+    window.removeEventListener('focus', handleWindowFocus);
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('mouseup', onGlobalMouseUp);
+    window.removeEventListener('mousemove', onGlobalMouseMove);
 });
 
 onUnmounted(() => {
@@ -273,6 +282,7 @@ const handleKeyDown = (e) => {
     }
 
     if (e.key === 'Delete' || (e.key === 'Backspace' && !e.altKey && !e.ctrlKey && !e.shiftKey)) {
+        if (e.repeat) return;
         if (selectedFiles.value.length > 0) {
             e.preventDefault();
             deleteFiles(selectedFiles.value);
@@ -390,11 +400,14 @@ async function renameFile(file) {
     }
 }
 async function deleteFiles(filesToDelete) {
+    if (isDeletingFiles.value) return; // 拦截正在进行中的删除操作
+
     if (filesToDelete.length === 0) {
         ElMessage.warning(t('common.noFileSelected'));
         return;
     }
 
+    isDeletingFiles.value = true; // 上锁
     try {
         await ElMessageBox.confirm(t('common.confirmDeleteMultiple', { count: filesToDelete.length }), t('common.warningTitle'), { type: 'warning' });
 
@@ -452,6 +465,7 @@ async function deleteFiles(filesToDelete) {
         }
     } finally {
         isTableLoading.value = false;
+        isDeletingFiles.value = false; // 释放锁
     }
 }
 const handleSelectionChange = (val) => selectedFiles.value = val;

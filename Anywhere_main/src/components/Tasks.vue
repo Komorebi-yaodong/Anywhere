@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, reactive, onMounted, onBeforeUnmount, computed, inject } from 'vue'
+import { ref, watch, reactive, onMounted, onActivated, onDeactivated, computed, inject } from 'vue'
 import { Plus, Delete, Document, Edit, Search, InfoFilled, Refresh, Clock, Setting as SettingIcon, List, VideoPlay } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -61,10 +61,13 @@ onMounted(async () => {
             availableSkills.value = skills.sort((a, b) => a.name.localeCompare(b.name));
         } catch (e) { console.error(e); }
     }
+});
+
+onActivated(() => {
     window.addEventListener('keydown', handleGlobalKeyDown);
 });
 
-onBeforeUnmount(() => {
+onDeactivated(() => {
     window.removeEventListener('keydown', handleGlobalKeyDown);
 });
 
