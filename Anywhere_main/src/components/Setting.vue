@@ -839,10 +839,10 @@ async function selectLocalChatPath() {
       <template #footer>
         <div class="dialog-footer">
           <div class="footer-left">
-            <el-button :icon="Refresh" @click="fetchBackupFiles">{{ t('common.refresh') }}</el-button>
+            <el-button :icon="Refresh" @click="fetchBackupFiles"></el-button>
             <el-button type="danger" :icon="DeleteIcon" @click="deleteSelectedFiles"
               :disabled="selectedFiles.length === 0">
-              {{ t('common.deleteSelected') }} ({{ selectedFiles.length }})
+              ({{ selectedFiles.length }})
             </el-button>
           </div>
           <div class="footer-center">
@@ -1185,6 +1185,35 @@ html.dark .settings-page-container {
   align-items: center;
   width: 100%;
   padding-top: 10px;
+  gap: 15px;
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 0px;
+  flex-shrink: 0; 
+  white-space: nowrap;
+}
+
+.footer-left .el-button {
+  margin: 0;
+}
+
+.footer-center {
+  flex-grow: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0; 
+  overflow-x: auto;
+}
+
+.footer-center::-webkit-scrollbar {
+  display: none;
+}
+
+.footer-right {
+  flex-shrink: 0;
 }
 
 :deep(.el-table) {
@@ -1242,7 +1271,7 @@ html.dark .settings-page-container {
 }
 
 :deep(.backup-manager-dialog .el-dialog__footer) {
-  padding: 12px 20px;
+  padding: 0px 20px 12px;
   background-color: var(--panda-bg);
   border-top: 1px solid var(--panda-border);
 }
