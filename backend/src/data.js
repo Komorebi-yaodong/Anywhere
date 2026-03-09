@@ -961,7 +961,7 @@ function copyText(content) {
   utools.copyText(content);
 }
 
-let windowCreationQueue = Promise.resolve(); // 新增：窗口创建队列
+let windowCreationQueue = Promise.resolve();
 
 async function openWindow(config, msg) {
   // 计时开始
@@ -972,7 +972,63 @@ async function openWindow(config, msg) {
   }
 
   const promptCode = msg.originalCode || msg.code;
-  const { x, y, width, height } = getPosition(config, promptCode, msg); 
+  
+  // 1. 将 const 改为 let，以允许修改窗口坐标
+  let { x, y, width, height } = getPosition(config, promptCode, msg); 
+
+  const OFFSET_STEP = 30;
+  let attempts = 0;
+  const maxAttempts = 12;
+  const originalX = x;
+  const originalY = y;
+  // 获取当前点所在的屏幕安全工作区（避开任务栏/Dock）
+  const displayArea = utools.getDisplayNearestPoint({ x, y })?.workArea || utools.getPrimaryDisplay().workArea;
+
+  while (attempts < maxAttempts) {
+    let isOverlap = false;
+    for (const win_instance of windowMap.values()) {
+      // 仅检测存活且可见的窗口
+      if (!win_instance.isDestroyed() && win_instance.isVisible()) {
+        try {
+          const bounds = win_instance.getBounds();
+          // 若坐标差异极小 (小于 5 像素)，认定为位置重叠
+          if (Math.abs(bounds.x - x) < 5 && Math.abs(bounds.y - y) < 5) {
+            isOverlap = true;
+            break;
+          }
+        } catch (e) {
+          // 忽略刚被销毁窗口导致的 getBounds 调用报错
+        }
+      }
+    }
+
+    if (!isOverlap) break; // 当前位置无重叠，直接使用
+    
+    attempts++;
+    
+    // 尝试向右下方偏移
+    let newX = originalX + attempts * OFFSET_STEP;
+    let newY = originalY + attempts * OFFSET_STEP;
+    
+    // 如果向右下偏移超出了屏幕可用边界，则尝试反向向左上方偏移
+    if (displayArea && (newX + width > displayArea.x + displayArea.width || newY + height > displayArea.y + displayArea.height)) {
+       newX = originalX - attempts * OFFSET_STEP;
+       newY = originalY - attempts * OFFSET_STEP;
+       
+       // 如果向左上也超出了屏幕左上边界，则贴边对齐并结束偏移
+       if (newX < displayArea.x || newY < displayArea.y) {
+           newX = Math.max(displayArea.x, newX);
+           newY = Math.max(displayArea.y, newY);
+           x = newX;
+           y = newY;
+           break; 
+       }
+    }
+    
+    x = newX;
+    y = newY;
+  }
+
   const promptConfig = config.prompts[promptCode];
   const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
   let channel = "window";
@@ -1055,7 +1111,6 @@ async function openWindow(config, msg) {
   };
   const entryPath = config.isDarkMode ? "./window/index.html?dark=1" : "./window/index.html";
 
-  // 使用 Promise 队列序列化窗口创建，防止 uTools 底层并发崩溃
   return new Promise((resolve) => {
     windowCreationQueue = windowCreationQueue.then(() => {
       return new Promise((nextInQueue) => {
