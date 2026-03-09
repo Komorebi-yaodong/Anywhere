@@ -994,17 +994,30 @@ async function openWindow(config, msg) {
 
       // 1. 获取已存在的同名窗口，自动生成不冲突的序号
       const features = utools.getFeatures();
-      const existingNames = features
-        .filter(f => f.code.startsWith('append_to_') && f.explain.startsWith(`追问 ${promptCode}`))
-        .map(f => f.explain);
-        
-      let displayName = `追问 ${promptCode}`;
-      let idx = 1;
-      while (existingNames.includes(displayName)) {
-        displayName = `追问 ${promptCode}-${idx}`;
-        idx++;
-      }
+      const baseName = `追问 ${promptCode}`;
+      
+      // 安全转义 promptCode 用于正则匹配，提取最大后缀 x
+      const escapedPromptCode = promptCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameRegex = new RegExp(`^追问 ${escapedPromptCode}(?:-(\\d+))?$`);
+      
+      let maxIdx = -1;
+      features.forEach(f => {
+        if (f.code.startsWith('append_to_')) {
+          const match = f.explain.match(nameRegex);
+          if (match) {
+            if (match[1]) {
+              maxIdx = Math.max(maxIdx, parseInt(match[1], 10)); // 匹配到 "-x"
+            } else {
+              maxIdx = Math.max(maxIdx, 0); // 只有基础名 (视为 0)
+            }
+          }
+        }
+      });
 
+      let displayName = baseName;
+      if (maxIdx >= 0) {
+        displayName = `${baseName}-${maxIdx + 1}`;
+      }
 
       // 2. 动态注册专属“追问”特征指令
       utools.setFeature({
@@ -1317,7 +1330,13 @@ async function openAppendSelectorWindow(features, payload, type) {
     senderId: f.code.replace('append_to_', ''),
     name: f.explain.replace('追问 ', ''), 
     icon: f.icon
-  }));
+  })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  
+  let startTime;
+  if (utools.isDev()) {
+    startTime = performance.now();
+    console.log(`[Timer Start] Opening window for 追问`);
+  }
 
   const isDark = utools.isDarkColors();
   const count = features.length;
@@ -1356,6 +1375,12 @@ async function openAppendSelectorWindow(features, payload, type) {
       preload: "./fast_window_preload.js",
     }
   }, () => {
+    
+    if (utools.isDev()) {
+      const windowShownTime = performance.now();
+      console.log(`[Timer Checkpoint] utools.createBrowserWindow callback executed. Elapsed: ${(windowShownTime - startTime).toFixed(2)} ms`);
+    }
+
     selectorWin.webContents.send('init-selector', { 
       list: listData, 
       payload, 
