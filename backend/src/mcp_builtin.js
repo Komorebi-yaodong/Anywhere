@@ -26,7 +26,7 @@ function appendBgLog(id, text) {
 
 // 引入 IPC 用于子窗口通信
 let ipcRenderer = null;
-try { ipcRenderer = require('electron').ipcRenderer; } catch (e) {}
+try { ipcRenderer = require('electron').ipcRenderer; } catch (e) { }
 
 // 判断是否为独立窗口 (通过 location 判断或 API 特征)
 function isChildWindow() {
@@ -41,7 +41,7 @@ async function callParentShell(action, payload, signal = null) {
     return new Promise((resolve, reject) => {
         const requestId = Math.random().toString(36).substr(2);
         let isDone = false;
-        
+
         const handler = (event, response) => {
             if (response.requestId === requestId) {
                 isDone = true;
@@ -50,10 +50,10 @@ async function callParentShell(action, payload, signal = null) {
                 else resolve(response.data);
             }
         };
-        
+
         ipcRenderer.on('background-shell-reply', handler);
         utools.sendToParent('background-shell-request', { requestId, action, payload });
-        
+
         // 监听前端的取消操作
         if (signal) {
             const abortHandler = () => {
@@ -68,14 +68,14 @@ async function callParentShell(action, payload, signal = null) {
             if (signal.aborted) abortHandler();
             else signal.addEventListener('abort', abortHandler);
         }
-        
+
         // 超时保护
         setTimeout(() => {
             if (isDone) return;
             isDone = true;
             ipcRenderer.off('background-shell-reply', handler);
             resolve(`[System Notice]: The request timed out after 60s. The target agent may still be generating. You can try again later, or check previous messages which may be useful.`);
-        }, 60000); 
+        }, 60000);
     });
 }
 
@@ -451,7 +451,7 @@ const BUILTIN_TOOLS = {
                     file_path: { type: "string", description: "Absolute path to the file." },
                     content: { type: "string", description: "The content to insert." },
                     anchor_pattern: { type: "string", description: "Mode A: A unique regex pattern to locate the insertion point." },
-                    line_number: { type: "integer", description: "Mode B: Absolute line number (1-based). CAUTION: Only use if you recently retrieved the line number using 'grep_search'." },
+                    line_number: { type: "integer", description: "Mode B: Absolute line number (1-based). CAUTION: Only use if you recently retrieved the line number using 'grep_search'.", minimum: 0},
                     direction: {
                         type: "string",
                         enum: ["before", "after"],
@@ -572,11 +572,11 @@ IMPORTANT:
         {
             name: "list_agents",
             description: "List all pre-configured professional Agents (System Prompts). You can optionally provide an 'agent_name' to inspect its system prompt and capabilities before summoning it.",
-            inputSchema: { 
-                type: "object", 
+            inputSchema: {
+                type: "object",
                 properties: {
                     agent_name: { type: "string", description: "Optional. Name of the agent to inspect." }
-                } 
+                }
             }
         },
         {
@@ -633,11 +633,11 @@ IMPORTANT:
         {
             name: "list_tasks",
             description: "List scheduled tasks. By default, it returns a summary (ID and Name). If 'task_name_or_id' is provided, it returns full details for that specific task.",
-            inputSchema: { 
-                type: "object", 
+            inputSchema: {
+                type: "object",
                 properties: {
                     task_name_or_id: { type: "string", description: "Optional. Provide a Task ID or Name to view detailed configuration (including schedule, instructions, etc.)." }
-                } 
+                }
             }
         },
         {
@@ -649,15 +649,15 @@ IMPORTANT:
                     name: { type: "string", description: "Task name: concise, clear, and unique." },
                     instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
                     agent_name: { type: "string", description: "Optional. Name of the Quick Prompt to use. Defaults to '__DEFAULT__'." },
-                    schedule_type: { 
-                        type: "string", enum: ["interval", "daily", "weekly", "monthly", "single"], 
-                        description: "Type of schedule. 'interval'(every X mins), 'daily'(fixed time), 'weekly'(fixed days in week), 'monthly'(fixed dates in month)." 
+                    schedule_type: {
+                        type: "string", enum: ["interval", "daily", "weekly", "monthly", "single"],
+                        description: "Type of schedule. 'interval'(every X mins), 'daily'(fixed time), 'weekly'(fixed days in week), 'monthly'(fixed dates in month)."
                     },
                     time_param: { type: "string", description: "For 'interval': number of minutes. For others: HH:mm format." },
-                    interval_time_ranges: { 
-                        type: "array", 
-                        items: { type: "string" }, 
-                        description: "Optional. Active time ranges for 'interval' only. Format: ['HH:mm-HH:mm']. If omitted, runs 24h." 
+                    interval_time_ranges: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Optional. Active time ranges for 'interval' only. Format: ['HH:mm-HH:mm']. If omitted, runs 24h."
                     },
                     weekly_days: {
                         type: "array",
@@ -669,9 +669,9 @@ IMPORTANT:
                         items: { type: "integer" },
                         description: "Optional. Required for 'monthly'. Array of dates in month (1-31). e.g. [1, 15, 28]."
                     },
-                    single_date: { 
-                        type: "string", 
-                        description: "Optional. Required for 'single'. Format: YYYY-MM-DD (e.g. 2026-03-05). Defaults to today if omitted." 
+                    single_date: {
+                        type: "string",
+                        description: "Optional. Required for 'single'. Format: YYYY-MM-DD (e.g. 2026-03-05). Defaults to today if omitted."
                     },
                     enabled: { type: "boolean", description: "Enable immediately. Defaults to true.", default: true },
                     extra_mcp: {
@@ -696,7 +696,7 @@ IMPORTANT:
                 properties: {
                     task_name_or_id: { type: "string" },
                     new_name: { type: "string" },
-                    instruction: { type: "string",description: "New prompt content. Provide a highly detailed, self-contained instruction for autonomous execution (explicitly stating tools to use, goals, and output formats)." },
+                    instruction: { type: "string", description: "New prompt content. Provide a highly detailed, self-contained instruction for autonomous execution (explicitly stating tools to use, goals, and output formats)." },
                     agent_name: { type: "string" },
                     schedule_type: { type: "string", enum: ["interval", "daily", "weekly", "monthly", "single"] },
                     time_param: { type: "string" },
@@ -741,9 +741,9 @@ IMPORTANT:
             inputSchema: {
                 type: "object",
                 properties: {
-                    timezone: { 
-                        type: "string", 
-                        description: "Optional. The timezone to get the time for, e.g., 'Asia/Shanghai', 'America/New_York', 'UTC'. If omitted, returns the local system time." 
+                    timezone: {
+                        type: "string",
+                        description: "Optional. The timezone to get the time for, e.g., 'Asia/Shanghai', 'America/New_York', 'UTC'. If omitted, returns the local system time."
                     }
                 }
             }
@@ -1404,20 +1404,20 @@ const handlers = {
                             if (output_mode === 'count') continue;
 
                             const lines = content.split(/\r?\n/);
-                            
+
                             for (const m of matches) {
                                 if (results.length >= MAX_RESULTS_BLOCKS) break;
 
                                 const offset = m.index;
                                 const matchLen = m[0].length;
-                                
+
                                 // 计算行号 (1-based)
                                 const preMatch = content.substring(0, offset);
                                 const lineNum = preMatch.split(/\r?\n/).length;
-                                
+
                                 // 计算列号 (1-based)
                                 const lastNewLinePos = preMatch.lastIndexOf('\n');
-                                const colNum = offset - lastNewLinePos; 
+                                const colNum = offset - lastNewLinePos;
 
                                 // 计算匹配结束行号 (处理多行匹配)
                                 const matchText = m[0];
@@ -1428,7 +1428,7 @@ const handlers = {
                                 const contextLines = 20;
                                 const startLineIdx = Math.max(0, lineNum - 1 - contextLines);
                                 const endLineIdx = Math.min(lines.length, endLineNum - 1 + 1 + contextLines);
-                                
+
                                 let contextBlock = "";
                                 for (let i = startLineIdx; i < endLineIdx; i++) {
                                     const currentLineNum = i + 1;
@@ -1531,11 +1531,11 @@ ${contextBlock}
             let fullText = "";
             if (result.type === 'text' && result.text) {
                 fullText = result.text;
-                
+
                 const prefixRegex = /^file name:.*?\nfile content:\n/;
                 const suffixRegex = /\nfile end$/;
                 fullText = fullText.replace(prefixRegex, '').replace(suffixRegex, '');
-                
+
             } else {
                 const typeInfo = result.type === 'image_url' ? 'Image' : 'Binary/PDF';
                 return `[System] File '${fileForHandler.name}' detected as ${typeInfo}. \nContent extraction is currently NOT supported via this tool for binary formats in this context.`;
@@ -1549,13 +1549,13 @@ ${contextBlock}
                 // 按行读取模式
                 const lines = fullText.split(/\r?\n/);
                 const totalLines = lines.length;
-                
+
                 let startIdx = 0;
                 let endIdx = totalLines - 1;
-                
+
                 if (start_line !== undefined && start_line > 0) startIdx = Math.max(0, parseInt(start_line) - 1);
                 if (end_line !== undefined && end_line > 0) endIdx = Math.min(totalLines - 1, parseInt(end_line) - 1);
-                
+
                 if (startIdx > endIdx || startIdx >= totalLines) {
                     return `Error: Invalid line range. The file has ${totalLines} lines.`;
                 }
@@ -1570,7 +1570,7 @@ ${contextBlock}
                         const lineNumStr = String(i + 1).padStart(4);
                         lineContent = `${lineNumStr} | ${lineContent}`;
                     }
-                    
+
                     const lineLen = lineContent.length + 1; // +1 for '\n'
                     if (currentLength + lineLen > MAX_READ && i > startIdx) {
                         break;
@@ -1607,7 +1607,7 @@ ${contextBlock}
                     let lineNum = (preText.match(/\n/g) || []).length + 1;
                     const chunkLines = contentChunk.split('\n');
                     let numberedLines = [];
-                    for(let i = 0; i < chunkLines.length; i++) {
+                    for (let i = 0; i < chunkLines.length; i++) {
                         const lineNumStr = String(lineNum + i).padStart(4);
                         numberedLines.push(`${lineNumStr} | ${chunkLines[i]}`);
                     }
@@ -1754,23 +1754,8 @@ ${contextBlock}
             let fileContent = await fs.promises.readFile(safePath, 'utf-8');
             const processedContent = content;
 
-            if (line_number !== undefined && line_number !== null) {
-                const lines = fileContent.split(/\r?\n/);
-                const targetIndex = parseInt(line_number) - 1;
-
-                if (isNaN(targetIndex) || targetIndex < 0 || targetIndex > lines.length) {
-                    return `Error: Line number ${line_number} is out of bounds (File has ${lines.length} lines).`;
-                }
-
-                const insertPos = direction === 'before' ? targetIndex : targetIndex + 1;
-                const contentLines = processedContent.split(/\r?\n/);
-                lines.splice(insertPos, 0, ...contentLines);
-
-                await fs.promises.writeFile(safePath, lines.join('\n'), 'utf-8');
-                return `Successfully inserted content at line ${line_number} in ${path.basename(safePath)}.`;
-            }
-
-            if (anchor_pattern) {
+            // 优先判断 anchor_pattern 模式 (即使 AI 生成了错误的 line_number = 0 也会被拦截)
+            if (anchor_pattern && typeof anchor_pattern === 'string' && anchor_pattern.trim() !== '') {
                 let regex;
                 try {
                     regex = new RegExp(anchor_pattern, 'm');
@@ -1787,7 +1772,26 @@ ${contextBlock}
                 await fs.promises.writeFile(safePath, newFullContent, 'utf-8');
                 return `Successfully inserted content ${direction} anchor pattern in ${path.basename(safePath)}.`;
             }
-            return `Error: You must provide either 'line_number' or 'anchor_pattern'.`;
+
+            // 当没有 anchor_pattern 时，退回行号模式，并过滤 line_number 为 0 或非正数的值
+            if (line_number !== undefined && line_number !== null && parseInt(line_number) > 0) {
+                const lines = fileContent.split(/\r?\n/);
+                const targetIndex = parseInt(line_number) - 1;
+
+                if (isNaN(targetIndex) || targetIndex < 0 || targetIndex > lines.length) {
+                    return `Error: Line number ${line_number} is out of bounds (File has ${lines.length} lines).`;
+                }
+
+                const insertPos = direction === 'before' ? targetIndex : targetIndex + 1;
+                const contentLines = processedContent.split(/\r?\n/);
+                lines.splice(insertPos, 0, ...contentLines);
+
+                await fs.promises.writeFile(safePath, lines.join('\n'), 'utf-8');
+                return `Successfully inserted content at line ${line_number} in ${path.basename(safePath)}.`;
+            }
+
+            // 若两者皆未有效提供
+            return `Error: You must provide either a valid 'line_number' (> 0) or 'anchor_pattern'.`;
         } catch (e) {
             return `Insert error: ${e.message}`;
         } finally {
@@ -1825,7 +1829,7 @@ ${contextBlock}
         const crypto = require('crypto');
         const scriptId = crypto.randomBytes(4).toString('hex');
         const tempDir = os.tmpdir();
-        
+
         let tempFile = '';
         let shellToUse = '';
         let spawnArgs = [];
@@ -1847,7 +1851,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         }
 
         const cleanupTempFile = () => {
-            try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) {}
+            try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) { }
         };
 
         if (!background && trimmedCmd.startsWith('cd ') && trimmedCmd.split('\n').length === 1) {
@@ -1878,7 +1882,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                     const child = require('child_process').spawn(shellToUse, spawnArgs, {
                         cwd: bashCwd,
                         env: { ...process.env, FORCE_COLOR: '1' },
-                        detached: !isWin 
+                        detached: !isWin
                     });
                     backgroundShells.set(shellId, {
                         process: child, command: command, startTime: new Date().toISOString(),
@@ -1888,7 +1892,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                     child.stderr.on('data', (data) => appendBgLog(shellId, data.toString()));
                     child.on('close', (code) => {
                         const proc = backgroundShells.get(shellId);
-                        if(proc) proc.active = false;
+                        if (proc) proc.active = false;
                         cleanupTempFile();
                     });
                     resolve(`Background process started successfully.\nID: ${shellId}\nUse 'read_background_shell_output' to view logs.`);
@@ -1916,10 +1920,10 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                     if (isWin) {
                         require('child_process').execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' });
                     } else {
-                        process.kill(-pid, 'SIGKILL'); 
+                        process.kill(-pid, 'SIGKILL');
                     }
                 } catch (e) {
-                    try { child.kill('SIGKILL'); } catch (e2) {}
+                    try { child.kill('SIGKILL'); } catch (e2) { }
                 }
             };
 
@@ -1968,7 +1972,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                     const buf = Buffer.concat(bufArray);
                     const str = new TextDecoder('utf-8', { fatal: false }).decode(buf);
                     if (isWin && str.includes('\uFFFD')) { // 乱码回退 GBK
-                        try { return new TextDecoder('gbk', { fatal: false }).decode(buf); } catch(e) { return str; }
+                        try { return new TextDecoder('gbk', { fatal: false }).decode(buf); } catch (e) { return str; }
                     }
                     return str;
                 };
@@ -1976,7 +1980,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 let result = decode(outChunks);
                 const errorStr = decode(errChunks);
                 if (errorStr) result += `\n[Stderr]:\n${errorStr}`;
-                
+
                 if (!result.trim()) result = "Command executed successfully.";
                 resolve(`[CWD: ${bashCwd}]\n${result}`);
             });
@@ -1995,16 +1999,16 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (isChildWindow()) return await callParentShell('list', {});
 
         if (backgroundShells.size === 0) return "No active background shells.";
-        
+
         let output = "ID | PID | Status | Start Time | Command\n";
         output += "--- | --- | --- | --- | ---\n";
-        
+
         backgroundShells.forEach((proc, id) => {
             const status = proc.active ? "Running" : "Exited";
             const cmdDisplay = proc.command.length > 30 ? proc.command.substring(0, 30) + '...' : proc.command;
             output += `${id} | ${proc.pid} | ${status} | ${proc.startTime} | ${cmdDisplay}\n`;
         });
-        
+
         return output;
     },
 
@@ -2021,10 +2025,10 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
 
         const chunk = fullLogs.substring(safeOffset, safeOffset + safeLength);
         const nextOffset = safeOffset + chunk.length;
-        
+
         let statusInfo = `[Process State: ${proc.active ? 'Running' : 'Exited'}]`;
         let footer = "";
-        
+
         if (nextOffset < totalLength) {
             footer = `\n\n[System]: More output available (${totalLength - nextOffset} chars remaining). Call tool again with offset=${nextOffset}.`;
         }
@@ -2053,12 +2057,12 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             } else {
                 // Unix Group Kill (使用 -pid)
                 try {
-                    process.kill(-pid, 'SIGKILL'); 
+                    process.kill(-pid, 'SIGKILL');
                 } catch (e) {
-                    try { process.kill(pid, 'SIGKILL'); } catch(e2){}
+                    try { process.kill(pid, 'SIGKILL'); } catch (e2) { }
                 }
             }
-            
+
             proc.active = false;
             appendBgLog(shell_id, `\n[System]: Process terminated by user request (Tree Kill).\n`);
             return `Successfully sent tree kill signal to process ${pid} (${shell_id}).`;
@@ -2228,7 +2232,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
     // --- Agent Collaboration Handlers ---
     list_agents: async (args, context, signal) => {
         if (isChildWindow()) return await callParentShell('list_agents', args, signal);
-        
+
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
         const prompts = configData.config.prompts || {};
@@ -2237,9 +2241,9 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (args && args.agent_name) {
             const agent = prompts[args.agent_name];
             if (!agent) return `Error: Agent "${args.agent_name}" not found.`;
-            
+
             // --- 解析能力信息 (MCP & Skills) ---
-            
+
             // 1. 获取并映射 MCP 名称
             const mcpIds = agent.defaultMcpServers || [];
             const mcpNames = mcpIds.map(id => {
@@ -2262,7 +2266,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             detail += `- Bound MCP Tools: ${mcpDisplay}\n`;
             detail += `- Bound Skills: ${skillDisplay}\n`;
             detail += `\n[System Prompt]\n${agent.prompt || 'None'}`;
-            
+
             return detail;
         }
 
@@ -2273,13 +2277,13 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             .forEach(([key]) => {
                 agentStr += `- ${key}\n`;
             });
-            
+
         return `Available Agents (Standalone Window Mode & Enabled):\n${agentStr}`;
     },
 
     summon_agent: async (args, context, signal) => {
         if (isChildWindow()) return await callParentShell('summon_agent', args, signal);
-        
+
         const { agent_name, text, file_paths, enable_tools } = args;
         const { getConfig, openWindow } = require('./data.js');
         const configData = await getConfig();
@@ -2308,7 +2312,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
 
     list_agent_chats: async (args, context, signal) => {
         if (isChildWindow()) return await callParentShell('list_agent_chats', { _callerId: context?.senderId }, signal);
-        
+
         const { windowMap } = require('./data.js');
         let result = "Active Agent Windows:\n";
         const callerId = args ? args._callerId : (context ? context.senderId : null);
@@ -2320,10 +2324,10 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 deadIds.push(id);
                 continue;
             }
-            const title = win.getTitle(); 
+            const title = win.getTitle();
             // 标题依然是默认的 "Anywhere" 代表渲染未完成或已成死区
             if (title === "Anywhere") {
-                continue; 
+                continue;
             }
             const isMe = callerId === id ? "  <-- [This is YOU]" : "";
             result += `- Window ID: ${id} | Agent: ${title}${isMe}\n`;
@@ -2352,12 +2356,12 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
 
         const { windowMap } = require('./data.js');
         const win = windowMap.get(window_id);
-        
+
         if (!win || win.isDestroyed()) return `[System Notice]: Target Window (ID: ${window_id}) is already closed or does not exist.`;
 
         try {
             const chatLength = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.getChatLength() : 0');
-            
+
             let shouldWait = false;
             if (message_index !== undefined && message_index !== null) {
                 let actualIndex = parseInt(message_index);
@@ -2372,13 +2376,13 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 let waitCount = 0;
                 while (!win.isDestroyed() && waitCount < 1200) {
                     const isBusy = await win.webContents.executeJavaScript('window.__AGENT_API__ ? window.__AGENT_API__.isBusy() : false').catch(() => false);
-                    if (!isBusy) break; 
+                    if (!isBusy) break;
                     await new Promise(r => setTimeout(r, 100));
                     waitCount++;
                 }
 
                 if (win.isDestroyed()) return `[System Notice]: The target window was CLOSED by the user while waiting for the response. Operation aborted.`;
-                
+
                 if (waitCount >= 1200) {
                     timeoutMsg = `\n[System Warning]: The request timed out after 120s. The agent is still generating, so the following content may be incomplete.`;
                 }
@@ -2389,7 +2393,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
 
             if (message_index === undefined || message_index === null) {
                 return `${outlineSection}\n[System]: To read a specific message detail, use 'read_agent_chats' WITH the 'message_index'.`;
-            } 
+            }
 
             const content = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.getMessage(${message_index}) : "Error: API not ready."`);
 
@@ -2399,13 +2403,13 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
 
             const totalChars = content.length;
             const safeOffset = Math.max(0, offset);
-            const safeLength = Math.min(length, 128000); 
-            
+            const safeLength = Math.min(length, 128000);
+
             const chunk = content.substring(safeOffset, safeOffset + safeLength);
             const currentEndPos = safeOffset + chunk.length;
 
             let footer = "";
-            
+
             if (currentEndPos < totalChars) {
                 const remaining = totalChars - currentEndPos;
                 footer = `\n\n--- [SYSTEM: CONTENT TRUNCATED] ---\n(Showing chars ${safeOffset}-${currentEndPos} of ${totalChars})\nRemaining: ${remaining} chars.\n>>> ACTION REQUIRED: Call 'read_agent_chats' again with offset=${currentEndPos} to read the rest.`;
@@ -2440,9 +2444,9 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
 
         try {
             const res = await win.webContents.executeJavaScript(`window.__AGENT_API__ ? window.__AGENT_API__.sendMessage(${JSON.stringify(text)}, ${JSON.stringify(file_paths || [])}) : Promise.reject("API not ready")`);
-            return res; 
+            return res;
         } catch (e) {
-             return `Error sending message: ${e.message}`;
+            return `Error sending message: ${e.message}`;
         }
     },
 
@@ -2456,7 +2460,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         const { window_id } = args;
         const { windowMap } = require('./data.js');
         const win = windowMap.get(window_id);
-        
+
         if (!win || win.isDestroyed()) return `Error: Window ID ${window_id} not found or already closed.`;
 
         try {
@@ -2465,7 +2469,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         } catch (e) {
             // 如果 AI 关闭的是自己，窗口销毁会导致 IPC 断连报错，这里做无感捕获处理
             if (e.message.includes('Object has been destroyed')) {
-                 return `Successfully saved and closed agent window (ID: ${window_id}).`;
+                return `Successfully saved and closed agent window (ID: ${window_id}).`;
             }
             return `Error closing window: ${e.message}`;
         }
@@ -2475,7 +2479,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
         const mcpServers = configData.config.mcpServers || {};
-        
+
         let mcpStr = "Available MCP Servers (ID - Name: Description):\n";
         Object.entries(mcpServers).filter(([_, s]) => s.isActive).forEach(([id, s]) => {
             mcpStr += `- ID: [${id}] - Name: [${s.name}] - Desc: ${s.description || 'No description'}\n`;
@@ -2487,7 +2491,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         const { getConfig } = require('./data.js');
         const configData = await getConfig();
         const tasks = configData.config.tasks || {};
-        
+
         if (Object.keys(tasks).length === 0) return "No tasks found.";
 
         if (task_name_or_id) {
@@ -2498,7 +2502,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             }
 
             if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
-            
+
             const task = tasks[targetId];
             let details = `### Task Details\n`;
             details += `- ID: ${targetId}\n`;
@@ -2506,7 +2510,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             details += `- Enabled: ${task.enabled}\n`;
             details += `- Agent: ${task.promptKey}\n`;
             details += `- Schedule Type: ${task.triggerType}\n`;
-            
+
             if (task.triggerType === 'interval') {
                 details += `- Interval: Every ${task.intervalMinutes} mins\n`;
                 if (task.intervalStartTime) details += `- Daily Start Check: ${task.intervalStartTime}\n`;
@@ -2526,10 +2530,10 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             } else if (task.triggerType === 'single') {
                 details += `- Single Run: ${task.singleDate} at ${task.singleTime}\n`;
             }
-            
+
             if (task.extraMcp && task.extraMcp.length > 0) details += `- Extra MCPs: [${task.extraMcp.join(', ')}]\n`;
             if (task.extraSkills && task.extraSkills.length > 0) details += `- Extra Skills: [${task.extraSkills.join(', ')}]\n`;
-            
+
             details += `\n**Instruction:**\n${task.description}`;
             return details;
         }
@@ -2569,8 +2573,8 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 promptKey: targetPromptKey,
                 triggerType: schedule_type,
                 enabled: enabled,
-                intervalMinutes: 60, intervalStartTime: '00:00', intervalTimeRanges: [], 
-                dailyTime: '12:00', weeklyDays: [1,2,3,4,5], weeklyTime: '12:00', monthlyDays: [1], monthlyTime: '12:00',
+                intervalMinutes: 60, intervalStartTime: '00:00', intervalTimeRanges: [],
+                dailyTime: '12:00', weeklyDays: [1, 2, 3, 4, 5], weeklyTime: '12:00', monthlyDays: [1], monthlyTime: '12:00',
                 extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
                 lastRunTime: enabled ? Date.now() : 0,
                 singleDate: single_date || new Date().toISOString().split('T')[0],
@@ -2580,7 +2584,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             if (interval_time_ranges && Array.isArray(interval_time_ranges)) {
                 newTask.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
             }
-            
+
             // --- MCP / SKill 逻辑 ---
             if (extra_mcp && Array.isArray(extra_mcp)) {
                 newTask.extraMcp = extra_mcp;
@@ -2588,7 +2592,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 // 如果没传，默认挂载所有内置服务
                 newTask.extraMcp = Object.entries(configData.config.mcpServers).filter(([_, s]) => s.type === 'builtin').map(([id]) => id);
             }
-            
+
             if (extra_skills && Array.isArray(extra_skills)) {
                 newTask.extraSkills = extra_skills;
             }
@@ -2702,12 +2706,12 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
 
             if (time_param) {
                 if (currentType === 'daily' || currentType === 'weekly' || currentType === 'monthly' || currentType === 'single') {
-                    if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) { 
-                        if (currentType === 'daily') task.dailyTime = time_param; 
-                        if (currentType === 'weekly') task.weeklyTime = time_param; 
+                    if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time_param)) {
+                        if (currentType === 'daily') task.dailyTime = time_param;
+                        if (currentType === 'weekly') task.weeklyTime = time_param;
                         if (currentType === 'monthly') task.monthlyTime = time_param;
-                        if (currentType === 'single') task.singleTime = time_param; 
-                        timeChanged = true; 
+                        if (currentType === 'single') task.singleTime = time_param;
+                        timeChanged = true;
                     }
                     else return "Error: Invalid time format. Use HH:mm.";
                 } else if (currentType === 'interval') {
@@ -2815,14 +2819,14 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             if (timezone) {
                 options.timeZone = timezone;
             }
-            
+
             const now = new Date();
             const dateStr = new Intl.DateTimeFormat('zh-CN', options).format(now).replace(/\//g, '-');
-            const weekdayStr = new Intl.DateTimeFormat('en-US', { 
-                weekday: 'long', 
-                ...(timezone ? { timeZone: timezone } : {}) 
+            const weekdayStr = new Intl.DateTimeFormat('en-US', {
+                weekday: 'long',
+                ...(timezone ? { timeZone: timezone } : {})
             }).format(now);
-            
+
             const tzDisplay = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Local System Time";
 
             return `Current Time (${tzDisplay}):\nDate & Time: ${dateStr}\nDay of Week: ${weekdayStr}`;
@@ -2841,28 +2845,28 @@ function getBuiltinServers() {
 function getBuiltinTools(serverId) {
     // 必须深拷贝，避免修改原始常量导致叠加污染
     const tools = JSON.parse(JSON.stringify(BUILTIN_TOOLS[serverId] || []));
-    
+
     // [动态注入] Super-Agent 自动枚举所有可用 Agent，消除模型幻觉
     if (serverId === 'builtin_superagent') {
         try {
             // 同步读取数据库获取最新 Agent 列表 (utools.db.get 是同步的，非常适合这里)
             const promptsDoc = utools.db.get("prompts");
             const prompts = promptsDoc ? promptsDoc.data : {};
-            
+
             // 筛选 Standalone Window 模式 且 已启用 的 Agent (只有这种才能被召唤)
             const agentNames = Object.entries(prompts)
                 .filter(([_, p]) => p.showMode === 'window' && p.enable)
                 .map(([k]) => k)
                 .sort();
-                
+
             // 始终包含默认 Agent
             const allAgents = ['__DEFAULT__', ...agentNames];
-            
+
             // 限制展示数量，防止 Description 过长导致 Token 溢出 (虽然一般不会超)
-            const displayAgents = allAgents.slice(0, 100); 
+            const displayAgents = allAgents.slice(0, 100);
             const agentListStr = displayAgents.map(n => `"${n}"`).join(', ');
             const suffix = allAgents.length > 100 ? `...and ${allAgents.length - 100} more` : '';
-            
+
             const fullListStr = `${agentListStr}${suffix}`;
 
             // 1. 注入到 list_agents
@@ -2870,11 +2874,11 @@ function getBuiltinTools(serverId) {
             if (listTool) {
                 listTool.description += `\n\n[CURRENTLY AVAILABLE AGENTS]: ${fullListStr}`;
             }
-            
+
             // 2. 同时也注入到 summon_agent，让 AI 在决定召唤时手边就有确切的名单
             const summonTool = tools.find(t => t.name === 'summon_agent');
             if (summonTool) {
-                 summonTool.description += `\n\n[VALID TARGET NAMES]: ${fullListStr}`;
+                summonTool.description += `\n\n[VALID TARGET NAMES]: ${fullListStr}`;
             }
 
         } catch (e) {
@@ -2882,7 +2886,7 @@ function getBuiltinTools(serverId) {
             // console.error("Inject agent list failed:", e);
         }
     }
-    
+
     return tools;
 }
 
@@ -2902,7 +2906,7 @@ async function invokeBuiltinTool(toolName, args, signal = null, context = null) 
 function killAllBackgroundShells() {
     if (backgroundShells.size === 0) return;
     const { execSync } = require('child_process');
-    
+
     backgroundShells.forEach((proc, shell_id) => {
         if (proc.active && proc.pid) {
             try {
@@ -2910,8 +2914,8 @@ function killAllBackgroundShells() {
                     // 使用同步阻塞执行，确保在插件进程死亡前把子进程杀干净
                     execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'ignore' });
                 } else {
-                    try { process.kill(-proc.pid, 'SIGKILL'); } 
-                    catch (e) { try { process.kill(proc.pid, 'SIGKILL'); } catch(e2){} }
+                    try { process.kill(-proc.pid, 'SIGKILL'); }
+                    catch (e) { try { process.kill(proc.pid, 'SIGKILL'); } catch (e2) { } }
                 }
             } catch (e) {
                 // 忽略错误，强制执行
@@ -2944,10 +2948,10 @@ function handleBgShellRequest(action, payload) {
         'continue_agent_chats': handlers.continue_agent_chats,
         'close_agent_window': handlers.close_agent_window,
     };
-    
+
     const fn = fnMap[action];
     if (!fn) throw new Error("Unknown action: " + action);
-    
+
     if (action === 'start') {
         return fn({ command: payload.command, background: true }, null, null);
     }
