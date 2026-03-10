@@ -75,6 +75,48 @@ const getMessageComponentByIndex = (index) => {
   return messageRefs.get(msg.id);
 };
 
+const updateModelListAndMap = (config) => {
+  const newModelList = [];
+  const newModelMap = {};
+  
+  const folders = config.providerFolders || {};
+  const order = config.providerOrder || [];
+  
+  // 1. 文件夹按字母序排序
+  const sortedFolderIds = Object.keys(folders).sort((a, b) => 
+    (folders[a].name || '').localeCompare(folders[b].name || '')
+  );
+
+  const orderedProviderIds = [];
+  // 2. 优先提取文件夹内的服务商
+  sortedFolderIds.forEach(folderId => {
+    order.forEach(id => {
+      const p = config.providers[id];
+      if (p && p.folderId === folderId) orderedProviderIds.push(id);
+    });
+  });
+  // 3. 提取根目录的服务商
+  order.forEach(id => {
+    const p = config.providers[id];
+    if (p && (!p.folderId || !folders[p.folderId])) orderedProviderIds.push(id);
+  });
+
+  // 4. 组装最终的模型列表
+  orderedProviderIds.forEach(id => {
+    const provider = config.providers[id];
+    if (provider?.enable) {
+      provider.modelList.forEach(m => {
+        const key = `${id}|${m}`;
+        newModelList.push({ key, value: key, label: `${provider.name}|${m}` });
+        newModelMap[key] = `${provider.name}|${m}`;
+      });
+    }
+  });
+
+  modelList.value = newModelList;
+  modelMap.value = newModelMap;
+};
+
 const urlParams = new URLSearchParams(window.location.search);
 const isDarkInit = urlParams.get('dark') === '1';
 if (isDarkInit) {
@@ -778,20 +820,7 @@ const handleOpenModelDialog = async () => {
       currentConfig.value.providers = result.config.providers;
       currentConfig.value.providerOrder = result.config.providerOrder;
 
-      const newModelList = [];
-      const newModelMap = {};
-      currentConfig.value.providerOrder.forEach(id => {
-        const provider = currentConfig.value.providers[id];
-        if (provider?.enable) {
-          provider.modelList.forEach(m => {
-            const key = `${id}|${m}`;
-            newModelList.push({ key, value: key, label: `${provider.name}|${m}` });
-            newModelMap[key] = `${provider.name}|${m}`;
-          });
-        }
-      });
-      modelList.value = newModelList;
-      modelMap.value = newModelMap;
+      updateModelListAndMap(currentConfig.value);
 
       if (currentProviderID.value && currentConfig.value.providers[currentProviderID.value]) {
         const activeProvider = currentConfig.value.providers[currentProviderID.value];
@@ -1369,17 +1398,7 @@ onMounted(async () => {
       currentOS.value = data.os;
     }
 
-    modelList.value = []; modelMap.value = {};
-    currentConfig.value.providerOrder.forEach(id => {
-      const provider = currentConfig.value.providers[id];
-      if (provider?.enable) {
-        provider.modelList.forEach(m => {
-          const key = `${id}|${m}`;
-          modelList.value.push({ key, value: key, label: `${provider.name}|${m}` });
-          modelMap.value[key] = `${provider.name}|${m}`;
-        });
-      }
-    });
+    updateModelListAndMap(currentConfig.value);
 
     const code = data?.code || "AI";
     const currentPromptConfig = currentConfig.value.prompts[code] || defaultConfig.config.prompts.AI;
@@ -1666,20 +1685,7 @@ onMounted(async () => {
         }
 
         // 1. 配置更新后同步重构服务商和模型列表
-        const newModelList = [];
-        const newModelMap = {};
-        newConfig.providerOrder.forEach(id => {
-          const provider = newConfig.providers[id];
-          if (provider?.enable) {
-            provider.modelList.forEach(m => {
-              const key = `${id}|${m}`;
-              newModelList.push({ key, value: key, label: `${provider.name}|${m}` });
-              newModelMap[key] = `${provider.name}|${m}`;
-            });
-          }
-        });
-        modelList.value = newModelList;
-        modelMap.value = newModelMap;
+        updateModelListAndMap(newConfig);
 
         // 2. 校验并清理已删除或被禁用的 MCP 服务
         if (newConfig.mcpServers) {

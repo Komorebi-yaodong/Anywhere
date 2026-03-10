@@ -314,8 +314,30 @@ const replaceModelForm = reactive({
 const availableModels = computed(() => {
   const models = [];
   if (!currentConfig.value || !currentConfig.value.providers) return models;
-  const providerOrder = currentConfig.value.providerOrder || [];
-  providerOrder.forEach(providerId => {
+  
+  const folders = currentConfig.value.providerFolders || {};
+  const order = currentConfig.value.providerOrder || [];
+  
+  // 1. 文件夹按字母序排序
+  const sortedFolderIds = Object.keys(folders).sort((a, b) => 
+    (folders[a].name || '').localeCompare(folders[b].name || '')
+  );
+
+  const orderedProviderIds = [];
+  // 2. 提取文件夹内的服务商
+  sortedFolderIds.forEach(folderId => {
+    order.forEach(id => {
+      const p = currentConfig.value.providers[id];
+      if (p && p.folderId === folderId) orderedProviderIds.push(id);
+    });
+  });
+  // 3. 提取根目录的服务商
+  order.forEach(id => {
+    const p = currentConfig.value.providers[id];
+    if (p && (!p.folderId || !folders[p.folderId])) orderedProviderIds.push(id);
+  });
+
+  orderedProviderIds.forEach(providerId => {
     const provider = currentConfig.value.providers[providerId];
     if (provider && provider.enable && provider.modelList && provider.modelList.length > 0) {
       provider.modelList.forEach(modelName => {
