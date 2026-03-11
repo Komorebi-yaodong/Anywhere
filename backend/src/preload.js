@@ -205,6 +205,10 @@ window.api = {
   shellShowItemInFolder: (fullPath) => {
     utools.shellShowItemInFolder(fullPath);
   },
+  // 浏览器打开链接
+  shellOpenExternal: (url) => {
+    utools.shellOpenExternal(url);
+  },
   // 生成 Skill Tool 定义 (供前端构建请求参数时使用)
   getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
     try {

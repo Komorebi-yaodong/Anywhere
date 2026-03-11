@@ -306,8 +306,8 @@ const handleDocLinks = (event) => {
 
   // 1. 处理 HTTP/HTTPS 外部链接 -> 调用系统浏览器打开
   if (href.startsWith('http://') || href.startsWith('https://')) {
-    if (window.utools && window.utools.shellOpenExternal) {
-      window.utools.shellOpenExternal(href);
+    if (window.api && window.api.shellOpenExternal) {
+      window.api.shellOpenExternal(href);
     } else {
       window.open(href, '_blank'); // 兜底方案
     }
