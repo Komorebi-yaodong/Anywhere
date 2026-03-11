@@ -1,11 +1,12 @@
 <script setup>
-import { ref, onMounted, computed, watch, onUnmounted, nextTick, onActivated, onDeactivated } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted, nextTick, onActivated, onDeactivated, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
 import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n();
+const currentConfig = inject('config');
 
 // --- Component State ---
 const activeView = ref('local');
@@ -22,6 +23,26 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const singleFileSyncing = ref({});
 const isDeletingFiles = ref(false);
+
+watch(() => currentConfig.value?.webdav, (newWebdav) => {
+    if (newWebdav) {
+        const oldLocalPath = localChatPath.value;
+        localChatPath.value = newWebdav.localChatPath || '';
+        webdavConfig.value = newWebdav;
+        isWebdavConfigValid.value = !!(webdavConfig.value.url && webdavConfig.value.data_path);
+        
+        // 如果本地路径发生变化，且当前在"本地对话"视图，则重新获取列表
+        if (oldLocalPath !== localChatPath.value) {
+            if (activeView.value === 'local') {
+                if (localChatPath.value) {
+                    fetchLocalFiles(true);
+                } else {
+                    localChatFiles.value = [];
+                }
+            }
+        }
+    }
+}, { deep: true });
 
 // --- Sync Progress State ---
 const isSyncing = ref(false);
@@ -111,6 +132,7 @@ onActivated(() => {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('mouseup', onGlobalMouseUp);
     window.addEventListener('mousemove', onGlobalMouseMove);
+    refreshData(true);
 });
 
 onDeactivated(() => {
