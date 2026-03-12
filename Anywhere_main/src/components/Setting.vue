@@ -180,6 +180,13 @@ async function exportConfig() {
       delete configToExport.skillPath;
     }
 
+    if (window.api && window.api.exportMemoryData) {
+      const memories = await window.api.exportMemoryData();
+      if (memories && memories.length > 0) {
+        configToExport.memories = memories;
+      }
+    }
+
     const jsonString = JSON.stringify(configToExport, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -222,6 +229,11 @@ function importConfig() {
 
           if (currentSkillPath) {
             importedData.skillPath = currentSkillPath;
+          }
+
+          if (importedData.memories && window.api && window.api.importMemoryData) {
+            await window.api.importMemoryData(importedData.memories);
+            delete importedData.memories;
           }
 
           if (window.api && window.api.updateConfig) {
@@ -389,6 +401,13 @@ async function backupToWebdav() {
               delete configToBackup.skillPath;
             }
 
+            if (window.api && window.api.exportMemoryData) {
+              const memories = await window.api.exportMemoryData();
+              if (memories && memories.length > 0) {
+                configToBackup.memories = memories;
+              }
+            }
+
             const jsonString = JSON.stringify(configToBackup, null, 2);
             await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
 
@@ -502,6 +521,11 @@ async function restoreFromWebdav(file) {
 
     if (currentSkillPath) {
       importedData.skillPath = currentSkillPath;
+    }
+
+    if (importedData.memories && window.api && window.api.importMemoryData) {
+      await window.api.importMemoryData(importedData.memories);
+      delete importedData.memories;
     }
 
     if (window.api && window.api.updateConfig) {
@@ -684,14 +708,6 @@ async function selectLocalChatPath() {
                       </div>
                       <el-switch v-model="currentConfig.CtrlEnterToSend"
                         @change="(value) => saveSingleSetting('CtrlEnterToSend', value)" />
-                    </div>
-                    <div class="setting-option-item">
-                      <div class="setting-text-content">
-                        <span class="setting-option-label">{{ t('setting.notification.label') }}</span>
-                        <span class="setting-option-description">{{ t('setting.notification.description') }}</span>
-                      </div>
-                      <el-switch v-model="currentConfig.showNotification"
-                        @change="(value) => saveSingleSetting('showNotification', value)" />
                     </div>
                     <div class="setting-option-item no-border">
                       <div class="setting-text-content">

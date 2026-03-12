@@ -18,6 +18,8 @@ const {
   saveMcpToolCache,
   getMcpToolCache,
   broadcastEvent,
+  exportMemoryData,
+  importMemoryData,
 } = require('./data.js');
 
 const {
@@ -297,6 +299,8 @@ window.api = {
     await openWindow(windowConfig, msg);
     return true;
   },
+  exportMemoryData,
+  importMemoryData,
 };
 
 const commandHandlers = {
@@ -321,7 +325,6 @@ const commandHandlers = {
       const features = utools.getFeatures().filter(f => f.code.startsWith('append_to_') && windowMap.has(f.code.replace('append_to_', '')));
 
       if (features.length === 0) {
-        utools.showNotification("当前没有打开的独立对话窗口");
         utools.outPlugin();
         return;
       }
@@ -357,7 +360,6 @@ const commandHandlers = {
     const win = windowMap.get(senderId);
 
     if (!win || win.isDestroyed()) {
-      utools.showNotification("目标窗口已关闭或不存在");
       utools.removeFeature(code);
       utools.outPlugin();
       return;
@@ -484,7 +486,6 @@ const commandHandlers = {
 
     const promptConfig = config.prompts[code];
     if (!promptConfig) {
-      utools.showNotification(`Error: Prompt "${code}" not found.`);
       utools.outPlugin();
       return;
     }
@@ -516,8 +517,6 @@ const commandHandlers = {
         content = [{ type: "image_url", image_url: { url: payload } }];
       } else if (type === "files") {
         content = await sendfileDirect(payload);
-      } else {
-        utools.showNotification("Unsupported input type");
       }
 
       if (content) {

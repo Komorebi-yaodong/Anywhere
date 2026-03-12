@@ -640,10 +640,6 @@
       "label": "Ctrl+Enter to Send",
       "description": "Enable to send messages by pressing Ctrl+Enter."
     },
-    "notification": {
-      "label": "Show Success Notification",
-      "description": "Enable to show a notification on successful response."
-    },
     "darkMode": {
       "label": "Theme",
       "description": "Light mode or dark mode",

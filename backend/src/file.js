@@ -201,7 +201,6 @@ async function sendfileDirect(filePathList) {
             // 1. 路径 -> File 对象
             const fileObject = await handleFilePath(filePath);
             if (!fileObject) {
-                utools.showNotification('无法读取或访问文件:', filePath);
                 return null;
             }
             // 2. File 对象 -> Base64 Data URL
@@ -218,7 +217,6 @@ async function sendfileDirect(filePathList) {
             console.error(`处理文件出错: ${item.path}`, error);
             // 仅在非不支持类型错误时弹窗，避免骚扰
             if (!error.message.includes('不支持的文件类型')) {
-                utools.showNotification('处理文件出错:', item.path);
             }
             return null;
         }

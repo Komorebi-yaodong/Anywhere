@@ -643,10 +643,6 @@
       "label": "Ctrl+Enter 发送",
       "description": "启用以通过按 Ctrl+Enter 发送消息"
     },
-    "notification": {
-      "label": "显示成功通知",
-      "description": "启用以在响应成功时显示通知"
-    },
     "darkMode": {
       "label": "主题",
       "description": "浅色模式或深色模式",

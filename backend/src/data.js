@@ -69,7 +69,6 @@ const defaultConfig = {
     tags: {},
     skipLineBreak: false,
     CtrlEnterToSend: false,
-    showNotification: true,
     isDarkMode: false,
     fix_position: false,
     isAlwaysOnTop_global: true,
@@ -353,7 +352,6 @@ function checkConfig(config) {
     autoCloseOnBlur_global: true,
     autoSaveChat_global: false,
     CtrlEnterToSend: false,
-    showNotification: false,
     fix_position: false,
     zoom: 1,
     language: "zh",
@@ -375,6 +373,8 @@ function checkConfig(config) {
   for (const [key, val] of Object.entries(rootDefaults)) {
     if (config[key] === undefined) { config[key] = val; flag = true; }
   }
+
+  if (config['showNotification'] !== undefined) { delete config['showNotification']; flag = true; }
 
   if (!config.defaultTaskModel && config.providers) {
       const firstProvId = config.providerOrder?.[0];
@@ -1694,6 +1694,34 @@ async function addTaskHistory(taskId, logEntry) {
   }
 }
 
+// --- 处理记忆(Memory MCP)的导出与导入 ---
+async function exportMemoryData() {
+  try {
+    const docs = await utools.db.promises.allDocs('anywhere_mem_');
+    return docs || [];
+  } catch (e) {
+    console.error("Export memory error:", e);
+    return [];
+  }
+}
+
+async function importMemoryData(memories) {
+  if (!Array.isArray(memories) || memories.length === 0) return;
+  for (const mem of memories) {
+    try {
+      let doc = await utools.db.promises.get(mem._id);
+      if (doc) {
+        mem._rev = doc._rev; // 保留已存在的 rev 进行覆盖
+      } else {
+        delete mem._rev;     // 新建时移除 rev
+      }
+      await utools.db.promises.put(mem);
+    } catch (e) {
+      console.error(`Import memory error for ${mem._id}:`, e);
+    }
+  }
+}
+
 module.exports = {
   getConfig,
   checkConfig,
@@ -1718,4 +1746,6 @@ module.exports = {
   cacheBackgroundImage,
   broadcastEvent,
   addTaskHistory,
+  exportMemoryData,
+  importMemoryData,
 };
