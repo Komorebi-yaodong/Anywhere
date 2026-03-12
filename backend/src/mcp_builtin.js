@@ -791,7 +791,7 @@ IMPORTANT:
             description: "Retrieve the complete content of a memory document with all Markdown formatting preserved. Please naturally integrate memories to better maintain memory continuity across sessions.",
             inputSchema: {
                 type: "object",
-                properties: { memory_id: { type: "string", description: "The ID of the memory document to retrieve." } },
+                properties: { memory_id: { type: "string", description: "The ID(not the name of memory, use list_memories to get memory_id) of the memory document to retrieve." } },
                 required: ["memory_id"]
             }
         },
