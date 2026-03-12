@@ -761,13 +761,12 @@ function updateConfig(newConfig) {
       if (prompt.type === "general") {
         expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
         expectedMatchFeature.cmds.push({ type: "img", label: key });
-        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|gif|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue|tex|latex|bib|sty|yaml|yml|ini|bat|log|toml)$/i" });
+        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file" });
       } else if (prompt.type === "files") {
-        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|gif|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue|tex|latex|bib|sty|yaml|yml|ini|bat|log|toml)$/i" });
+        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file" });
       } else if (prompt.type === "img") {
         expectedMatchFeature.cmds.push({ type: "img", label: key });
       } else if (prompt.type === "over") {
-        // 根据 matchRegex 决定生成 regex 还是 over 类型的 cmd
         if (prompt.matchRegex && prompt.matchRegex.trim() !== '') {
           expectedMatchFeature.cmds.push({
             type: "regex",
@@ -1084,7 +1083,7 @@ async function openWindow(config, msg) {
         cmds: [
           { type: "over", label: displayName, maxLength: 99999999999 },
           { type: "img", label: displayName },
-          { type: "files", label: displayName, fileType: "file", match: "/\\.(png|jpeg|jpg|webp|gif|docx|xlsx|xls|csv|pdf|mp3|wav|txt|md|markdown|json|xml|html|htm|css|yml|py|js|ts|java|c|cpp|h|hpp|cs|go|php|rb|rs|sh|sql|vue|tex|latex|bib|sty|yaml|yml|ini|bat|log|toml)$/i" }
+          { type: "files", label: displayName, fileType: "file" }
         ]
       });
     } catch (e) {

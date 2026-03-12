@@ -72,18 +72,53 @@ const fileHandlers = {
 const isFileTypeSupported = (fileName) => {
     if (!fileName) return false;
     const extension = ('.' + fileName.split('.').pop()).toLowerCase();
+    
+    // 1. 如果在白名单内，直接支持
     for (const category in fileHandlers) {
         if (fileHandlers[category].extensions.includes(extension)) {
             return true;
         }
     }
-    return false;
+    
+    // 2. 拦截明确不支持且无法作为文本处理的常见二进制黑名单
+    const unsupportedBinary = ['.doc', '.pptx', '.ppt', '.odt', '.ods', '.epub', '.mobi', '.bmp', '.ico', '.mp4', '.mov', '.avi', '.mkv', '.zip', '.rar', '.7z', '.tar', '.gz', '.exe', '.dll', '.bin', '.so', '.dmg', '.class', '.jar', '.pyc'];
+    if (unsupportedBinary.includes(extension)) {
+        return false;
+    }
+    
+    // 3. 其他未知后缀统统放行，在 parseFileObject 时通过内容探针检查是否为文本
+    return true;
 };
 
 const parseFileObject = async (fileObj) => {
-    const handler = getFileHandler(fileObj.name);
+    let handler = getFileHandler(fileObj.name);
+    
     if (!handler) {
-        throw new Error(`不支持的文件类型: ${fileObj.name}`);
+        // 尝试通过内容嗅探判断是否为纯文本
+        try {
+            const base64Data = fileObj.url.split(',')[1];
+            if (base64Data) {
+                // 取 Base64 的前一部分进行解码嗅探（8192 字符解码后约 6KB）
+                const buffer = Buffer.from(base64Data.substring(0, 8192), 'base64');
+                let isBinary = false;
+                for (let i = 0; i < buffer.length; i++) {
+                    if (buffer[i] === 0) { // 发现空字符 \0，大概率为二进制文件
+                        isBinary = true;
+                        break;
+                    }
+                }
+                // 没有发现空字符，将其作为普通文本处理
+                if (!isBinary) {
+                    handler = fileHandlers.text.handler;
+                }
+            }
+        } catch (e) {
+            console.warn(`文件内容探针检查失败: ${fileObj.name}`, e);
+        }
+    }
+
+    if (!handler) {
+        throw new Error(`不支持的文件类型且疑似为二进制文件: ${fileObj.name}`);
     }
     return await handler(fileObj);
 };
