@@ -303,7 +303,7 @@ const commandHandlers = {
 
   'append_global': async (action) => {
     const { type, payload } = action;
-    // 1. 立即隐藏主窗口，不被后面的逻辑阻塞
+    // 1. 避免弹出主窗口，立即隐藏主窗口，不被后面的逻辑阻塞
     utools.hideMainWindow();
 
     // 2. 将高开销的底层 API 调用和窗口创建推入下一个事件循环，让系统的隐藏动画先行
@@ -348,6 +348,7 @@ const commandHandlers = {
   },
 
   'append_to_window': async (action) => {
+    // 避免弹出主窗口
     utools.hideMainWindow();
     const { type, payload, code } = action;
     
@@ -378,6 +379,7 @@ const commandHandlers = {
   },
 
   'Resume Conversation': async ({ type, payload }) => {
+    // 避免弹出主窗口
     utools.hideMainWindow();
     // 使用 await
     const configResult = await getConfig();
@@ -440,6 +442,7 @@ const commandHandlers = {
 
   // 直接打开快捷助手
   handleAssistant: async ({ code, type, payload }) => {
+    // 避免弹出主窗口
     utools.hideMainWindow();
     // 使用 await
     const configResult = await getConfig();
@@ -472,6 +475,7 @@ const commandHandlers = {
 
   // 匹配调用
   handlePrompt: async ({ code, type, payload }) => {
+    // 避免弹出主窗口
     utools.hideMainWindow();
     // 使用 await
     const configResult = await getConfig();

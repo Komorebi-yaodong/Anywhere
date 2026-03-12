@@ -2213,7 +2213,6 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
     web_search: async ({ query, count = 5, language = 'zh-CN' }, context, signal) => {
         try {
             const limit = Math.min(Math.max(parseInt(count) || 5, 1), 10);
-            const url = "https://html.duckduckgo.com/html/";
 
             let ddgRegion = 'cn-zh';
             let acceptLang = 'zh-CN,zh;q=0.9,en;q=0.8';
@@ -2242,51 +2241,61 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 "Referer": "https://html.duckduckgo.com/"
             };
 
-            const body = new URLSearchParams();
-            body.append('q', query);
-            body.append('b', '');
-            body.append('kl', ddgRegion);
-
-            // 传递 signal
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: headers,
-                body: body,
-                signal: signal
-            });
-
-            if (!response.ok) throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
-            const html = await response.text();
-
-            const results = [];
-            const titleLinkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
-            const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-            const titles = [...html.matchAll(titleLinkRegex)];
-            const snippets = [...html.matchAll(snippetRegex)];
             const decodeHtml = (str) => {
                 if (!str) return "";
                 return str
                     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
                     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ")
-                    .replace(/<b>/g, "").replace(/<\/b>/g, "").replace(/\s+/g, " ").trim();
+                    .replace(/<b>/g, "").replace(/<\/b>/g, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
             };
-            for (let i = 0; i < titles.length && i < limit; i++) {
-                let link = titles[i][1];
-                const titleRaw = titles[i][2];
-                const snippetRaw = snippets[i] ? snippets[i][1] : "";
-                try {
-                    if (link.includes('uddg=')) {
-                        const urlObj = new URL(link, "https://html.duckduckgo.com");
-                        const uddg = urlObj.searchParams.get("uddg");
-                        if (uddg) link = decodeURIComponent(uddg);
-                    }
-                } catch (e) { }
-                results.push({
-                    title: decodeHtml(titleRaw),
-                    link: link,
-                    snippet: decodeHtml(snippetRaw)
+
+            let results = [];
+
+            try {
+                const body = new URLSearchParams();
+                body.append('q', query);
+                body.append('b', '');
+                body.append('kl', ddgRegion);
+
+                const response = await fetch("https://html.duckduckgo.com/html/", {
+                    method: 'POST',
+                    headers: headers,
+                    body: body,
+                    signal: signal
                 });
+
+                const html = await response.text();
+
+                // 放宽类名匹配，并同时兼容 <a> 和 <div> 标签结尾
+                const titleLinkRegex = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+                const snippetRegex = /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div)>/g;
+                
+                const titles = [...html.matchAll(titleLinkRegex)];
+                const snippets = [...html.matchAll(snippetRegex)];
+                
+                for (let i = 0; i < titles.length && i < limit; i++) {
+                    let link = titles[i][1];
+                    const titleRaw = titles[i][2];
+                    const snippetRaw = snippets[i] ? snippets[i][1] : "";
+                    
+                    try {
+                        if (link.includes('uddg=')) {
+                            const urlObj = new URL(link, "https://html.duckduckgo.com");
+                            const uddg = urlObj.searchParams.get("uddg");
+                            if (uddg) link = decodeURIComponent(uddg);
+                        }
+                    } catch (e) { }
+                    
+                    results.push({
+                        title: decodeHtml(titleRaw),
+                        link: link,
+                        snippet: decodeHtml(snippetRaw)
+                    });
+                }
+            } catch (e) {
+                console.warn("DDG fetch error:", e);
             }
+
             if (results.length === 0) {
                 if (ddgRegion === 'cn-zh') return JSON.stringify({ message: "No results found in Chinese region. Try setting language='en' or 'all'.", query: query });
                 return JSON.stringify({ message: "No results found.", query: query });
