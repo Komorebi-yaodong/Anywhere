@@ -497,6 +497,13 @@ const fetchSkillsList = async () => {
   }
 };
 
+const getActiveBuiltinIds = () => {
+  if (!currentConfig.value.mcpServers) return [];
+  return Object.entries(currentConfig.value.mcpServers)
+    .filter(([, server]) => server.type === 'builtin' && server.isActive !== false)
+    .map(([id]) => id);
+};
+
 const handleQuickSkillToggle = async (skillName) => {
   const index = sessionSkillIds.value.indexOf(skillName);
   if (index === -1) {
@@ -507,10 +514,8 @@ const handleQuickSkillToggle = async (skillName) => {
     }
 
     // 检查是否需要自动启用内置 MCP
-    if (currentConfig.value.mcpServers) {
-      const builtinIds = Object.entries(currentConfig.value.mcpServers)
-        .filter(([, server]) => server.type === 'builtin')
-        .map(([id]) => id);
+    {
+      const builtinIds = getActiveBuiltinIds();
 
       let changed = false;
       builtinIds.forEach(id => {
@@ -569,10 +574,8 @@ const handleSkillSelectionConfirm = async () => {
   sessionSkillIds.value = [...tempSessionSkillIds.value];
   isSkillDialogVisible.value = false;
 
-  if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
-    const builtinIds = Object.entries(currentConfig.value.mcpServers)
-      .filter(([, server]) => server.type === 'builtin')
-      .map(([id]) => id);
+  if (sessionSkillIds.value.length > 0) {
+    const builtinIds = getActiveBuiltinIds();
 
     let changed = false;
     builtinIds.forEach(id => {
@@ -1505,10 +1508,8 @@ onMounted(async () => {
           if (file_paths && Array.isArray(file_paths) && file_paths.length > 0) {
             for (const p of file_paths) await processFilePath(p);
           }
-          if (enable_tools && currentConfig.value.mcpServers) {
-            const builtinIds = Object.entries(currentConfig.value.mcpServers)
-              .filter(([, server]) => server.type === 'builtin')
-              .map(([id]) => id);
+          if (enable_tools) {
+            const builtinIds = getActiveBuiltinIds();
             builtinIds.forEach(id => {
               if (!sessionMcpServerIds.value.includes(id)) {
                 sessionMcpServerIds.value.push(id);
@@ -1579,10 +1580,8 @@ onMounted(async () => {
 
       let mcpServersToLoad = [...new Set([...defaultMcpServers, ...sessionMcpServerIds.value])];
 
-      if (sessionSkillIds.value.length > 0 && currentConfig.value.mcpServers) {
-        const builtinIds = Object.entries(currentConfig.value.mcpServers)
-          .filter(([, server]) => server.type === 'builtin')
-          .map(([id]) => id);
+      if (sessionSkillIds.value.length > 0) {
+        const builtinIds = getActiveBuiltinIds();
         mcpServersToLoad = [...new Set([...mcpServersToLoad, ...builtinIds])];
       }
 
