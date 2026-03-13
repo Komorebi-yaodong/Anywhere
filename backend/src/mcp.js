@@ -17,6 +17,40 @@ function normalizeTransportType(transport) {
 }
 
 /**
+ * 预处理 stdio 类型的配置：
+ * 1. 如果 command 中包含空格且没有 args，自动拆分（兼容通用 MCP 配置格式）
+ * 2. 确保 env 中包含完整的 PATH，避免在 Electron 环境下找不到可执行文件
+ */
+function preprocessStdioConfig(config) {
+  const result = { ...config };
+  const transport = normalizeTransportType(result.transport || result.type || '');
+
+  if (transport === 'stdio') {
+    // 兼容 command 中包含参数的写法，如 "npx -y mcp-remote https://..."
+    if (result.command && result.command.includes(' ') && (!result.args || result.args.length === 0)) {
+      const parts = result.command.split(/\s+/);
+      result.command = parts[0];
+      result.args = parts.slice(1);
+    }
+
+    // 确保 env 中包含完整的 PATH
+    // 当 env 为空对象时，@langchain/mcp-adapters 会用 { PATH: process.env.PATH } 替换整个环境
+    // 在 Electron/uTools 中 process.env.PATH 可能不完整，导致找不到可执行文件
+    if (result.env && typeof result.env === 'object') {
+      if (Object.keys(result.env).length === 0) {
+        // 空 env 对象：不传 env，让子进程继承父进程完整环境
+        delete result.env;
+      } else {
+        // 非空 env：合并父进程的完整环境变量，确保 PATH 等关键变量可用
+        result.env = { ...process.env, ...result.env };
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * 独立连接并获取工具列表的函数
  * 用于测试连接，以及无缓存时的临时连接获取
  * 包含 10s 超时和强制关闭逻辑
@@ -35,7 +69,7 @@ async function connectAndFetchTools(id, config) {
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
   try {
-    const modifiedConfig = { ...config, transport: normalizeTransportType(config.transport) };
+    const modifiedConfig = preprocessStdioConfig({ ...config, transport: normalizeTransportType(config.transport) });
 
     // 创建客户端
     tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
@@ -239,7 +273,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
         continue;
       }
       try {
-        const modifiedConfig = { ...config, transport: normalizeTransportType(config.transport) };
+        const modifiedConfig = preprocessStdioConfig({ ...config, transport: normalizeTransportType(config.transport) });
         const client = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } });
         const tools = await client.getTools();
 
@@ -344,7 +378,7 @@ async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
     }
 
     try {
-      const modifiedConfig = { ...serverConfig };
+      const modifiedConfig = preprocessStdioConfig({ ...serverConfig });
       modifiedConfig.transport = normalizeTransportType(modifiedConfig.transport);
 
       tempClient = new MultiServerMCPClient({ [serverConfig.id]: { id: serverConfig.id, ...modifiedConfig } }, { signal: controller.signal });
@@ -378,7 +412,7 @@ async function connectAndInvokeTool(id, config, toolName, toolArgs, context = nu
   const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
-    const modifiedConfig = { ...config, transport: normalizeTransportType(config.transport) };
+    const modifiedConfig = preprocessStdioConfig({ ...config, transport: normalizeTransportType(config.transport) });
     tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
     const tools = await tempClient.getTools();
     const targetTool = tools.find(t => t.name === toolName || t.name === `${id}_${toolName}`);
