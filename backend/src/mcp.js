@@ -26,22 +26,20 @@ function preprocessStdioConfig(config) {
   const transport = normalizeTransportType(result.transport || result.type || '');
 
   if (transport === 'stdio') {
-    // 兼容 command 中包含参数的写法，如 "npx -y mcp-remote https://..."
+    // 兼容 command 中包含参数的写法，如 "npx -y mcp-remote" 使用正则拆分，保护引号内的空格不被截断 (兼容 Windows 的 C:\Program Files\...)
     if (result.command && result.command.includes(' ') && (!result.args || result.args.length === 0)) {
-      const parts = result.command.split(/\s+/);
-      result.command = parts[0];
-      result.args = parts.slice(1);
+      const parts = result.command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g);
+      if (parts && parts.length > 0) {
+        result.command = parts[0].replace(/^["']|["']$/g, '');
+        result.args = parts.slice(1).map(arg => arg.replace(/^["']|["']$/g, ''));
+      }
     }
 
-    // 确保 env 中包含完整的 PATH
-    // 当 env 为空对象时，@langchain/mcp-adapters 会用 { PATH: process.env.PATH } 替换整个环境
-    // 在 Electron/uTools 中 process.env.PATH 可能不完整，导致找不到可执行文件
+    // 确保 env 中包含完整的 PATH，避免在 Electron 环境下找不到可执行文件
     if (result.env && typeof result.env === 'object') {
       if (Object.keys(result.env).length === 0) {
-        // 空 env 对象：不传 env，让子进程继承父进程完整环境
         delete result.env;
       } else {
-        // 非空 env：合并父进程的完整环境变量，确保 PATH 等关键变量可用
         result.env = { ...process.env, ...result.env };
       }
     }
@@ -206,7 +204,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
               isPersistent: false,
               serverConfig: { id, ...config },
               isBuiltin: isBuiltin,
-              enabled: getToolEnabledState(id, tool.name) // [新增] 应用状态
+              enabled: getToolEnabledState(id, tool.name) // 应用状态
             });
           });
           currentlyConnectedServerIds.add(id);
@@ -236,7 +234,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
         try {
           const tools = require('./mcp_builtin.js').getBuiltinTools(id);
 
-          // [新增] 强制更新内置服务的缓存
+          // 强制更新内置服务的缓存
           if (saveCacheCallback && typeof saveCacheCallback === 'function') {
             const oldToolsCache = cachedToolsMap[id] || [];
             const sanitizedTools = tools.map(tool => {
@@ -300,7 +298,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
             isPersistent: true,
             serverConfig: { id, ...config },
             isBuiltin: false,
-            enabled: getToolEnabledState(id, tool.name) // [新增] 应用状态
+            enabled: getToolEnabledState(id, tool.name) // 应用状态
           });
         });
         persistentClients.set(id, client);
