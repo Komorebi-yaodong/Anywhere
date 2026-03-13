@@ -172,7 +172,7 @@ function handleAddTask() {
     const taskId = `task_${Date.now()}`;
 
     const builtinIds = Object.entries(currentConfig.value.mcpServers || {})
-        .filter(([, server]) => server.type === 'builtin')
+        .filter(([, server]) => server.type === 'builtin' && server.isActive !== false)
         .map(([id]) => id);
 
     atomicSave(config => {

@@ -11,16 +11,43 @@ const { getBuiltinServers, getBuiltinTools } = require('./mcp_builtin.js');
 function getAllBuiltinToolNames() {
     const servers = getBuiltinServers();
     let allToolNames = [];
+
+    // 1. 获取当前 MCP 服务配置 (判断服务是否被禁用)
+    const mcpServersDoc = utools.db.get("mcpServers");
+    const configDoc = utools.db.get("config");
+    const mcpServersConfig = mcpServersDoc ? mcpServersDoc.data : (configDoc?.data?.config?.mcpServers || {});
+
+    // 2. 获取工具缓存 (判断具体工具是否被单独禁用)
+    const cacheDoc = utools.db.get("mcp_tools_cache");
+    const mcpToolCache = cacheDoc ? cacheDoc.data : {};
+
     // 遍历所有内置服务 ID
     for (const serverId in servers) {
-        // 获取该服务下的所有工具
+        // 校验 1：如果该服务在用户设置中被明确禁用，直接跳过
+        const serverState = mcpServersConfig[serverId];
+        if (serverState && serverState.isActive === false) {
+            continue;
+        }
+
+        // 获取该服务下的静态工具定义
         const tools = getBuiltinTools(serverId);
         if (tools && Array.isArray(tools)) {
-            allToolNames.push(...tools.map(t => t.name));
+            const cachedTools = mcpToolCache[serverId] || [];
+
+            tools.forEach(t => {
+                // 校验 2：如果该具体工具在面板中被用户单独关闭，则跳过
+                const cachedTool = cachedTools.find(ct => ct.name === t.name);
+                const isToolEnabled = cachedTool ? (cachedTool.enabled !== false) : true;
+
+                // 过滤掉 'sub_agent' 自身，防止子智能体无限递归调用子智能体
+                if (isToolEnabled && t.name !== 'sub_agent') {
+                    allToolNames.push(t.name);
+                }
+            });
         }
     }
-    // 过滤掉 'sub_agent' 自身，防止子智能体无限递归调用子智能体（除非显式指定）
-    return allToolNames.filter(name => name !== 'sub_agent');
+    
+    return allToolNames;
 }
 
 // 解析 Frontmatter (简单的 YAML 解析，不需要额外依赖)
