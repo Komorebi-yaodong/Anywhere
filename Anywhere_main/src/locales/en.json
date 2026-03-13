@@ -2,6 +2,7 @@
   "app": {
     "header": {
       "chats": "Chats",
+      "tasks": "Scheduled Task",
       "prompts": "Agent Prompts",
       "mcp": "MCP Servers",
       "skills": "Skills",
@@ -11,6 +12,7 @@
     },
     "tabs": {
       "chats": "Chat History",
+      "tasks": "Scheduled Task",
       "prompts": "Agent Prompts",
       "mcp": "MCP Servers",
       "skills": "Skills",
@@ -162,7 +164,7 @@
     "singleDateLabel": "Execution Date",
     "singleTimeLabel": "Execution Time",
     "intervalMinutesLabel": "Interval (Minutes)",
-    "intervalStartTimeLabel": "Daily Start Time",
+    "intervalStartTimeLabel": "Daily Start Time (Anchor)",
     "intervalStartTimePlaceholder": "Default: 00:00",
     "intervalTimeRangesLabel": "Active Time Ranges (Optional)",
     "addTimeRange": "Add Time Range",
@@ -276,6 +278,7 @@
     "AssistantParametersLabel": "Quick Prompt Parameters",
     "sendDirectLabel": "Direct Text Sending",
     "sendImageDirectLabel": "Direct Image Sending",
+    "sendFileLabel": "Direct File Sending",
     "ifTextNecessary": "Add Text Info",
     "streamLabel": "Stream Responses",
     "enableTemperatureLabel": "Custom Temperature",
@@ -348,7 +351,7 @@
     },
     "defaultMcpServersLabel": "MCP",
     "defaultMcpServersPlaceholder": "Select default MCP services for this assistant",
-    "defaultSkillsLabel": "Skills",
+    "defaultSkillsLabel": "SKILL",
     "defaultSkillsPlaceholder": "Select default skills for this assistant"
   },
   "mcp": {
