@@ -1782,10 +1782,14 @@ ${contextBlock}
 
         const unlock = await acquireLock(safePath);
         try {
-            let content = await fs.promises.readFile(safePath, 'utf-8');
-
-            const targetOld = old_string;
-            const targetNew = new_string;
+            let rawContent = await fs.promises.readFile(safePath, 'utf-8');
+            // 判断原始文件的换行符风格 (是否存在 \r\n)
+            const isCRLF = rawContent.includes('\r\n');
+            
+            // 统一换行符为 \n，消除因系统换行符差异导致的严格匹配失败
+            let content = rawContent.replace(/\r\n/g, '\n');
+            const targetOld = typeof old_string === 'string' ? old_string.replace(/\r\n/g, '\n') : old_string;
+            const targetNew = typeof new_string === 'string' ? new_string.replace(/\r\n/g, '\n') : new_string;
 
             // 检查 old_string 是否存在
             if (!content.includes(targetOld)) {
@@ -1807,6 +1811,11 @@ ${contextBlock}
                 if (index !== -1) {
                     content = content.substring(0, index) + targetNew + content.substring(index + targetOld.length);
                 }
+            }
+
+            // 恢复原文件的换行符风格
+            if (isCRLF) {
+                content = content.replace(/\n/g, '\r\n');
             }
 
             await fs.promises.writeFile(safePath, content, 'utf-8');
