@@ -68,7 +68,7 @@ watch(() => props.voiceList, (newVal) => {
 
 // --- Computed Properties ---
 const reasoningTooltipContent = computed(() => {
-    const map = { default: '默认', low: '低', medium: '中', high: '高' };
+    const map = { default: '默认', none:'关闭', low: '低', medium: '中', high: '高', xhigh: '极深'};
     return `思考预算: ${map[tempReasoningEffort.value] || '默认'}`;
 });
 
