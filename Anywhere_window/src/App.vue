@@ -1601,7 +1601,7 @@ onMounted(async () => {
     await fetchSkillsList();
 
     if (shouldDirectSend) {
-      scrollToBottom();
+      if (isAtBottom.value) scrollToBottom();
       if (isFileDirectSend) await askAI(false);
       else await askAI(true);
     }
@@ -2763,7 +2763,7 @@ const saveSessionAsImage = async () => {
 
             await new Promise(r => setTimeout(r, 200));
 
-            // 进行极速合影 (因为此时 DOM 里只有几张 <img> 和 背景，没有任何复杂样式树，耗时约等于0)
+            // 进行快速合影
             const finalCanvas = await html2canvas(finalContainer, {
               useCORS: true,
               allowTaint: true,
@@ -3299,8 +3299,10 @@ const askAI = async (forceSend = false) => {
   signalController.value = new AbortController();
   await nextTick();
 
-  isSticky.value = true;
-  scrollToBottom('auto');
+  if (isAtBottom.value) {
+    isSticky.value = true;
+    scrollToBottom('auto');
+  }
 
   const currentPromptConfig = currentConfig.value.prompts[CODE.value];
   const isVoiceReply = !!selectedVoice.value;
@@ -3316,7 +3318,7 @@ const askAI = async (forceSend = false) => {
   try {
     // --- 3. 开始工具调用循环 ---
     while (!signalController.value.signal.aborted) {
-      chatInputRef.value?.focus({ cursor: 'end' });
+      // chatInputRef.value?.focus({ cursor: 'end' });
 
       // --- 为本次请求创建临时消息列表 ---
       let messagesForThisRequest = JSON.parse(JSON.stringify(history.value));
@@ -3903,7 +3905,10 @@ const askAI = async (forceSend = false) => {
       chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
     }
     await nextTick();
-    chatInputRef.value?.focus({ cursor: 'end' });
+    const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
+    if (textarea && document.activeElement !== textarea) {
+      chatInputRef.value?.focus({ cursor: 'end' });
+    }
 
     if (currentTaskConfig.value) {
       let savedFileName = '未保存';
