@@ -2907,18 +2907,7 @@ const loadSession = async (jsonData) => {
       favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
     }
 
-    modelList.value = [];
-    modelMap.value = {};
-    currentConfig.value.providerOrder.forEach(id => {
-      const provider = currentConfig.value.providers[id];
-      if (provider?.enable) {
-        provider.modelList.forEach(m => {
-          const key = `${id}|${m}`;
-          modelList.value.push({ key, value: key, label: `${provider.name}|${m}` });
-          modelMap.value[key] = `${provider.name}|${m}`;
-        });
-      }
-    });
+    updateModelListAndMap(currentConfig.value);
 
     let restoredModel = '';
     if (jsonData.model && modelMap.value[jsonData.model]) restoredModel = jsonData.model;
