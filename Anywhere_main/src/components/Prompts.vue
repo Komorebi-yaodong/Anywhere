@@ -611,7 +611,7 @@ function savePrompt() {
       backgroundImage: editingPrompt.backgroundImage,
       backgroundOpacity: editingPrompt.backgroundOpacity,
       backgroundBlur: editingPrompt.backgroundBlur,
-      autoSaveChat: editingPrompt.autoSaveChat,
+      autoSaveChat: !!editingPrompt.autoSaveChat,
     };
 
     // 1. 更新或创建 prompts 对象中的条目

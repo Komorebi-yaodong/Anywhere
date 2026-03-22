@@ -846,8 +846,7 @@ const handleChangeModel = (chosenModel) => {
 };
 const handleTogglePin = () => {
   autoCloseOnBlur.value = !autoCloseOnBlur.value;
-  if (autoCloseOnBlur.value) window.addEventListener('blur', closePage);
-  else window.removeEventListener('blur', closePage);
+  syncAutoCloseOnBlurListener();
 };
 const handleToggleAlwaysOnTop = () => {
   window.api.toggleAlwaysOnTop();
@@ -1151,14 +1150,24 @@ const saveSystemPrompt = async () => {
   systemPromptDialogVisible.value = false;
 };
 
+const handleAutoCloseOnBlur = () => closePage(false);
+const syncAutoCloseOnBlurListener = () => {
+  window.removeEventListener('blur', handleAutoCloseOnBlur);
+  if (autoCloseOnBlur.value && !loading.value) {
+    window.addEventListener('blur', handleAutoCloseOnBlur);
+  }
+};
+
 const closePage = async (force_save = false) => {
+  const shouldForceSave = force_save === true;
+
   // 1. 如果是为了打开文件选择器而失去焦点，拦截关闭
   if (isFilePickerOpen.value) return;
 
   // 条件：配置了本地存储路径 且 当前对话已有名称
-  if (currentConfig.value?.webdav?.localChatPath && (defaultConversationName.value || force_save)) {
+  if (currentConfig.value?.webdav?.localChatPath && (defaultConversationName.value || shouldForceSave)) {
     try {
-      await autoSaveSession(force_save);
+      await autoSaveSession(shouldForceSave);
     } catch (e) {
       console.error("关闭时自动保存失败:", e);
     }
@@ -1571,9 +1580,7 @@ onMounted(async () => {
         } catch (error) { console.error("Error during initial file processing:", error); showDismissibleMessage.error("文件处理失败: " + error.message); }
       }
     }
-    if (autoCloseOnBlur.value) {
-      window.addEventListener('blur', closePage);
-    }
+    syncAutoCloseOnBlurListener();
 
     if (!isSessionRestored) {
       const defaultMcpServers = currentPromptConfig.defaultMcpServers || [];
@@ -1744,7 +1751,7 @@ const autoSaveSession = async (force = false) => {
 
   // 2. 获取当前快捷助手的配置
   const promptConfig = currentConfig.value?.prompts?.[CODE.value];
-  const isAutoSaveConfigEnabled = promptConfig?.autoSaveChat ?? true;
+  const isAutoSaveConfigEnabled = promptConfig?.autoSaveChat ?? false;
 
   if (!defaultConversationName.value && !isAutoSaveConfigEnabled && !force) {
     return;
@@ -1809,7 +1816,7 @@ onBeforeUnmount(async () => {
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('blur', handleWindowBlur);
   if (textSearchInstance) textSearchInstance.destroy();
-  if (!autoCloseOnBlur.value) window.removeEventListener('blur', closePage);
+  window.removeEventListener('blur', handleAutoCloseOnBlur);
   await window.api.closeMcpClient();
   window.removeEventListener('error', handleGlobalImageError, true);
   window.removeEventListener('keydown', handleGlobalKeyDown);
@@ -3285,6 +3292,7 @@ const askAI = async (forceSend = false) => {
 
   // --- 2. 初始化 AI 回合 ---
   loading.value = true;
+  syncAutoCloseOnBlurListener();
   signalController.value = new AbortController();
   await nextTick();
 
@@ -3887,6 +3895,7 @@ const askAI = async (forceSend = false) => {
 
   } finally {
     loading.value = false;
+    syncAutoCloseOnBlurListener();
     signalController.value = null;
     if (currentAssistantChatShowIndex > -1) {
       const endTime = Date.now();

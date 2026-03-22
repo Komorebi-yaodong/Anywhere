@@ -301,7 +301,7 @@ async function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  const CURRENT_VERSION = "2.1.15";
+  const CURRENT_VERSION = "2.6.10";
 
   // --- 1. 版本检查与旧数据迁移 ---
   if (config.version !== CURRENT_VERSION) {
@@ -373,6 +373,8 @@ function checkConfig(config) {
   for (const [key, val] of Object.entries(rootDefaults)) {
     if (config[key] === undefined) { config[key] = val; flag = true; }
   }
+
+  if (typeof config.autoSaveChat_global !== 'boolean') { config.autoSaveChat_global = false; flag = true; }
 
   if (config['showNotification'] !== undefined) { delete config['showNotification']; flag = true; }
 
@@ -455,6 +457,7 @@ function checkConfig(config) {
         if (p[pk] === undefined) { p[pk] = pv; flag = true; }
       }
       if (p.voice === null) { p.voice = ''; flag = true; }
+      if (typeof p.autoSaveChat !== 'boolean') { p.autoSaveChat = false; flag = true; }
 
       // 4.4 模型自动修复
       let hasValidModel = p.model && config.providers && config.providers[p.model.split("|")[0]];
