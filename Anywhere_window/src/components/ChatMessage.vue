@@ -41,9 +41,9 @@ const timeDisplay = computed(() => {
     const duration = (msg.endTime - msg.startTime) / 1000;
     let durationStr = '';
     if (duration < 60) {
-        durationStr = `${duration.toFixed(1)} s`;
+      durationStr = `${duration.toFixed(1)} s`;
     } else {
-        durationStr = `${(duration / 60).toFixed(1)} min`;
+      durationStr = `${(duration / 60).toFixed(1)} min`;
     }
     // 格式：2023-01-01 12:00 (3.5 s)
     return `${formattedStart} (${durationStr})`;
@@ -55,9 +55,9 @@ const timeDisplay = computed(() => {
 
 const onCopyImage = async () => {
   if (!messageWrapperRef.value) return;
-  
+
   const loadingMsg = ElMessage.info({ message: '正在生成图片...', duration: 0 });
-  
+
   // 延时让 UI 有机会渲染 Loading
   setTimeout(async () => {
     let wrapper = null;
@@ -65,18 +65,18 @@ const onCopyImage = async () => {
       // 1. 获取 App 全局背景节点
       const originalBgBase = document.querySelector('.window-bg-base');
       const originalBgLayer = document.querySelector('.window-bg-layer');
-      
+
       // 2. 获取兜底主题色
       const rootStyle = getComputedStyle(document.documentElement);
       let themeBgColor = rootStyle.getPropertyValue('--el-bg-color').trim();
       const isDark = document.documentElement.classList.contains('dark');
       if (!themeBgColor || themeBgColor === 'transparent' || themeBgColor === 'rgba(0, 0, 0, 0)') {
-          themeBgColor = isDark ? '#212121' : '#FFFFFD'; 
+        themeBgColor = isDark ? '#212121' : '#FFFFFD';
       }
 
       // 3. 构建截图容器 (Wrapper)
       // 设置最小宽度
-      const MIN_IMAGE_WIDTH = 800; 
+      const MIN_IMAGE_WIDTH = 800;
       const targetWidth = Math.max(messageWrapperRef.value.clientWidth, MIN_IMAGE_WIDTH);
 
       wrapper = document.createElement('div');
@@ -92,18 +92,18 @@ const onCopyImage = async () => {
       const bgBaseClone = document.createElement('div');
       bgBaseClone.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; z-index: 0;';
       if (originalBgBase) {
-          bgBaseClone.style.backgroundColor = getComputedStyle(originalBgBase).backgroundColor;
+        bgBaseClone.style.backgroundColor = getComputedStyle(originalBgBase).backgroundColor;
       } else {
-          bgBaseClone.style.backgroundColor = themeBgColor;
+        bgBaseClone.style.backgroundColor = themeBgColor;
       }
       wrapper.appendChild(bgBaseClone);
 
       // 3.2 重建背景层 (Layer)
       if (originalBgLayer) {
-          const layerComputed = getComputedStyle(originalBgLayer);
-          if (layerComputed.backgroundImage !== 'none' && layerComputed.opacity !== '0') {
-              const bgLayerClone = document.createElement('div');
-              bgLayerClone.style.cssText = `
+        const layerComputed = getComputedStyle(originalBgLayer);
+        if (layerComputed.backgroundImage !== 'none' && layerComputed.opacity !== '0') {
+          const bgLayerClone = document.createElement('div');
+          bgLayerClone.style.cssText = `
                   position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
                   background-image: ${layerComputed.backgroundImage};
                   background-size: ${layerComputed.backgroundSize};
@@ -112,93 +112,93 @@ const onCopyImage = async () => {
                   opacity: ${layerComputed.opacity};
                   filter: ${layerComputed.filter};
               `;
-              wrapper.appendChild(bgLayerClone);
-          }
+          wrapper.appendChild(bgLayerClone);
+        }
       }
 
       // 4. 克隆消息内容
       const clone = messageWrapperRef.value.cloneNode(true);
       clone.style.position = 'relative';
-      clone.style.zIndex = '2'; 
+      clone.style.zIndex = '2';
       clone.style.margin = '0';
       clone.style.maxWidth = '100%';
-      
+
       const footer = clone.querySelector('.message-footer');
       if (footer) footer.remove();
 
       if (props.message.role === 'user') {
-          clone.style.alignSelf = 'flex-end';
+        clone.style.alignSelf = 'flex-end';
       } else {
-          clone.style.alignSelf = 'flex-start';
+        clone.style.alignSelf = 'flex-start';
       }
 
       // A. 气泡本体
       const originalBubble = messageWrapperRef.value.querySelector('.el-bubble-content');
       const clonedBubble = clone.querySelector('.el-bubble-content');
-      
+
       if (originalBubble && clonedBubble) {
-          const comp = getComputedStyle(originalBubble);
-          clonedBubble.style.backgroundColor = comp.backgroundColor;
-          clonedBubble.style.color = comp.color;
-          clonedBubble.style.border = comp.border;
-          clonedBubble.style.borderRadius = comp.borderRadius;
-          clonedBubble.style.boxShadow = comp.boxShadow;
-          clonedBubble.style.backdropFilter = 'none';
-          clonedBubble.style.overflow = 'hidden'; 
+        const comp = getComputedStyle(originalBubble);
+        clonedBubble.style.backgroundColor = comp.backgroundColor;
+        clonedBubble.style.color = comp.color;
+        clonedBubble.style.border = comp.border;
+        clonedBubble.style.borderRadius = comp.borderRadius;
+        clonedBubble.style.boxShadow = comp.boxShadow;
+        clonedBubble.style.backdropFilter = 'none';
+        clonedBubble.style.overflow = 'hidden';
       }
 
       // B. 思考按钮
       const originalThinkingTriggers = messageWrapperRef.value.querySelectorAll('.el-thinking .trigger');
       const clonedThinkingTriggers = clone.querySelectorAll('.el-thinking .trigger');
       originalThinkingTriggers.forEach((orig, i) => {
-          if (clonedThinkingTriggers[i]) {
-              const comp = getComputedStyle(orig);
-              clonedThinkingTriggers[i].style.backgroundColor = comp.backgroundColor;
-              clonedThinkingTriggers[i].style.border = comp.border;
-              clonedThinkingTriggers[i].style.borderRadius = comp.borderRadius;
-              clonedThinkingTriggers[i].style.color = comp.color;
-          }
+        if (clonedThinkingTriggers[i]) {
+          const comp = getComputedStyle(orig);
+          clonedThinkingTriggers[i].style.backgroundColor = comp.backgroundColor;
+          clonedThinkingTriggers[i].style.border = comp.border;
+          clonedThinkingTriggers[i].style.borderRadius = comp.borderRadius;
+          clonedThinkingTriggers[i].style.color = comp.color;
+        }
       });
 
       // E. 思考内容块
       const originalThinkingContent = messageWrapperRef.value.querySelectorAll('.el-thinking .content pre');
       const clonedThinkingContent = clone.querySelectorAll('.el-thinking .content pre');
       originalThinkingContent.forEach((orig, i) => {
-          if (clonedThinkingContent[i]) {
-              const comp = getComputedStyle(orig);
-              clonedThinkingContent[i].style.borderRadius = comp.borderRadius;
-              clonedThinkingContent[i].style.backgroundColor = comp.backgroundColor;
-              clonedThinkingContent[i].style.border = comp.border;
-              clonedThinkingContent[i].style.color = comp.color;
-              clonedThinkingContent[i].style.whiteSpace = 'pre-wrap';
-              clonedThinkingContent[i].style.overflow = 'visible';
-              clonedThinkingContent[i].style.height = 'auto';
-              clonedThinkingContent[i].style.maxHeight = 'none';
-          }
+        if (clonedThinkingContent[i]) {
+          const comp = getComputedStyle(orig);
+          clonedThinkingContent[i].style.borderRadius = comp.borderRadius;
+          clonedThinkingContent[i].style.backgroundColor = comp.backgroundColor;
+          clonedThinkingContent[i].style.border = comp.border;
+          clonedThinkingContent[i].style.color = comp.color;
+          clonedThinkingContent[i].style.whiteSpace = 'pre-wrap';
+          clonedThinkingContent[i].style.overflow = 'visible';
+          clonedThinkingContent[i].style.height = 'auto';
+          clonedThinkingContent[i].style.maxHeight = 'none';
+        }
       });
 
       // C. 普通代码块
       const originalPres = messageWrapperRef.value.querySelectorAll('pre:not(.el-thinking *)');
       const clonedPres = clone.querySelectorAll('pre:not(.el-thinking *)');
       originalPres.forEach((orig, i) => {
-          if (clonedPres[i]) {
-              const comp = getComputedStyle(orig);
-              clonedPres[i].style.backgroundColor = comp.backgroundColor;
-              clonedPres[i].style.color = comp.color;
-              clonedPres[i].style.border = comp.border;
-              clonedPres[i].style.borderRadius = comp.borderRadius;
-              clonedPres[i].style.whiteSpace = 'pre-wrap';
-              clonedPres[i].style.overflow = 'visible';
-              clonedPres[i].style.height = 'auto';
-              clonedPres[i].style.maxHeight = 'none';
-          }
+        if (clonedPres[i]) {
+          const comp = getComputedStyle(orig);
+          clonedPres[i].style.backgroundColor = comp.backgroundColor;
+          clonedPres[i].style.color = comp.color;
+          clonedPres[i].style.border = comp.border;
+          clonedPres[i].style.borderRadius = comp.borderRadius;
+          clonedPres[i].style.whiteSpace = 'pre-wrap';
+          clonedPres[i].style.overflow = 'visible';
+          clonedPres[i].style.height = 'auto';
+          clonedPres[i].style.maxHeight = 'none';
+        }
       });
 
       // D. Markdown 容器
       clone.querySelectorAll('.markdown-wrapper').forEach(md => {
-          md.style.height = 'auto';
-          md.style.overflow = 'visible';
-          md.classList.remove('collapsed');
+        md.style.height = 'auto';
+        md.style.overflow = 'visible';
+        md.classList.remove('collapsed');
       });
 
       wrapper.appendChild(clone);
@@ -208,10 +208,10 @@ const onCopyImage = async () => {
 
       // 5. 截图
       const canvas = await html2canvas(wrapper, {
-        useCORS: true, 
+        useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        scale: 2, 
+        scale: 2,
         logging: false,
         ignoreElements: (el) => false
       });
@@ -222,17 +222,17 @@ const onCopyImage = async () => {
 
       // 7. 导出
       const dataUrl = canvas.toDataURL('image/png');
-      
+
       requestAnimationFrame(async () => {
-          try {
-              await window.api.copyImage(dataUrl);
-              loadingMsg.close();
-              ElMessage.success('消息图片已复制');
-          } catch (clipErr) {
-              console.error(clipErr);
-              loadingMsg.close();
-              ElMessage.error('写入剪贴板失败');
-          }
+        try {
+          await window.api.copyImage(dataUrl);
+          loadingMsg.close();
+          ElMessage.success('消息图片已复制');
+        } catch (clipErr) {
+          console.error(clipErr);
+          loadingMsg.close();
+          ElMessage.error('写入剪贴板失败');
+        }
       });
 
     } catch (error) {
@@ -240,7 +240,7 @@ const onCopyImage = async () => {
       loadingMsg.close();
       ElMessage.error('生成图片失败');
       if (wrapper && wrapper.parentNode) {
-          wrapper.parentNode.removeChild(wrapper);
+        wrapper.parentNode.removeChild(wrapper);
       }
       const orphans = document.querySelectorAll('[style*="-10000px"]');
       orphans.forEach(el => el.remove());
@@ -252,12 +252,12 @@ const onCopyImage = async () => {
 // 如果是最后一条消息 && 正在加载 && 没有正在进行的思考内容
 const showBubbleLoading = computed(() => {
   if (!props.isLastMessage || !props.isLoading) return false;
-  
+
   // 如果有 reasoning_content 且状态是 thinking，说明正在思考，不显示正文 loading
   if (props.message.reasoning_content && props.message.status === 'thinking') {
     return false;
   }
-  
+
   // 正文为空时才显示 loading
   const contentEmpty = !props.message.content || (Array.isArray(props.message.content) && props.message.content.length === 0);
   return contentEmpty && (!props.message.tool_calls || props.message.tool_calls.length === 0);
@@ -564,8 +564,7 @@ const truncateFilename = (filename, maxLength = 30) => {
       </div>
 
       <Bubble class="ai-bubble" placement="start" shape="corner" maxWidth="100%"
-        :class="{ 'no-content': !hasContentToShow }"
-        :loading="showBubbleLoading">
+        :class="{ 'no-content': !hasContentToShow }" :loading="showBubbleLoading">
         <template #header>
           <Thinking v-if="message.reasoning_content && message.reasoning_content.trim().length > 0" maxWidth="90%"
             :content="(message.reasoning_content || '').trim()" :modelValue="false" :status="message.status">
@@ -603,7 +602,11 @@ const truncateFilename = (filename, maxLength = 30) => {
                           </path>
                         </svg>
                       </el-icon>
-                      <span class="tool-name">{{ toolCall.name }}</span>
+                      <div class="tool-name-wrapper">
+                        <el-tooltip :content="toolCall.name" placement="top" :show-after="500">
+                          <span class="tool-name">{{ toolCall.name }}</span>
+                        </el-tooltip>
+                      </div>
                       <div class="tool-header-right">
                         <el-tag v-if="toolCall.approvalStatus === 'waiting'" type="warning" size="small" effect="light"
                           round>等待批准</el-tag>
@@ -657,8 +660,8 @@ const truncateFilename = (filename, maxLength = 30) => {
             <div class="footer-actions">
               <el-button :icon="DocumentCopy" @click="onCopy" size="small" circle />
               <el-tooltip content="复制为图片" placement="top" :show-after="500">
-                  <el-button :icon="Picture" @click="onCopyImage" size="small" circle />
-                </el-tooltip>
+                <el-button :icon="Picture" @click="onCopyImage" size="small" circle />
+              </el-tooltip>
               <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small"
                 circle />
               <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
@@ -765,6 +768,7 @@ const truncateFilename = (filename, maxLength = 30) => {
   border-radius: 6px;
   margin-right: 10px;
 }
+
 .ai-name {
   font-weight: 700;
   font-size: 13px;
@@ -1553,13 +1557,27 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
   gap: 8px;
 }
 
+.tool-name-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
 .tool-name {
   font-weight: 500;
   color: var(--el-text-color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  width: 100%;
 }
 
 .tool-icon {
   color: var(--el-text-color-secondary);
+  flex-shrink: 0;
 }
 
 .tool-header-right {
@@ -1568,6 +1586,7 @@ html.dark .ai-bubble :deep(.el-thinking .content pre) {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .stop-btn-wrapper {
@@ -1679,7 +1698,7 @@ html.dark .stop-btn-wrapper {
 }
 
 .tool-call-details .tool-detail-section pre {
-    border-radius: var(--bubble-radius);
+  border-radius: var(--bubble-radius);
 }
 
 .tool-call-details .tool-detail-section pre::-webkit-scrollbar {
