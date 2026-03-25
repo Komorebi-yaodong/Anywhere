@@ -623,6 +623,19 @@ IMPORTANT:
             }
         },
         {
+            name: "continue_agent_chats",
+            description: "Send follow-up messages to an ALREADY OPEN agent window. Returns immediately. The agent starts generating in background. You can do other things or immediately call 'read_agent_chats' with index=-1 to wait for its result.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    window_id: { type: "string", description: "The window_id of the target agent." },
+                    text: { type: "string", description: "The follow-up message to send." },
+                    file_paths: { type: "array", items: { type: "string" }, description: "Optional. Local paths of files/images to attach." }
+                },
+                required: ["window_id", "text"]
+            }
+        },
+        {
             name: "close_agent_window",
             description: "Close an active agent window using its 'window_id'(get window_id from 'list_agent_chats'). The system will automatically generate a name and save the chat history before closing. HIGH PRIVILEGE OPERATION: please use this function with caution, ensuring the task of that window is complete before closing the Agent window.",
             inputSchema: {

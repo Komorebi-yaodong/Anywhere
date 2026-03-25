@@ -1789,8 +1789,17 @@ const autoSaveSession = async (force = false) => {
         const now = new Date();
         const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
 
+        // 断上下文并添加合适的前缀
+        let prefixTag = "";
+        if (basic_msg.value?.type === "summon") {
+          prefixTag = "召唤-";
+        } else if (force) {
+          // force 为 true 通常是由 MCP 调用 close_agent_window 引起的强制保存关闭
+          prefixTag = "关闭留档-";
+        }
+
         // 组合文件名
-        defaultConversationName.value = `${namePrefix}-${safeCodeName}-${timestamp}`;
+        defaultConversationName.value = `${prefixTag}${namePrefix}-${safeCodeName}-${timestamp}`;
       }
     }
   }
@@ -3914,7 +3923,7 @@ const askAI = async (forceSend = false) => {
         if (currentTaskConfig.value.autoSave && currentConfig.value.webdav?.localChatPath) {
           // 构造文件名：任务名-时间
           const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/[\/ :]/g, '-').replace(/,/g, '');
-          defaultConversationName.value = `${currentTaskConfig.value.name}-${timeStr}`;
+          defaultConversationName.value = `定时任务-${currentTaskConfig.value.name}-${timeStr}`;
           const sessionData = getSessionDataAsObject();
           const jsonString = JSON.stringify(sessionData, null, 2);
 
