@@ -373,7 +373,8 @@ async function openTaskChat(logFile) {
     try {
         ElMessage.info(t('chats.alerts.loadingChat') || '正在加载对话...');
         const jsonString = await window.api.readLocalFile(filePath);
-        await window.api.coderedirect(t('chats.alerts.restoreChat') || '恢复聊天', JSON.stringify({ sessionData: jsonString, filename: logFile }));
+        // 将 t('chats.alerts.restoreChat') || '恢复聊天' 修改为硬编码的 '恢复聊天'
+        await window.api.coderedirect('恢复聊天', JSON.stringify({ sessionData: jsonString, filename: logFile }));
         ElMessage.success(t('chats.alerts.restoreInitiated') || '对话已开始');
     } catch (error) {
         ElMessage.error((t('chats.alerts.restoreFailed') || '无法打开对话') + `: ${error.message}`);

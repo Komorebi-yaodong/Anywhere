@@ -378,10 +378,13 @@ async function startChat(file) {
             const client = createClient(url, { username, password });
             jsonString = await client.getFileContents(`${data_path.endsWith('/') ? data_path.slice(0, -1) : data_path}/${file.basename}`, { format: "text" });
         }
-        await window.api.coderedirect(t('chats.alerts.restoreChat'), JSON.stringify({ sessionData: jsonString, filename: file.basename }));
+        await window.api.coderedirect('恢复聊天', JSON.stringify({ sessionData: jsonString, filename: file.basename }));
         ElMessage.success(t('chats.alerts.restoreInitiated'));
-    } catch (error) { ElMessage.error(`${t('chats.alerts.restoreFailed')}: ${error.message}`); }
+    } catch (error) { 
+        ElMessage.error(`${t('chats.alerts.restoreFailed')}: ${error.message}`); 
+    }
 }
+
 async function renameFile(file) {
     const defaultInputValue = file.basename.endsWith('.json') ? file.basename.slice(0, -5) : file.basename;
     try {
