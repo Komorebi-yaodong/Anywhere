@@ -2021,7 +2021,7 @@ const saveSessionAsMarkdown = async () => {
     await ElMessageBox({
       title: '保存为 Markdown',
       message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入文件名。'),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
@@ -2049,8 +2049,7 @@ const saveSessionAsMarkdown = async () => {
           instance.confirmButtonLoading = true;
           try {
             await window.api.saveFile({ title: '保存为 Markdown', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'Markdown 文件', extensions: ['md'] }, { name: '所有文件', extensions: ['*'] }], fileContent: markdownContent });
-            defaultConversationName.value = finalBasename;
-            showDismissibleMessage.success('会话已成功保存为 Markdown！');
+            showDismissibleMessage.success('Markdown 文件已成功导出！');
             done();
           } catch (error) {
             if (!error.message.includes('canceled by the user')) { console.error('保存 Markdown 失败:', error); showDismissibleMessage.error(`保存失败: ${error.message}`); }
@@ -2414,7 +2413,7 @@ const saveSessionAsHtml = async () => {
     await ElMessageBox({
       title: '保存为 HTML',
       message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入文件名。'),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
@@ -2438,8 +2437,7 @@ const saveSessionAsHtml = async () => {
           try {
             const htmlContent = generateHtmlContent();
             await window.api.saveFile({ title: '保存为 HTML', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'HTML 文件', extensions: ['html'] }, { name: '所有文件', extensions: ['*'] }], fileContent: htmlContent });
-            defaultConversationName.value = finalBasename;
-            showDismissibleMessage.success('会话已成功保存为 HTML！');
+            showDismissibleMessage.success('HTML 文件已成功导出！');
             done();
           } catch (error) {
             if (!error.message.includes('User cancelled') && !error.message.includes('用户取消')) { console.error('保存 HTML 失败:', error); showDismissibleMessage.error(`保存失败: ${error.message}`); }
@@ -2462,7 +2460,7 @@ const saveSessionAsJson = async () => {
     await ElMessageBox({
       title: '保存为 JSON',
       message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入会话名称。'),
+        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入文件名。'),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
@@ -2807,10 +2805,8 @@ const saveSessionAsImage = async () => {
               filters: [{ name: 'PNG 图片', extensions: ['png'] }],
               fileContent: ia
             });
-
-            defaultConversationName.value = finalBasename;
             loadingMsg.close();
-            showDismissibleMessage.success('会话已成功保存为长图！');
+            showDismissibleMessage.success('图片已成功导出！');
             done();
           } catch (error) {
             loadingMsg.close();
