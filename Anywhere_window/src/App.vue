@@ -57,8 +57,7 @@ const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
 
 // 核心状态：是否粘滞在底部
-const isSticky = ref(true);
-let chatObserver = null;    // DOM 观察器实例
+const isSticky = ref(true);
 
 let autoSaveInterval = null;
 
@@ -852,6 +851,59 @@ const handleTogglePin = () => {
 const handleToggleAlwaysOnTop = () => {
   window.api.toggleAlwaysOnTop();
 };
+const withTemporaryAutoScroll = (chatContainer, updater) => {
+  if (!chatContainer) return;
+  const previousBehavior = chatContainer.style.scrollBehavior;
+  chatContainer.style.scrollBehavior = 'auto';
+  updater();
+  chatContainer.style.scrollBehavior = previousBehavior || 'smooth';
+};
+
+const scrollToBottomImmediately = () => {
+  const chatContainer = chatContainerRef.value?.$el;
+  if (!chatContainer) return;
+  withTemporaryAutoScroll(chatContainer, () => {
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  });
+  isAtBottom.value = true;
+  showScrollToBottomButton.value = false;
+};
+
+const keepMessageAnchor = async (messageElement, updater, fallbackToBottom = false) => {
+  const chatContainer = chatContainerRef.value?.$el;
+  if (!chatContainer || !messageElement) {
+    await updater();
+    return;
+  }
+
+  if (fallbackToBottom && isSticky.value) {
+    await updater();
+    await nextTick();
+    scrollToBottomImmediately();
+    return;
+  }
+
+  const originalScrollTop = chatContainer.scrollTop;
+  const originalElementTop = messageElement.offsetTop;
+  const originalVisualPosition = originalElementTop - originalScrollTop;
+
+  await updater();
+  await nextTick();
+
+  const newElementTop = messageElement.offsetTop;
+  withTemporaryAutoScroll(chatContainer, () => {
+    chatContainer.scrollTop = newElementTop - originalVisualPosition;
+  });
+};
+
+const syncStickyScrollAfterRender = () => {
+  if (!isSticky.value) return;
+  nextTick(() => {
+    scrollToBottomImmediately();
+  });
+};
+
+
 const handleSaveSession = () => handleSaveAction();
 const handleDeleteMessage = (index) => deleteMessage(index);
 const handleCopyText = (content, index) => copyText(content, index);
@@ -861,48 +913,30 @@ const handleShowSystemPrompt = () => {
   systemPromptDialogVisible.value = true;
 };
 const handleToggleCollapse = async (index, event) => {
-  const chatContainer = chatContainerRef.value?.$el;
-  const buttonElement = event.currentTarget;
-  const messageElement = buttonElement.closest('.chat-message');
-  if (!chatContainer || !buttonElement || !messageElement) return;
-  const originalScrollTop = chatContainer.scrollTop;
+  const messageElement = event.currentTarget?.closest('.chat-message');
+  if (!messageElement) return;
+
   const isExpanding = isCollapsed(index);
-  if (isExpanding) {
-    const originalElementTop = messageElement.offsetTop;
-    const originalVisualPosition = originalElementTop - originalScrollTop;
-    collapsedMessages.value.delete(index);
-    await nextTick();
-    const newElementTop = messageElement.offsetTop;
-    chatContainer.style.scrollBehavior = 'auto';
-    chatContainer.scrollTop = newElementTop - originalVisualPosition;
-    chatContainer.style.scrollBehavior = 'smooth';
-  } else {
-    const originalButtonTop = buttonElement.getBoundingClientRect().top;
-    collapsedMessages.value.add(index);
-    await nextTick();
-    const newButtonTop = buttonElement.getBoundingClientRect().top;
-    chatContainer.style.scrollBehavior = 'auto';
-    chatContainer.scrollTop = originalScrollTop + (newButtonTop - originalButtonTop);
-    chatContainer.style.scrollBehavior = 'smooth';
-  }
+  await keepMessageAnchor(messageElement, async () => {
+    if (isExpanding) {
+      collapsedMessages.value.delete(index);
+    } else {
+      collapsedMessages.value.add(index);
+    }
+  }, index === chat_show.value.length - 1);
 };
 const onAvatarClick = async (role, event) => {
-  const chatContainer = chatContainerRef.value?.$el;
   const messageElement = event.currentTarget.closest('.chat-message');
-  if (!chatContainer || !messageElement) return;
-  const originalScrollTop = chatContainer.scrollTop;
-  const originalElementTop = messageElement.offsetTop;
-  const originalVisualPosition = originalElementTop - originalScrollTop;
+  if (!messageElement) return;
+
   const roleMessageIndices = chat_show.value.map((msg, index) => (msg.role === role ? index : -1)).filter(index => index !== -1);
   if (roleMessageIndices.length === 0) return;
+
   const anyExpanded = roleMessageIndices.some(index => !collapsedMessages.value.has(index));
-  if (anyExpanded) roleMessageIndices.forEach(index => collapsedMessages.value.add(index));
-  else roleMessageIndices.forEach(index => collapsedMessages.value.delete(index));
-  await nextTick();
-  const newElementTop = messageElement.offsetTop;
-  chatContainer.style.scrollBehavior = 'auto';
-  chatContainer.scrollTop = newElementTop - originalVisualPosition;
-  chatContainer.style.scrollBehavior = 'smooth';
+  await keepMessageAnchor(messageElement, async () => {
+    if (anyExpanded) roleMessageIndices.forEach(index => collapsedMessages.value.add(index));
+    else roleMessageIndices.forEach(index => collapsedMessages.value.delete(index));
+  }, roleMessageIndices.includes(chat_show.value.length - 1));
 };
 
 const handleSubmit = () => askAI(false);
@@ -1368,23 +1402,6 @@ onMounted(async () => {
   window.addEventListener('wheel', handleWheel, { passive: false });
   window.addEventListener('focus', handleWindowFocus);
   window.addEventListener('blur', handleWindowBlur);
-  const chatMainElement = chatContainerRef.value?.$el;
-  if (chatMainElement) {
-    chatObserver = new MutationObserver(() => {
-      // 只要处于粘滞状态，任何 DOM 变化（文字生成、元素高度变化）
-      // 都立即将 scrollTop 设为最大值。这在浏览器重绘前发生，因此视觉上是“内容上推”。
-      if (isSticky.value) {
-        chatMainElement.scrollTop = chatMainElement.scrollHeight;
-      }
-    });
-
-    // 监听子节点变化（新消息）和子树字符数据变化（打字机效果）
-    chatObserver.observe(chatMainElement, {
-      childList: true,
-      subtree: true,
-      characterData: true
-    });
-  }
 
   const initializeWindow = async (data = null) => {
     try {
@@ -1831,10 +1848,6 @@ onBeforeUnmount(async () => {
   window.removeEventListener('error', handleGlobalImageError, true);
   window.removeEventListener('keydown', handleGlobalKeyDown);
 
-  if (chatObserver) {
-    chatObserver.disconnect();
-    chatObserver = null;
-  }
 });
 
 const saveWindowSize = async () => {
@@ -3498,6 +3511,7 @@ const askAI = async (forceSend = false) => {
 
       let responseMessage;
 
+
       if (useStream) {
         // --- 流式处理 ---
         const stream = await window.api.createChatCompletion(requestParams);
@@ -3510,6 +3524,20 @@ const askAI = async (forceSend = false) => {
         let lastUpdateTime = Date.now();
 
         const responsesItemIdToIndexMap = new Map();
+
+        const flushStreamingDisplay = () => {
+          const currentDisplayContent = [];
+          if (aggregatedContent) currentDisplayContent.push({ type: 'text', text: aggregatedContent });
+          if (aggregatedMedia.length > 0) currentDisplayContent.push(...aggregatedMedia);
+
+          chat_show.value[currentAssistantChatShowIndex].content = currentDisplayContent;
+          if (aggregatedReasoningContent) {
+            chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
+          }
+          lastUpdateTime = Date.now();
+          syncStickyScrollAfterRender();
+        };
+
 
         for await (const part of stream) {
           // console.log(part);
@@ -3524,10 +3552,6 @@ const askAI = async (forceSend = false) => {
               aggregatedReasoningContent += part.delta;
               if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
                 chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
-              }
-              if (Date.now() - lastUpdateTime > 100) {
-                chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-                lastUpdateTime = Date.now();
               }
             }
             else if (part.type === 'response.output_item.added') {
@@ -3566,10 +3590,6 @@ const askAI = async (forceSend = false) => {
               if (chat_show.value[currentAssistantChatShowIndex].status !== 'thinking') {
                 chat_show.value[currentAssistantChatShowIndex].status = 'thinking';
               }
-              if (Date.now() - lastUpdateTime > 100) {
-                chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-                lastUpdateTime = Date.now();
-              }
             }
 
             if (delta.content) {
@@ -3606,19 +3626,18 @@ const askAI = async (forceSend = false) => {
             }
           }
 
-          if (Date.now() - lastUpdateTime > 100) {
-            const currentDisplayContent = [];
-            if (aggregatedContent) currentDisplayContent.push({ type: 'text', text: aggregatedContent });
-            if (aggregatedMedia.length > 0) currentDisplayContent.push(...aggregatedMedia);
+          let throttleDelay = 100;
+          const currentTotalLength = aggregatedContent.length + aggregatedReasoningContent.length;
+          if (currentTotalLength > 1500) throttleDelay = 160;
+          if (currentTotalLength > 4000) throttleDelay = 250;
+          if (currentTotalLength > 8000) throttleDelay = 400;
 
-            chat_show.value[currentAssistantChatShowIndex].content = currentDisplayContent;
-
-            if (aggregatedReasoningContent) {
-              chat_show.value[currentAssistantChatShowIndex].reasoning_content = aggregatedReasoningContent;
-            }
-            lastUpdateTime = Date.now();
+          if (Date.now() - lastUpdateTime > throttleDelay) {
+            flushStreamingDisplay();
           }
         }
+
+        flushStreamingDisplay();
 
         let finalContentForHistory = null;
         if (aggregatedMedia.length > 0) {
