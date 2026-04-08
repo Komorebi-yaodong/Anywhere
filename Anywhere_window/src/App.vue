@@ -155,6 +155,21 @@ const prompt = ref("");
 const signalController = ref(null);
 const fileList = ref([]);
 const zoomLevel = ref(1);
+
+const normalizeZoomLevel = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return null;
+  return Math.max(0.5, Math.min(2.0, numericValue));
+};
+
+const resolveWindowZoomLevel = (...candidates) => {
+  for (const candidate of candidates) {
+    const normalizedZoom = normalizeZoomLevel(candidate);
+    if (normalizedZoom !== null) return normalizedZoom;
+  }
+  return 1;
+};
+
 const collapsedMessages = ref(new Set());
 const defaultConversationName = ref("");
 const selectedVoice = ref(null);
@@ -1436,7 +1451,7 @@ onMounted(async () => {
       loadBackground(currentPromptConfig.backgroundImage);
     }
     isAlwaysOnTop.value = data?.isAlwaysOnTop ?? currentPromptConfig.isAlwaysOnTop ?? true;
-    zoomLevel.value = currentPromptConfig.zoom || currentConfig.value.zoom || 1;
+    zoomLevel.value = resolveWindowZoomLevel(currentPromptConfig.zoom, currentConfig.value.zoom, 1);
     if (window.api && typeof window.api.setZoomFactor === 'function') {
       window.api.setZoomFactor(zoomLevel.value);
     }
@@ -1704,9 +1719,7 @@ onMounted(async () => {
     window.api.onConfigUpdated((newConfig) => {
       if (newConfig) {
         currentConfig.value = newConfig;
-        if (newConfig.zoom !== undefined) {
-          zoomLevel.value = newConfig.zoom;
-        }
+        // 配置热更新时保留当前窗口已调整的缩放，避免新增服务商等操作后被全局配置覆盖。
 
         // 1. 配置更新后同步重构服务商和模型列表
         updateModelListAndMap(newConfig);
@@ -2964,7 +2977,12 @@ const loadSession = async (jsonData) => {
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
 
-    zoomLevel.value = currentConfig.value.zoom || 1;
+    zoomLevel.value = resolveWindowZoomLevel(
+      jsonData.currentPromptConfig?.zoom,
+      currentConfig.value.prompts?.[CODE.value]?.zoom,
+      currentConfig.value.zoom,
+      1
+    );
     if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(zoomLevel.value);
 
     if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); }
