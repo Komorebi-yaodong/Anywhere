@@ -591,7 +591,7 @@ IMPORTANT:
         },
         {
             name: "summon_agent",
-            description: "Summon a specific ai agent (from list_agents) in a NEW window with a BLANK history, and send an initial task. Returns a 'window_id' immediately.\n\nThe target agent will start generating a response in the background. You can do other things or immediately call 'read_agent_chats' to wait for its result. \n\n Use 'summon_agent' ONLY when you explicitly need a brand-new, isolated conversation.",
+            description: "Summon a specific ai agent (from list_agents) in a NEW window with a BLANK history, and send an initial task. Returns a 'window_id' immediately.\n\nThe target agent will start generating a response in the background. You can do other things or immediately call 'read_agent_chats' to wait for its result. \n\n Use 'summon_agent' ONLY when you explicitly need a brand-new, isolated conversation. \n\n If the agent invocation is temporary, please ensure that the summoned agent window is closed once it is no longer needed after the temporary conversation is completed.",
             inputSchema: {
                 type: "object",
                 properties: {
