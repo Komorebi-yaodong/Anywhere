@@ -32,7 +32,7 @@ const defaultConfig = {
         type: "over",
         prompt: `你是一个AI助手`,
         showMode: "window",
-        model: "0|gpt-4o",
+        model: "",
         enable: true,
         icon: "",
         stream: true,
@@ -128,6 +128,83 @@ const defaultConfig = {
     ],
   }
 };
+
+
+function isValidProviderModelKey(config, modelKey) {
+  if (!modelKey || typeof modelKey !== 'string') return false;
+  const separatorIndex = modelKey.indexOf('|');
+  if (separatorIndex <= 0) return false;
+
+  const providerId = modelKey.slice(0, separatorIndex);
+  const modelName = modelKey.slice(separatorIndex + 1);
+  if (!providerId || !modelName) return false;
+
+  const provider = config?.providers?.[providerId];
+  if (!provider || provider.enable === false) return false;
+  return Array.isArray(provider.modelList) && provider.modelList.includes(modelName);
+}
+
+function getOrderedProviderIds(config) {
+  const providers = config?.providers || {};
+  const folders = config?.providerFolders || {};
+  const order = Array.isArray(config?.providerOrder) ? config.providerOrder.map(String) : [];
+  const orderedProviderIds = [];
+  const seen = new Set();
+
+  const sortedFolderIds = Object.keys(folders).sort((a, b) =>
+    String(folders[a]?.name || '').localeCompare(String(folders[b]?.name || ''))
+  );
+
+  sortedFolderIds.forEach(folderId => {
+    order.forEach(id => {
+      const provider = providers[id];
+      if (provider && provider.folderId === folderId && !seen.has(id)) {
+        orderedProviderIds.push(id);
+        seen.add(id);
+      }
+    });
+  });
+
+  order.forEach(id => {
+    const provider = providers[id];
+    if (provider && (!provider.folderId || !folders[provider.folderId]) && !seen.has(id)) {
+      orderedProviderIds.push(id);
+      seen.add(id);
+    }
+  });
+
+  Object.keys(providers).forEach(id => {
+    if (!seen.has(id)) {
+      orderedProviderIds.push(id);
+      seen.add(id);
+    }
+  });
+
+  return orderedProviderIds;
+}
+
+function getFirstAvailableProviderModel(config) {
+  const providers = config?.providers || {};
+  const orderedProviderIds = getOrderedProviderIds(config);
+
+  for (const providerId of orderedProviderIds) {
+    const provider = providers[providerId];
+    if (!provider || provider.enable === false || !Array.isArray(provider.modelList)) continue;
+    const firstModel = provider.modelList.find(modelName => typeof modelName === 'string' && modelName.trim() !== '');
+    if (firstModel) {
+      return `${providerId}|${firstModel}`;
+    }
+  }
+
+  return "";
+}
+
+function resolveDefaultAssistantModel(config) {
+  if (isValidProviderModelKey(config, config?.defaultTaskModel)) {
+    return config.defaultTaskModel;
+  }
+  return getFirstAvailableProviderModel(config);
+}
 
 function getLocalConfigId() {
   return 'config_local_' + utools.getNativeId();
@@ -378,13 +455,12 @@ function checkConfig(config) {
 
   if (config['showNotification'] !== undefined) { delete config['showNotification']; flag = true; }
 
-  if (!config.defaultTaskModel && config.providers) {
-      const firstProvId = config.providerOrder?.[0];
-      const firstModel = config.providers?.[firstProvId]?.modelList?.[0];
-      if (firstProvId && firstModel) {
-          config.defaultTaskModel = `${firstProvId}|${firstModel}`;
-          flag = true;
-      }
+  if (!isValidProviderModelKey(config, config.defaultTaskModel)) {
+    const resolvedDefaultTaskModel = resolveDefaultAssistantModel(config);
+    if (config.defaultTaskModel !== resolvedDefaultTaskModel) {
+      config.defaultTaskModel = resolvedDefaultTaskModel;
+      flag = true;
+    }
   }
   
   if (!config.settingsCardOrder || !Array.isArray(config.settingsCardOrder)) {
@@ -460,12 +536,11 @@ function checkConfig(config) {
       if (typeof p.autoSaveChat !== 'boolean') { p.autoSaveChat = false; flag = true; }
 
       // 4.4 模型自动修复
-      let hasValidModel = p.model && config.providers && config.providers[p.model.split("|")[0]];
-      if (!hasValidModel) {
-        // 尝试指向第一个可用模型
-        const firstProvId = config.providerOrder?.[0];
-        const firstModel = config.providers?.[firstProvId]?.modelList?.[0];
-        p.model = (firstProvId && firstModel) ? `${firstProvId}|${firstModel}` : "";
+      const resolvedPromptModel = isValidProviderModelKey(config, p.model)
+        ? p.model
+        : resolveDefaultAssistantModel(config);
+      if (p.model !== resolvedPromptModel) {
+        p.model = resolvedPromptModel;
         flag = true;
       }
     }
@@ -1750,4 +1825,7 @@ module.exports = {
   addTaskHistory,
   exportMemoryData,
   importMemoryData,
+  isValidProviderModelKey,
+  getFirstAvailableProviderModel,
+  resolveDefaultAssistantModel,
 };

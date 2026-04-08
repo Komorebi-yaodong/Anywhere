@@ -20,6 +20,7 @@ const {
   broadcastEvent,
   exportMemoryData,
   importMemoryData,
+  resolveDefaultAssistantModel,
 } = require('./data.js');
 
 const {
@@ -277,7 +278,7 @@ window.api = {
         type: "general",
         prompt: "",
         showMode: "window",
-        model: windowConfig.defaultTaskModel || "",
+        model: resolveDefaultAssistantModel(windowConfig),
         stream: true,
         isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
         autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
@@ -741,7 +742,7 @@ setInterval(async () => {
             type: "general",
             prompt: "",
             showMode: "window",
-            model: windowConfig.defaultTaskModel || "",
+            model: resolveDefaultAssistantModel(windowConfig),
             stream: true,
             isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
             autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,

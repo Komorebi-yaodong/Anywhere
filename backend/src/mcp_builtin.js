@@ -2454,7 +2454,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (isChildWindow()) return await callParentShell('summon_agent', args, signal);
 
         const { agent_name, text, file_paths, enable_tools } = args;
-        const { getConfig, openWindow } = require('./data.js');
+        const { getConfig, openWindow, resolveDefaultAssistantModel } = require('./data.js');
         const configData = await getConfig();
         const windowConfig = JSON.parse(JSON.stringify(configData.config));
 
@@ -2464,7 +2464,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         if (agent_name === '__DEFAULT__') {
             if (!windowConfig.prompts) windowConfig.prompts = {};
             windowConfig.prompts['__DEFAULT__'] = {
-                type: "general", prompt: "", showMode: "window", model: windowConfig.defaultTaskModel || "", stream: true, isAlwaysOnTop: true, autoCloseOnBlur: false, window_width: 580, window_height: 740, icon: ""
+                type: "general", prompt: "", showMode: "window", model: resolveDefaultAssistantModel(windowConfig), stream: true, isAlwaysOnTop: true, autoCloseOnBlur: false, window_width: 580, window_height: 740, icon: ""
             };
         }
 
@@ -2472,7 +2472,8 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             os: process.platform === 'win32' ? 'win' : (process.platform === 'darwin' ? 'macos' : 'linux'),
             code: agent_name,
             type: "summon",
-            summonData: { text, file_paths, enable_tools }
+            summonData: { text, file_paths, enable_tools },
+            tempPromptConfig: agent_name === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
         };
 
         const senderId = await openWindow(windowConfig, msg);
