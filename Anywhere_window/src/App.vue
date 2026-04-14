@@ -238,6 +238,51 @@ watch(() => {
 const inputLayout = computed(() => currentConfig.value.inputLayout || 'horizontal');
 const currentSystemPrompt = ref("");
 
+const normalizeSessionTimestamp = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const getConversationDisplayName = () => {
+  const title = defaultConversationName.value || '';
+  if (title.trim()) return title.trim();
+
+  const firstUserMsg = chat_show.value.find(msg => msg.role === 'user');
+  if (!firstUserMsg) return CODE.value || 'AI';
+
+  const content = firstUserMsg.content;
+  if (Array.isArray(content)) {
+    const textPart = content.find(part => part.type === 'text' && part.text?.trim());
+    if (textPart?.text) return textPart.text.trim().slice(0, 50);
+    if (content.some(part => part.type === 'image_url')) return '图片对话';
+    if (content.some(part => part.type === 'file' || part.type === 'input_file')) return '文件对话';
+  }
+
+  if (typeof content === 'string' && content.trim()) return content.trim().slice(0, 50);
+  return CODE.value || 'AI';
+};
+
+const getSessionMetadata = () => {
+  const timestamps = [];
+  chat_show.value.forEach((message) => {
+    const candidates = [message?.timestamp, message?.completedTimestamp, message?.updatedAt, message?.createdAt];
+    candidates.forEach((candidate) => {
+      const normalized = normalizeSessionTimestamp(candidate);
+      if (normalized) timestamps.push(normalized);
+    });
+  });
+
+  timestamps.sort((a, b) => new Date(a) - new Date(b));
+
+  return {
+    title: getConversationDisplayName(),
+    createdAt: timestamps[0] || new Date().toISOString(),
+    updatedAt: timestamps[timestamps.length - 1] || new Date().toISOString(),
+  };
+};
+
+
 const changeModel_page = ref(false);
 const systemPromptDialogVisible = ref(false);
 const systemPromptContent = ref('');
@@ -1903,6 +1948,7 @@ const getSessionDataAsObject = () => {
   return {
     anywhere_history: true, CODE: CODE.value, basic_msg: basic_msg.value, isInit: isInit.value,
     autoCloseOnBlur: autoCloseOnBlur.value, model: model.value,
+    sessionMetadata: getSessionMetadata(),
     currentPromptConfig: currentPromptConfig, history: history.value, chat_show: chat_show.value, selectedVoice: selectedVoice.value,
     activeMcpServerIds: sessionMcpServerIds.value || [],
     activeSkillIds: sessionSkillIds.value || [],

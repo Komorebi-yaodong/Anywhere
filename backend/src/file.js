@@ -289,6 +289,60 @@ async function selectDirectory() {
     return result && result.length > 0 ? result[0] : null;
 }
 
+const normalizeSessionTimestamp = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const collectSessionTimestamps = (sessionData) => {
+    const timestamps = [];
+    const messageLists = [sessionData?.chat_show, sessionData?.history];
+
+    messageLists.forEach((messages) => {
+        if (!Array.isArray(messages)) return;
+        messages.forEach((message) => {
+            const candidates = [
+                message?.timestamp,
+                message?.completedTimestamp,
+                message?.updatedAt,
+                message?.createdAt,
+            ];
+            candidates.forEach((candidate) => {
+                const normalized = normalizeSessionTimestamp(candidate);
+                if (normalized) timestamps.push(normalized);
+            });
+        });
+    });
+
+    return timestamps.sort((a, b) => new Date(a) - new Date(b));
+};
+
+async function readSessionMetadata(filePath, fallbackBasename) {
+    try {
+        const rawContent = await fs.readFile(filePath, 'utf-8');
+        const sessionData = JSON.parse(rawContent);
+        if (!sessionData || sessionData.anywhere_history !== true) return null;
+
+        const sessionMetadata = sessionData.sessionMetadata || {};
+        const timestamps = collectSessionTimestamps(sessionData);
+        const fallbackCreatedAt = timestamps[0] || null;
+        const fallbackUpdatedAt = timestamps[timestamps.length - 1] || null;
+
+        const title = typeof sessionMetadata.title === 'string' && sessionMetadata.title.trim()
+            ? sessionMetadata.title.trim()
+            : (fallbackBasename.endsWith('.json') ? fallbackBasename.slice(0, -5) : fallbackBasename);
+
+        return {
+            title,
+            createdAt: normalizeSessionTimestamp(sessionMetadata.createdAt) || fallbackCreatedAt,
+            updatedAt: normalizeSessionTimestamp(sessionMetadata.updatedAt) || fallbackUpdatedAt,
+        };
+    } catch (error) {
+        return null;
+    }
+}
+
 /**
  * [新增] 读取指定目录下的所有 .json 文件信息
  * @param {string} dirPath - 目录路径
@@ -304,10 +358,17 @@ async function listJsonFiles(dirPath) {
             const filePath = path.join(dirPath, file);
             try {
                 const stats = await fs_node.promises.stat(filePath);
+                const sessionMetadata = await readSessionMetadata(filePath, file);
+                const createdAt = sessionMetadata?.createdAt || normalizeSessionTimestamp(stats.birthtime) || normalizeSessionTimestamp(stats.mtime);
+                const updatedAt = sessionMetadata?.updatedAt || normalizeSessionTimestamp(stats.mtime) || createdAt;
+
                 return {
                     basename: file,
                     path: filePath,
                     lastmod: stats.mtime.toISOString(),
+                    createdAt,
+                    updatedAt,
+                    title: sessionMetadata?.title || (file.endsWith('.json') ? file.slice(0, -5) : file),
                     size: stats.size,
                     type: 'file'
                 };
@@ -317,7 +378,9 @@ async function listJsonFiles(dirPath) {
             }
         })
     );
-    return fileDetails.filter(Boolean).sort((a, b) => new Date(b.lastmod) - new Date(a.lastmod));
+    return fileDetails
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.createdAt || b.lastmod) - new Date(a.createdAt || a.lastmod));
 }
 
 /**

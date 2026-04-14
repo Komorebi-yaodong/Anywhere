@@ -46,6 +46,12 @@
       "pathNotSet": "尚未配置",
       "cloudDesc": "· 云端对话：上传到云端的对话，可以随时拉取到本地。"
     },
+    "sort": {
+      "button": "排序方式",
+      "createdAt": "按创建时间",
+      "updatedAt": "按编辑时间",
+      "name": "按名称"
+    },
     "configRequired": {
       "title": "云端对话",
       "webdavDescription": "请先在“设置”中配置 WebDAV URL 和数据路径 (data_path) 以使用此功能",

@@ -46,6 +46,12 @@
       "pathNotSet": "Not configured",
       "cloudDesc": "· Cloud Chats: Conversations uploaded to the cloud, which can be pulled to local at any time."
     },
+    "sort": {
+      "button": "Sort",
+      "createdAt": "Sort by Created Time",
+      "updatedAt": "Sort by Edited Time",
+      "name": "Sort by Name"
+    },
     "configRequired": {
       "title": "Cloud Chats",
       "webdavDescription": "Please configure WebDAV URL and data path (data_path) in 'Settings' to use this feature.",

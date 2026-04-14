@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch, onUnmounted, nextTick, onActivated, onDeactivated, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
-import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush } from '@element-plus/icons-vue'
+import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush, Operation } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n();
@@ -23,6 +23,7 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const singleFileSyncing = ref({});
 const isDeletingFiles = ref(false);
+const sortMode = ref('createdAt');
 
 watch(() => currentConfig.value?.webdav, (newWebdav) => {
     if (newWebdav) {
@@ -68,28 +69,111 @@ let hasMoved = false;
 // 记录拖拽开始前哪些文件是选中的 (Set<Basename>)
 let initialSelectionSnap = new Set(); 
 
+
+const normalizeDateValue = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const safeDateValue = (value) => {
+    const normalized = normalizeDateValue(value);
+    return normalized ? new Date(normalized).getTime() : 0;
+};
+
+const normalizeTitleValue = (file) => {
+    const basename = formatFilenameDisplay(file?.basename || '');
+    if (basename) return basename;
+    return typeof file?.title === 'string' && file.title.trim() ? file.title.trim() : '';
+};
+
+const collectMessageTimestamps = (sessionData) => {
+    const timestamps = [];
+    const messageLists = [sessionData?.chat_show, sessionData?.history];
+
+    messageLists.forEach((messages) => {
+        if (!Array.isArray(messages)) return;
+        messages.forEach((message) => {
+            [message?.timestamp, message?.completedTimestamp, message?.updatedAt, message?.createdAt].forEach((candidate) => {
+                const normalized = normalizeDateValue(candidate);
+                if (normalized) timestamps.push(normalized);
+            });
+        });
+    });
+
+    return timestamps.sort((a, b) => new Date(a) - new Date(b));
+};
+
+const normalizeSessionFile = (file, sessionData = null) => {
+    const sessionMetadata = sessionData?.sessionMetadata || {};
+    const timestamps = sessionData ? collectMessageTimestamps(sessionData) : [];
+    const fallbackCreatedAt = timestamps[0] || normalizeDateValue(file.createdAt) || normalizeDateValue(file.birthtime) || normalizeDateValue(file.lastmod);
+    const fallbackUpdatedAt = timestamps[timestamps.length - 1] || normalizeDateValue(file.updatedAt) || normalizeDateValue(file.lastmod) || fallbackCreatedAt;
+
+    return {
+        ...file,
+        title: (typeof sessionMetadata.title === 'string' && sessionMetadata.title.trim()) || normalizeTitleValue(file),
+        createdAt: normalizeDateValue(sessionMetadata.createdAt) || fallbackCreatedAt,
+        updatedAt: normalizeDateValue(sessionMetadata.updatedAt) || fallbackUpdatedAt,
+    };
+};
+
+
+const getSortModeLabel = (mode = sortMode.value) => {
+    return t(`chats.sort.${mode}`);
+};
+
+const formatFileTimeSummary = (file) => {
+    const created = formatDate(file.createdAt || file.lastmod);
+    const updated = formatDate(file.updatedAt || file.lastmod || file.createdAt);
+    return `${created} | ${updated}`;
+};
+
+const compareFilesBySortMode = (a, b) => {
+    if (sortMode.value === 'name') {
+        return normalizeTitleValue(a).localeCompare(normalizeTitleValue(b), undefined, { numeric: true, sensitivity: 'base' });
+    }
+
+    if (sortMode.value === 'updatedAt') {
+        return safeDateValue(b.updatedAt || b.lastmod) - safeDateValue(a.updatedAt || a.lastmod);
+    }
+
+    return safeDateValue(b.createdAt || b.lastmod) - safeDateValue(a.createdAt || a.lastmod);
+};
+
+const getCompareTimestamp = (file) => {
+    return file.updatedAt || file.lastmod || file.createdAt;
+};
+
+const shouldUploadFile = (local, cloudFile) => {
+    if (!cloudFile) return true;
+    return safeDateValue(getCompareTimestamp(local)) > safeDateValue(getCompareTimestamp(cloudFile));
+};
+
+const shouldDownloadFile = (cloud, localFile) => {
+    if (!localFile) return true;
+    return safeDateValue(getCompareTimestamp(cloud)) > safeDateValue(getCompareTimestamp(localFile));
+};
+
 // --- Computed Properties ---
 const getFileMap = (fileList) => new Map(fileList.map(f => [f.basename, f]));
 
 const uploadableCount = computed(() => {
     if (!isWebdavConfigValid.value) return 0;
     const cloudMap = getFileMap(cloudChatFiles.value);
-    return localChatFiles.value.filter(local => {
-        const cloudFile = cloudMap.get(local.basename);
-        return !cloudFile || new Date(local.lastmod) > new Date(cloudFile.lastmod);
-    }).length;
+    return localChatFiles.value.filter(local => shouldUploadFile(local, cloudMap.get(local.basename))).length;
 });
 
 const downloadableCount = computed(() => {
     if (!isWebdavConfigValid.value) return 0;
     const localMap = getFileMap(localChatFiles.value);
-    return cloudChatFiles.value.filter(cloud => {
-        const localFile = localMap.get(cloud.basename);
-        return !localFile || new Date(cloud.lastmod) > new Date(localFile.lastmod);
-    }).length;
+    return cloudChatFiles.value.filter(cloud => shouldDownloadFile(cloud, localMap.get(cloud.basename))).length;
 });
 
-const currentFiles = computed(() => activeView.value === 'local' ? localChatFiles.value : cloudChatFiles.value);
+const currentFiles = computed(() => {
+    const fileList = activeView.value === 'local' ? localChatFiles.value : cloudChatFiles.value;
+    return [...fileList].sort(compareFilesBySortMode);
+});
 const paginatedFiles = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
     const end = start + pageSize.value;
@@ -312,6 +396,11 @@ const handleKeyDown = (e) => {
     }
 };
 
+
+watch(sortMode, () => {
+    currentPage.value = 1;
+});
+
 watch(activeView, async (newView) => {
     if (newView === 'cloud' && !isCloudDataLoaded.value && isWebdavConfigValid.value) {
         await fetchCloudFiles();
@@ -327,7 +416,8 @@ async function fetchLocalFiles(silent = false) {
     if (!localChatPath.value) return;
     if (!silent) isTableLoading.value = true;
     try {
-        localChatFiles.value = await window.api.listJsonFiles(localChatPath.value);
+        const files = await window.api.listJsonFiles(localChatPath.value);
+        localChatFiles.value = files.map(file => normalizeSessionFile(file));
     } catch (error) {
         ElMessage.error(`读取本地文件列表失败: ${error.message}`);
         localChatFiles.value = [];
@@ -345,7 +435,17 @@ async function fetchCloudFiles(silent = false) {
         const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
         if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
         const response = await client.getDirectoryContents(remoteDir, { details: true });
-        cloudChatFiles.value = response.data.filter(item => item.type === 'file' && item.basename.endsWith('.json')).sort((a, b) => new Date(b.lastmod) - new Date(a.lastmod));
+        const jsonFiles = response.data.filter(item => item.type === 'file' && item.basename.endsWith('.json'));
+        cloudChatFiles.value = await Promise.all(jsonFiles.map(async (file) => {
+            try {
+                const remotePath = `${remoteDir}/${file.basename}`;
+                const fileContent = await client.getFileContents(remotePath, { format: 'text' });
+                const sessionData = JSON.parse(fileContent);
+                return normalizeSessionFile(file, sessionData);
+            } catch (error) {
+                return normalizeSessionFile(file);
+            }
+        }));
     } catch (error) {
         ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`);
         cloudChatFiles.value = [];
@@ -535,10 +635,7 @@ async function runConcurrentTasks(tasks, signal, concurrencyLimit = 3) {
 
 async function intelligentUpload() {
     if (!isWebdavConfigValid.value) return ElMessage.warning(t('chats.alerts.webdavRequired'));
-    const filesToUpload = localChatFiles.value.filter(local => {
-        const cloudFile = getFileMap(cloudChatFiles.value).get(local.basename);
-        return !cloudFile || new Date(local.lastmod) > new Date(cloudFile.lastmod);
-    });
+    const filesToUpload = localChatFiles.value.filter(local => shouldUploadFile(local, getFileMap(cloudChatFiles.value).get(local.basename)));
     if (filesToUpload.length === 0) return ElMessage.info(t('chats.alerts.syncNoUpload'));
 
     try {
@@ -557,10 +654,7 @@ async function intelligentUpload() {
 
 async function intelligentDownload() {
     if (!localChatPath.value) return ElMessage.warning(t('chats.alerts.localPathRequired'));
-    const filesToDownload = cloudChatFiles.value.filter(cloud => {
-        const localFile = getFileMap(localChatFiles.value).get(cloud.basename);
-        return !localFile || new Date(cloud.lastmod) > new Date(localFile.lastmod);
-    });
+    const filesToDownload = cloudChatFiles.value.filter(cloud => shouldDownloadFile(cloud, getFileMap(localChatFiles.value).get(cloud.basename)));
     if (filesToDownload.length === 0) return ElMessage.info(t('chats.alerts.syncNoDownload'));
 
     try {
@@ -615,20 +709,6 @@ async function forceSyncFile(basename, direction, signal) {
             const content = await window.api.readLocalFile(localPath, signal);
             await client.putFileContents(remotePath, content, { overwrite: true, signal });
 
-            await client.customRequest(remotePath, {
-                method: "PROPPATCH",
-                headers: { "Content-Type": "application/xml" },
-                data: `<?xml version="1.0"?>
-                       <d:propertyupdate xmlns:d="DAV:">
-                         <d:set>
-                           <d:prop>
-                             <lastmodified xmlns="DAV:">${new Date(localFile.lastmod).toUTCString()}</lastmodified>
-                           </d:prop>
-                         </d:set>
-                       </d:propertyupdate>`,
-                signal
-            });
-
         } else { // download
             const cloudFile = cloudChatFiles.value.find(f => f.basename === basename);
             if (!cloudFile) throw new Error(`云端文件 "${basename}" 未找到`);
@@ -636,7 +716,7 @@ async function forceSyncFile(basename, direction, signal) {
             const content = await client.getFileContents(remotePath, { format: 'text', signal });
             await window.api.writeLocalFile(localPath, content, signal);
 
-            await window.api.setFileMtime(localPath, cloudFile.lastmod);
+            await window.api.setFileMtime(localPath, cloudFile.updatedAt || cloudFile.lastmod);
         }
     } catch (error) {
         if (error.name === 'AbortError') throw new Error("Cancelled");
@@ -656,7 +736,7 @@ const computedFilesToClean = computed(() => {
     cutoffDate.setDate(cutoffDate.getDate() - days);
 
     return currentFiles.value.filter(file => {
-        const fileDate = new Date(file.lastmod);
+        const fileDate = new Date(file.updatedAt || file.lastmod || file.createdAt);
         return fileDate < cutoffDate;
     });
 });
@@ -781,6 +861,24 @@ const toggleSelectAll = () => {
                         }}</el-radio-button>
                 </el-radio-group>
             </div>
+            <div class="sort-button-container">
+                <el-dropdown trigger="click" @command="(command) => sortMode = command">
+                    <el-button :icon="Operation" circle :title="`${t('chats.sort.button')}: ${getSortModeLabel()}`" />
+                    <template #dropdown>
+                        <el-dropdown-menu>
+                            <el-dropdown-item command="createdAt" :class="{ 'is-active-sort': sortMode === 'createdAt' }">
+                                {{ t('chats.sort.createdAt') }}
+                            </el-dropdown-item>
+                            <el-dropdown-item command="updatedAt" :class="{ 'is-active-sort': sortMode === 'updatedAt' }">
+                                {{ t('chats.sort.updatedAt') }}
+                            </el-dropdown-item>
+                            <el-dropdown-item command="name" :class="{ 'is-active-sort': sortMode === 'name' }">
+                                {{ t('chats.sort.name') }}
+                            </el-dropdown-item>
+                        </el-dropdown-menu>
+                    </template>
+                </el-dropdown>
+            </div>
 
             <div class="table-container">
                 <!-- 拖拽选框 -->
@@ -834,12 +932,12 @@ const toggleSelectAll = () => {
 
                             <!-- 中间：名称 -->
                             <div class="list-content">
-                                <div class="list-title" :title="file.basename">
-                                    {{ formatFilenameDisplay(file.basename) }}
+                                <div class="list-title" :title="normalizeTitleValue(file)">
+                                    {{ normalizeTitleValue(file) }}
                                 </div>
                                 <!-- 元数据现在紧跟标题 -->
                                 <div class="list-meta">
-                                    <span class="meta-time">{{ formatDate(file.lastmod) }}</span>
+                                    <span class="meta-time">{{ formatFileTimeSummary(file) }}</span>
                                     <span class="meta-separator">|</span>
                                     <span class="meta-size">{{ formatBytes(file.size) }}</span>
                                 </div>
@@ -941,7 +1039,7 @@ const toggleSelectAll = () => {
                     <ul class="file-preview-list">
                         <li v-for="file in computedFilesToClean" :key="file.basename">
                             <span class="fname">{{ file.basename }}</span>
-                            <span class="fdate">{{ formatDate(file.lastmod) }}</span>
+                            <span class="fdate">{{ formatDate(file.updatedAt || file.lastmod || file.createdAt) }}</span>
                         </li>
                     </ul>
                 </el-scrollbar>
@@ -974,8 +1072,25 @@ const toggleSelectAll = () => {
 }
 
 .view-selector {
-    padding: 5px 15px 0px 0px;
+    padding: 5px 100px 0px 100px;
     text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.sort-button-container {
+    position: absolute;
+    top: 8px;
+    left: 104px;
+    z-index: 10;
+}
+
+.sort-button-container .el-button {
+    width: 32px;
+    height: 32px;
 }
 
 .chats-page-container {
@@ -1109,7 +1224,8 @@ const toggleSelectAll = () => {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 0 1 auto;
+    flex: 1 1 0;
+    min-width: 0;
     margin-right: 12px;
 }
 
@@ -1120,7 +1236,8 @@ const toggleSelectAll = () => {
     align-items: center;
     gap: 8px;
     white-space: nowrap;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    min-width: fit-content;
 }
 
 .list-actions {
@@ -1137,6 +1254,22 @@ const toggleSelectAll = () => {
 .meta-separator {
     opacity: 0.5;
 }
+
+.meta-time {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.meta-size {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+:deep(.is-active-sort) {
+    color: var(--el-color-primary);
+    font-weight: 600;
+}
+
 
 .list-actions {
     display: flex;
