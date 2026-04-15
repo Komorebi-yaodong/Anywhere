@@ -485,8 +485,39 @@ async function startChat(file) {
     }
 }
 
+
+async function renameRemoteSessionFileWithMetadata(client, remoteDir, oldFilename, newFilename) {
+    const normalizedRemoteDir = String(remoteDir || '').endsWith('/') ? String(remoteDir).slice(0, -1) : String(remoteDir || '');
+    const oldRemotePath = `${normalizedRemoteDir}/${oldFilename}`;
+    const newRemotePath = `${normalizedRemoteDir}/${newFilename}`;
+    const nextTitle = newFilename.toLowerCase().endsWith('.json') ? newFilename.slice(0, -5) : newFilename;
+
+    await client.moveFile(oldRemotePath, newRemotePath);
+
+    try {
+        const content = await client.getFileContents(newRemotePath, { format: 'text' });
+        const sessionData = JSON.parse(typeof content === 'string' ? content : String(content));
+        if (sessionData && sessionData.anywhere_history === true && typeof sessionData === 'object') {
+            const sessionMetadata =
+                sessionData.sessionMetadata && typeof sessionData.sessionMetadata === 'object'
+                    ? sessionData.sessionMetadata
+                    : {};
+
+            if ((sessionMetadata.title || '').trim() !== nextTitle) {
+                sessionData.sessionMetadata = {
+                    ...sessionMetadata,
+                    title: nextTitle
+                };
+                await client.putFileContents(newRemotePath, JSON.stringify(sessionData, null, 2), { overwrite: true });
+            }
+        }
+    } catch {
+        // ignore remote metadata sync failure to preserve rename compatibility
+    }
+}
+
 async function renameFile(file) {
-    const defaultInputValue = file.basename.endsWith('.json') ? file.basename.slice(0, -5) : file.basename;
+    const defaultInputValue = file.title || (file.basename.endsWith('.json') ? file.basename.slice(0, -5) : file.basename);
     try {
         const { value: userInput } = await ElMessageBox.prompt(t('chats.rename.promptMessage'), t('chats.rename.promptTitle'), { inputValue: defaultInputValue });
         let finalFilename = (userInput || "").trim();
@@ -503,12 +534,12 @@ async function renameFile(file) {
                 ).catch(() => false);
                 if (confirm) {
                     const client = createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password });
-                    await client.moveFile(`${webdavConfig.value.data_path}/${file.basename}`, `${webdavConfig.value.data_path}/${finalFilename}`);
+                    await renameRemoteSessionFileWithMetadata(client, webdavConfig.value.data_path, file.basename, finalFilename);
                 }
             }
         } else { // cloud
             const client = createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password });
-            await client.moveFile(`${webdavConfig.value.data_path}/${file.basename}`, `${webdavConfig.value.data_path}/${finalFilename}`);
+            await renameRemoteSessionFileWithMetadata(client, webdavConfig.value.data_path, file.basename, finalFilename);
             if (localChatFiles.value.some(f => f.basename === file.basename)) {
                 const confirm = await ElMessageBox.confirm(
                     t('chats.rename.syncLocalConfirm'),

@@ -2595,6 +2595,38 @@ const saveSessionAsJson = async () => {
 };
 
 // 重命名当前会话逻辑
+
+const renameRemoteSessionFileWithMetadata = async (client, remoteDir, oldFilename, newFilename) => {
+  const normalizedRemoteDir = String(remoteDir || '').endsWith('/') ? String(remoteDir).slice(0, -1) : String(remoteDir || '');
+  const oldRemotePath = `${normalizedRemoteDir}/${oldFilename}`;
+  const newRemotePath = `${normalizedRemoteDir}/${newFilename}`;
+  const nextTitle = newFilename.toLowerCase().endsWith('.json') ? newFilename.slice(0, -5) : newFilename;
+
+  await client.moveFile(oldRemotePath, newRemotePath);
+
+  try {
+    const content = await client.getFileContents(newRemotePath, { format: 'text' });
+    const sessionData = JSON.parse(typeof content === 'string' ? content : String(content));
+    if (sessionData && sessionData.anywhere_history === true && typeof sessionData === 'object') {
+      const sessionMetadata =
+        sessionData.sessionMetadata && typeof sessionData.sessionMetadata === 'object'
+          ? sessionData.sessionMetadata
+          : {};
+
+      if ((sessionMetadata.title || '').trim() !== nextTitle) {
+        sessionData.sessionMetadata = {
+          ...sessionMetadata,
+          title: nextTitle
+        };
+        await client.putFileContents(newRemotePath, JSON.stringify(sessionData, null, 2), { overwrite: true });
+      }
+    }
+  } catch {
+    // ignore remote metadata sync failure to preserve rename compatibility
+  }
+};
+
+
 const handleRenameSession = async () => {
   if (autoCloseOnBlur.value) handleTogglePin(); // 暂停失焦关闭，防止弹窗时窗口消失
 
@@ -2666,7 +2698,7 @@ const handleRenameSession = async () => {
             '同步操作提示',
             { confirmButtonText: '是', cancelButtonText: '否', type: 'info' }
           );
-          await client.moveFile(oldRemotePath, newRemotePath);
+          await renameRemoteSessionFileWithMetadata(client, remoteDir, oldFilename, newFilename);
           showDismissibleMessage.success('云端同步重命名成功');
         }
       } catch (e) {
