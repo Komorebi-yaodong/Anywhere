@@ -7,6 +7,7 @@ const ON_DEMAND_CONCURRENCY_LIMIT = 5; // 非持久连接的并发限制
 let persistentClients = new Map(); // 存储持久化客户端实例，它们会一直存在直到被明确关闭
 let fullToolInfoMap = new Map();
 let currentlyConnectedServerIds = new Set();
+let inFlightToolFetchMap = new Map();
 
 function normalizeTransportType(transport) {
   const streamableHttpRegex = /^streamable[\s_-]?http$/i;
@@ -48,49 +49,70 @@ function preprocessStdioConfig(config) {
   return result;
 }
 
+
+function getToolFetchKey(id, config = {}) {
+  const normalizedConfig = {
+    id,
+    transport: config.transport || config.type || '',
+    command: config.command || '',
+    args: Array.isArray(config.args) ? [...config.args] : [],
+    url: config.url || config.baseUrl || '',
+    env: config.env && typeof config.env === 'object' ? Object.entries(config.env).sort(([a], [b]) => a.localeCompare(b)) : [],
+    headers: config.headers && typeof config.headers === 'object' ? Object.entries(config.headers).sort(([a], [b]) => a.localeCompare(b)) : [],
+    isPersistent: Boolean(config.isPersistent)
+  };
+  return JSON.stringify(normalizedConfig);
+}
+
 /**
  * 独立连接并获取工具列表的函数
  * 用于测试连接，以及无缓存时的临时连接获取
  * 包含 10s 超时和强制关闭逻辑
  */
 async function connectAndFetchTools(id, config) {
-  // [拦截] 内置类型直接返回定义的工具列表
-  if (config.transport === 'builtin' || config.type === 'builtin') {
-    return getBuiltinTools(id);
+  const fetchKey = getToolFetchKey(id, config || {});
+  const existingRequest = inFlightToolFetchMap.get(fetchKey);
+  if (existingRequest) {
+    return await existingRequest;
   }
 
-  // console.log(`[MCP] Connecting to ${id} (${config.transport})...`);
-  let tempClient = null;
-  const controller = new AbortController();
+  const requestPromise = (async () => {
+    // [拦截] 内置类型直接返回定义的工具列表
+    if (config.transport === 'builtin' || config.type === 'builtin') {
+      return getBuiltinTools(id);
+    }
 
-  // 设置超时，防止连接卡死导致无法关闭 (特别是 stdio)
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+    let tempClient = null;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
+    try {
+      const modifiedConfig = preprocessStdioConfig({ ...config, transport: normalizeTransportType(config.transport) });
+      tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
+      return await tempClient.getTools();
+    } catch (error) {
+      console.error(`[MCP] Error fetching tools from ${id}:`, error);
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+      controller.abort();
+      if (tempClient) {
+        try {
+          await tempClient.close();
+        } catch (closeError) {
+          console.error(`[MCP] Error closing connection for ${id}:`, closeError);
+        }
+      }
+    }
+  })();
+
+  inFlightToolFetchMap.set(fetchKey, requestPromise);
 
   try {
-    const modifiedConfig = preprocessStdioConfig({ ...config, transport: normalizeTransportType(config.transport) });
-
-    // 创建客户端
-    tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
-
-    // 获取工具
-    const tools = await tempClient.getTools();
-    // console.log(`[MCP] Successfully fetched ${tools.length} tools from ${id}`);
-
-    return tools; // 返回原生工具数组
-  } catch (error) {
-    console.error(`[MCP] Error fetching tools from ${id}:`, error);
-    throw error;
+    return await requestPromise;
   } finally {
-    clearTimeout(timeoutId);
-    controller.abort(); // 确保信号中止
-    if (tempClient) {
-      try {
-        // console.log(`[MCP] Closing temp connection for ${id}...`);
-        await tempClient.close();
-        // console.log(`[MCP] Connection closed for ${id}`);
-      } catch (closeError) {
-        console.error(`[MCP] Error closing connection for ${id}:`, closeError);
-      }
+    if (inFlightToolFetchMap.get(fetchKey) === requestPromise) {
+      inFlightToolFetchMap.delete(fetchKey);
     }
   }
 }
@@ -192,7 +214,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
               };
             });
             const cleanTools = JSON.parse(JSON.stringify(sanitizedTools));
-            saveCacheCallback(id, cleanTools).catch(e => console.error(`[MCP] Auto-cache failed for ${id}:`, e));
+            saveCacheCallback(id, cleanTools, { emitEvent: false, reason: 'auto-bootstrap' }).catch(e => console.error(`[MCP] Auto-cache failed for ${id}:`, e));
           }
 
           const isBuiltin = config.transport === 'builtin' || config.type === 'builtin';
@@ -287,7 +309,7 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
             };
           });
           const cleanTools = JSON.parse(JSON.stringify(sanitizedTools));
-          saveCacheCallback(id, cleanTools).catch(e => console.error(`[MCP] Auto-cache failed for persistent ${id}:`, e));
+          saveCacheCallback(id, cleanTools, { emitEvent: false, reason: 'auto-bootstrap' }).catch(e => console.error(`[MCP] Auto-cache failed for persistent ${id}:`, e));
         }
 
         tools.forEach(tool => {

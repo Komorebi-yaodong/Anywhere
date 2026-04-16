@@ -590,7 +590,7 @@ const handleQuickSkillToggle = async (skillName) => {
 
       if (changed) {
         showDismissibleMessage.success(`已启用 Skill "${skillName}" (并自动关联内置 MCP)`);
-        await applyMcpTools(false); // 重新加载 MCP
+        await requestApplyMcpTools(false, 'skill-builtin-auto-enable'); // 重新加载 MCP
         return;
       }
     }
@@ -649,7 +649,7 @@ const handleSkillSelectionConfirm = async () => {
 
     if (changed) {
       showDismissibleMessage.success('已自动启用内置 MCP 服务以支持 Skill');
-      await applyMcpTools(false);
+      await requestApplyMcpTools(false, 'skill-builtin-auto-enable');
     }
   }
 };
@@ -1677,7 +1677,7 @@ onMounted(async () => {
         if (validIds.length > 0) {
           sessionMcpServerIds.value = [...validIds];
           tempSessionMcpServerIds.value = [...validIds];
-          await applyMcpTools(false);
+          await requestApplyMcpTools(false, 'skill-builtin-auto-enable');
         }
       }
     }
@@ -1785,7 +1785,7 @@ onMounted(async () => {
 
           // 如果发现存在失效的 MCP 服务，通知后端重新加载客户端
           if (mcpChanged && !loading.value) {
-            applyMcpTools(false);
+            requestApplyMcpTools(false, 'config-or-session-sync');
           }
         }
       }
@@ -1793,14 +1793,25 @@ onMounted(async () => {
   }
 
   if (window.api && window.api.onMcpCacheUpdated) {
-    window.api.onMcpCacheUpdated(async (serverId) => {
+    window.api.onMcpCacheUpdated(async (payload) => {
       try {
         const cache = await window.api.getMcpToolCache() || {};
         mcpToolCache.value = cache;
 
-        // 如果被修改具体工具启停的 MCP 正在被当前对话使用，并且没有在生成消息，重载工具
-        if (sessionMcpServerIds.value.includes(serverId) && !loading.value) {
-          applyMcpTools(false);
+        const serverId = typeof payload?.serverId === 'string' ? payload.serverId : '';
+        const reason = typeof payload?.reason === 'string' ? payload.reason : '';
+        const emitReloadSuggested = payload?.emitReloadSuggested !== false;
+
+        if (!serverId || !sessionMcpServerIds.value.includes(serverId)) {
+          return;
+        }
+
+        if (reason === 'auto-bootstrap' || !emitReloadSuggested) {
+          return;
+        }
+
+        if (!loading.value && !isMcpLoading.value) {
+          requestApplyMcpTools(false, `mcp-cache-updated:${reason || 'manual'}`);
         }
       } catch (error) {
         console.error("Auto refresh MCP cache failed:", error);
@@ -3160,11 +3171,11 @@ const loadSession = async (jsonData) => {
     if (validMcpServerIds.length > 0) {
       sessionMcpServerIds.value = [...validMcpServerIds];
       tempSessionMcpServerIds.value = [...validMcpServerIds];
-      applyMcpTools(false);
+      requestApplyMcpTools(false, 'config-or-session-sync');
     } else {
       sessionMcpServerIds.value = [];
       tempSessionMcpServerIds.value = [];
-      applyMcpTools(false);
+      requestApplyMcpTools(false, 'config-or-session-sync');
     }
 
   } catch (error) {
@@ -3258,13 +3269,41 @@ const sendFile = async () => {
   return contentList;
 };
 
-async function applyMcpTools(show_none = true) {
+
+const isApplyMcpRunning = ref(false);
+const pendingApplyMcpRequest = ref(null);
+
+const requestApplyMcpTools = async (show_none = true, reason = 'unknown') => {
+  pendingApplyMcpRequest.value = {
+    show_none: show_none !== false,
+    reason: typeof reason === 'string' && reason ? reason : 'unknown'
+  };
+
+  if (isApplyMcpRunning.value) {
+    return;
+  }
+
+  isApplyMcpRunning.value = true;
+  try {
+    while (pendingApplyMcpRequest.value) {
+      const currentRequest = pendingApplyMcpRequest.value;
+      pendingApplyMcpRequest.value = null;
+      await applyMcpTools(currentRequest.show_none, currentRequest.reason);
+    }
+  } finally {
+    isApplyMcpRunning.value = false;
+  }
+};
+
+async function applyMcpTools(show_none = true, reason = 'unknown') {
   isMcpDialogVisible.value = false;
   isMcpLoading.value = true;
   await nextTick();
 
   const activeServerConfigs = {};
   const serverIdsToLoad = [...sessionMcpServerIds.value];
+  console.log('[Plugin Window MCP] applying tools', { reason, show_none, serverIdsToLoad });
+
   for (const id of serverIdsToLoad) {
     if (currentConfig.value.mcpServers[id]) {
       const serverConf = currentConfig.value.mcpServers[id];
@@ -4273,7 +4312,7 @@ async function handleQuickMcpToggle(serverId) {
 
   tempSessionMcpServerIds.value = [...sessionMcpServerIds.value];
 
-  await applyMcpTools(false);
+  await requestApplyMcpTools(false, 'quick-toggle');
 }
 
 const focusOnInput = () => {
@@ -4764,7 +4803,7 @@ const scrollToMessageByIndex = (index) => {
         </div>
         <div>
           <el-button type="primary" class="bw-btn"
-            @click="sessionMcpServerIds = [...tempSessionMcpServerIds]; applyMcpTools();">应用</el-button>
+            @click="sessionMcpServerIds = [...tempSessionMcpServerIds]; requestApplyMcpTools(true, 'dialog-apply');">应用</el-button>
         </div>
       </div>
     </template>

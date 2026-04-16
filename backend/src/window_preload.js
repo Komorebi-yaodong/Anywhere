@@ -309,8 +309,22 @@ window.api = {
         }
     },
     onMcpCacheUpdated: (callback) => {
-        ipcRenderer.on('mcp-cache-updated', (event, serverId) => {
-            callback(serverId);
+        const normalizePayload = (payload) => {
+            if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+                return {
+                    serverId: typeof payload.serverId === 'string' ? payload.serverId : '',
+                    reason: typeof payload.reason === 'string' ? payload.reason : '',
+                    emitReloadSuggested: payload.emitReloadSuggested !== false
+                };
+            }
+            return {
+                serverId: typeof payload === 'string' ? payload : '',
+                reason: '',
+                emitReloadSuggested: true
+            };
+        };
+        ipcRenderer.on('mcp-cache-updated', (event, payload) => {
+            callback(normalizePayload(payload));
         });
     },
     onSkillsUpdated: (callback) => {

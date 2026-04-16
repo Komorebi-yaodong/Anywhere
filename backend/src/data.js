@@ -1528,22 +1528,76 @@ async function openAppendSelectorWindow(features, payload, type) {
  * @param {string} serverId - 服务器 ID
  * @param {Array} tools - 工具列表
  */
-async function saveMcpToolCache(serverId, tools) {
-  let doc = await utools.db.promises.get("mcp_tools_cache");
-  if (!doc) {
-    doc = { _id: "mcp_tools_cache", data: {} };
+async function saveMcpToolCache(serverId, tools = [], options = {}) {
+  const normalizedId = typeof serverId === 'string' ? serverId.trim() : '';
+  if (!normalizedId) {
+    throw new Error('serverId is required');
   }
-  doc.data[serverId] = tools;
-  const result = await utools.db.promises.put({
-    _id: "mcp_tools_cache",
-    data: doc.data,
-    _rev: doc._rev
-  });
-  
-  if (result.ok) {
-    broadcastEvent('mcp-cache-updated', serverId);
+
+  const normalizedTools = Array.isArray(tools) ? JSON.parse(JSON.stringify(tools)) : [];
+  const emitEvent = options && options.emitEvent !== false;
+  const reason = options && typeof options.reason === 'string' && options.reason.trim()
+    ? options.reason.trim()
+    : 'manual';
+  const maxRetries = Number.isInteger(options?.maxRetries) && options.maxRetries > 0
+    ? options.maxRetries
+    : 3;
+
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    let doc = await utools.db.promises.get('mcp_tools_cache');
+    if (!doc) {
+      doc = { _id: 'mcp_tools_cache', data: {} };
+    }
+
+    const latestData = doc && doc.data && typeof doc.data === 'object'
+      ? JSON.parse(JSON.stringify(doc.data))
+      : {};
+    const previousTools = latestData[normalizedId];
+
+    let isSame = false;
+    try {
+      isSame = JSON.stringify(previousTools || []) === JSON.stringify(normalizedTools);
+    } catch (e) {
+      isSame = false;
+    }
+
+    if (isSame) {
+      return { ok: true, skipped: true, reason, serverId: normalizedId, tools: normalizedTools };
+    }
+
+    latestData[normalizedId] = normalizedTools;
+
+    try {
+      const result = await utools.db.promises.put({
+        _id: 'mcp_tools_cache',
+        data: latestData,
+        _rev: doc._rev
+      });
+
+      if (result.ok && emitEvent) {
+        broadcastEvent('mcp-cache-updated', {
+          serverId: normalizedId,
+          reason,
+          emitReloadSuggested: reason !== 'auto-bootstrap'
+        });
+      }
+
+      return {
+        ...result,
+        reason,
+        serverId: normalizedId,
+        tools: normalizedTools
+      };
+    } catch (error) {
+      const message = String(error?.message || error || '').toLowerCase();
+      const isConflict = message.includes('conflict') || message.includes('revision') || message.includes('rev');
+      if (!isConflict || attempt === maxRetries - 1) {
+        throw error;
+      }
+    }
   }
-  return result;
+
+  throw new Error('saveMcpToolCache retry exhausted');
 }
 
 /**
