@@ -289,6 +289,43 @@ async function selectDirectory() {
     return result && result.length > 0 ? result[0] : null;
 }
 
+const localSessionMetadataCache = new Map();
+
+function buildLocalSessionCacheKey(filePath) {
+    return path.resolve(String(filePath || ''));
+}
+
+function cloneSessionMetadataCacheEntry(entry) {
+    return entry ? { ...entry } : null;
+}
+
+function createSessionFileSummary({ filePath, basename, stats, sessionMetadata }) {
+    const normalizedBasename = basename || path.basename(filePath);
+    const createdAt = sessionMetadata?.createdAt || normalizeSessionTimestamp(stats.birthtime) || normalizeSessionTimestamp(stats.mtime);
+    const updatedAt = sessionMetadata?.updatedAt || normalizeSessionTimestamp(stats.mtime) || createdAt;
+
+    return {
+        basename: normalizedBasename,
+        path: filePath,
+        lastmod: stats.mtime.toISOString(),
+        createdAt,
+        updatedAt,
+        title: sessionMetadata?.title || (normalizedBasename.endsWith('.json') ? normalizedBasename.slice(0, -5) : normalizedBasename),
+        size: stats.size,
+        type: 'file'
+    };
+}
+
+function pruneLocalSessionMetadataCache(validFilePaths) {
+    const validPathSet = new Set(validFilePaths.map(filePath => buildLocalSessionCacheKey(filePath)));
+    for (const cacheKey of localSessionMetadataCache.keys()) {
+        if (!validPathSet.has(cacheKey)) {
+            localSessionMetadataCache.delete(cacheKey);
+        }
+    }
+}
+
+
 const normalizeSessionTimestamp = (value) => {
     if (!value) return null;
     const date = new Date(value);
@@ -318,26 +355,48 @@ const collectSessionTimestamps = (sessionData) => {
     return timestamps.sort((a, b) => new Date(a) - new Date(b));
 };
 
-async function readSessionMetadata(filePath, fallbackBasename) {
+async function readSessionMetadata(filePath, fallbackBasename, cacheContext = null) {
+    const cacheKey = buildLocalSessionCacheKey(filePath);
+
+    if (cacheContext && cacheContext.stats) {
+        const cachedEntry = localSessionMetadataCache.get(cacheKey);
+        const mtimeMs = cacheContext.stats.mtimeMs;
+        const size = cacheContext.stats.size;
+        if (cachedEntry && cachedEntry.mtimeMs === mtimeMs && cachedEntry.size === size) {
+            return cloneSessionMetadataCacheEntry(cachedEntry.sessionMetadata);
+        }
+    }
+
     try {
         const rawContent = await fs.readFile(filePath, 'utf-8');
         const sessionData = JSON.parse(rawContent);
-        if (!sessionData || sessionData.anywhere_history !== true) return null;
+        if (!sessionData || sessionData.anywhere_history !== true) {
+            localSessionMetadataCache.delete(cacheKey);
+            return null;
+        }
 
         const sessionMetadata = sessionData.sessionMetadata || {};
         const timestamps = collectSessionTimestamps(sessionData);
         const fallbackCreatedAt = timestamps[0] || null;
         const fallbackUpdatedAt = timestamps[timestamps.length - 1] || null;
 
-        const title = typeof sessionMetadata.title === 'string' && sessionMetadata.title.trim()
-            ? sessionMetadata.title.trim()
-            : (fallbackBasename.endsWith('.json') ? fallbackBasename.slice(0, -5) : fallbackBasename);
-
-        return {
-            title,
+        const normalizedMetadata = {
+            title: typeof sessionMetadata.title === 'string' && sessionMetadata.title.trim()
+                ? sessionMetadata.title.trim()
+                : (fallbackBasename.endsWith('.json') ? fallbackBasename.slice(0, -5) : fallbackBasename),
             createdAt: normalizeSessionTimestamp(sessionMetadata.createdAt) || fallbackCreatedAt,
             updatedAt: normalizeSessionTimestamp(sessionMetadata.updatedAt) || fallbackUpdatedAt,
         };
+
+        if (cacheContext && cacheContext.stats) {
+            localSessionMetadataCache.set(cacheKey, {
+                mtimeMs: cacheContext.stats.mtimeMs,
+                size: cacheContext.stats.size,
+                sessionMetadata: normalizedMetadata
+            });
+        }
+
+        return cloneSessionMetadataCacheEntry(normalizedMetadata);
     } catch (error) {
         return null;
     }
@@ -352,26 +411,21 @@ async function listJsonFiles(dirPath) {
     if (!dirPath) return [];
     const files = await fs.readdir(dirPath);
     const jsonFiles = files.filter(file => path.extname(file).toLowerCase() === '.json');
+    const validFilePaths = jsonFiles.map(file => path.join(dirPath, file));
+    pruneLocalSessionMetadataCache(validFilePaths);
 
     const fileDetails = await Promise.all(
         jsonFiles.map(async file => {
             const filePath = path.join(dirPath, file);
             try {
                 const stats = await fs_node.promises.stat(filePath);
-                const sessionMetadata = await readSessionMetadata(filePath, file);
-                const createdAt = sessionMetadata?.createdAt || normalizeSessionTimestamp(stats.birthtime) || normalizeSessionTimestamp(stats.mtime);
-                const updatedAt = sessionMetadata?.updatedAt || normalizeSessionTimestamp(stats.mtime) || createdAt;
-
-                return {
+                const sessionMetadata = await readSessionMetadata(filePath, file, { stats });
+                return createSessionFileSummary({
+                    filePath,
                     basename: file,
-                    path: filePath,
-                    lastmod: stats.mtime.toISOString(),
-                    createdAt,
-                    updatedAt,
-                    title: sessionMetadata?.title || (file.endsWith('.json') ? file.slice(0, -5) : file),
-                    size: stats.size,
-                    type: 'file'
-                };
+                    stats,
+                    sessionMetadata
+                });
             } catch (error) {
                 console.error(`无法获取文件信息: ${filePath}`, error);
                 return null;

@@ -59,7 +59,6 @@ const focusedMessageIndex = ref(null);
 // 核心状态：是否粘滞在底部
 const isSticky = ref(true);
 
-let autoSaveInterval = null;
 
 let textSearchInstance = null;
 
@@ -1754,9 +1753,6 @@ onMounted(async () => {
       }
     });
   }
-
-  if (autoSaveInterval) clearInterval(autoSaveInterval);
-  autoSaveInterval = setInterval(autoSaveSession, 15000);
   window.addEventListener('error', handleGlobalImageError, true);
   window.addEventListener('keydown', handleGlobalKeyDown);
 
@@ -1896,7 +1892,8 @@ const autoSaveSession = async (force = false) => {
   }
 };
 
-onBeforeUnmount(async () => {
+onBeforeUnmount(async () => {  // 15s 轮询自动保存已移除；当前仅保留显式业务触发的保存链路。
+
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('blur', handleWindowBlur);
