@@ -6,6 +6,9 @@
   <a href="https://www.u-tools.cn/plugins/detail/AI%20Anywhere/">
     <img src="https://img.shields.io/badge/uTools-Plugin-blue?style=flat-square&logo=utools" alt="uTools Plugin">
   </a>
+  <a href="https://github.com/Komorebi-yaodong/anywheredesktop">
+    <img src="https://img.shields.io/badge/Desktop-Anywhere%20Desktop-47848F?style=flat-square&logo=electron" alt="Anywhere Desktop">
+  </a>
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
   <a href="https://github.com/Komorebi-yaodong/Anywhere">
     <img src="https://img.shields.io/github/stars/Komorebi-yaodong/Anywhere?style=flat-square" alt="Stars">
@@ -15,6 +18,8 @@
 Anywhere 是一款为 **uTools** 打造的深度定制化 AI 助手插件。它不仅仅是一个聚合 API 的聊天窗口，更是一个集成了 **定时任务调度**、**MCP 工具调用**、**Skill 流程编排**、**多模态交互**、**多智能体协同**、**全局追问** 以及 **多端数据同步** 的生产力平台。
 
 无论是日常的划词翻译、变量命名，还是全自动化的每日新闻摘要、系统监控、智能爬虫，它都能成为你最得力的 24 小时智能员工。同时，Anywhere 也可作为 AI 服务商的集成平台，或个人提示词的理想存储与管理工具。
+
+如果你希望体验不依赖 uTools 的独立客户端，目前也可以关注作者的软件 [Anywhere Desktop](https://github.com/Komorebi-yaodong/anywheredesktop)，目前已经重构完成，欢迎体验~
 
 ---
 
