@@ -637,7 +637,7 @@ IMPORTANT:
         },
         {
             name: "close_agent_window",
-            description: "Close an active agent window using its 'window_id'(get window_id from 'list_agent_chats'). The system will automatically generate a name and save the chat history before closing. HIGH PRIVILEGE OPERATION: please use this function with caution, ensuring the task of that window is complete before closing the Agent window.",
+            description: "Close an active agent window using its 'window_id' (retrieved via 'list_agent_chats'). The system will automatically generate a name and save the chat history before closing. **HIGH PRIVILEGE OPERATION**: Please use this function with caution, ensuring that the window's task is complete before closing the Agent window. Additionally, if an Agent is invoked for temporary tasks, please ensure it is closed promptly upon completion to avoid opening excessive redundant windows.",
             inputSchema: {
                 type: "object",
                 properties: {
