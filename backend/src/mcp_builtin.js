@@ -479,8 +479,11 @@ const BUILTIN_TOOLS = {
             description: `Execute a shell command.
 IMPORTANT:
 1. The underlying shell is **${currentOS}**:**${isWin ? "PowerShell" : "Bash"}**. Adjust syntax accordingly.
-2. **Long-running processes**: For servers (e.g. 'npm run dev', 'python server.py') or tasks taking >15s, YOU MUST set 'background': true.
-3. When 'background': true, you will receive a 'shell_id' immediately. Use 'read_background_shell_output' to check logs and 'kill_background_shell' to stop it.`,
+2. **Stateless Sessions**: Each execution starts in a fresh environment at the default system path. Do NOT assume that a previous 'cd' or environment change persists. To run commands in a specific directory, you MUST chain them: 
+   - **PowerShell**: \`Set-Location "your_path" ; your_command\`
+   - **Bash**: \`cd "your_path" && your_command\`
+3. **Long-running processes**: For servers (e.g. 'npm run dev', 'python server.py') or tasks taking >15s, YOU MUST set 'background': true.
+4. When 'background': true, you will receive a 'shell_id' immediately. Use 'read_background_shell_output' to check logs and 'kill_background_shell' to stop it.`,
             inputSchema: {
                 type: "object",
                 properties: {
