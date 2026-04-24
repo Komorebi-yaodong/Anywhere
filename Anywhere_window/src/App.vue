@@ -15,7 +15,7 @@ import { marked } from 'marked';
 import html2canvas from 'html2canvas';
 
 import TextSearchUI from './utils/TextSearchUI.js';
-import { formatTimestamp, sanitizeToolArgs } from './utils/formatters.js';
+import { formatTimestamp, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
 
 const showDismissibleMessage = (options) => {
   const opts = typeof options === 'string' ? { message: options } : options;
@@ -3460,6 +3460,28 @@ Here are the rules you should always follow to solve your task:
 `;
 };
 
+
+const normalizeToolsForRequest = (tools = []) => {
+  const usedNames = new Set();
+  return (Array.isArray(tools) ? tools : []).map((tool, index) => {
+    if (!tool || tool.type !== 'function' || !tool.function) {
+      return tool;
+    }
+
+    const clonedTool = JSON.parse(JSON.stringify(tool));
+    const rawName = clonedTool.function.name;
+    let safeName = sanitizeToolFunctionName(rawName, `tool_${index + 1}`);
+    let suffix = 2;
+    while (usedNames.has(safeName)) {
+      safeName = `${sanitizeToolFunctionName(rawName, `tool_${index + 1}`)}_${suffix}`;
+      suffix += 1;
+    }
+    usedNames.add(safeName);
+    clonedTool.function.name = safeName;
+    return clonedTool;
+  });
+};
+
 const askAI = async (forceSend = false) => {
   if (loading.value || isPreparingSend.value) return;
   if (isMcpLoading.value) {
@@ -3618,7 +3640,7 @@ const askAI = async (forceSend = false) => {
       }
 
       if (activeTools.length > 0) {
-        requestParams.tools = activeTools;
+        requestParams.tools = normalizeToolsForRequest(activeTools);
         requestParams.tool_choice = "auto";
       }
 

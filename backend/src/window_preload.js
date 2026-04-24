@@ -179,8 +179,22 @@ window.api = {
                 headers: serverConfig.headers,
             });
 
+            const sanitizeToolAlias = (name, fallback = 'tool') => {
+                const source = typeof name === 'string' ? name.trim() : '';
+                const baseName = source || fallback;
+                const sanitized = baseName
+                    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^_+|_+$/g, '');
+                return sanitized || fallback;
+            };
+
             const sanitizedTools = rawTools.map(tool => ({
                 name: tool.name,
+                alias: sanitizeToolAlias(tool.name, serverConfig.id || 'tool'),
+                rawName: tool.name,
+                originalName: tool.name,
+                displayName: tool.name,
                 description: tool.description,
                 inputSchema: tool.inputSchema || tool.schema || {}
             }));
@@ -190,7 +204,7 @@ window.api = {
             const oldTools = oldCacheMap ? (oldCacheMap[serverConfig.id] || []) : [];
 
             const mergedTools = sanitizedTools.map(newTool => {
-                const oldTool = oldTools.find(t => t.name === newTool.name);
+                const oldTool = oldTools.find(t => t.name === newTool.name || t.alias === newTool.alias || t.rawName === newTool.name || t.originalName === newTool.name);
                 return {
                     ...newTool,
                     enabled: oldTool ? (oldTool.enabled ?? true) : true

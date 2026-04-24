@@ -38,6 +38,24 @@ export const formatMessageText = (content) => {
  * @param {string} jsonString 
  * @returns {string}
  */
+
+/**
+ * 规范工具名为 API 兼容格式
+ * @param {string} name
+ * @param {string} fallback
+ * @returns {string}
+ */
+export const sanitizeToolFunctionName = (name, fallback = 'tool') => {
+    const source = typeof name === 'string' ? name.trim() : '';
+    const baseName = source || fallback;
+    const sanitized = baseName
+        .replace(/[^a-zA-Z0-9_-]+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '');
+
+    return sanitized || fallback;
+};
+
 export const sanitizeToolArgs = (jsonString) => {
     if (!jsonString) return "{}";
     try {
