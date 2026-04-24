@@ -57,14 +57,8 @@ function normalizeMessagesForChatCompletions(messages = []) {
             const reasoningContent = typeof nextMsg.reasoning_content === 'string'
                 ? nextMsg.reasoning_content
                 : '';
-
             if (reasoningContent) {
                 nextMsg.reasoning_content = reasoningContent;
-                // 某些兼容 OpenAI 的服务商在 assistant 存在 tool_calls / reasoning_content 时，
-                // 仍要求 content 字段显式存在，否则会误判为未回传 thinking 内容。
-                if (nextMsg.content === undefined || nextMsg.content === null) {
-                    nextMsg.content = '';
-                }
             }
         }
 
