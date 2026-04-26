@@ -740,9 +740,8 @@ const findFocusedMessageIndex = () => {
   let closestIndex = -1;
   let smallestDistance = Infinity;
   for (let i = chat_show.value.length - 1; i >= 0; i--) {
-    const msgComponent = getMessageComponentByIndex(i);
-    if (msgComponent) {
-      const el = msgComponent.$el;
+    const el = getMessageElementByIndex(i);
+    if (el) {
       const elTop = el.offsetTop;
       const elBottom = elTop + el.clientHeight;
       if (elTop < scrollTop + container.clientHeight && elBottom > scrollTop) {
@@ -794,22 +793,16 @@ const navigateToPreviousMessage = () => {
   if (!element || !container) return;
   const scrollDifference = container.scrollTop - element.offsetTop;
   if (scrollDifference > 5) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    centerActiveNavNode(currentIndex);
+    scrollChatContainerToMessage(currentIndex);
   } else if (currentIndex > 0) {
-    const newIndex = currentIndex - 1;
-    focusedMessageIndex.value = newIndex;
-    const previousElement = getMessageElementByIndex(newIndex);
-    if (previousElement) previousElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollChatContainerToMessage(currentIndex - 1);
   }
 };
 
 const navigateToNextMessage = () => {
   findFocusedMessageIndex();
   if (focusedMessageIndex.value !== null && focusedMessageIndex.value < chat_show.value.length - 1) {
-    focusedMessageIndex.value++;
-    const targetElement = getMessageElementByIndex(focusedMessageIndex.value);
-    if (targetElement) targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollChatContainerToMessage(focusedMessageIndex.value + 1);
   } else {
     forceScrollToBottom();
   }
@@ -978,6 +971,24 @@ const scrollToBottomImmediately = () => {
   });
   isAtBottom.value = true;
   showScrollToBottomButton.value = false;
+};
+
+const scrollChatContainerToMessage = (index, behavior = 'smooth') => {
+  const chatContainer = chatContainerRef.value?.$el;
+  const targetElement = getMessageElementByIndex(index);
+  if (!chatContainer || !targetElement) return false;
+
+  isSticky.value = false;
+  isAtBottom.value = false;
+  showScrollToBottomButton.value = true;
+
+  chatContainer.scrollTo({
+    top: Math.max(0, targetElement.offsetTop),
+    behavior
+  });
+  focusedMessageIndex.value = index;
+  centerActiveNavNode(index);
+  return true;
 };
 
 const keepMessageAnchor = async (messageElement, updater, fallbackToBottom = false) => {
@@ -4598,12 +4609,7 @@ const getMessagePreviewText = (message) => {
 
 // 2. 滚动到指定消息
 const scrollToMessageByIndex = (index) => {
-  const element = getMessageElementByIndex(index);
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    focusedMessageIndex.value = index;
-    centerActiveNavNode(index);
-  }
+  scrollChatContainerToMessage(index);
 };
 </script>
 
