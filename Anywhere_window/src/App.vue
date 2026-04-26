@@ -95,6 +95,18 @@ const getMessageComponentByIndex = (index) => {
   return messageRefs.get(msg.id);
 };
 
+const getMessageElementByIndex = (index) => {
+  const target = getMessageComponentByIndex(index);
+  if (!target) return null;
+  if (target.nodeType === 1) return target;
+  if (typeof target.getMessageElement === 'function') {
+    const messageElement = target.getMessageElement();
+    if (messageElement?.nodeType === 1) return messageElement;
+  }
+  if (target.$el?.nodeType === 1) return target.$el;
+  return null;
+};
+
 const updateModelListAndMap = (config) => {
   const newModelList = [];
   const newModelMap = {};
@@ -777,10 +789,9 @@ const navigateToPreviousMessage = () => {
   findFocusedMessageIndex();
   const currentIndex = focusedMessageIndex.value;
   if (currentIndex === null) return;
-  const targetComponent = getMessageComponentByIndex(currentIndex);
+  const element = getMessageElementByIndex(currentIndex);
   const container = chatContainerRef.value?.$el;
-  if (!targetComponent || !container) return;
-  const element = targetComponent.$el;
+  if (!element || !container) return;
   const scrollDifference = container.scrollTop - element.offsetTop;
   if (scrollDifference > 5) {
     element.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -788,8 +799,8 @@ const navigateToPreviousMessage = () => {
   } else if (currentIndex > 0) {
     const newIndex = currentIndex - 1;
     focusedMessageIndex.value = newIndex;
-    const previousComponent = getMessageComponentByIndex(newIndex);
-    if (previousComponent) previousComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const previousElement = getMessageElementByIndex(newIndex);
+    if (previousElement) previousElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 };
 
@@ -797,8 +808,8 @@ const navigateToNextMessage = () => {
   findFocusedMessageIndex();
   if (focusedMessageIndex.value !== null && focusedMessageIndex.value < chat_show.value.length - 1) {
     focusedMessageIndex.value++;
-    const targetComponent = getMessageComponentByIndex(focusedMessageIndex.value);
-    if (targetComponent) targetComponent.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const targetElement = getMessageElementByIndex(focusedMessageIndex.value);
+    if (targetElement) targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } else {
     forceScrollToBottom();
   }
@@ -1184,7 +1195,7 @@ const handleEditMessage = (index, newContent) => {
 const handleEditStart = async (index) => {
   const scrollContainer = chatContainerRef.value?.$el;
   const childComponent = getMessageComponentByIndex(index);
-  const element = childComponent?.$el;
+  const element = getMessageElementByIndex(index);
 
   if (!scrollContainer || !element || !childComponent) return;
 
@@ -4587,9 +4598,9 @@ const getMessagePreviewText = (message) => {
 
 // 2. 滚动到指定消息
 const scrollToMessageByIndex = (index) => {
-  const component = getMessageComponentByIndex(index);
-  if (component && component.$el && component.$el.nodeType === 1) {
-    component.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const element = getMessageElementByIndex(index);
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     focusedMessageIndex.value = index;
     centerActiveNavNode(index);
   }
