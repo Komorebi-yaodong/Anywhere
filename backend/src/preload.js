@@ -37,6 +37,7 @@ const {
   isFileTypeSupported,
   parseFileObject,
   copyLocalPath,
+  exportLocalChatFile,
 } = require('./file.js');
 
 
@@ -165,6 +166,10 @@ window.api = {
   closeMcpClient,
   isFileTypeSupported,
   parseFileObject,
+  exportLocalChatFile: async (sourcePath, dialogOptions = {}) => {
+    return await exportLocalChatFile(sourcePath, dialogOptions);
+  },
+
   copyLocalPath: async (src, dest) => {
     try {
       await copyLocalPath(src, dest);

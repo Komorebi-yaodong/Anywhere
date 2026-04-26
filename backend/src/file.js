@@ -289,6 +289,51 @@ async function selectDirectory() {
     return result && result.length > 0 ? result[0] : null;
 }
 
+async function exportLocalChatFile(sourcePath, dialogOptions = {}) {
+    const normalizedSourcePath = path.resolve(String(sourcePath || '').trim());
+    if (!normalizedSourcePath) {
+        throw new Error('未提供有效的本地对话路径');
+    }
+
+    let sourceStats;
+    try {
+        sourceStats = await fs.stat(normalizedSourcePath);
+    } catch {
+        throw new Error('本地对话文件不存在');
+    }
+
+    if (!sourceStats.isFile()) {
+        throw new Error('仅支持导出本地对话文件');
+    }
+
+    const defaultBasename = path.basename(normalizedSourcePath);
+    const savePath = utools.showSaveDialog({
+        title: '导出对话',
+        defaultPath: defaultBasename,
+        filters: [{ name: 'JSON Files', extensions: ['json'] }],
+        ...dialogOptions,
+    });
+
+    if (!savePath) {
+        return { cancelled: true, path: null, sourcePath: normalizedSourcePath };
+    }
+
+    const normalizedSavePath = path.resolve(String(savePath));
+    if (normalizedSavePath !== normalizedSourcePath) {
+        await fs.copyFile(normalizedSourcePath, normalizedSavePath);
+        await fs.utimes(normalizedSavePath, sourceStats.atime, sourceStats.mtime);
+    }
+
+    return {
+        cancelled: false,
+        sourcePath: normalizedSourcePath,
+        path: normalizedSavePath,
+        basename: path.basename(normalizedSavePath),
+        skippedCopy: normalizedSavePath === normalizedSourcePath,
+    };
+}
+
+
 const localSessionMetadataCache = new Map();
 
 function buildLocalSessionCacheKey(filePath) {
@@ -559,6 +604,7 @@ module.exports = {
     saveFile,
 
     selectDirectory,
+    exportLocalChatFile,
     listJsonFiles,
     readLocalFile,
     renameLocalFile,
