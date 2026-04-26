@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch, onUnmounted, nextTick, onActivated, onDeactivated, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
-import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush, Operation } from '@element-plus/icons-vue'
+import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush, Operation, Share } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n();
@@ -515,6 +515,32 @@ async function renameRemoteSessionFileWithMetadata(client, remoteDir, oldFilenam
         // ignore remote metadata sync failure to preserve rename compatibility
     }
 }
+async function exportLocalChat(file) {
+    if (activeView.value !== 'local') return;
+    if (!file?.path) {
+        ElMessage.warning(t('chats.alerts.localFileMissing'));
+        return;
+    }
+
+    try {
+        const result = await window.api.exportLocalChatFile(file.path, {
+            title: t('chats.export.dialogTitle'),
+            defaultPath: file.basename,
+            filters: [{ name: 'JSON Files', extensions: ['json'] }]
+        });
+
+        if (result?.cancelled) {
+            ElMessage.info(t('chats.export.cancelled'));
+            return;
+        }
+
+        ElMessage.success(t('chats.export.success'));
+    } catch (error) {
+        ElMessage.error(`${t('chats.export.failed')}: ${error.message}`);
+    }
+}
+
+
 
 async function renameFile(file) {
     const defaultInputValue = file.title || (file.basename.endsWith('.json') ? file.basename.slice(0, -5) : file.basename);
@@ -981,8 +1007,13 @@ const toggleSelectAll = () => {
                                     <el-button link type="primary" :icon="ChatDotRound"
                                         class="action-icon-btn chat-highlight" @click.stop="startChat(file)" />
                                 </el-tooltip>
+                                <!-- 2. 分享/导出按钮（仅本地） -->
+                                <el-tooltip v-if="activeView === 'local'" :content="t('chats.actions.share')" placement="top" :show-after="500">
+                                    <el-button link type="success" :icon="Share" class="action-icon-btn"
+                                        @click.stop="exportLocalChat(file)" />
+                                </el-tooltip>
 
-                                <!-- 2. 同步按钮 -->
+                                <!-- 3. 同步按钮 -->
                                 <el-tooltip
                                     :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')"
                                     placement="top" :show-after="500">
@@ -991,13 +1022,13 @@ const toggleSelectAll = () => {
                                         :loading="singleFileSyncing[file.basename]" />
                                 </el-tooltip>
 
-                                <!-- 3. 重命名按钮 -->
+                                <!-- 4. 重命名按钮 -->
                                 <el-tooltip :content="t('chats.actions.rename')" placement="top" :show-after="500">
                                     <el-button link type="warning" :icon="Edit" class="action-icon-btn"
                                         @click.stop="renameFile(file)" />
                                 </el-tooltip>
 
-                                <!-- 4. 删除按钮 -->
+                                <!-- 5. 删除按钮 -->
                                 <el-tooltip :content="t('chats.actions.delete')" placement="top" :show-after="500">
                                     <el-button link type="danger" :icon="DeleteIcon" class="action-icon-btn"
                                         @click.stop="deleteFiles([file])" />

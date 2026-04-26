@@ -65,6 +65,7 @@
     },
     "actions": {
       "chat": "聊天",
+      "share": "分享/导出",
       "rename": "重命名",
       "delete": "删除",
       "forceSync": "同步"
@@ -77,6 +78,13 @@
       "syncCloudConfirm": "云端也存在同名文件，是否同步重命名？",
       "syncLocalConfirm": "本地也存在同名文件，是否同步重命名？"
     },
+    "export": {
+      "dialogTitle": "导出对话",
+      "success": "对话导出成功",
+      "failed": "导出对话失败",
+      "cancelled": "已取消导出"
+    },
+
     "tooltips": {
       "syncToCloud": "上传至云端",
       "syncFromCloud": "从云端同步",
@@ -133,7 +141,8 @@
       "webdavRequired": "请先配置WebDAV",
       "localPathRequired": "请先配置本地对话路径",
       "continueConfirm": "是否继续？",
-      "restoreChat": "恢复聊天"
+      "restoreChat": "恢复聊天",
+      "localFileMissing": "未找到本地对话文件"
     }
   },
   "tasks": {

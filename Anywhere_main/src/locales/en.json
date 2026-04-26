@@ -65,6 +65,7 @@
     },
     "actions": {
       "chat": "Chat",
+      "share": "Share / Export",
       "rename": "Rename",
       "delete": "Delete",
       "forceSync": "Sync"
@@ -77,6 +78,13 @@
       "syncCloudConfirm": "A file with the same name exists in the cloud. Rename it synchronously?",
       "syncLocalConfirm": "A file with the same name exists locally. Rename it synchronously?"
     },
+    "export": {
+      "dialogTitle": "Export Chat",
+      "success": "Chat exported successfully.",
+      "failed": "Failed to export chat",
+      "cancelled": "Export cancelled"
+    },
+
     "tooltips": {
       "syncToCloud": "Upload to Cloud",
       "syncFromCloud": "Sync from Cloud",
@@ -133,7 +141,8 @@
       "webdavRequired": "Please configure WebDAV first",
       "localPathRequired": "Please configure local chat path first",
       "continueConfirm": "Continue?",
-      "restoreChat": "Restore Chat"
+      "restoreChat": "Restore Chat",
+      "localFileMissing": "Local chat file not found"
     }
   },
   "tasks": {
