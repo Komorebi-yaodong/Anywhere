@@ -97,14 +97,7 @@ const getMessageComponentByIndex = (index) => {
 
 const getMessageElementByIndex = (index) => {
   const target = getMessageComponentByIndex(index);
-  if (!target) return null;
-  if (target.nodeType === 1) return target;
-  if (typeof target.getMessageElement === 'function') {
-    const messageElement = target.getMessageElement();
-    if (messageElement?.nodeType === 1) return messageElement;
-  }
-  if (target.$el?.nodeType === 1) return target.$el;
-  return null;
+  return target?.$el?.nodeType === 1 ? target.$el : null;
 };
 
 const updateModelListAndMap = (config) => {

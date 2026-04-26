@@ -388,9 +388,7 @@ const switchToShowMode = () => {
   isEditing.value = false;
 };
 
-const getMessageElement = () => messageWrapperRef.value || null;
-
-defineExpose({ switchToEditMode, switchToShowMode, getMessageElement });
+defineExpose({ switchToEditMode, switchToShowMode });
 
 const finishEdit = (action) => {
   isEditing.value = false;
