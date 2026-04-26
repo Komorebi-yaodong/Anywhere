@@ -534,6 +534,10 @@ async function exportLocalChat(file) {
             return;
         }
 
+        if (result?.path) {
+            window.api.shellShowItemInFolder(result.path);
+        }
+
         ElMessage.success(t('chats.export.success'));
     } catch (error) {
         ElMessage.error(`${t('chats.export.failed')}: ${error.message}`);
