@@ -55,6 +55,28 @@ const showScrollToBottomButton = ref(false);
 const isForcingScroll = ref(false);
 const messageRefs = new Map();
 const focusedMessageIndex = ref(null);
+const navTimelineScrollerRef = ref(null);
+
+const getLastNavigableMessageIndex = () => {
+  for (let i = chat_show.value.length - 1; i >= 0; i--) {
+    if (chat_show.value[i]?.role !== 'system') return i;
+  }
+  return null;
+};
+
+const centerActiveNavNode = async (targetIndex = focusedMessageIndex.value) => {
+  if (targetIndex === null || targetIndex === undefined) return;
+  await nextTick();
+  const scroller = navTimelineScrollerRef.value;
+  if (!scroller) return;
+  const activeNode = scroller.querySelector(`.timeline-node-wrapper[data-original-index="${targetIndex}"]`);
+  if (!activeNode) return;
+  const targetScrollTop = activeNode.offsetTop - (scroller.clientHeight / 2) + (activeNode.offsetHeight / 2);
+  scroller.scrollTo({
+    top: Math.max(0, targetScrollTop),
+    behavior: 'smooth'
+  });
+};
 
 // 核心状态：是否粘滞在底部
 const isSticky = ref(true);
@@ -690,10 +712,11 @@ const forceScrollToBottom = () => {
   isSticky.value = true; // 强制激活粘滞
   isAtBottom.value = true;
   showScrollToBottomButton.value = false;
-  focusedMessageIndex.value = null;
+  focusedMessageIndex.value = getLastNavigableMessageIndex();
 
   // 点击按钮时，为了视觉反馈，可以使用平滑滚动
   scrollToBottom('smooth');
+  centerActiveNavNode(focusedMessageIndex.value);
 
   setTimeout(() => { isForcingScroll.value = false; }, 500);
 };
@@ -720,6 +743,7 @@ const findFocusedMessageIndex = () => {
     }
   }
   if (closestIndex !== -1) focusedMessageIndex.value = closestIndex;
+  else if (isSticky.value || isAtBottom.value) focusedMessageIndex.value = getLastNavigableMessageIndex();
 };
 
 // 滚动监听：仅负责更新 isSticky 状态和 UI 按钮显示
@@ -740,7 +764,7 @@ const handleScroll = (event) => {
     if (!isSticky.value) isSticky.value = true;
     if (!isAtBottom.value) isAtBottom.value = true;
     showScrollToBottomButton.value = false;
-    focusedMessageIndex.value = null;
+    focusedMessageIndex.value = getLastNavigableMessageIndex();
   } else {
     if (isSticky.value) isSticky.value = false; // 用户主动离开了底部
     if (isAtBottom.value) isAtBottom.value = false;
@@ -758,8 +782,10 @@ const navigateToPreviousMessage = () => {
   if (!targetComponent || !container) return;
   const element = targetComponent.$el;
   const scrollDifference = container.scrollTop - element.offsetTop;
-  if (scrollDifference > 5) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  else if (currentIndex > 0) {
+  if (scrollDifference > 5) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    centerActiveNavNode(currentIndex);
+  } else if (currentIndex > 0) {
     const newIndex = currentIndex - 1;
     focusedMessageIndex.value = newIndex;
     const previousComponent = getMessageComponentByIndex(newIndex);
@@ -777,6 +803,21 @@ const navigateToNextMessage = () => {
     forceScrollToBottom();
   }
 };
+
+watch(focusedMessageIndex, (value) => {
+  if (value === null || value === undefined) return;
+  centerActiveNavNode(value);
+});
+watch(() => chat_show.value.length, () => {
+  const hasNavigableMessage = chat_show.value.some(msg => msg?.role !== 'system');
+  if (!hasNavigableMessage) {
+    focusedMessageIndex.value = null;
+    return;
+  }
+  if (isSticky.value || isAtBottom.value) {
+    focusedMessageIndex.value = getLastNavigableMessageIndex();
+  }
+});
 
 const isCollapsed = (index) => collapsedMessages.value.has(index);
 
@@ -4550,6 +4591,7 @@ const scrollToMessageByIndex = (index) => {
   if (component && component.$el && component.$el.nodeType === 1) {
     component.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     focusedMessageIndex.value = index;
+    centerActiveNavNode(index);
   }
 };
 </script>
@@ -4613,9 +4655,9 @@ const scrollToMessageByIndex = (index) => {
 
           <div class="nav-timeline-area">
             <div class="timeline-track"></div>
-            <div class="timeline-scroller no-scrollbar">
+            <div ref="navTimelineScrollerRef" class="timeline-scroller no-scrollbar">
               <div v-for="msg in navMessages" :key="msg.id" class="timeline-node-wrapper"
-                @click="scrollToMessageByIndex(msg.originalIndex)">
+                :data-original-index="msg.originalIndex" @click="scrollToMessageByIndex(msg.originalIndex)">
                 <el-tooltip :content="getMessagePreviewText(msg)" placement="left" :show-after="200" :enterable="false"
                   effect="dark">
                   <div class="timeline-node" :class="[
