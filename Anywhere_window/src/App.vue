@@ -79,7 +79,8 @@ const centerActiveNavNode = async (targetIndex = focusedMessageIndex.value) => {
 };
 
 // 核心状态：是否粘滞在底部
-const isSticky = ref(true);
+const isSticky = ref(true);
+
 
 
 let textSearchInstance = null;
@@ -3536,6 +3537,86 @@ const ensureAssistantReasoningContentForThinkingMode = (messages = [], reasoning
   return messages;
 };
 
+
+const isAsyncIterableResponse = (value) => {
+  return value && typeof value[Symbol.asyncIterator] === 'function';
+};
+
+
+const collectChatCompletionStreamToMessage = async (streamLike) => {
+  let aggregatedReasoningContent = '';
+  let aggregatedContent = '';
+  let aggregatedMedia = [];
+  let aggregatedToolCalls = [];
+  let aggregatedExtraContent = null;
+
+  for await (const part of streamLike) {
+    const delta = part?.choices?.[0]?.delta;
+    if (!delta) continue;
+
+    if (delta.extra_content) {
+      aggregatedExtraContent = { ...aggregatedExtraContent, ...delta.extra_content };
+    }
+    if (delta.thought_signature) {
+      aggregatedExtraContent = aggregatedExtraContent || {};
+      aggregatedExtraContent.google = aggregatedExtraContent.google || {};
+      aggregatedExtraContent.google.thought_signature = delta.thought_signature;
+    }
+    if (delta.reasoning_content || delta.reasoning) {
+      aggregatedReasoningContent += delta.reasoning_content || delta.reasoning;
+    }
+    if (delta.content) {
+      if (typeof delta.content === 'string') {
+        aggregatedContent += delta.content;
+      } else if (Array.isArray(delta.content)) {
+        delta.content.forEach(item => {
+          if (item?.type === 'text') {
+            aggregatedContent += (item.text || '');
+          } else if (item?.type === 'image_url') {
+            aggregatedMedia.push(item);
+          }
+        });
+      }
+    }
+    if (delta.tool_calls) {
+      for (const toolCallChunk of delta.tool_calls) {
+        const index = toolCallChunk.index ?? aggregatedToolCalls.length;
+        if (!aggregatedToolCalls[index]) {
+          aggregatedToolCalls[index] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+        }
+        const currentTool = aggregatedToolCalls[index];
+        if (toolCallChunk.id) currentTool.id = toolCallChunk.id;
+        if (toolCallChunk.function?.name) currentTool.function.name = toolCallChunk.function.name;
+        if (toolCallChunk.function?.arguments) currentTool.function.arguments += toolCallChunk.function.arguments;
+        if (toolCallChunk.extra_content) {
+          currentTool.extra_content = { ...currentTool.extra_content, ...toolCallChunk.extra_content };
+        }
+      }
+    }
+  }
+
+  let normalizedContent = aggregatedContent || null;
+  if (aggregatedMedia.length > 0) {
+    normalizedContent = [];
+    if (aggregatedContent) normalizedContent.push({ type: 'text', text: aggregatedContent });
+    normalizedContent.push(...aggregatedMedia);
+  }
+
+  const message = {
+    role: 'assistant',
+    content: normalizedContent,
+    reasoning_content: aggregatedReasoningContent || null,
+    extra_content: aggregatedExtraContent
+  };
+
+  const validToolCalls = aggregatedToolCalls.filter(tc => tc?.id && tc?.function?.name);
+  if (validToolCalls.length > 0) {
+    message.tool_calls = validToolCalls;
+  }
+
+  return message;
+};
+
 const normalizeToolsForRequest = (tools = []) => {
   const usedNames = new Set();
   return (Array.isArray(tools) ? tools : []).map((tool, index) => {
@@ -3938,8 +4019,13 @@ const askAI = async (forceSend = false) => {
             tool_calls: toolCalls.length > 0 ? toolCalls : undefined
           };
         } else {
-          // Chat Completions
-          responseMessage = response.choices[0].message;
+          if (isAsyncIterableResponse(response)) {
+            responseMessage = await collectChatCompletionStreamToMessage(response);
+          } else if (response && response.choices && response.choices.length > 0) {
+            responseMessage = response.choices[0].message;
+          } else {
+            throw new Error(`API 返回异常，未包含有效的 choices 数据: ${JSON.stringify(response)}`);
+          }
         }
       }
 
