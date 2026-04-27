@@ -46,19 +46,25 @@ function adaptToolsForResponses(tools) {
  * 将 Chat Completions 格式的消息历史转换为 Responses API 的 Input Items
  */
 
-function normalizeMessagesForChatCompletions(messages = []) {
+function shouldIncludeAssistantReasoningContent(reasoningEffort) {
+    return typeof reasoningEffort === 'string' && !['', 'default', 'none'].includes(reasoningEffort);
+}
+
+function normalizeMessagesForChatCompletions(messages = [], reasoningEffort) {
     if (!Array.isArray(messages)) return [];
+
+    const shouldBackfillReasoningContent = shouldIncludeAssistantReasoningContent(reasoningEffort);
 
     return messages.map((msg) => {
         if (!msg || typeof msg !== 'object') return msg;
 
         const nextMsg = { ...msg };
         if (nextMsg.role === 'assistant') {
-            const reasoningContent = typeof nextMsg.reasoning_content === 'string'
-                ? nextMsg.reasoning_content
-                : '';
-            if (reasoningContent) {
-                nextMsg.reasoning_content = reasoningContent;
+            const hasReasoningContent = typeof nextMsg.reasoning_content === 'string';
+            if (hasReasoningContent) {
+                nextMsg.reasoning_content = nextMsg.reasoning_content;
+            } else if (shouldBackfillReasoningContent) {
+                nextMsg.reasoning_content = '';
             }
         }
 
@@ -68,7 +74,7 @@ function normalizeMessagesForChatCompletions(messages = []) {
 
 function convertMessagesToResponsesInput(messages) {
     const inputItems = [];
-    const normalizedMessages = normalizeMessagesForChatCompletions(messages);
+    const normalizedMessages = normalizeMessagesForChatCompletions(messages, undefined);
 
     for (const msg of normalizedMessages) {
         // 1. Role 映射 (Responses API 使用 developer 代替 system)
@@ -237,7 +243,7 @@ async function createChatCompletion(params) {
             return await client.responses.create(responseParams, { signal });
         } else {
             // 标准 Chat Completions API
-            const normalizedMessages = normalizeMessagesForChatCompletions(openAiParams.messages);
+            const normalizedMessages = normalizeMessagesForChatCompletions(openAiParams.messages, openAiParams.reasoning_effort);
             return await client.chat.completions.create(
                 {
                     ...openAiParams,

@@ -3517,6 +3517,25 @@ Here are the rules you should always follow to solve your task:
 };
 
 
+
+const shouldBackfillAssistantReasoningContent = (reasoningEffort) => {
+  return typeof reasoningEffort === 'string' && !['', 'default', 'none'].includes(reasoningEffort);
+};
+
+const ensureAssistantReasoningContentForThinkingMode = (messages = [], reasoningEffort) => {
+  if (!Array.isArray(messages) || !shouldBackfillAssistantReasoningContent(reasoningEffort)) {
+    return messages;
+  }
+
+  messages.forEach(msg => {
+    if (msg?.role === 'assistant' && typeof msg.reasoning_content !== 'string') {
+      msg.reasoning_content = '';
+    }
+  });
+
+  return messages;
+};
+
 const normalizeToolsForRequest = (tools = []) => {
   const usedNames = new Set();
   return (Array.isArray(tools) ? tools : []).map((tool, index) => {
@@ -3609,6 +3628,8 @@ const askAI = async (forceSend = false) => {
         }
         return true;
       });
+
+      ensureAssistantReasoningContentForThinkingMode(messagesForThisRequest, tempReasoningEffort.value);
 
       messagesForThisRequest.forEach(msg => {
         if (Array.isArray(msg.content)) {
@@ -3861,7 +3882,7 @@ const askAI = async (forceSend = false) => {
         responseMessage = {
           role: 'assistant',
           content: finalContentForHistory,
-          reasoning_content: aggregatedReasoningContent || null,
+          reasoning_content: aggregatedReasoningContent || (shouldBackfillAssistantReasoningContent(tempReasoningEffort.value) ? '' : null),
           extra_content: aggregatedExtraContent
         };
 
@@ -3913,7 +3934,7 @@ const askAI = async (forceSend = false) => {
           responseMessage = {
             role: 'assistant',
             content: contentText || null,
-            reasoning_content: reasoningText || null,
+            reasoning_content: reasoningText || (shouldBackfillAssistantReasoningContent(tempReasoningEffort.value) ? '' : null),
             tool_calls: toolCalls.length > 0 ? toolCalls : undefined
           };
         } else {
@@ -3930,7 +3951,10 @@ const askAI = async (forceSend = false) => {
         });
       }
 
-      history.value.push(responseMessage);
+      
+      ensureAssistantReasoningContentForThinkingMode([responseMessage], tempReasoningEffort.value);
+
+history.value.push(responseMessage);
 
       // --- 更新 UI 气泡 ---
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
