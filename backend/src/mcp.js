@@ -469,9 +469,10 @@ async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
       resolvedToolName,
       serverId: toolInfo.serverConfig?.id,
       timeoutSeconds: toolInfo.serverConfig?.timeoutSeconds ?? null,
-      toolTimeoutMs
+      toolTimeoutMs,
+      method: 'call'
     });
-    return await toolInfo.instance.invoke(toolArgs, { signal, timeout: toolTimeoutMs });
+    return await toolInfo.instance.call(toolArgs, { signal, timeout: toolTimeoutMs });
   }
 
   const serverConfig = toolInfo.serverConfig;
@@ -495,9 +496,10 @@ async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
         resolvedToolName,
         serverId: serverConfig.id,
         timeoutSeconds: serverConfig.timeoutSeconds ?? null,
-        toolTimeoutMs
+        toolTimeoutMs,
+        method: 'call'
       });
-      return await toolToCall.invoke(toolArgs, { signal: controller.signal, timeout: toolTimeoutMs });
+      return await toolToCall.call(toolArgs, { signal: controller.signal, timeout: toolTimeoutMs });
     } finally {
       if (!signal) controller.abort();
       if (tempClient) await tempClient.close();
@@ -538,10 +540,11 @@ async function connectAndInvokeTool(id, config, toolName, toolArgs, context = nu
       id,
       toolName,
       timeoutSeconds: config?.timeoutSeconds ?? null,
-      toolTimeoutMs
+      toolTimeoutMs,
+      method: 'call'
     });
 
-    return await targetTool.invoke(toolArgs, { signal: controller.signal, timeout: toolTimeoutMs });
+    return await targetTool.call(toolArgs, { signal: controller.signal, timeout: toolTimeoutMs });
   } catch (error) {
     console.error(`[MCP] Error invoking tool ${toolName} on ${id}:`, error);
     throw error;
