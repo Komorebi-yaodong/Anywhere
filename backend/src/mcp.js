@@ -149,15 +149,6 @@ function buildMcpClientServerConfig(id, config = {}, options = {}) {
     delete runtimeConfig.defaultToolTimeout;
   }
 
-  console.log('[MCP Debug] buildMcpClientServerConfig', {
-    id,
-    transport: runtimeConfig.transport || runtimeConfig.type,
-    useConfiguredTimeout,
-    timeoutSeconds: sourceConfig.timeoutSeconds,
-    normalizedTimeoutSeconds,
-    defaultToolTimeout: runtimeConfig.defaultToolTimeout ?? null
-  });
-
   return { id, ...runtimeConfig };
 }
 
@@ -464,14 +455,6 @@ async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
   }
 
   if (toolInfo.isPersistent && toolInfo.instance) {
-    console.log('[MCP Debug] invokeMcpTool persistent', {
-      toolName,
-      resolvedToolName,
-      serverId: toolInfo.serverConfig?.id,
-      timeoutSeconds: toolInfo.serverConfig?.timeoutSeconds ?? null,
-      toolTimeoutMs,
-      method: 'call'
-    });
     return await toolInfo.instance.call(toolArgs, { signal, timeout: toolTimeoutMs });
   }
 
@@ -491,14 +474,6 @@ async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
       const tools = await tempClient.getTools();
       const toolToCall = tools.find(t => t.name === resolvedToolName || sanitizeToolName(t.name, serverConfig.id || 'tool') === toolName);
       if (!toolToCall) throw new Error(`Tool "${resolvedToolName}" not found.`);
-      console.log('[MCP Debug] invokeMcpTool on-demand', {
-        toolName,
-        resolvedToolName,
-        serverId: serverConfig.id,
-        timeoutSeconds: serverConfig.timeoutSeconds ?? null,
-        toolTimeoutMs,
-        method: 'call'
-      });
       return await toolToCall.call(toolArgs, { signal: controller.signal, timeout: toolTimeoutMs });
     } finally {
       if (!signal) controller.abort();
@@ -536,13 +511,6 @@ async function connectAndInvokeTool(id, config, toolName, toolArgs, context = nu
     }
 
     const toolTimeoutMs = normalizeMcpTimeoutSeconds(config?.timeoutSeconds) * 1000;
-    console.log('[MCP Debug] connectAndInvokeTool', {
-      id,
-      toolName,
-      timeoutSeconds: config?.timeoutSeconds ?? null,
-      toolTimeoutMs,
-      method: 'call'
-    });
 
     return await targetTool.call(toolArgs, { signal: controller.signal, timeout: toolTimeoutMs });
   } catch (error) {
