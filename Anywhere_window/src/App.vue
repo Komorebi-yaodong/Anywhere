@@ -3686,7 +3686,7 @@ const askAI = async (forceSend = false) => {
 
   const currentPromptConfig = currentConfig.value.prompts[CODE.value];
   const isVoiceReply = !!selectedVoice.value;
-  let useStream = currentPromptConfig?.stream && !isVoiceReply;
+  let useStream = (currentPromptConfig?.stream ?? true) && !isVoiceReply;
   let tool_calls_count = 0;
 
   // 获取当前服务商的 API 类型
