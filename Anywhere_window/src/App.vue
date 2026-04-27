@@ -3371,6 +3371,7 @@ async function applyMcpTools(show_none = true, reason = 'unknown') {
         url: serverConf.baseUrl,
         env: serverConf.env,
         headers: serverConf.headers,
+        timeoutSeconds: serverConf.timeoutSeconds,
         isPersistent: serverConf.isPersistent,
       };
     }
