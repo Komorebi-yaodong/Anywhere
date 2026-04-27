@@ -134,18 +134,29 @@ function normalizeMcpTimeoutSeconds(timeoutSeconds, fallbackSeconds = 120) {
 function buildMcpClientServerConfig(id, config = {}, options = {}) {
   const sourceConfig = config && typeof config === 'object' ? config : {};
   const useConfiguredTimeout = options.useConfiguredTimeout !== false;
+  const normalizedTimeoutSeconds = normalizeMcpTimeoutSeconds(sourceConfig.timeoutSeconds);
   const runtimeConfig = preprocessStdioConfig({
     ...sourceConfig,
     transport: normalizeTransportType(sourceConfig.transport || sourceConfig.type || '')
   });
 
   delete runtimeConfig.timeoutSeconds;
+  delete runtimeConfig.timeout;
 
   if (useConfiguredTimeout) {
-    runtimeConfig.timeout = normalizeMcpTimeoutSeconds(sourceConfig.timeoutSeconds);
+    runtimeConfig.defaultToolTimeout = normalizedTimeoutSeconds * 1000;
   } else {
-    delete runtimeConfig.timeout;
+    delete runtimeConfig.defaultToolTimeout;
   }
+
+  console.log('[MCP Debug] buildMcpClientServerConfig', {
+    id,
+    transport: runtimeConfig.transport || runtimeConfig.type,
+    useConfiguredTimeout,
+    timeoutSeconds: sourceConfig.timeoutSeconds,
+    normalizedTimeoutSeconds,
+    defaultToolTimeout: runtimeConfig.defaultToolTimeout ?? null
+  });
 
   return { id, ...runtimeConfig };
 }
@@ -434,6 +445,7 @@ function buildOpenaiFormattedTools() {
 async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
   const toolInfo = fullToolInfoMap.get(toolName);
   const resolvedToolName = toolInfo?.rawName || toolInfo?.originalName || toolInfo?.displayName || toolName;
+  const toolTimeoutMs = normalizeMcpTimeoutSeconds(toolInfo?.serverConfig?.timeoutSeconds) * 1000;
 
   if (!toolInfo) {
     try {
@@ -452,7 +464,14 @@ async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
   }
 
   if (toolInfo.isPersistent && toolInfo.instance) {
-    return await toolInfo.instance.invoke(toolArgs, { signal });
+    console.log('[MCP Debug] invokeMcpTool persistent', {
+      toolName,
+      resolvedToolName,
+      serverId: toolInfo.serverConfig?.id,
+      timeoutSeconds: toolInfo.serverConfig?.timeoutSeconds ?? null,
+      toolTimeoutMs
+    });
+    return await toolInfo.instance.invoke(toolArgs, { signal, timeout: toolTimeoutMs });
   }
 
   const serverConfig = toolInfo.serverConfig;
@@ -471,7 +490,14 @@ async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
       const tools = await tempClient.getTools();
       const toolToCall = tools.find(t => t.name === resolvedToolName || sanitizeToolName(t.name, serverConfig.id || 'tool') === toolName);
       if (!toolToCall) throw new Error(`Tool "${resolvedToolName}" not found.`);
-      return await toolToCall.invoke(toolArgs, { signal: controller.signal });
+      console.log('[MCP Debug] invokeMcpTool on-demand', {
+        toolName,
+        resolvedToolName,
+        serverId: serverConfig.id,
+        timeoutSeconds: serverConfig.timeoutSeconds ?? null,
+        toolTimeoutMs
+      });
+      return await toolToCall.invoke(toolArgs, { signal: controller.signal, timeout: toolTimeoutMs });
     } finally {
       if (!signal) controller.abort();
       if (tempClient) await tempClient.close();
@@ -507,7 +533,15 @@ async function connectAndInvokeTool(id, config, toolName, toolArgs, context = nu
       throw new Error(`Tool '${toolName}' not found on server '${id}'. Available tools: ${tools.map(t => t.name).join(', ')}`);
     }
 
-    return await targetTool.invoke(toolArgs, { signal: controller.signal });
+    const toolTimeoutMs = normalizeMcpTimeoutSeconds(config?.timeoutSeconds) * 1000;
+    console.log('[MCP Debug] connectAndInvokeTool', {
+      id,
+      toolName,
+      timeoutSeconds: config?.timeoutSeconds ?? null,
+      toolTimeoutMs
+    });
+
+    return await targetTool.invoke(toolArgs, { signal: controller.signal, timeout: toolTimeoutMs });
   } catch (error) {
     console.error(`[MCP] Error invoking tool ${toolName} on ${id}:`, error);
     throw error;

@@ -383,7 +383,7 @@
     "typeLabel": "Type",
     "activeLabel": "Active",
     "timeoutLabel": "Tool Call Timeout (seconds)",
-    "timeoutTooltip": "Only affects MCP tool call timeout. Tool discovery remains fixed at 10 seconds. Leave empty to use the default 120 seconds.",
+    "timeoutTooltip": "Default 120s",
     "timeoutPlaceholder": "Leave empty for default 120",
     "persistentOn": "Persistent connection ON",
     "persistentOff": "Persistent connection OFF",

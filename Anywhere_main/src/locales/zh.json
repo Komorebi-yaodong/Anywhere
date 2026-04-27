@@ -383,7 +383,7 @@
     "typeLabel": "类型",
     "activeLabel": "启用",
     "timeoutLabel": "工具调用超时（秒）",
-    "timeoutTooltip": "仅影响 MCP 工具调用超时；获取工具列表仍固定为 10 秒。留空时默认使用 120 秒。",
+    "timeoutTooltip": "默认120s",
     "timeoutPlaceholder": "留空默认 120",
     "persistentOn": "持久连接已开启",
     "persistentOff": "持久连接已关闭",
