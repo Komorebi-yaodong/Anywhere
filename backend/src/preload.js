@@ -155,6 +155,7 @@ window.api = {
         url: serverConfig.baseUrl,
         env: serverConfig.env,
         headers: serverConfig.headers,
+        timeoutSeconds: serverConfig.timeoutSeconds,
         type: serverConfig.type // 确保 type 传递给 builtin 判断
       }, toolName, args);
       return { success: true, result };

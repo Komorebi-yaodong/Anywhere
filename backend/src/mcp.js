@@ -122,6 +122,34 @@ function preprocessStdioConfig(config) {
   return result;
 }
 
+
+function normalizeMcpTimeoutSeconds(timeoutSeconds, fallbackSeconds = 120) {
+  const numericValue = Number(timeoutSeconds);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return fallbackSeconds;
+  }
+  return numericValue;
+}
+
+function buildMcpClientServerConfig(id, config = {}, options = {}) {
+  const sourceConfig = config && typeof config === 'object' ? config : {};
+  const useConfiguredTimeout = options.useConfiguredTimeout !== false;
+  const runtimeConfig = preprocessStdioConfig({
+    ...sourceConfig,
+    transport: normalizeTransportType(sourceConfig.transport || sourceConfig.type || '')
+  });
+
+  delete runtimeConfig.timeoutSeconds;
+
+  if (useConfiguredTimeout) {
+    runtimeConfig.timeout = normalizeMcpTimeoutSeconds(sourceConfig.timeoutSeconds);
+  } else {
+    delete runtimeConfig.timeout;
+  }
+
+  return { id, ...runtimeConfig };
+}
+
 function getToolFetchKey(id, config = {}) {
   const normalizedConfig = {
     id,
@@ -158,8 +186,8 @@ async function connectAndFetchTools(id, config) {
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
-      const modifiedConfig = preprocessStdioConfig({ ...config, transport: normalizeTransportType(config.transport) });
-      tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
+      const runtimeConfig = buildMcpClientServerConfig(id, config, { useConfiguredTimeout: false });
+      tempClient = new MultiServerMCPClient({ [id]: runtimeConfig }, { signal: controller.signal });
       return await tempClient.getTools();
     } catch (error) {
       console.error(`[MCP] Error fetching tools from ${id}:`, error);
@@ -349,8 +377,8 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
       }
 
       try {
-        const modifiedConfig = preprocessStdioConfig({ ...config, transport: normalizeTransportType(config.transport) });
-        const client = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } });
+        const runtimeConfig = buildMcpClientServerConfig(id, config);
+        const client = new MultiServerMCPClient({ [id]: runtimeConfig });
         const tools = await client.getTools();
         const oldToolsCache = cachedToolsMap[id] || [];
         await cacheResolvedTools(id, tools, oldToolsCache).catch(e => console.error(`[MCP] Auto-cache failed for persistent ${id}:`, e));
@@ -438,10 +466,8 @@ async function invokeMcpTool(toolName, toolArgs, signal, context = null) {
     }
 
     try {
-      const modifiedConfig = preprocessStdioConfig({ ...serverConfig });
-      modifiedConfig.transport = normalizeTransportType(modifiedConfig.transport);
-
-      tempClient = new MultiServerMCPClient({ [serverConfig.id]: { id: serverConfig.id, ...modifiedConfig } }, { signal: controller.signal });
+      const runtimeConfig = buildMcpClientServerConfig(serverConfig.id, serverConfig);
+      tempClient = new MultiServerMCPClient({ [serverConfig.id]: runtimeConfig }, { signal: controller.signal });
       const tools = await tempClient.getTools();
       const toolToCall = tools.find(t => t.name === resolvedToolName || sanitizeToolName(t.name, serverConfig.id || 'tool') === toolName);
       if (!toolToCall) throw new Error(`Tool "${resolvedToolName}" not found.`);
@@ -466,11 +492,10 @@ async function connectAndInvokeTool(id, config, toolName, toolArgs, context = nu
 
   let tempClient = null;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
-    const modifiedConfig = preprocessStdioConfig({ ...config, transport: normalizeTransportType(config.transport) });
-    tempClient = new MultiServerMCPClient({ [id]: { id, ...modifiedConfig } }, { signal: controller.signal });
+    const runtimeConfig = buildMcpClientServerConfig(id, config);
+    tempClient = new MultiServerMCPClient({ [id]: runtimeConfig }, { signal: controller.signal });
     const tools = await tempClient.getTools();
     const normalizedToolName = sanitizeToolName(toolName, id || 'tool');
     const targetTool = tools.find(t => {
@@ -487,7 +512,6 @@ async function connectAndInvokeTool(id, config, toolName, toolArgs, context = nu
     console.error(`[MCP] Error invoking tool ${toolName} on ${id}:`, error);
     throw error;
   } finally {
-    clearTimeout(timeoutId);
     controller.abort();
     if (tempClient) {
       try {

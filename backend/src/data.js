@@ -365,7 +365,8 @@ async function getConfig() {
           mergedMcpServers[id] = { 
               ...server, 
               isActive: mergedMcpServers[id].isActive,
-              isPersistent: mergedMcpServers[id].isPersistent
+              isPersistent: mergedMcpServers[id].isPersistent,
+              timeoutSeconds: mergedMcpServers[id].timeoutSeconds
           };
       } else {
           mergedMcpServers[id] = server;
@@ -546,7 +547,29 @@ function checkConfig(config) {
     }
   }
 
-  // --- 5. Providers & Order 检查 ---
+  
+  if (config.mcpServers && typeof config.mcpServers === 'object') {
+    for (const server of Object.values(config.mcpServers)) {
+      if (!server || typeof server !== 'object') continue;
+      if (server.timeoutSeconds === '' || server.timeoutSeconds === null) {
+        delete server.timeoutSeconds;
+        flag = true;
+        continue;
+      }
+      if (server.timeoutSeconds !== undefined) {
+        const numericTimeout = Number(server.timeoutSeconds);
+        if (!Number.isFinite(numericTimeout) || numericTimeout <= 0) {
+          delete server.timeoutSeconds;
+          flag = true;
+        } else if (server.timeoutSeconds !== numericTimeout) {
+          server.timeoutSeconds = numericTimeout;
+          flag = true;
+        }
+      }
+    }
+  }
+
+// --- 5. Providers & Order 检查 ---
   if (config.providers) {
     for (const key in config.providers) {
       const prov = config.providers[key];
