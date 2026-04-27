@@ -3951,10 +3951,9 @@ const askAI = async (forceSend = false) => {
         });
       }
 
-      
       ensureAssistantReasoningContentForThinkingMode([responseMessage], tempReasoningEffort.value);
 
-history.value.push(responseMessage);
+      history.value.push(responseMessage);
 
       // --- 更新 UI 气泡 ---
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
