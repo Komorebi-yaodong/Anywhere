@@ -362,6 +362,36 @@ const isRefreshingMcp = ref(false);
 const mcpToolCache = ref({});
 const expandedMcpServers = ref(new Set());
 
+const lastAppliedMcpConfigFingerprint = ref('');
+
+const buildComparableMcpServerConfig = (server = {}) => ({
+  type: server?.type || '',
+  command: server?.command || '',
+  args: Array.isArray(server?.args) ? [...server.args] : [],
+  baseUrl: server?.baseUrl || '',
+  env: server?.env && typeof server.env === 'object'
+    ? Object.entries(server.env).sort(([a], [b]) => String(a).localeCompare(String(b)))
+    : [],
+  headers: server?.headers && typeof server.headers === 'object'
+    ? Object.entries(server.headers).sort(([a], [b]) => String(a).localeCompare(String(b)))
+    : [],
+  isPersistent: Boolean(server?.isPersistent),
+  timeoutSeconds: Number(server?.timeoutSeconds) || 120
+});
+
+const buildSelectedMcpConfigFingerprint = (serverIds = sessionMcpServerIds.value, mcpServers = currentConfig.value?.mcpServers || {}) => {
+  const payload = (Array.isArray(serverIds) ? [...serverIds] : [])
+    .filter(id => mcpServers && mcpServers[id])
+    .sort()
+    .map((id) => ({
+      id,
+      config: buildComparableMcpServerConfig(mcpServers[id])
+    }));
+
+  return JSON.stringify(payload);
+};
+
+
 const toggleMcpServerExpansion = (serverId) => {
   if (expandedMcpServers.value.has(serverId)) {
     expandedMcpServers.value.delete(serverId);
@@ -1822,9 +1852,10 @@ onMounted(async () => {
         // 1. 配置更新后同步重构服务商和模型列表
         updateModelListAndMap(newConfig);
 
-        // 2. 校验并清理已删除或被禁用的 MCP 服务
+        // 2. 校验并清理已删除、被禁用或运行时配置已变化的 MCP 服务
         if (newConfig.mcpServers) {
           let mcpChanged = false;
+          const previousFingerprint = lastAppliedMcpConfigFingerprint.value;
           // 筛选当前真正有效的选中 ID
           const validMcpIds = sessionMcpServerIds.value.filter(id => {
             const server = newConfig.mcpServers[id];
@@ -1840,9 +1871,14 @@ onMounted(async () => {
             mcpChanged = true;
           }
 
-          // 如果发现存在失效的 MCP 服务，通知后端重新加载客户端
-          if (mcpChanged && !loading.value) {
-            requestApplyMcpTools(false, 'config-or-session-sync');
+          const nextFingerprint = buildSelectedMcpConfigFingerprint(validMcpIds, newConfig.mcpServers);
+          if (nextFingerprint !== previousFingerprint) {
+            mcpChanged = true;
+          }
+
+          // 仅在当前窗口实际使用的 MCP 运行时配置变化时，本地重新加载，不回写配置，避免广播风暴
+          if (mcpChanged && !loading.value && !isMcpLoading.value) {
+            requestApplyMcpTools(false, 'config-runtime-changed');
           }
         }
       }
@@ -3386,6 +3422,7 @@ async function applyMcpTools(show_none = true, reason = 'unknown') {
 
     openaiFormattedTools.value = newFormattedTools;
     sessionMcpServerIds.value = successfulServerIds;
+    lastAppliedMcpConfigFingerprint.value = buildSelectedMcpConfigFingerprint(successfulServerIds, currentConfig.value?.mcpServers || {});
 
     if (failedServerIds && failedServerIds.length > 0) {
       const failedNames = failedServerIds.map(id => currentConfig.value.mcpServers[id]?.name || id).join('、');
@@ -3408,6 +3445,7 @@ async function applyMcpTools(show_none = true, reason = 'unknown') {
     showDismissibleMessage.error(`加载MCP工具失败: ${error.message}`);
     openaiFormattedTools.value = [];
     sessionMcpServerIds.value = [];
+    lastAppliedMcpConfigFingerprint.value = buildSelectedMcpConfigFingerprint([], currentConfig.value?.mcpServers || {});
   } finally {
     isMcpLoading.value = false;
   }
