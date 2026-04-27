@@ -1494,13 +1494,25 @@ const handlers = {
                 return "Error: You MUST provide a 'pattern' argument.";
             }
 
-            const rootDir = resolvePath(searchPath);
-            const parsed = path.parse(rootDir);
-            if (parsed.root === rootDir && rootDir.length <= 3) {
-                return `Error: Grep searching the system root directory ('${rootDir}') is not allowed. Please specify a project directory.`;
+            const targetPath = resolvePath(searchPath);
+            const parsed = path.parse(targetPath);
+            if (parsed.root === targetPath && targetPath.length <= 3) {
+                return `Error: Grep searching the system root directory ('${targetPath}') is not allowed. Please specify a project directory.`;
             }
 
-            if (!fs.existsSync(rootDir)) return `Error: Directory not found: ${rootDir}`;
+            if (!fs.existsSync(targetPath)) return `Error: Directory not found: ${targetPath}`;
+
+            let targetStats;
+            try {
+                targetStats = await fs.promises.stat(targetPath);
+            } catch (e) {
+                return `Error: Unable to access path: ${targetPath}`;
+            }
+
+            const isSingleFile = targetStats.isFile();
+            if (!isSingleFile && !targetStats.isDirectory()) {
+                return `Error: Unsupported path type: ${targetPath}`;
+            }
 
             const regexFlags = multiline ? 'gmsi' : 'gi';
             let searchRegex;
@@ -1514,15 +1526,16 @@ const handlers = {
             searchRegex.lastIndex = 0;
 
             const globRegex = glob ? globToRegex(glob) : null;
-            const normalizedRoot = normalizePath(rootDir);
+            const normalizedRoot = normalizePath(isSingleFile ? path.dirname(targetPath) : targetPath);
 
             const results = [];
             let matchCount = 0;
             const MAX_SCANNED = 5000;
             const MAX_RESULTS_BLOCKS = 100;
             let scanned = 0;
+            const filesToSearch = isSingleFile ? [targetPath] : walkDir(targetPath, 20, 0, signal);
 
-            for await (const filePath of walkDir(rootDir, 20, 0, signal)) {
+            for await (const filePath of filesToSearch) {
                 if (signal && signal.aborted) throw new Error("Operation aborted by user.");
                 if (scanned++ > MAX_SCANNED) {
                     results.push(`\n[System] Scan limit reached (${MAX_SCANNED} files). Please narrow down your search path or use a glob filter.`);
@@ -1563,22 +1576,16 @@ const handlers = {
                                 if (results.length >= MAX_RESULTS_BLOCKS) break;
 
                                 const offset = m.index;
-                                const matchLen = m[0].length;
+                                const lineNum = content.substring(0, offset).split(/\r?\n/).length;
 
-                                // 计算行号 (1-based)
                                 const preMatch = content.substring(0, offset);
-                                const lineNum = preMatch.split(/\r?\n/).length;
-
-                                // 计算列号 (1-based)
                                 const lastNewLinePos = preMatch.lastIndexOf('\n');
                                 const colNum = offset - lastNewLinePos;
 
-                                // 计算匹配结束行号 (处理多行匹配)
                                 const matchText = m[0];
                                 const newLinesInMatch = (matchText.match(/\n/g) || []).length;
                                 const endLineNum = lineNum + newLinesInMatch;
 
-                                // 获取上下文 (前后 20 行)
                                 const contextLines = 20;
                                 const startLineIdx = Math.max(0, lineNum - 1 - contextLines);
                                 const endLineIdx = Math.min(lines.length, endLineNum - 1 + 1 + contextLines);
