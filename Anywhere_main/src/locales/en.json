@@ -111,6 +111,9 @@
       },
       "scopeTip": "Note: This action only deletes files in the current view ({view}) and will not sync delete files on the other side."
     },
+    "selection": {
+      "count": "Selected {count} items"
+    },
     "alerts": {
       "configError": "Failed to get configuration.",
       "pathNotFound": "Specified WebDAV data path not found.",
@@ -762,6 +765,7 @@
     "downloadIcon": "Download",
     "warningTitle": "Warning",
     "refresh": "Refresh",
+    "selectAll": "Select All",
     "deleteSelected": "Delete",
     "noFileSelected": "No files selected.",
     "confirmDeleteMultiple": "Are you sure you want to permanently delete the {count} selected files?",

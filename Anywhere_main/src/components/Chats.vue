@@ -20,7 +20,7 @@ const cloudChatFiles = ref([]);
 const isTableLoading = ref(false);
 const selectedFiles = ref([]);
 const currentPage = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(20);
 const singleFileSyncing = ref({});
 const isDeletingFiles = ref(false);
 const sortMode = ref('createdAt');
@@ -1045,14 +1045,14 @@ const toggleSelectAll = () => {
 
             <div class="footer-bar">
                 <div class="footer-left">
-                    <el-checkbox :model-value="isAllSelected" @change="toggleSelectAll" label="全选" size="large"
+                    <el-checkbox :model-value="isAllSelected" @change="toggleSelectAll" :label="t('common.selectAll')" size="large"
                         :disabled="paginatedFiles.length === 0" />
-                    <span v-if="selectedFiles.length > 0" class="selection-count">已选 {{ selectedFiles.length }} 项</span>
+                    <span v-if="selectedFiles.length > 0" class="selection-count">{{ t('chats.selection.count', { count: selectedFiles.length }) }}</span>
                 </div>
                 <div class="footer-center">
                     <el-pagination v-if="currentFiles.length > 0" v-model:current-page="currentPage"
                         v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="currentFiles.length"
-                        layout="total, sizes, prev, pager, next, jumper" background size="small" />
+                        :pager-count="5" layout="total, sizes, prev, pager, next, jumper" background size="small" />
                 </div>
                 <div class="footer-right">
                     <el-tooltip :content="t('common.refresh')" placement="top">
@@ -1402,9 +1402,11 @@ const toggleSelectAll = () => {
 }
 
 .footer-center {
-    flex-grow: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     justify-content: center;
+    overflow: hidden;
 }
 
 .footer-right {
@@ -1418,6 +1420,18 @@ const toggleSelectAll = () => {
 :deep(.el-pagination) {
     --el-pagination-text-color: var(--text-secondary);
 }
+
+:deep(.el-pagination) {
+    flex-wrap: nowrap;
+    max-width: 100%;
+}
+
+:deep(.el-pagination .el-pagination__sizes),
+:deep(.el-pagination .el-pagination__total),
+:deep(.el-pagination .el-pagination__jump) {
+    white-space: nowrap;
+}
+
 
 :deep(.el-pagination.is-background .el-pager li),
 :deep(.el-pagination.is-background .btn-prev),

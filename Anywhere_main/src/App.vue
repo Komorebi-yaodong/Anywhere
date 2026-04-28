@@ -12,8 +12,13 @@ import { useI18n } from 'vue-i18n'
 import { Collection, Bell, Document } from '@element-plus/icons-vue'
 import { marked } from 'marked';
 import { ElBadge } from 'element-plus'; // 确保引入 ElBadge
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import enLocale from 'element-plus/es/locale/lang/en'
 
 const { t, locale } = useI18n()
+
+const elementPlusLocale = computed(() => locale.value === 'en' ? enLocale : zhCn)
+
 const tab = ref(0);
 const header_text = ref(t('app.header.chats'));
 
@@ -396,9 +401,10 @@ watch(locale, () => {
 </script>
 
 <template>
-  <el-container class="common-layout">
-    <el-header>
-      <el-row :gutter="0" class="header-row" align="middle">
+  <el-config-provider :locale="elementPlusLocale">
+    <el-container class="common-layout">
+      <el-header>
+        <el-row :gutter="0" class="header-row" align="middle">
         <!-- 左侧：帮助文档按钮 -->
         <el-col :span="6" class="left-actions-col">
           <el-tooltip :content="t('app.header.help') || '使用指南'" placement="bottom">
@@ -553,7 +559,8 @@ watch(locale, () => {
         </div>
       </div>
     </el-dialog>
-  </el-container>
+    </el-container>
+  </el-config-provider>
 </template>
 
 <style scoped>

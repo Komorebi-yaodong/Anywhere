@@ -111,6 +111,9 @@
       },
       "scopeTip": "注意：此操作仅删除当前视图（{view}）下的文件，不会同步删除另一端的文件。"
     },
+    "selection": {
+      "count": "已选 {count} 项"
+    },
     "alerts": {
       "configError": "获取配置失败",
       "pathNotFound": "未找到指定的WebDAV数据路径",
@@ -762,6 +765,7 @@
     "downloadIcon": "下载",
     "warningTitle": "警告",
     "refresh": "刷新",
+    "selectAll": "全选",
     "deleteSelected": "删除",
     "noFileSelected": "未选择任何文件",
     "confirmDeleteMultiple": "您确定要永久删除选中的 {count} 个文件吗？",
