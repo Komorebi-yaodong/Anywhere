@@ -1,12 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#647eff"/>
-      <stop offset="100%" stop-color="#42d392"/>
-    </linearGradient>
-  </defs>
-  <rect width="128" height="128" rx="28" fill="url(#g)"/>
-  <circle cx="46" cy="52" r="8" fill="white"/>
-  <circle cx="82" cy="52" r="8" fill="white"/>
-  <path d="M38 82c8 8 18 12 26 12s18-4 26-12" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" shape-rendering="crispEdges">
+  <!-- 主体 -->
+  <g fill="#000000">
+    <!-- 顶部小角 -->
+    <rect x="30" y="20" width="20" height="20"/>
+    <rect x="110" y="20" width="20" height="20"/>
+
+    <!-- 身体 -->
+    <rect x="20" y="40" width="120" height="80"/>
+
+    <!-- 四条腿：更粗更稳定，确保在小尺寸下清晰可见 -->
+    <rect x="30"  y="120" width="16" height="25"/>
+    <rect x="54"  y="120" width="16" height="25"/>
+    <rect x="90"  y="120" width="16" height="25"/>
+    <rect x="114" y="120" width="16" height="25"/>
+  </g>
+
+  <!-- 五官 -->
+  <g fill="#FFFFFF">
+    <!-- 眼睛 -->
+    <rect x="45" y="60" width="15" height="15"/>
+    <rect x="100" y="60" width="15" height="15"/>
+
+    <!-- 嘴巴 -->
+    <rect x="70" y="85" width="20" height="8"/>
+  </g>
 </svg>

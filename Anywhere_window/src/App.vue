@@ -1599,7 +1599,7 @@ onMounted(async () => {
       favicon.value = currentPromptConfig.icon;
     } else {
       AIAvart.value = "ai.svg";
-      favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
+      favicon.value = "favicon.png";
     }
 
     autoCloseOnBlur.value = currentPromptConfig.autoCloseOnBlur ?? false;
@@ -3173,7 +3173,7 @@ const loadSession = async (jsonData) => {
       favicon.value = currentPromptConfigFromLoad.icon;
     } else {
       AIAvart.value = "ai.svg";
-      favicon.value = currentConfig.value.isDarkMode ? "favicon-b.png" : "favicon.png";
+      favicon.value = "favicon.png";
     }
 
     updateModelListAndMap(currentConfig.value);
