@@ -682,7 +682,9 @@
       "exportButton": "导出",
       "importLabel": "导入配置",
       "importDesc": "从 JSON 文件导入设置，这将覆盖当前设置",
-      "importButton": "导入"
+      "importButton": "导入",
+      "skillPath": "本地 SKILLS 配置路径",
+      "skillPathPlaceholder": "请选择用于存放本地 SKILLS 的文件夹"
     },
     "dimensions": {
       "widthLabel": "窗口宽度 (px)",

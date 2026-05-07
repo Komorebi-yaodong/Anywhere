@@ -615,6 +615,15 @@ async function selectLocalChatPath() {
     saveSingleSetting('webdav.localChatPath', path);
   }
 }
+
+async function selectSkillPath() {
+  const path = await window.api.selectDirectory();
+  if (path) {
+    currentConfig.value.skillPath = path;
+    saveSingleSetting('skillPath', path);
+  }
+}
+
 </script>
 
 <template>
@@ -750,7 +759,7 @@ async function selectLocalChatPath() {
                         t('setting.dataManagement.importButton')
                       }}</el-button>
                     </div>
-                    <div class="setting-option-item no-border">
+                    <div class="setting-option-item">
                       <div class="setting-text-content">
                         <span class="setting-option-label">{{ t('setting.webdav.localChatPath') }}</span>
                         <span class="setting-option-description">{{ t('setting.webdav.localChatPathPlaceholder') }}</span>
@@ -760,6 +769,19 @@ async function selectLocalChatPath() {
                         :placeholder="t('setting.webdav.localChatPathPlaceholder')" style="width: 320px;">
                         <template #append>
                           <el-button @click="selectLocalChatPath">{{ t('setting.webdav.selectFolder') }}</el-button>
+                        </template>
+                      </el-input>
+                    </div>
+                    <div class="setting-option-item no-border">
+                      <div class="setting-text-content">
+                        <span class="setting-option-label">{{ t('setting.dataManagement.skillPath') }}</span>
+                        <span class="setting-option-description">{{ t('setting.dataManagement.skillPathPlaceholder') }}</span>
+                      </div>
+                      <el-input v-model="currentConfig.skillPath"
+                        @change="(value) => saveSingleSetting('skillPath', value)"
+                        :placeholder="t('setting.dataManagement.skillPathPlaceholder')" style="width: 320px;">
+                        <template #append>
+                          <el-button @click="selectSkillPath">{{ t('setting.webdav.selectFolder') }}</el-button>
                         </template>
                       </el-input>
                     </div>

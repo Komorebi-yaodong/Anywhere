@@ -682,7 +682,9 @@
       "exportButton": "Export",
       "importLabel": "Import Configuration",
       "importDesc": "Import settings from a JSON file. This will overwrite current settings.",
-      "importButton": "Import"
+      "importButton": "Import",
+      "skillPath": "Local SKILLS Path",
+      "skillPathPlaceholder": "Please select a local folder to store SKILLS"
     },
     "dimensions": {
       "widthLabel": "Window Width (px)",

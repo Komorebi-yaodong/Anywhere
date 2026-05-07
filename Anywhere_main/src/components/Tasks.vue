@@ -1226,4 +1226,28 @@ html.dark .task-textarea-scrollbar :deep(.el-scrollbar__thumb:hover) {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+
+html.dark .task-form :deep(.el-checkbox-button__inner) {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-primary) !important;
+    box-shadow: none !important;
+}
+
+html.dark .task-form :deep(.el-checkbox-button.is-checked .el-checkbox-button__inner) {
+    background-color: var(--el-color-primary) !important;
+    color: #000000 !important;
+    border-color: var(--el-color-primary) !important;
+    box-shadow: -1px 0 0 0 var(--el-color-primary) !important;
+}
+
+html.dark .task-form :deep(.el-checkbox-button:first-child .el-checkbox-button__inner) {
+    border-left-color: var(--border-primary) !important;
+}
+
+html.dark .task-form :deep(.el-checkbox-button.is-checked:first-child .el-checkbox-button__inner) {
+    border-left-color: var(--el-color-primary) !important;
+}
+
 </style>
