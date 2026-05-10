@@ -437,7 +437,7 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
         const fileTreeStr = renderFiles(details.files);
         if (fileTreeStr.trim()) {
             assetsInfo += fileTreeStr;
-            assetsInfo += `\nNote: You can read these files using 'read_file' tool if referenced in the instructions.\n`;
+            assetsInfo += `\nNote: You can read these files(references/*) using 'read_file' tool if referenced in the instructions.\n`;
             assetsInfo += `(Note: 'SKILL.md' contains the instructions you are currently reading, so it is hidden from this list.)\n`;
         }
     }
