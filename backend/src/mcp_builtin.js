@@ -111,6 +111,25 @@ function extractMetadata(html) {
 }
 
 // HTML 转 Markdown 辅助函数
+
+function resolveProviderConfigByModel(fullConfig = {}, modelValue = '') {
+    const normalizedModelValue = typeof modelValue === 'string' ? modelValue.trim() : '';
+    const [providerId, ...modelParts] = normalizedModelValue.split('|');
+    const modelName = modelParts.join('|').trim();
+    const providers = fullConfig?.providers && typeof fullConfig.providers === 'object' ? fullConfig.providers : {};
+    const provider = providerId ? providers[providerId] : null;
+
+    return {
+        providerId: providerId || '',
+        providerName: provider?.name || providerId || '',
+        modelName,
+        provider,
+        apiType: provider?.apiType || 'chat_completions',
+        baseUrl: provider?.url || '',
+        apiKey: provider?.api_key || ''
+    };
+}
+
 function convertHtmlToMarkdown(html, baseUrl = '') {
     let text = html;
 
@@ -576,6 +595,7 @@ IMPORTANT:
                     task: { type: "string", description: "The detailed task description for the worker." },
                     context: { type: "string", description: "Background info or required variables." },
                     tools: { type: "array", items: { type: "string" }, description: "Tool names granted to the worker." },
+                    model_route: { type: "string", enum: ["superior", "general", "fast"], description: "Choose which default assistant route the Sub-Agent should use based on the task difficulty. Defaults to 'general'." },
                     planning_level: { type: "string", enum: ["fast", "medium", "high", "custom"] },
                     custom_steps: { type: "integer" }
                 },
@@ -1129,8 +1149,22 @@ const isPathSafe = (targetPath) => {
 };
 
 async function runSubAgent(args, globalContext, signal) {
-    const { task, context: userContext, tools: allowedToolNames, planning_level, custom_steps } = args;
-    const { apiKey, baseUrl, model, tools: allToolDefinitions, mcpSystemPrompt, onUpdate, apiType } = globalContext;
+    const { task, context: userContext, tools: allowedToolNames, model_route = 'general', planning_level, custom_steps } = args;
+    const { tools: allToolDefinitions, mcpSystemPrompt, onUpdate } = globalContext;
+    const { getConfig, resolveDefaultAssistantModel } = require('./data.js');
+    const configData = await getConfig();
+    const resolvedConfig = configData?.config || {};
+    const normalizedModelRoute = ['superior', 'general', 'fast'].includes(model_route) ? model_route : 'general';
+    const model = resolveDefaultAssistantModel(resolvedConfig, normalizedModelRoute);
+    const providerInfo = resolveProviderConfigByModel(resolvedConfig, model);
+    const baseUrl = providerInfo.baseUrl;
+    const apiKey = providerInfo.apiKey;
+    const apiType = providerInfo.apiType;
+    const requestModelName = providerInfo.modelName || '';
+
+    if (!baseUrl || !apiKey || !requestModelName) {
+        return `[Sub-Agent Error] Missing provider configuration for route '${normalizedModelRoute}'. Provider: ${providerInfo.providerId || 'N/A'}, model: ${model || 'N/A'}`;
+    }
 
     // --- 1. 工具直接映射 (Direct Mapping) ---
     let availableTools = [];
@@ -1179,7 +1213,7 @@ ${userContext || 'No additional context provided.'}
         }
     };
 
-    log(`[Sub-Agent] Started. Max steps: ${MAX_STEPS}. Tools: ${availableTools.map(t => t.function.name).join(', ') || 'None'}`);
+    log(`[Sub-Agent] Started. Route: ${normalizedModelRoute}. Model: ${requestModelName || 'N/A'}. Provider: ${providerInfo.providerName || 'N/A'}. Max steps: ${MAX_STEPS}. Tools: ${availableTools.map(t => t.function.name).join(', ') || 'None'}`);
 
     const { invokeMcpTool } = require('./mcp.js');
 
@@ -1196,7 +1230,7 @@ ${userContext || 'No additional context provided.'}
             const response = await createChatCompletion({
                 baseUrl: baseUrl,
                 apiKey: apiKey,
-                model: model,
+                model: requestModelName,
                 apiType: currentApiType,
                 messages: messages,
                 tools: availableTools.length > 0 ? availableTools : undefined,
@@ -1325,7 +1359,7 @@ ${userContext || 'No additional context provided.'}
         const summaryResponse = await createChatCompletion({
             baseUrl: baseUrl,
             apiKey: apiKey,
-            model: model,
+            model: requestModelName,
             apiType: currentApiType,
             messages: messages,
             tools: availableTools.length > 0 ? availableTools : undefined,

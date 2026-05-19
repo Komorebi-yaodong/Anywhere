@@ -269,7 +269,7 @@ window.api = {
     return await addTaskHistory(taskId, logEntry);
   },
   runTaskNow: async (taskId) => {
-    const { getConfig, openWindow } = require('./data.js');
+    const { getConfig, openWindow, resolveDefaultAssistantModel } = require('./data.js');
     const configResult = await getConfig();
     const tasks = configResult.config.tasks || {};
     const task = tasks[taskId];
@@ -280,11 +280,12 @@ window.api = {
     // 处理默认助手的临时配置构造
     if (task.promptKey === '__DEFAULT__') {
       if (!windowConfig.prompts) windowConfig.prompts = {};
+      const modelRoute = ['superior', 'general', 'fast'].includes(task?.modelRoute) ? task.modelRoute : 'general';
       windowConfig.prompts['__DEFAULT__'] = {
         type: "general",
         prompt: "",
         showMode: "window",
-        model: resolveDefaultAssistantModel(windowConfig),
+        model: resolveDefaultAssistantModel(windowConfig, modelRoute),
         stream: true,
         isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
         autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
@@ -743,12 +744,13 @@ setInterval(async () => {
         const windowConfig = JSON.parse(JSON.stringify(configResult.config));
 
         if (task.promptKey === '__DEFAULT__') {
-          if (!windowConfig.prompts) windowConfig.prompts = {};
-          windowConfig.prompts['__DEFAULT__'] = {
-            type: "general",
-            prompt: "",
-            showMode: "window",
-            model: resolveDefaultAssistantModel(windowConfig),
+      if (!windowConfig.prompts) windowConfig.prompts = {};
+      const modelRoute = ['superior', 'general', 'fast'].includes(task?.modelRoute) ? task.modelRoute : 'general';
+      windowConfig.prompts['__DEFAULT__'] = {
+        type: "general",
+        prompt: "",
+        showMode: "window",
+        model: resolveDefaultAssistantModel(windowConfig, modelRoute),
             stream: true,
             isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
             autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,

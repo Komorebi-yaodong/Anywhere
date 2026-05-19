@@ -14,6 +14,8 @@ const {
 const defaultConfig = {
   config: {
     defaultTaskModel: "",
+    defaultSuperiorModel: "",
+    defaultFastModel: "",
     tasks: {},
     providers: {
       "0": {
@@ -199,9 +201,19 @@ function getFirstAvailableProviderModel(config) {
   return "";
 }
 
-function resolveDefaultAssistantModel(config) {
-  if (isValidProviderModelKey(config, config?.defaultTaskModel)) {
-    return config.defaultTaskModel;
+function resolveDefaultAssistantModel(config, route = 'general') {
+  let candidateModel = "";
+
+  if (route === 'superior') {
+    candidateModel = config?.defaultSuperiorModel;
+  } else if (route === 'fast') {
+    candidateModel = config?.defaultFastModel;
+  } else {
+    candidateModel = config?.defaultTaskModel;
+  }
+
+  if (isValidProviderModelKey(config, candidateModel)) {
+    return candidateModel;
   }
   return getFirstAvailableProviderModel(config);
 }
@@ -426,6 +438,9 @@ function checkConfig(config) {
 
   // 需要补全的默认值
   const rootDefaults = {
+    defaultTaskModel: "",
+    defaultSuperiorModel: "",
+    defaultFastModel: "",
     isAlwaysOnTop_global: true,
     autoCloseOnBlur_global: true,
     autoSaveChat_global: false,
@@ -456,12 +471,21 @@ function checkConfig(config) {
 
   if (config['showNotification'] !== undefined) { delete config['showNotification']; flag = true; }
 
-  if (!isValidProviderModelKey(config, config.defaultTaskModel)) {
-    const resolvedDefaultTaskModel = resolveDefaultAssistantModel(config);
-    if (config.defaultTaskModel !== resolvedDefaultTaskModel) {
-      config.defaultTaskModel = resolvedDefaultTaskModel;
-      flag = true;
-    }
+  if (typeof config.defaultTaskModel !== 'string') { config.defaultTaskModel = ""; flag = true; }
+  if (typeof config.defaultSuperiorModel !== 'string') { config.defaultSuperiorModel = ""; flag = true; }
+  if (typeof config.defaultFastModel !== 'string') { config.defaultFastModel = ""; flag = true; }
+
+  if (config.defaultTaskModel && !isValidProviderModelKey(config, config.defaultTaskModel)) {
+    config.defaultTaskModel = "";
+    flag = true;
+  }
+  if (config.defaultSuperiorModel && !isValidProviderModelKey(config, config.defaultSuperiorModel)) {
+    config.defaultSuperiorModel = "";
+    flag = true;
+  }
+  if (config.defaultFastModel && !isValidProviderModelKey(config, config.defaultFastModel)) {
+    config.defaultFastModel = "";
+    flag = true;
   }
   
   if (!config.settingsCardOrder || !Array.isArray(config.settingsCardOrder)) {

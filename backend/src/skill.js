@@ -375,6 +375,11 @@ ${availableSkillsText}
                         type: "string",
                         enum: ["fast", "medium", "high"],
                         description: "Complexity level for Sub-Agent. Defaults to 'medium'. Required for Sub-Agent mode."
+                    },
+                    model_route: {
+                        type: "string",
+                        enum: ["superior", "general", "fast"],
+                        description: "Optional. Choose which default assistant route the Sub-Agent should use based on the task difficulty. Defaults to 'general'."
                     }
                 },
                 required: ["skill"],
@@ -483,6 +488,7 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
                 context: (toolArgsObj.context || "No additional context."),
                 tools: toolsToUse,
                 planning_level: toolArgsObj.planning_level || 'medium',
+                model_route: toolArgsObj.model_route || 'general',
                 custom_steps: toolArgsObj.custom_steps
             }
         };
