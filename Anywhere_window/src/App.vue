@@ -1920,6 +1920,380 @@ onMounted(async () => {
   }
 });
 
+
+const AUTO_NAMING_TIMEOUT_MS = 30000;
+const AUTO_NAMING_MAX_TEXT_CHARS = 1000;
+const AUTO_NAMING_MAX_IMAGES = 3;
+const AUTO_NAMING_SYSTEM_PROMPT = `Generate a short name (2-4 words) capturing the main topic in the conversation's language. Use lowercase words separated by hyphens (e.g., \`topic-name\` or \`主题-名称\`). Output only the name.`;
+
+const sanitizeConversationTitlePart = (value, maxLength = 30) => {
+  const normalized = typeof value === 'string' ? value : String(value ?? '');
+  return normalized
+    .replace(/^\s*(?:标题|会话标题|名称|命名)\s*[:：-]\s*/i, '')
+    .replace(/^[`'"“”‘’\s]+|[`'"“”‘’\s]+$/g, '')
+    .replace(/[\\/:*?"<>|\n\r]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength)
+    .trim();
+};
+
+const getAutoSavePrefixTag = (force = false) => {
+  if (basic_msg.value?.type === "summon") return "召唤-";
+  if (force) return "关闭留档-";
+  return "";
+};
+
+const buildConversationTitleOnly = (namePrefix, force = false) => {
+  const safeNamePrefix = sanitizeConversationTitlePart(namePrefix, 36);
+  if (!safeNamePrefix) return '';
+  return `${getAutoSavePrefixTag(force)}${safeNamePrefix}`;
+};
+
+const resolveUniqueConversationFileName = async (baseTitle = '', dirPath = '') => {
+  const normalizedBaseTitle = sanitizeConversationTitlePart(baseTitle, 80);
+  const normalizedDirPath = typeof dirPath === 'string' ? dirPath.trim() : '';
+  if (!normalizedBaseTitle || !normalizedDirPath) return normalizedBaseTitle;
+
+  try {
+    const existingFiles = await window.api.listJsonFiles(normalizedDirPath);
+    const existingTitles = new Set(
+      (Array.isArray(existingFiles) ? existingFiles : [])
+        .map(item => {
+          const rawTitle = typeof item?.title === 'string' && item.title.trim()
+            ? item.title.trim()
+            : typeof item?.basename === 'string'
+              ? item.basename.replace(/\.json$/i, '').trim()
+              : '';
+          return rawTitle;
+        })
+        .filter(Boolean)
+    );
+
+    if (!existingTitles.has(normalizedBaseTitle)) {
+      return normalizedBaseTitle;
+    }
+
+    let suffix = 2;
+    while (existingTitles.has(`${normalizedBaseTitle}-${suffix}`)) {
+      suffix += 1;
+    }
+
+    return `${normalizedBaseTitle}-${suffix}`;
+  } catch (error) {
+    console.warn('[Auto Naming] failed to inspect existing local chat files, fallback to base title:', error);
+    return normalizedBaseTitle;
+  }
+};
+
+const buildLegacyFallbackConversationFileName = (namePrefix, force = false) => {
+  const safeNamePrefix = sanitizeConversationTitlePart(namePrefix, 36);
+  if (!safeNamePrefix) return '';
+  const safeCodeName = CODE.value.replace(/[\\/:*?"<>|]/g, '_');
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+  return `${getAutoSavePrefixTag(force)}${safeNamePrefix}-${safeCodeName}-${timestamp}`;
+};
+
+const autoNamingAbortController = ref(null);
+const autoNamingPromise = ref(null);
+
+const cancelAutoNamingRequest = () => {
+  if (autoNamingAbortController.value) {
+    try {
+      autoNamingAbortController.value.abort();
+    } catch {
+      // ignore abort race
+    }
+    autoNamingAbortController.value = null;
+  }
+};
+
+const getFallbackConversationNamePrefix = (firstUserMsg) => {
+  if (!firstUserMsg) return '';
+  const content = firstUserMsg.content;
+
+  if (Array.isArray(content)) {
+    const hasImage = content.some(p => p?.type === 'image_url');
+    const hasFile = content.some(p => p?.type === 'file' || p?.type === 'input_file');
+    const textPart = content.find(p => p?.type === 'text' && typeof p.text === 'string' && p.text.trim());
+
+    if (hasImage) return '图片';
+    if (hasFile) return '文件';
+    if (textPart?.text) return sanitizeConversationTitlePart(textPart.text, 20);
+    return '';
+  }
+
+  if (typeof content === 'string') {
+    return sanitizeConversationTitlePart(content, 20);
+  }
+
+  return '';
+};
+
+const isConfiguredFastModelAvailable = (modelKey = '') => {
+  if (typeof modelKey !== 'string' || !modelKey.trim()) return false;
+  const separatorIndex = modelKey.indexOf('|');
+  if (separatorIndex <= 0) return false;
+
+  const providerId = modelKey.slice(0, separatorIndex);
+  const modelName = modelKey.slice(separatorIndex + 1);
+  const provider = currentConfig.value?.providers?.[providerId];
+  return Boolean(
+    provider &&
+    provider.enable !== false &&
+    modelName &&
+    Array.isArray(provider.modelList) &&
+    provider.modelList.includes(modelName)
+  );
+};
+
+const takeLastTextChars = (value, maxChars = AUTO_NAMING_MAX_TEXT_CHARS) => {
+  const normalized = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxChars) return normalized;
+  return normalized.slice(-maxChars);
+};
+
+const getCurrentConversationSystemPromptTail = () => {
+  return takeLastTextChars(currentSystemPrompt.value || '', AUTO_NAMING_MAX_TEXT_CHARS);
+};
+
+const getFirstUserMessageTextTail = (firstUserMsg) => {
+  const content = firstUserMsg?.content;
+
+  if (typeof content === 'string') {
+    return takeLastTextChars(content, AUTO_NAMING_MAX_TEXT_CHARS);
+  }
+
+  if (!Array.isArray(content)) return '';
+
+  const textContent = content
+    .filter(part => part?.type === 'text' && typeof part.text === 'string' && part.text.trim())
+    .map(part => part.text.trim())
+    .join('\n');
+
+  return takeLastTextChars(textContent, AUTO_NAMING_MAX_TEXT_CHARS);
+};
+
+const buildAutoNamingUserMessageText = (firstUserMsg) => {
+  const sections = [];
+  const conversationSystemPrompt = getCurrentConversationSystemPromptTail();
+  const firstUserMessage = getFirstUserMessageTextTail(firstUserMsg);
+  const fileNames = [];
+
+  if (conversationSystemPrompt) {
+    sections.push(`Conversation system prompt:\n${conversationSystemPrompt}`);
+  }
+
+  if (firstUserMessage) {
+    sections.push(`First user message:\n${firstUserMessage}`);
+  }
+
+  if (Array.isArray(firstUserMsg?.content)) {
+    firstUserMsg.content.forEach((part) => {
+      if (part?.type === 'file' || part?.type === 'input_file') {
+        const fileInput = part.file || part;
+        const fileName = fileInput?.filename || fileInput?.name;
+        if (fileName) fileNames.push(String(fileName));
+      }
+    });
+  }
+
+  if (fileNames.length > 0) {
+    sections.push(`Attached file names:\n${fileNames.slice(0, 10).join('\n')}`);
+  }
+
+  return sections.join('\n\n').trim();
+};
+
+const buildAutoNamingImageParts = (firstUserMsg) => {
+  const content = firstUserMsg?.content;
+  if (!Array.isArray(content)) return [];
+
+  return content
+    .filter(part => part?.type === 'image_url')
+    .slice(0, AUTO_NAMING_MAX_IMAGES)
+    .map((part) => {
+      const imageUrl = part.image_url?.url || part.image_url;
+      if (!imageUrl) return null;
+      return {
+        type: 'image_url',
+        image_url: typeof imageUrl === 'string' ? { url: imageUrl } : imageUrl
+      };
+    })
+    .filter(Boolean);
+};
+
+const buildAutoNamingUserContent = (firstUserMsg) => {
+  const userMessageText = buildAutoNamingUserMessageText(firstUserMsg);
+  const imageParts = buildAutoNamingImageParts(firstUserMsg);
+
+  if (!userMessageText && imageParts.length === 0) return '';
+  if (imageParts.length === 0) return userMessageText;
+
+  return [
+    ...(userMessageText ? [{ type: 'text', text: userMessageText }] : []),
+    ...imageParts
+  ];
+};
+
+const extractAssistantTextFromContent = (content) => {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map(part => {
+        if (typeof part === 'string') return part;
+        if (typeof part?.text === 'string') return part.text;
+        if (typeof part?.content === 'string') return part.content;
+        return '';
+      })
+      .filter(Boolean)
+      .join(' ');
+  }
+  if (content && typeof content === 'object') {
+    if (typeof content.text === 'string') return content.text;
+    if (typeof content.content === 'string') return content.content;
+  }
+  return '';
+};
+
+const extractAutoNamingResponseText = async (response, apiType = 'chat_completions') => {
+  if (!response) return '';
+
+  if (isAsyncIterableResponse(response)) {
+    const message = await collectChatCompletionStreamToMessage(response);
+    return extractAssistantTextFromContent(message?.content);
+  }
+
+  if (apiType === 'responses') {
+    if (typeof response.output_text === 'string' && response.output_text.trim()) {
+      return response.output_text;
+    }
+
+    if (Array.isArray(response.output)) {
+      return response.output
+        .flatMap(item => Array.isArray(item?.content) ? item.content : [])
+        .map(part => part?.text || '')
+        .filter(Boolean)
+        .join(' ');
+    }
+  }
+
+  return extractAssistantTextFromContent(response?.choices?.[0]?.message?.content);
+};
+
+const generateConversationNamePrefixWithFastModel = async (firstUserMsg, signal = null) => {
+  const fastModelKey = currentConfig.value?.defaultFastModel;
+  if (!isConfiguredFastModelAvailable(fastModelKey)) return '';
+
+  const separatorIndex = fastModelKey.indexOf('|');
+  const providerId = fastModelKey.slice(0, separatorIndex);
+  const modelName = fastModelKey.slice(separatorIndex + 1);
+  const provider = currentConfig.value.providers[providerId];
+  const userContent = buildAutoNamingUserContent(firstUserMsg);
+
+  if (!userContent || (Array.isArray(userContent) && userContent.length === 0)) return '';
+
+  const namingController = signal instanceof AbortSignal ? null : new AbortController();
+  const namingSignal = signal || namingController?.signal || null;
+  const timeoutId = namingController ? setTimeout(() => namingController.abort(), AUTO_NAMING_TIMEOUT_MS) : null;
+
+  try {
+    if (namingSignal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+
+    const apiType = provider?.apiType || 'chat_completions';
+    const response = await window.api.createChatCompletion({
+      baseUrl: provider.url,
+      apiKey: provider.api_key,
+      model: modelName,
+      apiType,
+      messages: [
+        { role: 'system', content: AUTO_NAMING_SYSTEM_PROMPT },
+        { role: 'user', content: userContent }
+      ],
+      stream: false,
+      signal: namingSignal,
+      temperature: 0.2
+    });
+
+    if (namingSignal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+
+    const rawTitle = await extractAutoNamingResponseText(response, apiType);
+    return sanitizeConversationTitlePart(rawTitle, 30);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
+    console.warn('[Auto Naming] fast model naming failed, fallback to local naming:', error);
+    return '';
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
+const triggerAutoNamingForFirstUserMessage = async ({ force = false, requestSignal = null } = {}) => {
+  if (defaultConversationName.value || !currentConfig.value?.webdav?.localChatPath) {
+    return defaultConversationName.value || '';
+  }
+
+  const firstUserMsg = chat_show.value.find(msg => msg.role === 'user');
+  if (!firstUserMsg) return '';
+
+  cancelAutoNamingRequest();
+  const localController = requestSignal instanceof AbortSignal ? null : new AbortController();
+  const namingSignal = requestSignal || localController?.signal || null;
+  if (localController) {
+    autoNamingAbortController.value = localController;
+  }
+
+  const namingTask = (async () => {
+    try {
+      const aiNamePrefix = await generateConversationNamePrefixWithFastModel(firstUserMsg, namingSignal);
+      if (defaultConversationName.value) {
+        return defaultConversationName.value;
+      }
+
+      if (aiNamePrefix) {
+        const generatedBaseTitle = buildConversationTitleOnly(aiNamePrefix, force);
+        if (generatedBaseTitle) {
+          const resolvedName = await resolveUniqueConversationFileName(
+            generatedBaseTitle,
+            currentConfig.value.webdav.localChatPath
+          );
+          if (!defaultConversationName.value && resolvedName) {
+            defaultConversationName.value = resolvedName;
+          }
+          return defaultConversationName.value || resolvedName || '';
+        }
+      }
+
+      const fallbackNamePrefix = getFallbackConversationNamePrefix(firstUserMsg);
+      const fallbackFileName = buildLegacyFallbackConversationFileName(fallbackNamePrefix, force);
+      if (!defaultConversationName.value && fallbackFileName) {
+        defaultConversationName.value = fallbackFileName;
+      }
+      return defaultConversationName.value || fallbackFileName || '';
+    } finally {
+      if (autoNamingAbortController.value === localController) {
+        autoNamingAbortController.value = null;
+      }
+      if (autoNamingPromise.value === namingTask) {
+        autoNamingPromise.value = null;
+      }
+    }
+  })();
+
+  autoNamingPromise.value = namingTask;
+  return namingTask;
+};
+
 const autoSaveSession = async (force = false) => {
   if ((loading.value && !force) || !currentConfig.value?.webdav?.localChatPath) {
     return;
@@ -1932,53 +2306,7 @@ const autoSaveSession = async (force = false) => {
   if (!defaultConversationName.value && !isAutoSaveConfigEnabled && !force) {
     return;
   }
-
-  // 自动命名逻辑：
-  if (!defaultConversationName.value && chat_show.value.length > 0) {
-    const firstUserMsg = chat_show.value.find(msg => msg.role === 'user');
-    if (firstUserMsg) {
-      let namePrefix = '';
-      const content = firstUserMsg.content;
-
-      // 提取并清洗用户输入内容，作为文件名前缀
-      if (Array.isArray(content)) {
-        const hasImage = content.some(p => p.type === 'image_url');
-        const hasFile = content.some(p => p.type === 'file');
-        const textPart = content.find(p => p.type === 'text');
-
-        if (hasImage) {
-          namePrefix = '图片';
-        } else if (hasFile) {
-          namePrefix = '文件';
-        } else if (textPart?.text) {
-          namePrefix = textPart.text.slice(0, 20).replace(/[\\/:*?"<>|\n\r]/g, '').trim();
-        }
-      } else if (typeof content === 'string') {
-        namePrefix = content.slice(0, 20).replace(/[\\/:*?"<>|\n\r]/g, '').trim();
-      }
-
-      if (namePrefix) {
-        // 清洗智能助手名称中的非法字符 (如 /, \, :, *, ?, ", <, >, |)
-        const safeCodeName = CODE.value.replace(/[\\/:*?"<>|]/g, '_');
-
-        // 添加时间戳避免文件名重复覆盖
-        const now = new Date();
-        const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-
-        // 断上下文并添加合适的前缀
-        let prefixTag = "";
-        if (basic_msg.value?.type === "summon") {
-          prefixTag = "召唤-";
-        } else if (force) {
-          // force 为 true 通常是由 MCP 调用 close_agent_window 引起的强制保存关闭
-          prefixTag = "关闭留档-";
-        }
-
-        // 组合文件名
-        defaultConversationName.value = `${prefixTag}${namePrefix}-${safeCodeName}-${timestamp}`;
-      }
-    }
-  }
+  // 自动命名已前移到首条消息发送阶段；自动保存阶段仅负责持久化已有会话名。
 
   // 5. 如果经过尝试后仍然没有对话名称（例如空对话），则不保存
   if (!defaultConversationName.value) {
@@ -3702,6 +4030,15 @@ const askAI = async (forceSend = false) => {
           history.value.push({ role: "user", content: contentForHistory });
           chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
 
+          const shouldTriggerAutoNaming = !defaultConversationName.value && chat_show.value.filter(msg => msg.role === 'user').length === 1;
+          if (shouldTriggerAutoNaming) {
+            triggerAutoNamingForFirstUserMessage({ force: false }).catch((error) => {
+              if (error?.name !== 'AbortError') {
+                console.warn('[Auto Naming] trigger failed:', error);
+              }
+            });
+          }
+
           autoSaveSession();
 
         } else return;
@@ -4387,7 +4724,13 @@ const askAI = async (forceSend = false) => {
   }
 };
 
-const cancelAskAI = () => { if (loading.value && signalController.value) { signalController.value.abort(); chatInputRef.value?.focus(); } };
+const cancelAskAI = () => {
+  if (loading.value && signalController.value) {
+    signalController.value.abort();
+    cancelAutoNamingRequest();
+    chatInputRef.value?.focus();
+  }
+};
 const copyText = async (content, index) => { if (loading.value && index === chat_show.value.length - 1) return; await window.api.copyText(content); };
 const reaskAI = async () => {
   if (loading.value) return;
@@ -4514,6 +4857,7 @@ const clearHistory = () => {
   collapsedMessages.value.clear();
   messageRefs.clear();
   focusedMessageIndex.value = null;
+  cancelAutoNamingRequest();
   defaultConversationName.value = "";
   chatInputRef.value?.focus({ cursor: 'end' });
   showDismissibleMessage.success('历史记录已清除');
