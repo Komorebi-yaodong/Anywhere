@@ -3359,24 +3359,20 @@ const saveSessionAsImage = async () => {
 };
 
 const handleSaveAction = async () => {
-
-  // 拦截正在生成时的保存操作，防止历史状态脱节
-  if (loading.value) {
-    showDismissibleMessage.warning('请等待 AI 回复完成后再执行保存或重命名操作');
-    return;
-  }
-
   if (autoCloseOnBlur.value) handleTogglePin();
   const isCloudEnabled = currentConfig.value.webdav?.url && currentConfig.value.webdav?.data_path;
   const saveOptions = [];
 
-  // 只有当已存在本地文件名（即已保存过）且配置了本地路径时，才显示重命名选项
+  // 只有当已存在本地文件名（即已保存过）且配置了本地路径时，才显示重命名选项；请求中继续禁用重命名，避免路径竞态。
   if (currentConfig.value.webdav?.localChatPath && defaultConversationName.value) {
     saveOptions.push({
       title: '重命名对话',
-      description: '修改当前对话名称，并同步修改本地文件（以及云端文件）。',
+      description: loading.value
+        ? '当前 AI 仍在回复中，请等待本轮回复结束后再重命名，避免与自动保存路径产生竞态。'
+        : '修改当前对话名称，并同步修改本地文件（以及云端文件）。',
       buttonType: 'warning',
-      action: handleRenameSession
+      action: handleRenameSession,
+      disabled: loading.value
     });
   }
 
@@ -3390,15 +3386,23 @@ const handleSaveAction = async () => {
   saveOptions.push({ title: '保存为 图片', description: '将完整聊天记录保存为长图 (.png)。', buttonType: '', action: saveSessionAsImage });
 
   const messageVNode = h('div', { class: 'save-options-list' }, saveOptions.map(opt => {
-    const trigger = () => { ElMessageBox.close(); opt.action(); };
+    const trigger = () => {
+      if (opt.disabled) return;
+      ElMessageBox.close();
+      opt.action();
+    };
 
-    return h('div', { class: 'save-option-item', onClick: trigger }, [
+    return h('div', {
+      class: ['save-option-item', opt.disabled ? 'is-disabled' : ''],
+      onClick: trigger
+    }, [
       h('div', { class: 'save-option-text' }, [
         h('h4', null, opt.title), h('p', null, opt.description)
       ]),
       h(ElButton, {
         type: opt.buttonType,
         plain: true,
+        disabled: Boolean(opt.disabled),
         class: opt.isDefault ? 'default-save-target' : '',
         onClick: (e) => { e.stopPropagation(); trigger(); }
       }, { default: () => '选择' })
@@ -5580,6 +5584,17 @@ html.dark .el-dialog {
   box-shadow: var(--el-box-shadow-light);
 }
 
+.save-option-item.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.save-option-item.is-disabled:hover {
+  transform: none;
+  border-color: var(--el-border-color-lighter);
+  box-shadow: none;
+}
+
 .save-option-text {
   flex-grow: 1;
   margin-right: 20px;
@@ -5605,6 +5620,11 @@ html.dark .save-option-item {
 html.dark .save-option-item:hover {
   border-color: var(--el-color-primary);
   background-color: var(--el-fill-color-dark);
+}
+
+html.dark .save-option-item.is-disabled:hover {
+  border-color: var(--el-border-color-dark);
+  background-color: transparent;
 }
 
 html.dark .save-option-text p {
@@ -6240,7 +6260,7 @@ html.dark .app-container {
 
 .chat-main {
   flex-grow: 1;
-  padding: 0 10px;
+  padding: 8px 18px 0 12px;
   margin: 0;
   overflow-y: auto;
   scroll-behavior: auto !important;
@@ -6250,13 +6270,21 @@ html.dark .app-container {
   transform: translateZ(0);
 }
 
+.main-area-wrapper {
+  --window-nav-raise: 52px;
+  --window-nav-safe-bottom: 138px;
+  --window-nav-height: 62vh;
+}
+
 .unified-nav-sidebar {
   position: absolute;
-  right: 12px;
-  top: 40%;
+  right: 10px;
+  top: calc(50% - var(--window-nav-raise));
   transform: translateY(-50%);
-  max-height: 60vh;
-  width: 24px;
+  height: min(var(--window-nav-height), calc(100% - var(--window-nav-safe-bottom)));
+  max-height: calc(100% - var(--window-nav-safe-bottom));
+  min-height: 240px;
+  width: 30px;
   z-index: 90;
   display: flex;
   flex-direction: column;
@@ -6265,65 +6293,51 @@ html.dark .app-container {
   pointer-events: none;
 }
 
-/* 上下控制按钮组 */
 .nav-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   pointer-events: auto;
-  border-radius: 12px;
-  padding: 2px 0;
   flex-shrink: 0;
+  padding: 2px 0;
 }
 
 .nav-mini-btn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-
-  color: #2c2c2c;
-  background-color: transparent !important;
+  color: rgba(46, 41, 34, 0.72);
+  background: transparent !important;
   border: none;
   box-shadow: none;
-
   transition: all 0.2s ease;
   font-size: 14px;
-  border-radius: 4px;
+  border-radius: 999px;
 
   &:hover {
-    color: #000;
-    background-color: transparent;
-    transform: scale(1.2);
+    color: rgba(28, 25, 22, 0.96);
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+    box-shadow: none;
   }
 }
 
-/* 中间时间轴区域 */
 .nav-timeline-area {
   flex: 1;
   position: relative;
   width: 100%;
+  min-height: 0;
   display: flex;
   justify-content: center;
   overflow: hidden;
-  flex-direction: column;
-  min-height: 0;
   pointer-events: auto;
 }
 
 .timeline-track {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  background-color: var(--el-border-color-lighter);
-  transform: translateX(-1px);
-  z-index: -1;
-  border-radius: 2px;
-  opacity: 0.6;
+  display: none;
 }
 
 .timeline-scroller {
@@ -6336,6 +6350,7 @@ html.dark .app-container {
   align-items: center;
   gap: 6px;
   padding: 4px 0;
+  scroll-behavior: smooth;
 
   &::-webkit-scrollbar {
     display: none;
@@ -6344,68 +6359,62 @@ html.dark .app-container {
   scrollbar-width: none;
 }
 
-/* 消息节点 */
 .timeline-node-wrapper {
   width: 100%;
-  height: 8px;
-  /* 减小高度，让横线更紧凑 */
+  min-height: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
   position: relative;
-
-  /* 增加悬浮热区高度 */
   padding: 2px 0;
 
   &:hover .timeline-node {
-    transform: scaleX(1.5) scaleY(1.2);
-    /* 横向拉长效果 */
+    transform: translateX(-1px);
   }
 
-  &:hover .node-tooltip {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-    visibility: visible;
+  &:hover .timeline-node.active {
+    transform: translateX(-4px);
   }
 }
 
 .timeline-node {
-  /* 变成短横线 */
-  width: 10px;
-  height: 3px;
-  border-radius: 2px;
-  /* 微圆角 */
-
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  width: 9px;
+  height: 2px;
+  border-radius: 999px;
+  transition: all 0.18s ease;
   box-shadow: none;
   border: none;
-  opacity: 0.6;
-  /* 默认半透明，不抢眼 */
+  opacity: 1;
+
+  &::before {
+    content: none;
+  }
 
   &.user {
-    background-color: var(--el-color-primary);
+    background: rgba(64, 158, 255, 0.96);
   }
 
   &.assistant {
-    background-color: #000000;
+    background: rgba(0, 0, 0, 0.96);
   }
 
-  /* 当前聚焦的消息：高亮、变宽、完全不透明 */
   &.active {
+    width: 15px;
+    height: 3px;
     opacity: 1;
-    width: 16px;
-    /* 激活时变长 */
-    box-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
+    transform: translateX(-4px);
   }
 }
 
-/* 悬浮提示框 (Tooltip) */
+.timeline-node-text {
+  display: none;
+}
+
 .node-tooltip {
   position: absolute;
   right: 28px;
-  /* 点的左侧 */
   top: 50%;
   transform: translateY(-50%) translateX(10px) scale(0.9);
   background-color: var(--el-color-black);
@@ -6428,42 +6437,37 @@ html.dark .app-container {
 
 html.dark {
   .nav-mini-btn {
-    background-color: #2c2c2c;
-    border-color: #4c4c4c;
-    color: #a3a6ad;
+    color: rgba(235, 236, 240, 0.75);
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    box-shadow: none;
 
     &:hover {
-      background-color: transparent;
-      color: #fff;
-    }
-
-    &.highlight-bottom {
-      background-color: rgba(64, 158, 255, 0.2);
-      color: #409eff;
-      border-color: #409eff;
+      color: rgba(255, 255, 255, 0.96);
+      background: rgba(255, 255, 255, 0.12);
+      box-shadow: none;
     }
   }
 
-  /* 强制区分颜色 */
   .timeline-node.user {
-    background-color: #409eff;
-    /* 用户：强制蓝色 */
-    border-color: #409eff;
+    background: rgba(96, 165, 250, 0.98);
   }
 
   .timeline-node.assistant {
-    background-color: #ffffff;
-    /* AI：强制纯白 */
-    border-color: #ffffff;
-  }
-
-  .timeline-track {
-    background-color: #4c4c4c;
+    background: rgba(255, 255, 255, 0.96);
   }
 
   .node-tooltip {
     background-color: #E5EAF3;
     color: #000;
+  }
+}
+
+@media (max-height: 760px) {
+  .main-area-wrapper {
+    --window-nav-raise: 64px;
+    --window-nav-safe-bottom: 170px;
+    --window-nav-height: 40vh;
   }
 }
 
