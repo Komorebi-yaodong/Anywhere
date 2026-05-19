@@ -2759,7 +2759,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         return "Current Tasks (Summary):\n" + taskList.join('\n') + "\n\n(Tip: Use 'task_name_or_id' argument to see full details of a specific task)";
     },
 
-    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, single_date, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills, }) => {
+    create_task: async ({ name, instruction, agent_name = '__DEFAULT__', schedule_type, time_param, enabled = true, single_date, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills, model_route }) => {
         const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
@@ -2785,6 +2785,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 name: name,
                 description: instruction || "",
                 promptKey: targetPromptKey,
+                modelRoute: ['superior', 'general', 'fast'].includes(model_route) ? model_route : 'general',
                 triggerType: schedule_type,
                 enabled: enabled,
                 intervalMinutes: 60, intervalStartTime: '00:00', intervalTimeRanges: [],
@@ -2857,7 +2858,7 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
         }
     },
 
-    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, single_date, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills }) => {
+    edit_task: async ({ task_name_or_id, new_name, instruction, agent_name, schedule_type, time_param, single_date, interval_time_ranges, weekly_days, monthly_days, extra_mcp, extra_skills, model_route }) => {
         const unlock = await acquireLock('config_tasks');
         try {
             const { getConfig, updateConfigWithoutFeatures } = require('./data.js');
@@ -2880,6 +2881,12 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
             }
 
             if (instruction !== undefined) task.description = instruction;
+
+            if (model_route !== undefined) {
+                if (['superior', 'general', 'fast'].includes(model_route)) task.modelRoute = model_route;
+                else return "Error: model_route must be one of superior/general/fast.";
+            }
+
 
             if (agent_name) {
                 if (agent_name === '__DEFAULT__') {
