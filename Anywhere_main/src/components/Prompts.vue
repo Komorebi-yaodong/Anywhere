@@ -306,10 +306,23 @@ const assignPromptForm = reactive({
 
 // [新增] 替换模型弹窗的状态
 const showReplaceModelDialog = ref(false);
+const showDefaultAssistantRouteDialog = ref(false);
 const replaceModelForm = reactive({
   sourceModel: null,
   targetModel: null,
 });
+
+
+function openDefaultAssistantRouteDialog() {
+  showDefaultAssistantRouteDialog.value = true;
+}
+
+async function saveDefaultAssistantRouteModel(settingKey, value) {
+  await atomicSave(config => {
+    config[settingKey] = value;
+  }, true);
+  ElMessage.success(t('tasks.defaultModelUpdated'));
+}
 
 const availableModels = computed(() => {
   const models = [];
@@ -933,6 +946,9 @@ async function refreshPromptsConfig() {
       <el-button class="action-btn" @click="prepareReplaceModels" :icon="Switch">
         {{ t('prompts.replaceModels') }}
       </el-button>
+      <el-button class="action-btn" @click="openDefaultAssistantRouteDialog" :icon="Position">
+        {{ t('prompts.defaultAssistantRoutesButton') }}
+      </el-button>
       <el-button class="refresh-fab-button" :icon="Refresh" type="primary" circle @click="refreshPromptsConfig" />
     </div>
 
@@ -1323,7 +1339,50 @@ async function refreshPromptsConfig() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showReplaceModelDialog" :title="t('prompts.replaceModelsDialog.title')" width="600px"
+    
+
+    <el-dialog v-model="showDefaultAssistantRouteDialog" :title="t('prompts.defaultAssistantRoutesDialogTitle')" width="520px"
+      :close-on-click-modal="false">
+      <el-form label-position="top">
+        <el-form-item>
+          <template #label>
+            {{ t('tasks.defaultAssistantRoutes.superior.label') }}
+          </template>
+          <el-select v-model="currentConfig.defaultSuperiorModel" filterable style="width: 100%;"
+            @change="(val) => saveDefaultAssistantRouteModel('defaultSuperiorModel', val)">
+            <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <template #label>
+            {{ t('tasks.defaultAssistantRoutes.general.label') }}
+          </template>
+          <el-select v-model="currentConfig.defaultTaskModel" filterable style="width: 100%;"
+            @change="(val) => saveDefaultAssistantRouteModel('defaultTaskModel', val)">
+            <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <template #label>
+            <span>{{ t('tasks.defaultAssistantRoutes.fast.label') }}</span>
+            <el-tooltip :content="t('prompts.defaultAssistantRoutesFastTip')" placement="top">
+              <el-icon class="tip-icon" style="margin-left: 4px;">
+                <QuestionFilled />
+              </el-icon>
+            </el-tooltip>
+          </template>
+          <el-select v-model="currentConfig.defaultFastModel" filterable style="width: 100%;"
+            @change="(val) => saveDefaultAssistantRouteModel('defaultFastModel', val)">
+            <el-option v-for="item in availableModels" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showDefaultAssistantRouteDialog = false">{{ t('common.close') }}</el-button>
+      </template>
+    </el-dialog>
+
+<el-dialog v-model="showReplaceModelDialog" :title="t('prompts.replaceModelsDialog.title')" width="600px"
       :close-on-click-modal="false">
       <el-form :model="replaceModelForm" label-position="top">
         <el-row :gutter="20">

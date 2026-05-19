@@ -206,7 +206,8 @@
     },
     "executionContentTitle": "Execution Content & Target",
     "targetPromptLabel": "Target Quick Prompt",
-    "targetPromptTooltip": "Only 'Standalone Window' mode assistants can perform scheduled tasks",
+    "targetPromptTooltip": "Only enabled assistants in 'Standalone Window' mode can perform scheduled tasks",
+    "targetPromptUnavailableWarning": "The prompt currently referenced by this task is disabled, deleted, or no longer in standalone window mode. Please select another enabled prompt.",
     "promptContentLabel": "Prompt Content",
     "promptContentPlaceholder": "Please describe what the AI needs to do in natural language. E.g., Search for today's big AI news and summarize it into a table.\nYou can enable built-in MCP to allow the assistant to perform more functions, such as saving the result as an MD file.",
     "advancedSettingsTitle": "Background & Extensions",
@@ -228,9 +229,23 @@
     "addDialogTitle": "New Scheduled Task",
     "addDialogNameLabel": "Task Name",
     "addDialogNamePlaceholder": "Enter a valid filename format",
-    "globalSettingsDialogTitle": "Global Default Agent Settings",
-    "executionModelLabel": "Execution Model",
-    "executionModelTooltip": "When a scheduled task is assigned to the [Default Agent], this model will be used uniformly, without any preset system prompts."
+    "globalSettingsDialogTitle": "Default Assistant Route Settings",
+    "defaultModelUpdated": "Default assistant route model updated",
+    "defaultAssistantRouteLabel": "Default Assistant Model Capability",
+    "defaultAssistantRoutes": {
+      "superior": {
+        "label": "Superior Model",
+        "tooltip": "Use for the strongest reasoning, complex analysis, and high-quality planning. Falls back to the first available model if not configured."
+      },
+      "general": {
+        "label": "General Model",
+        "tooltip": "Use for balanced everyday tasks; seamlessly compatible with the current `defaultTaskModel`. Falls back to the first available model if not configured."
+      },
+      "fast": {
+        "label": "Fast Model",
+        "tooltip": "Use for lightweight tasks where speed matters most. Falls back to the first available model if not configured."
+      }
+    }
   },
   "prompts": {
     "allPrompts": "ALL",
@@ -311,6 +326,9 @@
     "isAlwaysOnTopLabel": "Always on Top",
     "autoCloseOnBlurLabel": "Auto-close on Blur",
     "autoSaveChatLabel": "Auto-save Chat",
+    "defaultAssistantRoutesButton": "Default Assistant Route",
+    "defaultAssistantRoutesDialogTitle": "Default Assistant Route",
+    "defaultAssistantRoutesFastTip": "For the fast route, choose the quickest and most cost-effective model. It is suitable for simple sub-agent tasks, lightweight scheduled tasks, and automatic chat naming.",
     "replaceModels": "Replace Models",
     "replaceModelsDialog": {
       "title": "Bulk Replace Models",

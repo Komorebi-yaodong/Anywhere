@@ -206,7 +206,8 @@
     },
     "executionContentTitle": "执行内容与目标",
     "targetPromptLabel": "选择目标快捷助手",
-    "targetPromptTooltip": "只有【独立窗口】模式的助手才能执行定时任务",
+    "targetPromptTooltip": "只有【独立窗口】模式且已启用的快捷助手才能执行定时任务",
+    "targetPromptUnavailableWarning": "当前任务引用的快捷助手已被禁用、删除，或不再是独立窗口模式，请重新选择一个已启用的快捷助手。",
     "promptContentLabel": "自动发送的指令内容 (Prompt)",
     "promptContentPlaceholder": "请用自然语言描述 AI 需要做什么，例如：帮我搜索今天AI界的大新闻并总结为表格。\n可以启用内置MCP让快捷助手执行更多功能，例如：完成任务后将结果以MD文件形式保存到指定目录",
     "advancedSettingsTitle": "后台行为与扩展能力",
@@ -228,9 +229,23 @@
     "addDialogTitle": "新建定时任务",
     "addDialogNameLabel": "任务名称",
     "addDialogNamePlaceholder": "请输入有效的文件名称格式",
-    "globalSettingsDialogTitle": "全局默认助手设置",
-    "executionModelLabel": "执行模型",
-    "executionModelTooltip": "当定时任务分配给【默认助手】时，将统一使用此模型执行，且不包含任何预设系统提示词。"
+    "globalSettingsDialogTitle": "默认助手路由设置",
+    "defaultModelUpdated": "默认助手路由模型已更新",
+    "defaultAssistantRouteLabel": "默认助手模型能力",
+    "defaultAssistantRoutes": {
+      "superior": {
+        "label": "强思维模型",
+        "tooltip": "用于最强逻辑分析、复杂推理与高质量规划。未配置时将回退到模型列表中的第一个模型。"
+      },
+      "general": {
+        "label": "通用模型",
+        "tooltip": "用于日常综合任务；无缝兼容当前 `defaultTaskModel`。未配置时将回退到模型列表中的第一个模型。"
+      },
+      "fast": {
+        "label": "快速模型",
+        "tooltip": "用于响应速度优先的轻量任务。未配置时将回退到模型列表中的第一个模型。"
+      }
+    }
   },
   "prompts": {
     "allPrompts": "全部",
@@ -311,6 +326,9 @@
     "isAlwaysOnTopLabel": "窗口置顶",
     "autoCloseOnBlurLabel": "失焦关闭",
     "autoSaveChatLabel": "自动保存聊天",
+    "defaultAssistantRoutesButton": "默认助手路由",
+    "defaultAssistantRoutesDialogTitle": "默认助手路由",
+    "defaultAssistantRoutesFastTip": "快速模型建议选择回复快、性价比最高的模型，可用于子智能体简单任务、简单的定时任务与对话自动命名。",
     "replaceModels": "替换模型",
     "replaceModelsDialog": {
       "title": "批量替换模型",
