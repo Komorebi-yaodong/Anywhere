@@ -1574,7 +1574,7 @@ async function refreshPromptsConfig() {
 .content-wrapper {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0px 24px 132px 24px;
+  padding: 0px 24px 88px 24px;
 }
 
 .search-input-container {
@@ -1700,15 +1700,16 @@ async function refreshPromptsConfig() {
   width: 100%;
   display: flex;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 16px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 8px 12px;
   background-color: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-top: 1px solid var(--border-primary);
   z-index: 20;
   box-sizing: border-box;
+  overflow-x: auto;
 }
 
 html.dark .bottom-actions-container {
@@ -1716,38 +1717,34 @@ html.dark .bottom-actions-container {
 }
 
 .bottom-actions-container .action-btn {
-  flex: 1 1 160px;
+  flex: 0 1 160px;
   min-width: 0;
-  max-width: 220px;
+  max-width: 170px;
   font-weight: 500;
+  font-size: 12px;
+  padding: 8px 10px;
+  margin: 0;
 }
 
-@media (max-width: 900px) {
-  .bottom-actions-container {
-    justify-content: stretch;
-  }
-
-  .bottom-actions-container .action-btn {
-    flex: 1 1 calc(50% - 10px);
-    max-width: none;
-  }
+.bottom-actions-container .action-btn :deep(.el-icon) {
+  margin-right: 4px;
 }
 
 @media (max-width: 560px) {
   .content-wrapper {
-    padding: 0px 16px 176px 16px;
+    padding: 0px 16px 86px 16px;
   }
 
   .bottom-actions-container {
-    gap: 8px;
-    padding: 10px 12px;
+    gap: 6px;
+    padding: 8px 10px;
   }
 
   .bottom-actions-container .action-btn {
-    flex-basis: calc(50% - 8px);
-    font-size: 13px;
-    padding-left: 10px;
-    padding-right: 10px;
+    flex-basis: 140px;
+    max-width: 150px;
+    font-size: 11px;
+    padding: 7px 8px;
   }
 }
 
