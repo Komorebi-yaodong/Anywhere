@@ -2304,7 +2304,7 @@ const triggerAutoNamingForFirstUserMessage = async ({ force = false, requestSign
           );
           if (!defaultConversationName.value && resolvedName) {
             defaultConversationName.value = resolvedName;
-            autoSaveSession();
+            await persistSessionToLocalJsonFile(resolvedName);
           }
           return defaultConversationName.value || resolvedName || '';
         }
@@ -2314,7 +2314,7 @@ const triggerAutoNamingForFirstUserMessage = async ({ force = false, requestSign
       const fallbackFileName = buildLegacyFallbackConversationFileName(fallbackNamePrefix, force);
       if (!defaultConversationName.value && fallbackFileName) {
         defaultConversationName.value = fallbackFileName;
-        autoSaveSession();
+        await persistSessionToLocalJsonFile(fallbackFileName);
       }
       return defaultConversationName.value || fallbackFileName || '';
     } finally {
@@ -2351,10 +2351,7 @@ const autoSaveSession = async (force = false) => {
 
   // 6. 执行写入操作
   try {
-    const sessionData = getSessionDataAsObject();
-    const jsonString = JSON.stringify(sessionData, null, 2);
-    const filePath = `${currentConfig.value.webdav.localChatPath}/${defaultConversationName.value}.json`;
-    await window.api.writeLocalFile(filePath, jsonString);
+    await persistSessionToLocalJsonFile(defaultConversationName.value);
   } catch (error) {
     console.error('Auto-save failed:', error);
   }
@@ -2986,6 +2983,24 @@ const saveSessionAsHtml = async () => {
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
 };
 
+const persistSessionToLocalJsonFile = async (baseName = defaultConversationName.value) => {
+  const localChatPath = currentConfig.value.webdav?.localChatPath;
+  const normalizedBaseName = typeof baseName === 'string' ? baseName.trim() : '';
+
+  if (!localChatPath || !normalizedBaseName) {
+    return false;
+  }
+
+  const separator = currentOS.value === 'win' ? '\\' : '/';
+  const sessionData = getSessionDataAsObject();
+  const jsonString = JSON.stringify(sessionData, null, 2);
+  const fullPath = `${localChatPath}${separator}${normalizedBaseName}.json`;
+
+  await window.api.writeLocalFile(fullPath, jsonString);
+  return true;
+};
+
+
 const saveSessionAsJson = async () => {
   const sessionData = getSessionDataAsObject();
   const jsonString = JSON.stringify(sessionData, null, 2);
@@ -3028,10 +3043,7 @@ const saveSessionAsJson = async () => {
 
             // 优化逻辑：如果有本地路径，直接写入；否则弹出保存框
             if (localChatPath) {
-              const separator = currentOS.value === 'win' ? '\\' : '/';
-              const fullPath = `${localChatPath}${separator}${finalFilename}`;
-              // 直接写入文件，不弹窗
-              await window.api.writeLocalFile(fullPath, jsonString);
+              await persistSessionToLocalJsonFile(finalBasename);
             } else {
               // 未配置路径，弹出系统选择框
               await window.api.saveFile({
