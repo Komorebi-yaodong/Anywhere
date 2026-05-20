@@ -2304,6 +2304,7 @@ const triggerAutoNamingForFirstUserMessage = async ({ force = false, requestSign
           );
           if (!defaultConversationName.value && resolvedName) {
             defaultConversationName.value = resolvedName;
+            autoSaveSession();
           }
           return defaultConversationName.value || resolvedName || '';
         }
@@ -2313,6 +2314,7 @@ const triggerAutoNamingForFirstUserMessage = async ({ force = false, requestSign
       const fallbackFileName = buildLegacyFallbackConversationFileName(fallbackNamePrefix, force);
       if (!defaultConversationName.value && fallbackFileName) {
         defaultConversationName.value = fallbackFileName;
+        autoSaveSession();
       }
       return defaultConversationName.value || fallbackFileName || '';
     } finally {
