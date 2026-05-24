@@ -2027,6 +2027,16 @@ const isCurrentPromptAutoSaveEnabled = () => {
   return Boolean(promptConfig?.autoSaveChat);
 };
 
+const isNamedLocalConversationAvailable = () => Boolean(
+  currentConfig.value?.webdav?.localChatPath &&
+  typeof defaultConversationName.value === 'string' &&
+  defaultConversationName.value.trim()
+);
+
+const shouldPersistCurrentSessionAutomatically = () => {
+  return isCurrentPromptAutoSaveEnabled() || isNamedLocalConversationAvailable();
+};
+
 const cancelAutoNamingRequest = () => {
   if (autoNamingAbortController.value) {
     try {
@@ -2337,9 +2347,9 @@ const autoSaveSession = async (force = false) => {
   }
 
   // 2. 获取当前快捷助手的配置
-  const isAutoSaveConfigEnabled = isCurrentPromptAutoSaveEnabled();
+  const shouldAutoSave = shouldPersistCurrentSessionAutomatically();
 
-  if (!isAutoSaveConfigEnabled && !force) {
+  if (!shouldAutoSave && !force) {
     return;
   }
   // 自动命名已前移到首条消息发送阶段；自动保存阶段仅负责持久化已有会话名。

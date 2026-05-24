@@ -230,7 +230,6 @@
     "addDialogNameLabel": "任务名称",
     "addDialogNamePlaceholder": "请输入有效的文件名称格式",
     "globalSettingsDialogTitle": "默认助手路由设置",
-    "defaultModelUpdated": "默认助手路由模型已更新",
     "defaultAssistantRouteLabel": "默认助手模型能力",
     "defaultAssistantRoutes": {
       "superior": {

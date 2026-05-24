@@ -230,7 +230,6 @@
     "addDialogNameLabel": "Task Name",
     "addDialogNamePlaceholder": "Enter a valid filename format",
     "globalSettingsDialogTitle": "Default Assistant Route Settings",
-    "defaultModelUpdated": "Default assistant route model updated",
     "defaultAssistantRouteLabel": "Default Assistant Model Capability",
     "defaultAssistantRoutes": {
       "superior": {
