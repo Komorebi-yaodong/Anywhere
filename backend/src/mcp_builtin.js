@@ -621,7 +621,8 @@ IMPORTANT:
                     agent_name: { type: "string", description: "The exact name of the agent to summon." },
                     text: { type: "string", description: "The first message or task description to send to this agent." },
                     file_paths: { type: "array", items: { type: "string" }, description: "Optional. Local absolute file paths to attach. Use this field ONLY when you already know the real absolute local paths (for example, paths explicitly provided by the user or returned by a tool). Never invent, guess, or infer paths from images/files visible in the current chat. If the user uploaded an image but no actual local path is available, DO NOT generate a path and DO NOT include this field." },
-                    enable_tools: { type: "boolean", description: "Optional. If true, the summoned agent will be granted access to all built-in MCP tools (like file system, shell, web search, etc.), thereby expanding its local control capabilities." }
+                    enable_tools: { type: "boolean", description: "Optional. If true, the summoned agent will be granted access to all built-in MCP tools (like file system, shell, web search, etc.), thereby expanding its local control capabilities." },
+                    model_route: { type: "string", enum: ["superior", "general", "fast"], description: "Optional. Only applies when agent_name is '__DEFAULT__'. Choose which default assistant route to use for this summoned agent window." }
                 },
                 required: ["agent_name", "text"]
             }
@@ -2497,27 +2498,34 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
     summon_agent: async (args, context, signal) => {
         if (isChildWindow()) return await callParentShell('summon_agent', args, signal);
 
-        const { agent_name, text, file_paths, enable_tools } = args;
+        const { agent_name, text, file_paths, enable_tools, model_route } = args;
         const { getConfig, openWindow, resolveDefaultAssistantModel } = require('./data.js');
         const configData = await getConfig();
         const windowConfig = JSON.parse(JSON.stringify(configData.config));
+        const normalizedAgentName = typeof agent_name === 'string' && agent_name.trim() ? agent_name.trim() : '__DEFAULT__';
+        const normalizedModelRoute = ['superior', 'general', 'fast'].includes(model_route) ? model_route : 'general';
 
-        if (agent_name !== '__DEFAULT__' && !windowConfig.prompts[agent_name]) {
-            return `Error: Agent "${agent_name}" not found.`;
+        if (normalizedAgentName !== '__DEFAULT__' && !windowConfig.prompts[normalizedAgentName]) {
+            return `Error: Agent "${normalizedAgentName}" not found.`;
         }
-        if (agent_name === '__DEFAULT__') {
+        if (normalizedAgentName === '__DEFAULT__') {
             if (!windowConfig.prompts) windowConfig.prompts = {};
             windowConfig.prompts['__DEFAULT__'] = {
-                type: "general", prompt: "", showMode: "window", model: resolveDefaultAssistantModel(windowConfig), stream: true, isAlwaysOnTop: true, autoCloseOnBlur: false, window_width: 580, window_height: 740, icon: ""
+                type: "general", prompt: "", showMode: "window", model: resolveDefaultAssistantModel(windowConfig, normalizedModelRoute), stream: true, isAlwaysOnTop: true, autoCloseOnBlur: false, window_width: 580, window_height: 740, icon: ""
             };
         }
 
         const msg = {
             os: process.platform === 'win32' ? 'win' : (process.platform === 'darwin' ? 'macos' : 'linux'),
-            code: agent_name,
+            code: normalizedAgentName,
             type: "summon",
-            summonData: { text, file_paths, enable_tools },
-            tempPromptConfig: agent_name === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
+            summonData: {
+                text,
+                file_paths,
+                enable_tools,
+                model_route: normalizedAgentName === '__DEFAULT__' ? normalizedModelRoute : undefined
+            },
+            tempPromptConfig: normalizedAgentName === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
         };
 
         const senderId = await openWindow(windowConfig, msg);
