@@ -2322,6 +2322,78 @@ const generateConversationNamePrefixWithFastModel = async (firstUserMsg, signal 
   }
 };
 
+const generateSuggestedConversationBasename = async ({
+  force = false,
+  uniqueDirPath = '',
+  signal = null,
+  firstUserMsg = null,
+  allowFastModel = true
+} = {}) => {
+  const targetFirstUserMsg = firstUserMsg || chat_show.value.find(msg => msg.role === 'user') || null;
+  const fallbackNamePrefix = getFallbackConversationNamePrefix(targetFirstUserMsg) || CODE.value || 'AI';
+  let generatedBaseTitle = '';
+
+  if (targetFirstUserMsg && allowFastModel && isConfiguredFastModelAvailable(currentConfig.value?.defaultFastModel)) {
+    const aiNamePrefix = await generateConversationNamePrefixWithFastModel(targetFirstUserMsg, signal);
+    if (aiNamePrefix) {
+      generatedBaseTitle = buildConversationTitleOnly(aiNamePrefix, force);
+    }
+  }
+
+  if (!generatedBaseTitle) {
+    generatedBaseTitle = buildLegacyFallbackConversationFileName(fallbackNamePrefix, force)
+      || buildLegacyFallbackConversationFileName(CODE.value || 'AI', force);
+  }
+
+  if (!generatedBaseTitle) return '';
+  return resolveUniqueConversationFileName(generatedBaseTitle, uniqueDirPath);
+};
+
+const renderFilenameAutoNamingButton = ({ canUseAutoNaming = false, isAutoNaming, onClick }) => {
+  if (!canUseAutoNaming) return null;
+  return h(ElButton, {
+    class: 'filename-auto-name-button',
+    size: 'small',
+    loading: Boolean(isAutoNaming?.value),
+    disabled: Boolean(isAutoNaming?.value),
+    onClick
+  }, () => isAutoNaming?.value ? '命名中...' : '自动命名');
+};
+
+const renderFilenamePromptTitleRow = ({ text = '请输入文件名。', canUseAutoNaming = false, isAutoNaming, onClick }) => h(
+  'div',
+  { class: 'filename-prompt-title-row' },
+  [
+    h('p', { class: 'filename-prompt-title-text' }, text),
+    renderFilenameAutoNamingButton({ canUseAutoNaming, isAutoNaming, onClick })
+  ].filter(Boolean)
+);
+
+const createManualAutoNamingHandler = ({ inputValue, isAutoNaming, uniqueDirPath = '', fallbackBasename = '' }) => async () => {
+  if (isAutoNaming.value) return;
+  isAutoNaming.value = true;
+  try {
+    const generatedName = await generateSuggestedConversationBasename({
+      uniqueDirPath,
+      allowFastModel: true
+    });
+    const nextName = sanitizeConversationTitlePart(generatedName || fallbackBasename || CODE.value || 'AI', 80);
+    if (nextName) {
+      inputValue.value = nextName;
+    } else {
+      showDismissibleMessage.warning('当前对话内容不足，无法自动命名');
+    }
+  } catch (error) {
+    console.warn('[Auto Naming] manual naming failed:', error);
+    const fallbackName = sanitizeConversationTitlePart(fallbackBasename || CODE.value || 'AI', 80);
+    if (fallbackName) {
+      inputValue.value = fallbackName;
+    }
+  } finally {
+    isAutoNaming.value = false;
+  }
+};
+
 const triggerAutoNamingForFirstUserMessage = async ({ force = false, requestSignal = null } = {}) => {
   if (!force && !isCurrentPromptAutoSaveEnabled()) {
     return '';
@@ -2473,11 +2545,24 @@ const getSessionDataAsObject = () => {
 const saveSessionToCloud = async () => {
   const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
+  const isAutoNaming = ref(false);
+  const canUseAutoNaming = isConfiguredFastModelAvailable(currentConfig.value?.defaultFastModel);
+  const handleManualAutoNaming = createManualAutoNamingHandler({
+    inputValue,
+    isAutoNaming,
+    uniqueDirPath: currentConfig.value?.webdav?.localChatPath || '',
+    fallbackBasename: defaultBasename
+  });
   try {
     await ElMessageBox({
       title: '保存到云端',
       message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入要保存到云端的会话名称。'),
+        renderFilenamePromptTitleRow({
+          text: '请输入要保存到云端的会话名称。',
+          canUseAutoNaming,
+          isAutoNaming,
+          onClick: handleManualAutoNaming
+        }),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
@@ -3053,11 +3138,24 @@ const saveSessionAsJson = async () => {
   const jsonString = JSON.stringify(sessionData, null, 2);
   const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
+  const isAutoNaming = ref(false);
+  const canUseAutoNaming = isConfiguredFastModelAvailable(currentConfig.value?.defaultFastModel);
+  const handleManualAutoNaming = createManualAutoNamingHandler({
+    inputValue,
+    isAutoNaming,
+    uniqueDirPath: currentConfig.value?.webdav?.localChatPath || '',
+    fallbackBasename: defaultBasename
+  });
   try {
     await ElMessageBox({
       title: '保存为 JSON',
       message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入文件名。'),
+        renderFilenamePromptTitleRow({
+          text: '请输入文件名。',
+          canUseAutoNaming,
+          isAutoNaming,
+          onClick: handleManualAutoNaming
+        }),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
@@ -5779,6 +5877,28 @@ html.dark .system-prompt-dialog {
 
 html.dark .system-prompt-full-content .el-textarea__inner {
   background-color: var(--el-fill-color-dark) !important;
+}
+
+
+.filename-prompt-title-row {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.filename-prompt-title-text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  flex: 1;
+}
+
+.filename-auto-name-button {
+  flex-shrink: 0;
 }
 
 /* Filename Prompt Dialog */
