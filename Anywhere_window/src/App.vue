@@ -1938,7 +1938,7 @@ Rules:
 2. Do not use punctuation, separators, quotes, emoji, or other special symbols.
 3. Reply directly with the title only.
 4. If the user's primary language is unclear, summarize using ${locale}.
-5. The title must not exceed 10 characters.`;
+5. Keep the title brief and natural for mixed-language display. Prefer a short title that fits within about 16 display-width units (for example, around 8 Chinese/Japanese characters or around 16 ASCII letters, with mixed-language text balanced naturally).`;
 };
 
 const sanitizeConversationTitlePart = (value, maxLength = 30) => {
@@ -1954,12 +1954,60 @@ const sanitizeConversationTitlePart = (value, maxLength = 30) => {
 };
 
 
-const sanitizeAutoNamingTitlePart = (value) => sanitizeConversationTitlePart(value, 30)
-  .replace(/[^\p{L}\p{N}\s]/gu, '')
-  .replace(/\s+/g, ' ')
-  .trim()
-  .slice(0, 10)
-  .trim();
+const computeConversationTitleDisplayWidth = (value = '') => {
+  return Array.from(String(value || '')).reduce((total, char) => {
+    if (/\s/u.test(char)) return total + 0.5;
+    if (/^[\u0000-\u00ff]$/u.test(char)) return total + 1;
+    return total + 2;
+  }, 0);
+};
+
+const truncateConversationTitleByDisplayWidth = (value, maxDisplayWidth = 16) => {
+  const normalized = typeof value === 'string' ? value : String(value ?? '');
+  let result = '';
+  let usedWidth = 0;
+
+  for (const char of Array.from(normalized)) {
+    const charWidth = /\s/u.test(char)
+      ? 0.5
+      : (/^[\u0000-\u00ff]$/u.test(char) ? 1 : 2);
+    if (usedWidth + charWidth > maxDisplayWidth) break;
+    result += char;
+    usedWidth += charWidth;
+  }
+
+  return result.trim();
+};
+
+const sanitizeAutoNamingTitlePart = (value) => {
+  const normalized = sanitizeConversationTitlePart(value, 60)
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return truncateConversationTitleByDisplayWidth(normalized, 16);
+};
+
+const buildConversationTimestampSuffix = (date = new Date()) => {
+  const year = String(date.getFullYear()).slice(-2);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const milliseconds = String(date.getMilliseconds()).padStart(3, '0');
+  return `${year}${month}${day}-${hours}${minutes}${seconds}-${milliseconds}`;
+};
+
+const buildConversationTimestampedBasename = (namePrefix = '', { force = false, date = new Date(), includeCode = true } = {}) => {
+  const safeNamePrefix = sanitizeConversationTitlePart(namePrefix, 36);
+  if (!safeNamePrefix) return '';
+  const safeCodeName = sanitizeConversationTitlePart(CODE.value || 'AI', 36).replace(/[\\/:*?"<>|]/g, '_');
+  const timestampSuffix = buildConversationTimestampSuffix(date);
+  return includeCode && safeCodeName
+    ? `${getAutoSavePrefixTag(force)}${safeNamePrefix}-${safeCodeName}-${timestampSuffix}`
+    : `${getAutoSavePrefixTag(force)}${safeNamePrefix}-${timestampSuffix}`;
+};
 
 const getAutoSavePrefixTag = (force = false) => {
   if (basic_msg.value?.type === "summon") return "召唤-";
@@ -2010,12 +2058,7 @@ const resolveUniqueConversationFileName = async (baseTitle = '', dirPath = '') =
 };
 
 const buildLegacyFallbackConversationFileName = (namePrefix, force = false) => {
-  const safeNamePrefix = sanitizeConversationTitlePart(namePrefix, 36);
-  if (!safeNamePrefix) return '';
-  const safeCodeName = CODE.value.replace(/[\\/:*?"<>|]/g, '_');
-  const now = new Date();
-  const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-  return `${getAutoSavePrefixTag(force)}${safeNamePrefix}-${safeCodeName}-${timestamp}`;
+  return buildConversationTimestampedBasename(namePrefix, { force });
 };
 
 const autoNamingAbortController = ref(null);
@@ -2428,13 +2471,7 @@ const getSessionDataAsObject = () => {
   };
 }
 const saveSessionToCloud = async () => {
-  const now = new Date();
-  const year = String(now.getFullYear()).slice(-2);
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).toString().padStart(2, '0');
-  const hours = String(now.getHours()).toString().padStart(2, '0');
-  const minutes = String(now.getMinutes()).toString().padStart(2, '0');
-  const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${year}${month}${day}-${hours}${minutes}`;
+  const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
   try {
     await ElMessageBox({
@@ -3014,9 +3051,7 @@ const persistSessionToLocalJsonFile = async (baseName = defaultConversationName.
 const saveSessionAsJson = async () => {
   const sessionData = getSessionDataAsObject();
   const jsonString = JSON.stringify(sessionData, null, 2);
-  const now = new Date();
-  const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-  const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
+  const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
   try {
     await ElMessageBox({
