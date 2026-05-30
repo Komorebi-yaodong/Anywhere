@@ -210,6 +210,25 @@ window.api = {
   extractSkillPackage: async (filePath) => {
     return extractSkillPackage(filePath);
   },
+  // 按系统默认方式打开文件或目录
+  shellOpenPath: (fullPath) => {
+    const targetPath = String(fullPath || '').trim();
+    if (!targetPath) {
+      return { ok: false, reason: 'path_required' };
+    }
+
+    try {
+      if (typeof utools.shellOpenPath === 'function') {
+        const result = utools.shellOpenPath(targetPath);
+        return { ok: result !== false };
+      }
+
+      utools.shellShowItemInFolder(targetPath);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: String(error?.message || error) };
+    }
+  },
   // 在文件管理器中显示文件
   shellShowItemInFolder: (fullPath) => {
     utools.shellShowItemInFolder(fullPath);

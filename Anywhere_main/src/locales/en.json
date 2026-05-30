@@ -535,6 +535,7 @@
       "forkOn": "Enable Sub-Agent Mode",
       "forkOff": "Disable Sub-Agent Mode",
       "refresh": "Refresh List",
+      "openFolder": "Open skill folder",
       "forkMode": "When enabled, AI will spawn an isolated sub-agent to execute this skill with its own context."
     },
     "filesTab": {
@@ -545,6 +546,8 @@
     "alerts": {
       "listFailed": "Failed to list skills",
       "loadFailed": "Failed to load skill details",
+      "openFolderPathMissing": "Skill folder path is missing",
+      "openFolderFailed": "Failed to open skill folder",
       "nameRequired": "Skill name is required",
       "deleteConfirm": "Are you sure you want to delete skill \"{name}\"? This will permanently delete its directory.",
       "deleteFileConfirm": "Are you sure you want to delete file \"{name}\"?",

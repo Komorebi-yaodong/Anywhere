@@ -281,6 +281,23 @@ async function saveEditDialog() {
   }
 }
 
+async function openSkillFolder(skill) {
+  const targetPath = skill?.path || (skillPath.value && skill?.id ? window.api.pathJoin(skillPath.value, skill.id) : '');
+  if (!targetPath) {
+    ElMessage.warning(t('skills.alerts.openFolderPathMissing'));
+    return;
+  }
+
+  try {
+    const result = await window.api.shellOpenPath(targetPath);
+    if (result?.ok === false) {
+      throw new Error(result.message || result.reason || t('common.operationFailed'));
+    }
+  } catch (e) {
+    ElMessage.error(t('skills.alerts.openFolderFailed') + ': ' + e.message);
+  }
+}
+
 function deleteSkillFunc(skill) {
   ElMessageBox.confirm(
     t('skills.alerts.deleteConfirm', { name: skill.name }),
@@ -696,6 +713,9 @@ async function handleExportSkills() {
                   effect="plain" round>Tools</el-tag>
               </div>
               <div class="skill-actions">
+                <el-tooltip :content="t('skills.tooltips.openFolder')" placement="top">
+                  <el-button :icon="FolderOpened" text circle @click="openSkillFolder(skill)" class="action-btn-compact" />
+                </el-tooltip>
                 <el-button :icon="Edit" text circle @click="prepareEditSkill(skill.id)" class="action-btn-compact" />
                 <el-button :icon="Delete" text circle type="danger" @click="deleteSkillFunc(skill)"
                   class="action-btn-compact" />

@@ -535,6 +535,7 @@
       "forkOn": "开启子智能体模式",
       "forkOff": "关闭子智能体模式",
       "refresh": "刷新列表",
+      "openFolder": "打开技能文件夹",
       "forkMode": "开启后，AI 将调用独立子智能体来执行此技能，拥有独立的上下文环境。"
     },
     "filesTab": {
@@ -545,6 +546,8 @@
     "alerts": {
       "listFailed": "获取技能列表失败",
       "loadFailed": "加载技能详情失败",
+      "openFolderPathMissing": "技能目录路径不存在",
+      "openFolderFailed": "打开技能文件夹失败",
       "nameRequired": "技能名称不能为空",
       "deleteConfirm": "确定要删除技能 “{name}” 吗？这将永久删除其目录。",
       "deleteFileConfirm": "确定要删除文件 “{name}” 吗？",
