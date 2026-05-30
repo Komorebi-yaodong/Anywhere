@@ -6561,8 +6561,8 @@ html.dark .app-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
-  padding: 8px 0;
+  gap: 3px;
+  padding: 6px 0;
   scroll-behavior: smooth;
 
   &::-webkit-scrollbar {
@@ -6574,14 +6574,14 @@ html.dark .app-container {
 
 .timeline-node-wrapper {
   width: 100%;
-  min-height: 16px;
+  min-height: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
   position: relative;
-  padding: 4px 0;
+  padding: 2px 0;
 
   &:hover .timeline-node {
     transform: translateX(-1px) scaleX(1.08);
