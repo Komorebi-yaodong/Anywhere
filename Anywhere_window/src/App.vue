@@ -81,6 +81,15 @@ const centerActiveNavNode = async (targetIndex = focusedMessageIndex.value) => {
 // 核心状态：是否粘滞在底部
 const isSticky = ref(true);
 
+const AUTO_SAVE_INPUT_DEBOUNCE_MS = 800;
+const AUTO_SAVE_LOADING_THROTTLE_MS = 2500;
+let autoSaveTimer = null;
+let scheduledAutoSaveRequest = null;
+let queuedAutoSaveRequest = null;
+let autoSaveExecutionPromise = null;
+let lastAutoSaveAt = 0;
+
+
 
 
 let textSearchInstance = null;
@@ -1348,7 +1357,7 @@ const closePage = async (force_save = false) => {
   // 条件：配置了本地存储路径 且 当前对话已有名称
   if (currentConfig.value?.webdav?.localChatPath && (defaultConversationName.value || shouldForceSave)) {
     try {
-      await autoSaveSession(shouldForceSave);
+      await executeAutoSaveRequest({ reason: 'window-close', force: shouldForceSave });
     } catch (e) {
       console.error("关闭时自动保存失败:", e);
     }
@@ -2415,33 +2424,22 @@ const triggerAutoNamingForFirstUserMessage = async ({ force = false, requestSign
 
   const namingTask = (async () => {
     try {
-      const aiNamePrefix = await generateConversationNamePrefixWithFastModel(firstUserMsg, namingSignal);
-      if (defaultConversationName.value) {
-        return defaultConversationName.value;
+      const generatedName = await generateSuggestedConversationBasename({
+        force,
+        uniqueDirPath: currentConfig.value.webdav.localChatPath,
+        signal: namingSignal,
+        firstUserMsg
+      });
+      if (!defaultConversationName.value && generatedName) {
+        defaultConversationName.value = generatedName;
+        scheduleAutoSave({
+          reason: isConfiguredFastModelAvailable(currentConfig.value?.defaultFastModel)
+            ? 'auto-naming-completed'
+            : 'auto-naming-fallback-completed',
+          immediate: true
+        });
       }
-
-      if (aiNamePrefix) {
-        const generatedBaseTitle = buildConversationTitleOnly(aiNamePrefix, force);
-        if (generatedBaseTitle) {
-          const resolvedName = await resolveUniqueConversationFileName(
-            generatedBaseTitle,
-            currentConfig.value.webdav.localChatPath
-          );
-          if (!defaultConversationName.value && resolvedName) {
-            defaultConversationName.value = resolvedName;
-            await persistSessionToLocalJsonFile(resolvedName);
-          }
-          return defaultConversationName.value || resolvedName || '';
-        }
-      }
-
-      const fallbackNamePrefix = getFallbackConversationNamePrefix(firstUserMsg);
-      const fallbackFileName = buildLegacyFallbackConversationFileName(fallbackNamePrefix, force);
-      if (!defaultConversationName.value && fallbackFileName) {
-        defaultConversationName.value = fallbackFileName;
-        await persistSessionToLocalJsonFile(fallbackFileName);
-      }
-      return defaultConversationName.value || fallbackFileName || '';
+      return defaultConversationName.value || generatedName || '';
     } finally {
       if (autoNamingAbortController.value === localController) {
         autoNamingAbortController.value = null;
@@ -2457,30 +2455,115 @@ const triggerAutoNamingForFirstUserMessage = async ({ force = false, requestSign
 };
 
 const autoSaveSession = async (force = false) => {
-  if ((loading.value && !force) || !currentConfig.value?.webdav?.localChatPath) {
-    return;
+  if (!currentConfig.value?.webdav?.localChatPath) {
+    return false;
   }
 
   // 2. 获取当前快捷助手的配置
   const shouldAutoSave = shouldPersistCurrentSessionAutomatically();
 
   if (!shouldAutoSave && !force) {
-    return;
+    return false;
   }
   // 自动命名已前移到首条消息发送阶段；自动保存阶段仅负责持久化已有会话名。
 
   // 5. 如果经过尝试后仍然没有对话名称（例如空对话），则不保存
   if (!defaultConversationName.value) {
-    return;
+    return false;
   }
 
   // 6. 执行写入操作
   try {
     await persistSessionToLocalJsonFile(defaultConversationName.value);
+    lastAutoSaveAt = Date.now();
+    return true;
   } catch (error) {
     console.error('Auto-save failed:', error);
+    return false;
   }
 };
+
+const clearScheduledAutoSave = () => {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+  }
+  scheduledAutoSaveRequest = null;
+};
+
+const executeAutoSaveRequest = async (request = {}) => {
+  if (!request || !request.force) {
+    if (!shouldPersistCurrentSessionAutomatically()) {
+      return false;
+    }
+  }
+
+  if (autoSaveExecutionPromise) {
+    queuedAutoSaveRequest = {
+      force: queuedAutoSaveRequest?.force || request.force || false,
+      reason: request.reason || queuedAutoSaveRequest?.reason || 'queued'
+    };
+    return autoSaveExecutionPromise;
+  }
+
+  autoSaveExecutionPromise = (async () => {
+    try {
+      return await autoSaveSession(Boolean(request.force));
+    } finally {
+      autoSaveExecutionPromise = null;
+      if (queuedAutoSaveRequest) {
+        const nextRequest = queuedAutoSaveRequest;
+        queuedAutoSaveRequest = null;
+        await executeAutoSaveRequest(nextRequest);
+      }
+    }
+  })();
+
+  return autoSaveExecutionPromise;
+};
+
+const scheduleAutoSave = ({ reason = 'generic', immediate = false, force = false, delay = 0 } = {}) => {
+  if (!force && !shouldPersistCurrentSessionAutomatically()) {
+    return;
+  }
+
+  const request = { reason, force };
+
+  if (immediate || force || delay <= 0) {
+    clearScheduledAutoSave();
+    executeAutoSaveRequest(request);
+    return;
+  }
+
+  if (scheduledAutoSaveRequest?.force) {
+    request.force = true;
+  }
+  scheduledAutoSaveRequest = request;
+
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+  }
+  autoSaveTimer = setTimeout(() => {
+    const pendingRequest = scheduledAutoSaveRequest || request;
+    autoSaveTimer = null;
+    scheduledAutoSaveRequest = null;
+    executeAutoSaveRequest(pendingRequest);
+  }, delay);
+};
+
+const scheduleInputDraftAutoSave = (reason = 'input-draft') => {
+  scheduleAutoSave({ reason, delay: AUTO_SAVE_INPUT_DEBOUNCE_MS });
+};
+
+const scheduleLoadingAutoSave = (reason = 'loading-progress') => {
+  const elapsed = Date.now() - lastAutoSaveAt;
+  if (elapsed >= AUTO_SAVE_LOADING_THROTTLE_MS) {
+    scheduleAutoSave({ reason, immediate: true });
+  } else {
+    scheduleAutoSave({ reason, delay: Math.max(120, AUTO_SAVE_LOADING_THROTTLE_MS - elapsed) });
+  }
+};
+
 
 onBeforeUnmount(async () => {  // 15s 轮询自动保存已移除；当前仅保留显式业务触发的保存链路。
 
@@ -2492,6 +2575,7 @@ onBeforeUnmount(async () => {  // 15s 轮询自动保存已移除；当前仅保
   await window.api.closeMcpClient();
   window.removeEventListener('error', handleGlobalImageError, true);
   window.removeEventListener('keydown', handleGlobalKeyDown);
+  clearScheduledAutoSave();
 
 });
 
@@ -4225,16 +4309,7 @@ const askAI = async (forceSend = false) => {
           history.value.push({ role: "user", content: contentForHistory });
           chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
 
-          const shouldTriggerAutoNaming = !defaultConversationName.value && chat_show.value.filter(msg => msg.role === 'user').length === 1;
-          if (shouldTriggerAutoNaming) {
-            triggerAutoNamingForFirstUserMessage({ force: false }).catch((error) => {
-              if (error?.name !== 'AbortError') {
-                console.warn('[Auto Naming] trigger failed:', error);
-              }
-            });
-          }
-
-          autoSaveSession();
+          scheduleAutoSave({ reason: 'user-message', immediate: true });
 
         } else return;
       } else return;
@@ -4248,6 +4323,17 @@ const askAI = async (forceSend = false) => {
   loading.value = true;
   syncAutoCloseOnBlurListener();
   signalController.value = new AbortController();
+  const requestSignal = signalController.value.signal;
+
+  const shouldTriggerAutoNaming = !defaultConversationName.value && chat_show.value.filter(msg => msg.role === 'user').length === 1;
+  if (shouldTriggerAutoNaming) {
+    triggerAutoNamingForFirstUserMessage({ force: false, requestSignal }).catch((error) => {
+      if (error?.name !== 'AbortError') {
+        console.warn('[Auto Naming] trigger failed:', error);
+      }
+    });
+  }
+
   await nextTick();
 
   if (isAtBottom.value) {
@@ -4914,7 +5000,7 @@ const askAI = async (forceSend = false) => {
       }
       currentTaskConfig.value = null; // 清空标记，避免后续手动问答也触发
     } else {
-      autoSaveSession(); // 普通对话的自动保存
+      scheduleAutoSave({ reason: 'assistant-turn-finalized', immediate: true }); // 普通对话的自动保存
     }
   }
 };

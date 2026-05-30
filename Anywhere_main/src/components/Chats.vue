@@ -435,17 +435,9 @@ async function fetchCloudFiles(silent = false) {
         const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
         if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
         const response = await client.getDirectoryContents(remoteDir, { details: true });
-        const jsonFiles = response.data.filter(item => item.type === 'file' && item.basename.endsWith('.json'));
-        cloudChatFiles.value = await Promise.all(jsonFiles.map(async (file) => {
-            try {
-                const remotePath = `${remoteDir}/${file.basename}`;
-                const fileContent = await client.getFileContents(remotePath, { format: 'text' });
-                const sessionData = JSON.parse(fileContent);
-                return normalizeSessionFile(file, sessionData);
-            } catch (error) {
-                return normalizeSessionFile(file);
-            }
-        }));
+        const directoryItems = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+        const jsonFiles = directoryItems.filter(item => item.type === 'file' && item.basename && item.basename.endsWith('.json'));
+        cloudChatFiles.value = jsonFiles.map(file => normalizeSessionFile(file));
     } catch (error) {
         ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`);
         cloudChatFiles.value = [];

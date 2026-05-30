@@ -344,10 +344,13 @@ function cloneSessionMetadataCacheEntry(entry) {
     return entry ? { ...entry } : null;
 }
 
-function createSessionFileSummary({ filePath, basename, stats, sessionMetadata }) {
+function createSessionFileSummary({ filePath, basename, stats }) {
     const normalizedBasename = basename || path.basename(filePath);
-    const createdAt = sessionMetadata?.createdAt || normalizeSessionTimestamp(stats.birthtime) || normalizeSessionTimestamp(stats.mtime);
-    const updatedAt = sessionMetadata?.updatedAt || normalizeSessionTimestamp(stats.mtime) || createdAt;
+    const createdAt = normalizeSessionTimestamp(stats.birthtime) || normalizeSessionTimestamp(stats.ctime) || normalizeSessionTimestamp(stats.mtime);
+    const updatedAt = normalizeSessionTimestamp(stats.mtime) || createdAt;
+    const title = normalizedBasename.toLowerCase().endsWith('.json')
+        ? normalizedBasename.slice(0, -5)
+        : normalizedBasename;
 
     return {
         basename: normalizedBasename,
@@ -355,7 +358,7 @@ function createSessionFileSummary({ filePath, basename, stats, sessionMetadata }
         lastmod: stats.mtime.toISOString(),
         createdAt,
         updatedAt,
-        title: sessionMetadata?.title || (normalizedBasename.endsWith('.json') ? normalizedBasename.slice(0, -5) : normalizedBasename),
+        title,
         size: stats.size,
         type: 'file'
     };
@@ -454,22 +457,23 @@ async function readSessionMetadata(filePath, fallbackBasename, cacheContext = nu
  */
 async function listJsonFiles(dirPath) {
     if (!dirPath) return [];
-    const files = await fs.readdir(dirPath);
-    const jsonFiles = files.filter(file => path.extname(file).toLowerCase() === '.json');
-    const validFilePaths = jsonFiles.map(file => path.join(dirPath, file));
+    const resolvedDirPath = path.resolve(String(dirPath).trim());
+    const entries = await fs.readdir(resolvedDirPath, { withFileTypes: true });
+    const jsonFiles = entries.filter(
+        (entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === '.json'
+    );
+    const validFilePaths = jsonFiles.map(entry => path.join(resolvedDirPath, entry.name));
     pruneLocalSessionMetadataCache(validFilePaths);
 
     const fileDetails = await Promise.all(
-        jsonFiles.map(async file => {
-            const filePath = path.join(dirPath, file);
+        jsonFiles.map(async entry => {
+            const filePath = path.join(resolvedDirPath, entry.name);
             try {
                 const stats = await fs_node.promises.stat(filePath);
-                const sessionMetadata = await readSessionMetadata(filePath, file, { stats });
                 return createSessionFileSummary({
                     filePath,
-                    basename: file,
-                    stats,
-                    sessionMetadata
+                    basename: entry.name,
+                    stats
                 });
             } catch (error) {
                 console.error(`无法获取文件信息: ${filePath}`, error);
