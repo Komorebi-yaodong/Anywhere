@@ -442,7 +442,7 @@ function resolveSkillInvocation(skillRootPath, skillName, toolArgsObj) {
         const fileTreeStr = renderFiles(details.files);
         if (fileTreeStr.trim()) {
             assetsInfo += fileTreeStr;
-            assetsInfo += `\nNote: You can read these files(references/*) using 'read_file' tool if referenced in the instructions.\n`;
+            assetsInfo += `\nNote: If referenced in the instructions, you can read these files (e.g., files in the \`references\` directory, rather than scripts/*) and run the relevant scripts (do not read the script files themselves, such as those in the \`scripts\` directory). Modifying files in the skill directory without permission is prohibited.\n`
             assetsInfo += `(Note: 'SKILL.md' contains the instructions you are currently reading, so it is hidden from this list.)\n`;
         }
     }
