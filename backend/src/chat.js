@@ -244,12 +244,21 @@ async function createChatCompletion(params) {
         } else {
             // 标准 Chat Completions API
             const normalizedMessages = normalizeMessagesForChatCompletions(openAiParams.messages, openAiParams.reasoning_effort);
+            const chatCompletionParams = {
+                ...openAiParams,
+                messages: normalizedMessages,
+                stream: params.stream ?? true
+            };
+
+            if (chatCompletionParams.stream) {
+                chatCompletionParams.stream_options = {
+                    ...(openAiParams.stream_options || {}),
+                    include_usage: true
+                };
+            }
+
             return await client.chat.completions.create(
-                {
-                    ...openAiParams,
-                    messages: normalizedMessages,
-                    stream: params.stream ?? true
-                },
+                chatCompletionParams,
                 { signal }
             );
         }

@@ -28,6 +28,27 @@ const editedContent = ref('');
 const messageWrapperRef = ref(null);
 
 // 计算耗时或显示开始时间
+const formatTokenCount = (value) => {
+  const count = Number(value);
+  if (!Number.isFinite(count) || count < 0) return '0';
+  if (count >= 1000000) return `${(count / 1000000).toFixed(count >= 10000000 ? 1 : 2)}M`;
+  if (count >= 10000) return `${(count / 1000).toFixed(count >= 100000 ? 0 : 1)}K`;
+  return String(Math.round(count));
+};
+
+const tokenUsageDisplay = computed(() => {
+  if (props.message?.role !== 'assistant') return '';
+  const usage = props.message?.tokenUsage;
+  if (!usage || typeof usage !== 'object') return '';
+
+  const promptTokens = Number(usage.prompt_tokens ?? usage.input_tokens);
+  const completionTokens = Number(usage.completion_tokens ?? usage.output_tokens);
+  if (!Number.isFinite(promptTokens) && !Number.isFinite(completionTokens)) return '';
+
+  return `总输入 ${formatTokenCount(promptTokens)} · 输出 ${formatTokenCount(completionTokens)}`;
+});
+
+
 const timeDisplay = computed(() => {
   const msg = props.message;
   // 获取开始时间：优先取 startTime (AI)，其次取 timestamp (User/AI旧数据)
@@ -662,6 +683,7 @@ const truncateFilename = (filename, maxLength = 30) => {
               <el-button v-if="isLastMessage" :icon="Refresh" @click="onReAsk" size="small" circle />
               <el-button :icon="Delete" size="small" @click="onDelete" circle />
             </div>
+            <span v-if="tokenUsageDisplay" class="token-usage-row">{{ tokenUsageDisplay }}</span>
           </div>
         </template>
       </Bubble>
@@ -1428,6 +1450,26 @@ html.dark .ai-name {
   width: 100%;
   margin-top: 8px;
 }
+
+.ai-bubble .message-footer {
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.token-usage-row {
+  font-size: 11px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--el-text-color-primary) 72%, transparent);
+  white-space: nowrap;
+  user-select: none;
+  padding-top: 1px;
+}
+
+html.dark .token-usage-row {
+  color: rgba(221, 225, 235, 0.68);
+}
+
 
 .footer-actions {
   display: flex;

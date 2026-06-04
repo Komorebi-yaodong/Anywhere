@@ -4195,8 +4195,13 @@ const collectChatCompletionStreamToMessage = async (streamLike) => {
   let aggregatedMedia = [];
   let aggregatedToolCalls = [];
   let aggregatedExtraContent = null;
+  let aggregatedUsage = null;
 
   for await (const part of streamLike) {
+    if (part?.usage) {
+      aggregatedUsage = part.usage;
+    }
+
     const delta = part?.choices?.[0]?.delta;
     if (!delta) continue;
 
@@ -4259,6 +4264,9 @@ const collectChatCompletionStreamToMessage = async (streamLike) => {
   if (validToolCalls.length > 0) {
     message.tool_calls = validToolCalls;
   }
+  if (aggregatedUsage) {
+    message.tokenUsage = normalizeAssistantTokenUsage(aggregatedUsage);
+  }
 
   return message;
 };
@@ -4283,6 +4291,39 @@ const normalizeToolsForRequest = (tools = []) => {
     return clonedTool;
   });
 };
+
+const normalizeAssistantTokenUsage = (usage) => {
+  if (!usage || typeof usage !== 'object') return null;
+
+  const promptTokens = Number.isFinite(Number(usage.prompt_tokens))
+    ? Number(usage.prompt_tokens)
+    : (Number.isFinite(Number(usage.input_tokens)) ? Number(usage.input_tokens) : null);
+  const completionTokens = Number.isFinite(Number(usage.completion_tokens))
+    ? Number(usage.completion_tokens)
+    : (Number.isFinite(Number(usage.output_tokens)) ? Number(usage.output_tokens) : null);
+
+  if (promptTokens === null && completionTokens === null) return null;
+
+  const totalTokens = Number.isFinite(Number(usage.total_tokens)) ? Number(usage.total_tokens) : null;
+  return {
+    prompt_tokens: promptTokens ?? 0,
+    completion_tokens: completionTokens ?? 0,
+    total_tokens: totalTokens ?? ((promptTokens ?? 0) + (completionTokens ?? 0)),
+    raw: usage
+  };
+};
+
+const applyTokenUsageToAssistantMessage = (chatShowIndex, tokenUsage) => {
+  const normalizedUsage = normalizeAssistantTokenUsage(tokenUsage);
+  if (!normalizedUsage || chatShowIndex < 0) return null;
+
+  const bubble = chat_show.value[chatShowIndex];
+  if (bubble?.role === 'assistant') {
+    bubble.tokenUsage = normalizedUsage;
+  }
+  return normalizedUsage;
+};
+
 
 const askAI = async (forceSend = false) => {
   if (loading.value || isPreparingSend.value) return;
@@ -4379,6 +4420,7 @@ const askAI = async (forceSend = false) => {
             delete msg[key];
           }
         });
+        delete msg.tokenUsage;
       });
 
       if (currentPromptConfig && currentPromptConfig.ifTextNecessary) {
@@ -4490,6 +4532,7 @@ const askAI = async (forceSend = false) => {
         let aggregatedMedia = [];
         let aggregatedToolCalls = [];
         let aggregatedExtraContent = null;
+        let aggregatedUsage = null;
         let lastUpdateTime = Date.now();
 
         const responsesItemIdToIndexMap = new Map();
@@ -4510,7 +4553,13 @@ const askAI = async (forceSend = false) => {
 
         for await (const part of stream) {
           // console.log(part);
+          if (part?.usage) {
+            aggregatedUsage = part.usage;
+          }
           if (apiType === 'responses') {
+            if (part.type === 'response.completed' && part.response?.usage) {
+              aggregatedUsage = part.response.usage;
+            }
             if (part.type === 'response.output_text.delta') {
               aggregatedContent += part.delta;
               if (chat_show.value[currentAssistantChatShowIndex].status === 'thinking') {
@@ -4627,6 +4676,9 @@ const askAI = async (forceSend = false) => {
         if (aggregatedToolCalls.length > 0) {
           responseMessage.tool_calls = aggregatedToolCalls.filter(tc => tc.id && tc.function.name);
         }
+        if (aggregatedUsage) {
+          responseMessage.tokenUsage = normalizeAssistantTokenUsage(aggregatedUsage);
+        }
       } else {
         // --- 非流式处理 ---
         const response = await window.api.createChatCompletion(requestParams);
@@ -4673,13 +4725,15 @@ const askAI = async (forceSend = false) => {
             role: 'assistant',
             content: contentText || null,
             reasoning_content: reasoningText || (shouldBackfillAssistantReasoningContent(tempReasoningEffort.value) ? '' : null),
-            tool_calls: toolCalls.length > 0 ? toolCalls : undefined
+            tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+            tokenUsage: normalizeAssistantTokenUsage(response.usage)
           };
         } else {
           if (isAsyncIterableResponse(response)) {
             responseMessage = await collectChatCompletionStreamToMessage(response);
           } else if (response && response.choices && response.choices.length > 0) {
             responseMessage = response.choices[0].message;
+            responseMessage.tokenUsage = normalizeAssistantTokenUsage(response.usage);
           } else {
             throw new Error(`API 返回异常，未包含有效的 choices 数据: ${JSON.stringify(response)}`);
           }
@@ -4695,11 +4749,15 @@ const askAI = async (forceSend = false) => {
       }
 
       ensureAssistantReasoningContentForThinkingMode([responseMessage], tempReasoningEffort.value);
+      if (!responseMessage.tokenUsage) {
+        delete responseMessage.tokenUsage;
+      }
 
       history.value.push(responseMessage);
 
       // --- 更新 UI 气泡 ---
       const currentBubble = chat_show.value[currentAssistantChatShowIndex];
+      applyTokenUsageToAssistantMessage(currentAssistantChatShowIndex, responseMessage.tokenUsage);
 
       // 更新正文
       if (responseMessage.content) {
