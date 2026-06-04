@@ -79,7 +79,7 @@ async function callParentShell(action, payload, signal = null) {
     });
 }
 
-const MAX_READ = 256 * 1000; // 256k characters
+const MAX_READ = 128 * 1000; // 128k characters
 
 // 数据提取函数 (提取标题、作者、简介)
 function extractMetadata(html) {
@@ -1621,7 +1621,7 @@ const handlers = {
                                 const newLinesInMatch = (matchText.match(/\n/g) || []).length;
                                 const endLineNum = lineNum + newLinesInMatch;
 
-                                const contextLines = 20;
+                                const contextLines = 10;
                                 const startLineIdx = Math.max(0, lineNum - 1 - contextLines);
                                 const endLineIdx = Math.min(lines.length, endLineNum - 1 + 1 + contextLines);
 
