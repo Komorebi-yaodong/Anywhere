@@ -4301,6 +4301,13 @@ const normalizeAssistantTokenUsage = (usage) => {
   const completionTokens = Number.isFinite(Number(usage.completion_tokens))
     ? Number(usage.completion_tokens)
     : (Number.isFinite(Number(usage.output_tokens)) ? Number(usage.output_tokens) : null);
+  const reasoningTokens = Number.isFinite(Number(usage.reasoning_tokens))
+    ? Number(usage.reasoning_tokens)
+    : (Number.isFinite(Number(usage.completion_tokens_details?.reasoning_tokens))
+      ? Number(usage.completion_tokens_details.reasoning_tokens)
+      : (Number.isFinite(Number(usage.output_tokens_details?.reasoning_tokens))
+        ? Number(usage.output_tokens_details.reasoning_tokens)
+        : null));
 
   if (promptTokens === null && completionTokens === null) return null;
 
@@ -4308,6 +4315,7 @@ const normalizeAssistantTokenUsage = (usage) => {
   return {
     prompt_tokens: promptTokens ?? 0,
     completion_tokens: completionTokens ?? 0,
+    reasoning_tokens: reasoningTokens ?? 0,
     total_tokens: totalTokens ?? ((promptTokens ?? 0) + (completionTokens ?? 0)),
     raw: usage
   };

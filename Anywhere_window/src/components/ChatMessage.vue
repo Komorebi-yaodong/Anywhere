@@ -43,7 +43,12 @@ const tokenUsageDisplay = computed(() => {
 
   const promptTokens = Number(usage.prompt_tokens ?? usage.input_tokens);
   const completionTokens = Number(usage.completion_tokens ?? usage.output_tokens);
+  const reasoningTokens = Number(usage.reasoning_tokens);
   if (!Number.isFinite(promptTokens) && !Number.isFinite(completionTokens)) return '';
+
+  if (Number.isFinite(reasoningTokens) && reasoningTokens > 0) {
+    return `总输入 ${formatTokenCount(promptTokens)} · 思考 ${formatTokenCount(reasoningTokens)} · 输出 ${formatTokenCount(completionTokens)}`;
+  }
 
   return `总输入 ${formatTokenCount(promptTokens)} · 输出 ${formatTokenCount(completionTokens)}`;
 });
