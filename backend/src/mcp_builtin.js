@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const MarkitdownModule = require('markitdown-js');
 const { exec, spawn } = require('child_process');
 const { handleFilePath, parseFileObject } = require('./file.js');
 
@@ -264,6 +265,128 @@ function convertHtmlToMarkdown(html, baseUrl = '') {
 
     return cleanLines.join('\n').trim();
 }
+
+function resolveMarkitdownConstructor() {
+    const candidates = [
+        MarkitdownModule,
+        MarkitdownModule?.default,
+        MarkitdownModule?.MarkItDown,
+        MarkitdownModule?.default?.default,
+        MarkitdownModule?.default?.MarkItDown
+    ];
+
+    for (const candidate of candidates) {
+        if (typeof candidate === 'function') return candidate;
+    }
+
+    const exportKeys = MarkitdownModule && typeof MarkitdownModule === 'object' ? Object.keys(MarkitdownModule).join(', ') : typeof MarkitdownModule;
+    throw new Error(`markitdown_js_constructor_not_found: exports=${exportKeys}`);
+}
+
+function decodeHtmlEntitiesForMarkdown(str = '') {
+    const entities = {
+        '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&#x27;': "'",
+        '&copy;': '©', '&mdash;': '—', '&ndash;': '–', '&hellip;': '…', '&rsquo;': '’', '&lsquo;': '‘',
+        '&rdquo;': '”', '&ldquo;': '“'
+    };
+    return String(str).replace(/&(?:[a-zA-Z0-9#]+);/g, (match) => entities[match] || match);
+}
+
+function escapeHtmlForMarkdown(str = '') {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function extractCodeTextFromHtmlFragment(fragment = '') {
+    return decodeHtmlEntitiesForMarkdown(fragment)
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/span>\s*<span\b[^>]*class=["'][^"']*line[^"']*["'][^>]*>/gi, '\n')
+        .replace(/<span\b[^>]*class=["'][^"']*line[^"']*["'][^>]*>/gi, '')
+        .replace(/<\/span>/gi, '')
+        .replace(/<[^>]+>/g, '')
+        .split('\n')
+        .map((line) => line.trimEnd())
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function normalizeCodeBlocksForMarkitdown(html = '') {
+    return String(html).replace(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/gi, (match, preAttrs = '', inner = '') => {
+        const langMatch = `${preAttrs} ${inner}`.match(/language-([\w-]+)/i) || `${preAttrs} ${inner}`.match(/lang(?:uage)?-["']?([\w-]+)/i);
+        const lang = langMatch?.[1] || '';
+        const codeText = extractCodeTextFromHtmlFragment(inner);
+        return `<pre><code class="language-${lang}">${escapeHtmlForMarkdown(codeText)}</code></pre>`;
+    });
+}
+
+function absolutizeHtmlResourceLinks(html = '', baseUrl = '') {
+    if (!baseUrl) return html;
+    return String(html).replace(/\s(href|src)=(['"])(?!https?:|data:|mailto:|tel:|#|javascript:)([^'"]+)\2/gi, (match, attr, quote, value) => {
+        try {
+            return ` ${attr}=${quote}${new URL(value, baseUrl).href}${quote}`;
+        } catch (e) {
+            return match;
+        }
+    });
+}
+
+function sanitizeHtmlForMarkitdownJs(html = '', baseUrl = '') {
+    let text = normalizeCodeBlocksForMarkitdown(html);
+
+    // 只移除纯技术噪音。按用户要求保留 header/footer/nav/aside/button 等页面结构与底部信息。
+    text = text.replace(/<!--[\s\S]*?-->/g, '');
+    text = text.replace(/<(script|style|svg|noscript|iframe|canvas|template)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    text = text.replace(/<(input|select|option|textarea)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    text = text.replace(/<(input|select|option|textarea)[^>]*\/?>/gi, '');
+    text = absolutizeHtmlResourceLinks(text, baseUrl);
+
+    return text;
+}
+
+function postProcessMarkitdownMarkdown(markdown = '') {
+    let text = String(markdown || '');
+
+    text = decodeHtmlEntitiesForMarkdown(text)
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+$/gm, '')
+        .replace(/\n{4,}/g, '\n\n\n')
+        .replace(/^(Expand|Collapse|Copy|Copied)$/gmi, '')
+        .replace(/^format(?:unix)?time$/gmi, '')
+        .replace(/\n{4,}/g, '\n\n\n')
+        .trim();
+
+    return text;
+}
+
+async function convertHtmlWithMarkitdownJs(html, baseUrl = '') {
+    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'anywhere-web-fetch-'));
+    const tempFile = path.join(tempDir, 'page.html');
+    let timeoutId = null;
+
+    try {
+        const sanitizedHtml = sanitizeHtmlForMarkitdownJs(html, baseUrl);
+        await fs.promises.writeFile(tempFile, sanitizedHtml, 'utf8');
+
+        const MarkitdownConstructor = resolveMarkitdownConstructor();
+        const converter = new MarkitdownConstructor();
+        const conversionPromise = converter.convert(tempFile, { fileExtension: '.html' });
+        const timeoutPromise = new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('markitdown_js_conversion_timeout')), 30000);
+        });
+        const result = await Promise.race([conversionPromise, timeoutPromise]);
+        const markdown = postProcessMarkitdownMarkdown(result?.textContent || '');
+
+        if (!markdown || markdown.length < 20) {
+            throw new Error('markitdown_js_empty_output');
+        }
+
+        return markdown;
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+        await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => { });
+    }
+}
+
 
 // --- Definitions ---
 const BUILTIN_SERVERS = {
@@ -2406,7 +2529,13 @@ $PSDefaultParameterValues['*:Encoding'] = 'utf8';
                 try { fullText = JSON.stringify(JSON.parse(rawText), null, 2); } catch (e) { fullText = rawText; }
             } else {
                 const metadata = extractMetadata(rawText);
-                const markdownBody = convertHtmlToMarkdown(rawText, url);
+                let markdownBody = "";
+                try {
+                    markdownBody = await convertHtmlWithMarkitdownJs(rawText, url);
+                } catch (markitdownError) {
+                    console.warn('[web_fetch] markitdown-js conversion failed, fallback to legacy converter:', markitdownError?.message || markitdownError);
+                    markdownBody = convertHtmlToMarkdown(rawText, url);
+                }
                 if (!markdownBody || markdownBody.length < 50) {
                     return `Fetched URL: ${url}\n\nTitle: ${metadata.title}\n\n[System Info]: The extracted content is very short.`;
                 }
