@@ -443,10 +443,24 @@ const renderedMarkdownContent = computed(() => {
 
   const protectedMap = new Map();
   let placeholderIndex = 0;
+  const protectedContentPattern = /__PROTECTED_CONTENT_\d+__/g;
   const addPlaceholder = (text) => {
     const placeholder = `__PROTECTED_CONTENT_${placeholderIndex++}__`;
     protectedMap.set(placeholder, text);
     return placeholder;
+  };
+  const restoreProtectedContent = (text) => {
+    let restoredText = text;
+    // 内联代码可能先被 `...` 保护，再被 $...$ 误判包裹成更大的数学公式保护块。
+    // 因此必须递归恢复，避免内层 __PROTECTED_CONTENT_X__ 泄漏并被 Markdown 渲染为 PROTECTED_CONTENT_X。
+    for (let i = 0; i < placeholderIndex; i++) {
+      const nextText = restoredText.replace(protectedContentPattern, (placeholder) => {
+        return protectedMap.get(placeholder) || placeholder;
+      });
+      if (nextText === restoredText) break;
+      restoredText = nextText;
+    }
+    return restoredText;
   };
 
   // 1. 保护代码块和数学公式不被 DOMPurify 处理
@@ -468,9 +482,7 @@ const renderedMarkdownContent = computed(() => {
   sanitizedPart = sanitizedPart.replace(/&gt;/g, '>');
 
   // 3. 恢复受保护的内容（代码块等）
-  let finalContent = sanitizedPart.replace(/__PROTECTED_CONTENT_\d+__/g, (placeholder) => {
-    return protectedMap.get(placeholder) || placeholder;
-  });
+  let finalContent = restoreProtectedContent(sanitizedPart);
 
   // 匹配 <table...> 标签并包裹 div，利用正则确保只匹配实际的标签
   finalContent = finalContent.replace(/<table/g, '<div class="table-scroll-wrapper"><table').replace(/<\/table>/g, '</table></div>');
