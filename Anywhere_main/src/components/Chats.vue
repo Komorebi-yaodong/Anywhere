@@ -459,6 +459,16 @@ async function refreshData(silent = false) {
     }
 }
 
+
+const handleItemContextMenu = async (file, event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if (hasMoved) return;
+
+    await startChat(file);
+};
+
 async function startChat(file) {
     ElMessage.info(t('chats.alerts.loadingChat'));
     try {
@@ -975,7 +985,8 @@ const toggleSelectAll = () => {
                     <div class="chat-list" ref="chatListRef" @mousedown="onMouseDown">
                         <div v-for="file in paginatedFiles" :key="file.basename" class="chat-list-item"
                             :class="{ 'is-selected': isFileSelected(file) }"
-                            @click="handleItemClick(file)">
+                            @click="handleItemClick(file)"
+                            @contextmenu.prevent.stop="handleItemContextMenu(file, $event)">
 
                             <!-- 左侧：选择框 -->
                             <div class="list-checkbox">
