@@ -1,7 +1,7 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
 import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon, ElImage } from 'element-plus';
-import { Close, Check, Document, Delete, Collection, Picture } from '@element-plus/icons-vue';
+import { Close, Check, Document, Delete, Collection, Picture, ChatLineRound } from '@element-plus/icons-vue';
 
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
@@ -18,11 +18,12 @@ const props = defineProps({
     allMcpServers: { type: Array, default: () => [] },
     activeMcpIds: { type: Array, default: () => [] },
     activeSkillIds: { type: Array, default: () => [] },
-    allSkills: { type: Array, default: () => [] }
+    allSkills: { type: Array, default: () => [] },
+    appendBuffer: { type: Array, default: () => [] }
 });
 
 // 增加 toggle-mcp 事件
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog', 'cancel-buffer']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -266,12 +267,12 @@ const handleKeyDown = (event) => {
             insertNewline();
         } else if (!event.shiftKey) {
             event.preventDefault();
-            if (!props.loading) emit('submit');
+            emit('submit');
         }
     } else {
         if (isCtrlOrMetaPressed) {
             event.preventDefault();
-            if (!props.loading) emit('submit');
+            emit('submit');
         }
     }
 };
@@ -286,10 +287,11 @@ const handleMcpClick = (server) => {
     handleToggleMcp(server.id);
 };
 
-const onSubmit = () => { if (props.loading) return; emit('submit'); };
+const onSubmit = () => { emit('submit'); };
 const onCancel = () => emit('cancel');
 const onClearHistory = () => emit('clear-history');
 const onRemoveFile = (index) => emit('remove-file', index);
+const onCancelBuffer = (index) => emit('cancel-buffer', index);
 
 const toggleReasoningSelector = () => {
     if (isRecording.value) return;
@@ -570,6 +572,21 @@ defineExpose({ focus, senderRef });
     </div>
 
     <el-footer class="input-footer">
+        <!-- 追加消息缓冲区（位于文件上传区上方） -->
+        <el-row v-if="appendBuffer && appendBuffer.length > 0 && !isRecording">
+            <el-col :span="24">
+                <div class="append-buffer-container">
+                    <div class="append-buffer-title">缓冲区 · 本轮结束后自动发送</div>
+                    <div v-for="(item, index) in appendBuffer" :key="index" class="append-buffer-item">
+                        <el-icon :size="13" class="append-buffer-icon"><ChatLineRound /></el-icon>
+                        <span class="append-buffer-text">{{ item.preview || item.text || '追问消息' }}</span>
+                        <el-button class="append-buffer-remove" type="danger" link :icon="Close" size="small"
+                            @click="onCancelBuffer(index)" />
+                    </div>
+                </div>
+            </el-col>
+        </el-row>
+
         <!-- 文件列表 -->
         <el-row v-if="fileList.length > 0 && !isRecording">
             <el-col :span="0" />
@@ -1669,5 +1686,63 @@ html.dark .cancel-spinner {
     to {
         transform: rotate(360deg);
     }
+}
+
+/* 追加消息缓冲区 */
+.append-buffer-container {
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(8px) saturate(115%);
+    -webkit-backdrop-filter: blur(8px) saturate(115%);
+    border: 1px dashed var(--el-border-color);
+    box-sizing: border-box;
+}
+
+html.dark .append-buffer-container {
+    background-color: rgba(40, 40, 40, 0.4);
+}
+
+.append-buffer-title {
+    font-size: 11px;
+    color: var(--el-text-color-secondary);
+    margin-bottom: 6px;
+}
+
+.append-buffer-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 8px;
+}
+
+.append-buffer-item + .append-buffer-item {
+    margin-top: 2px;
+}
+
+.append-buffer-item:hover {
+    background-color: var(--el-fill-color);
+}
+
+.append-buffer-icon {
+    flex-shrink: 0;
+    color: var(--el-color-primary);
+}
+
+.append-buffer-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--el-text-color-regular);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.append-buffer-remove {
+    flex-shrink: 0;
 }
 </style>

@@ -1,19 +1,22 @@
 <script setup>
 import { computed } from 'vue';
 import { ElHeader, ElIcon, ElTooltip } from 'element-plus';
-import { Loading, Edit, Search } from '@element-plus/icons-vue'; // 引入 Search
+import { Loading, Edit, List, Check } from '@element-plus/icons-vue';
 
 const props = defineProps({
   modelMap: Object,
   model: String,
   isMcpLoading: Boolean,
   systemPrompt: String,
+  hasTaskTool: Boolean,
+  taskPanelVisible: Boolean,
+  taskStatus: { type: String, default: '' }
 });
 
 const emit = defineEmits([
   'open-model-dialog',
   'show-system-prompt',
-  'open-search' // 新增事件
+  'toggle-task-panel'
 ]);
 
 // 1. 字符串转颜色函数 (HSL 模式)
@@ -87,10 +90,15 @@ const logoColor = computed(() => {
           <span v-else class="model-text prompt-text placeholder">系统提示词</span>
         </div>
 
-        <!-- 3. [新增] 搜索按钮 -->
-        <el-tooltip content="搜索内容 (Ctrl/Cmd+F)" placement="bottom" :show-after="500">
-          <div class="model-pill icon-pill" @click="emit('open-search')">
-            <el-icon :size="14" class="header-icon"><Search /></el-icon>
+        <!-- 3. 任务面板按钮（仅当 Better Work 任务工具激活时显示；搜索改用 Ctrl/Cmd+F） -->
+        <el-tooltip v-if="hasTaskTool" content="任务进度 (Ctrl/Cmd+T)" placement="bottom" :show-after="500">
+          <div class="model-pill icon-pill task-pill" :class="{ 'is-active': taskPanelVisible }"
+            @click="emit('toggle-task-panel')">
+            <el-icon :size="14" class="header-icon"><List /></el-icon>
+            <span v-if="taskStatus" class="task-status-badge" :class="`ts-${taskStatus}`">
+              <el-icon v-if="taskStatus === 'in_progress'" :size="9" class="spin"><Loading /></el-icon>
+              <el-icon v-else-if="taskStatus === 'completed'" :size="9"><Check /></el-icon>
+            </span>
           </div>
         </el-tooltip>
 
@@ -279,4 +287,55 @@ html.dark .prompt-text {
 .header-icon {
   flex-shrink: 0;
 }
+
+/* 任务面板按钮 + 状态徽章 */
+.task-pill {
+  position: relative;
+}
+
+.task-pill.is-active {
+  background-color: var(--el-fill-color);
+  color: var(--el-color-primary);
+}
+
+.task-status-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--el-bg-color);
+  box-shadow: 0 0 0 1.5px var(--el-bg-color);
+}
+
+.task-status-badge.ts-in_progress {
+  color: var(--el-color-primary);
+}
+
+.task-status-badge.ts-completed {
+  color: var(--el-color-success);
+}
+
+.task-status-badge.ts-pending::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--el-text-color-placeholder);
+}
+
+.task-status-badge .spin {
+  animation: header-task-spin 1s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes header-task-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 </style>

@@ -9,6 +9,7 @@ import ChatHeader from './components/ChatHeader.vue';
 const ChatMessage = defineAsyncComponent(() => import('./components/ChatMessage.vue'));
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
+import TaskPanel from './components/TaskPanel.vue';
 
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -361,6 +362,130 @@ const handleToggleAutoApprove = (val) => {
   }
 };
 
+// --- Better Work MCP（前端拦截执行：choices 选项卡 / 任务面板） ---
+const pendingChoices = ref(new Map());
+const taskList = ref([]);
+const taskPanelVisible = ref(false);
+const pendingAppendBuffer = ref([]);
+const BETTERWORK_FRONTEND_TOOLS = new Set(['ask_user_choice', 'task_write', 'task_read']);
+
+const resolvePendingChoices = (payload = null) => {
+  pendingChoices.value.forEach((resolve) => {
+    try { resolve(payload); } catch { /* ignore choice resolve race */ }
+  });
+  pendingChoices.value.clear();
+};
+
+const handleChoiceSubmit = (toolCallId, payload) => {
+  const resolver = pendingChoices.value.get(toolCallId);
+  if (resolver) {
+    resolver(payload);
+    pendingChoices.value.delete(toolCallId);
+  }
+};
+
+const buildChoiceResultText = (questions, answer) => {
+  if (!answer || !Array.isArray(answer.responses)) {
+    return 'The user cancelled the selection (the request was interrupted).';
+  }
+  const lines = answer.responses.map((r, i) => {
+    const q = questions[r.questionIndex] || questions[i] || {};
+    const qText = q.question || r.question || `Question ${i + 1}`;
+    if (r.type === 'discuss') {
+      return `Q: ${qText}\nA: The user wants to discuss this question further. Proactively ask clarifying follow-up questions before proceeding.`;
+    }
+    if (r.type === 'custom') {
+      return `Q: ${qText}\nA (user's own input): ${r.customText || ''}`;
+    }
+    const selected = Array.isArray(r.selected) ? r.selected.join('; ') : '';
+    return `Q: ${qText}\nA: ${selected}`;
+  });
+  return lines.join('\n\n');
+};
+
+const normalizeTaskStatus = (status) => {
+  const s = String(status || '').toLowerCase();
+  if (s === 'in_progress' || s === 'doing' || s === 'active' || s === 'running') return 'in_progress';
+  if (s === 'completed' || s === 'done' || s === 'finished') return 'completed';
+  return 'pending';
+};
+
+const normalizeTaskList = (tasks) => {
+  if (!Array.isArray(tasks)) return [];
+  return tasks
+    .filter(t => t && typeof t.content === 'string')
+    .map((t, i) => ({
+      id: i,
+      content: t.content,
+      status: normalizeTaskStatus(t.status),
+      steps: Array.isArray(t.steps)
+        ? t.steps
+            .filter(s => s && typeof s.content === 'string')
+            .map(s => ({ content: s.content, status: normalizeTaskStatus(s.status) }))
+        : []
+    }));
+};
+
+const applyTaskList = (tasks) => {
+  taskList.value = normalizeTaskList(tasks);
+  if (taskList.value.length > 0) {
+    taskPanelVisible.value = true;
+  }
+};
+
+const serializeTaskListForModel = (tasks) => {
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    return 'The task list is currently empty.';
+  }
+  const lines = tasks.map((t, i) => {
+    let block = `${i + 1}. [${t.status}] ${t.content}`;
+    if (Array.isArray(t.steps) && t.steps.length > 0) {
+      block += '\n' + t.steps.map(s => `   - [${s.status}] ${s.content}`).join('\n');
+    }
+    return block;
+  });
+  return 'Current task list:\n' + lines.join('\n');
+};
+
+const handleBetterWorkTool = async (toolCall, args, uiToolCall) => {
+  if (toolCall.function.name === 'ask_user_choice') {
+    const questions = Array.isArray(args?.questions) ? args.questions : [];
+    if (questions.length === 0) {
+      if (uiToolCall) { uiToolCall.approvalStatus = 'finished'; uiToolCall.result = 'No questions were provided.'; }
+      return 'No questions were provided.';
+    }
+    if (uiToolCall) {
+      uiToolCall.choiceData = { questions };
+      uiToolCall.approvalStatus = 'choosing';
+      uiToolCall.result = '等待用户选择...';
+    }
+    const answer = await new Promise((resolve) => {
+      pendingChoices.value.set(toolCall.id, resolve);
+    });
+    const resultText = buildChoiceResultText(questions, answer);
+    if (uiToolCall) {
+      uiToolCall.approvalStatus = answer ? 'finished' : 'rejected';
+      uiToolCall.result = resultText;
+    }
+    return resultText;
+  }
+  if (toolCall.function.name === 'task_write') {
+    const tasks = Array.isArray(args?.tasks) ? args.tasks : [];
+    applyTaskList(tasks);
+    const total = taskList.value.length;
+    const done = taskList.value.filter(t => t.status === 'completed').length;
+    const ack = `Task list updated: ${total} task(s) total, ${done} completed.`;
+    if (uiToolCall) { uiToolCall.approvalStatus = 'finished'; uiToolCall.result = ack; }
+    return ack;
+  }
+  if (toolCall.function.name === 'task_read') {
+    const text = serializeTaskListForModel(taskList.value);
+    if (uiToolCall) { uiToolCall.approvalStatus = 'finished'; uiToolCall.result = text; }
+    return text;
+  }
+  return '';
+};
+
 const isMcpDialogVisible = ref(false);
 const sessionMcpServerIds = ref([]);
 const openaiFormattedTools = ref([]);
@@ -369,6 +494,21 @@ const isMcpLoading = ref(false);
 const mcpFilter = ref('all');
 const isRefreshingMcp = ref(false);
 const mcpToolCache = ref({});
+
+// Better Work：任务工具是否激活（决定 header 任务按钮是否显示）与任务整体状态（驱动徽章）
+const TASK_MCP_TOOL_NAMES = new Set(['task_write', 'task_read']);
+const hasTaskMcpTool = computed(() => {
+  return openaiFormattedTools.value.some(tool => TASK_MCP_TOOL_NAMES.has(tool?.function?.name));
+});
+const taskOverallStatus = computed(() => {
+  const tasks = taskList.value;
+  if (!Array.isArray(tasks) || tasks.length === 0) return '';
+  const isActive = (t) => t.status === 'in_progress'
+    || (Array.isArray(t.steps) && t.steps.some(s => s.status === 'in_progress'));
+  if (tasks.some(isActive)) return 'in_progress';
+  if (tasks.every(t => t.status === 'completed')) return 'completed';
+  return 'pending';
+});
 const expandedMcpServers = ref(new Set());
 
 const lastAppliedMcpConfigFingerprint = ref('');
@@ -1094,7 +1234,14 @@ const onAvatarClick = async (role, event) => {
   }, roleMessageIndices.includes(chat_show.value.length - 1));
 };
 
-const handleSubmit = () => askAI(false);
+const handleSubmit = () => {
+  // 生成中（或正在准备发送）时，把消息暂存进缓冲区，本轮结束后自动发送
+  if (loading.value || isPreparingSend.value) {
+    enqueueInputToBuffer();
+    return;
+  }
+  askAI(false);
+};
 const handleCancel = () => cancelAskAI();
 const handleClearHistory = () => clearHistory();
 const handleRemoveFile = (index) => fileList.value.splice(index, 1);
@@ -2624,7 +2771,8 @@ const getSessionDataAsObject = () => {
     currentPromptConfig: currentPromptConfig, history: history.value, chat_show: chat_show.value, selectedVoice: selectedVoice.value,
     activeMcpServerIds: sessionMcpServerIds.value || [],
     activeSkillIds: sessionSkillIds.value || [],
-    isAutoApproveTools: isAutoApproveTools.value
+    isAutoApproveTools: isAutoApproveTools.value,
+    taskList: taskList.value
   };
 }
 // --- 项目（目录）归属：窗口端 helper ---
@@ -3983,6 +4131,9 @@ const loadSession = async (jsonData) => {
     selectedVoice.value = jsonData.selectedVoice || '';
     tempReasoningEffort.value = jsonData.currentPromptConfig?.reasoning_effort || 'default';
     isAutoApproveTools.value = jsonData.isAutoApproveTools || true;
+    taskList.value = Array.isArray(jsonData.taskList) ? normalizeTaskList(jsonData.taskList) : [];
+    taskPanelVisible.value = false;
+    pendingAppendBuffer.value = [];
 
     const configData = await window.api.getConfig();
     currentConfig.value = configData.config;
@@ -4557,6 +4708,87 @@ const applyTokenUsageToAssistantMessage = (chatShowIndex, tokenUsage) => {
 };
 
 
+// --- 追加消息缓冲区：loading 期间发送的消息暂存于此，本轮结束后自动追加并续请求 ---
+const enqueueInputToBuffer = () => {
+  const text = prompt.value.trim();
+  const files = Array.isArray(fileList.value) ? fileList.value.slice() : [];
+  if (!text && files.length === 0) return;
+  pendingAppendBuffer.value.push({
+    kind: 'input',
+    text,
+    files,
+    preview: text || `[${files.length} 个文件]`
+  });
+  prompt.value = "";
+  fileList.value = [];
+  showDismissibleMessage.info('正在生成，消息已加入缓冲区，将在本轮结束后自动发送');
+};
+
+const removeBufferedMessage = (index) => {
+  if (index >= 0 && index < pendingAppendBuffer.value.length) {
+    pendingAppendBuffer.value.splice(index, 1);
+  }
+};
+
+// 把当前输入框内容（prompt + fileList）构造为一条 user 消息追加进历史（不发起请求），返回是否追加成功
+const appendCurrentInputToHistory = async () => {
+  const file_content = await sendFile();
+  const promptText = prompt.value.trim();
+  if (!((file_content && file_content.length > 0) || promptText)) return false;
+  const userContentList = [];
+  if (promptText) userContentList.push({ type: "text", text: promptText });
+  if (file_content && file_content.length > 0) userContentList.push(...file_content);
+  if (userContentList.length === 0) return false;
+  const userTimestamp = new Date().toLocaleString('sv-SE');
+  const contentForHistory = userContentList.length === 1 && userContentList[0].type === 'text'
+    ? userContentList[0].text
+    : userContentList;
+  history.value.push({ role: "user", content: contentForHistory });
+  chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
+  scheduleAutoSave({ reason: 'user-message', immediate: true });
+  prompt.value = "";
+  return true;
+};
+
+const drainBufferIntoHistory = async () => {
+  if (pendingAppendBuffer.value.length === 0) return false;
+  const items = pendingAppendBuffer.value.splice(0, pendingAppendBuffer.value.length);
+  // 还原用户在缓冲期间可能输入但尚未发送的内容
+  const savedPrompt = prompt.value;
+  const savedFiles = Array.isArray(fileList.value) ? fileList.value.slice() : [];
+  let appendedAny = false;
+  for (const item of items) {
+    if (item.kind === 'input') {
+      prompt.value = item.text || '';
+      fileList.value = Array.isArray(item.files) ? item.files : [];
+      isPreparingSend.value = true;
+      try {
+        const added = await appendCurrentInputToHistory();
+        if (added) appendedAny = true;
+      } finally {
+        isPreparingSend.value = false;
+      }
+    }
+  }
+  prompt.value = savedPrompt;
+  fileList.value = savedFiles;
+  return appendedAny;
+};
+
+const flushAppendBuffer = async () => {
+  if (loading.value || isPreparingSend.value) return;
+  const appendedAny = await drainBufferIntoHistory();
+  if (appendedAny) {
+    await askAI(true);
+  }
+};
+
+watch(loading, (now, prev) => {
+  if (prev && !now) {
+    nextTick(() => { flushAppendBuffer(); });
+  }
+});
+
 const askAI = async (forceSend = false) => {
   if (loading.value || isPreparingSend.value) return;
   if (isMcpLoading.value) {
@@ -4568,25 +4800,8 @@ const askAI = async (forceSend = false) => {
   if (!forceSend) {
     isPreparingSend.value = true;
     try {
-      let file_content = await sendFile();
-      const promptText = prompt.value.trim();
-      if ((file_content && file_content.length > 0) || promptText) {
-        const userContentList = [];
-        if (promptText) userContentList.push({ type: "text", text: promptText });
-        if (file_content && file_content.length > 0) userContentList.push(...file_content);
-        const userTimestamp = new Date().toLocaleString('sv-SE');
-        if (userContentList.length > 0) {
-          const contentForHistory = userContentList.length === 1 && userContentList[0].type === 'text'
-            ? userContentList[0].text
-            : userContentList;
-          history.value.push({ role: "user", content: contentForHistory });
-          chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
-
-          scheduleAutoSave({ reason: 'user-message', immediate: true });
-
-        } else return;
-      } else return;
-      prompt.value = "";
+      const added = await appendCurrentInputToHistory();
+      if (!added) return;
     } finally {
       isPreparingSend.value = false;
     }
@@ -5026,6 +5241,18 @@ const askAI = async (forceSend = false) => {
             const uiToolCall = currentBubble.tool_calls.find(t => t.id === toolCall.id);
             let toolContent;
 
+            // Better Work 交互工具：前端拦截，不走审批 / invokeMcpTool
+            if (BETTERWORK_FRONTEND_TOOLS.has(toolCall.function.name)) {
+              try {
+                const bwArgs = JSON.parse(toolCall.function.arguments || '{}');
+                toolContent = await handleBetterWorkTool(toolCall, bwArgs, uiToolCall);
+              } catch (e) {
+                toolContent = `Better Work tool error: ${e.message}`;
+                if (uiToolCall) { uiToolCall.approvalStatus = 'finished'; uiToolCall.result = toolContent; }
+              }
+              return { tool_call_id: toolCall.id, role: "tool", name: toolCall.function.name, content: toolContent };
+            }
+
             if (!isAutoApproveTools.value) {
               try {
                 const isApproved = await new Promise((resolve) => {
@@ -5172,6 +5399,8 @@ const askAI = async (forceSend = false) => {
         );
 
         history.value.push(...toolMessages);
+        // 工具调用完成本质也会向 AI 续发请求，此处保存一次
+        scheduleAutoSave({ reason: 'tool-calls-completed', immediate: true });
       } else {
         if (isVoiceReply && responseMessage.audio) {
           currentBubble.content = currentBubble.content || [];
@@ -5300,6 +5529,7 @@ const cancelAskAI = () => {
   if (loading.value && signalController.value) {
     signalController.value.abort();
     cancelAutoNamingRequest();
+    resolvePendingChoices(null);
     chatInputRef.value?.focus();
   }
 };
@@ -5431,6 +5661,9 @@ const clearHistory = () => {
   focusedMessageIndex.value = null;
   cancelAutoNamingRequest();
   defaultConversationName.value = "";
+  taskList.value = [];
+  taskPanelVisible.value = false;
+  pendingAppendBuffer.value = [];
   chatInputRef.value?.focus({ cursor: 'end' });
   showDismissibleMessage.success('历史记录已清除');
 };
@@ -5572,7 +5805,14 @@ const handleGlobalKeyDown = (event) => {
     return;
   }
 
-  // 2. 缩放快捷键控制
+  // 2. 任务进度面板开关 (Ctrl + T)
+  if (isCtrl && event.key.toLowerCase() === 't') {
+    event.preventDefault();
+    taskPanelVisible.value = !taskPanelVisible.value;
+    return;
+  }
+
+  // 3. 缩放快捷键控制
   if (isCtrl) {
     // 重置缩放 (Ctrl + 0)
     if (event.key === '0') {
@@ -5602,12 +5842,6 @@ const handleGlobalKeyDown = (event) => {
       showDismissibleMessage.info(`缩放: ${Math.round(zoomLevel.value * 100)}%`);
       return;
     }
-  }
-};
-
-const handleOpenSearch = () => {
-  if (textSearchInstance) {
-    textSearchInstance.show();
   }
 };
 
@@ -5686,8 +5920,11 @@ const scrollToMessageByIndex = (index) => {
         @toggle-pin="handleTogglePin" @toggle-always-on-top="handleToggleAlwaysOnTop" @minimize="handleMinimize"
         @maximize="handleMaximize" @close="handleCloseWindow" />
       <ChatHeader :modelMap="modelMap" :model="model" :is-mcp-loading="isMcpLoading" :systemPrompt="currentSystemPrompt"
+        :has-task-tool="hasTaskMcpTool" :task-panel-visible="taskPanelVisible" :task-status="taskOverallStatus"
         @open-model-dialog="handleOpenModelDialog" @show-system-prompt="handleShowSystemPrompt"
-        @open-search="handleOpenSearch" />
+        @toggle-task-panel="taskPanelVisible = !taskPanelVisible" />
+
+      <TaskPanel :tasks="taskList" :visible="taskPanelVisible" @close="taskPanelVisible = false" />
 
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMainClick"
@@ -5700,7 +5937,7 @@ const scrollToMessageByIndex = (index) => {
             :is-dark-mode="currentConfig.isDarkMode" @delete-message="handleDeleteMessage" @copy-text="handleCopyText"
             @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
             @avatar-click="onAvatarClick" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"
-            @edit-message="handleEditMessage" @cancel-tool-call="handleCancelToolCall" />
+            @edit-message="handleEditMessage" @cancel-tool-call="handleCancelToolCall" @submit-choice="handleChoiceSubmit" />
         </el-main>
 
         <div class="unified-nav-sidebar" v-if="chat_show.length > 0">
@@ -5774,11 +6011,11 @@ const scrollToMessageByIndex = (index) => {
           v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
           :is-mcp-active="isMcpActive" :all-mcp-servers="availableMcpServers" :active-mcp-ids="sessionMcpServerIds"
-          :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" @submit="handleSubmit" @cancel="handleCancel"
+          :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" :append-buffer="pendingAppendBuffer" @submit="handleSubmit" @cancel="handleCancel"
           @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
           @send-audio="handleSendAudio" @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart"
           @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle"
-          @open-skill-dialog="toggleSkillDialog" />
+          @open-skill-dialog="toggleSkillDialog" @cancel-buffer="removeBufferedMessage" />
       </div>
     </el-container>
   </main>
