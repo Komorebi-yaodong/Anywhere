@@ -1,4 +1,58 @@
 const { OpenAI } = require('openai');
+const { createAnthropicCompletion } = require('./anthropic.js');
+
+const DEFAULT_CHAT_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+};
+
+// 不允许用户自定义、可能破坏请求的请求头（小写比较）
+const FORBIDDEN_HEADER_NAMES = new Set(['host', 'content-length', 'transfer-encoding', 'connection']);
+
+// Codex 客户端指纹：anyrouter 等服务商会校验请求是否来自官方 Codex CLI
+const CODEX_USER_AGENT = 'codex_cli_rs/0.114.0 (Mac OS 14.2.0; x86_64) vscode/1.111.0';
+const CODEX_ORIGINATOR = 'codex-tui';
+
+// 归一化服务商自定义请求头：过滤空值、含换行符与危险请求头，返回普通对象
+function normalizeProviderHeaders(headers) {
+    const result = {};
+    if (!headers || typeof headers !== 'object') return result;
+
+    for (const [rawKey, rawValue] of Object.entries(headers)) {
+        const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+        const value = rawValue == null ? '' : String(rawValue).trim();
+
+        if (!key || !value) continue;
+        if (/[\r\n]/.test(key) || /[\r\n]/.test(value)) continue;
+        if (FORBIDDEN_HEADER_NAMES.has(key.toLowerCase())) continue;
+
+        result[key] = value;
+    }
+
+    return result;
+}
+
+// 合并多组请求头，后者覆盖前者；按名称大小写不敏感去重（保留最后出现的键名与值）
+function mergeHeaders(...headerGroups) {
+    const merged = {};
+    const lowerKeyToActualKey = new Map();
+
+    for (const group of headerGroups) {
+        if (!group || typeof group !== 'object') continue;
+        for (const [key, value] of Object.entries(group)) {
+            if (!key) continue;
+            const lowerKey = key.toLowerCase();
+            const existingKey = lowerKeyToActualKey.get(lowerKey);
+            if (existingKey && existingKey !== key) {
+                delete merged[existingKey];
+            }
+            merged[key] = value;
+            lowerKeyToActualKey.set(lowerKey, key);
+        }
+    }
+
+    return merged;
+}
 
 /**
  * 随机获取列表中的一项（用于 API Key 负载均衡）
@@ -140,6 +194,7 @@ function convertMessagesToResponsesInput(messages) {
             // 只有当 contentList 不为空时才添加 message item
             if (contentList.length > 0) {
                 inputItems.push({
+                    type: "message",
                     role: role,
                     content: contentList
                 });
@@ -186,18 +241,33 @@ async function createChatCompletion(params) {
         apiKey,
         signal,
         apiType = 'chat_completions',
+        headers: providerHeaders,
         ...openAiParams
     } = params;
+
+    // Claude 原生协议：经 Anthropic SDK 适配为 OpenAI Chat Completions 形态
+    if (apiType === 'claude') {
+        return await createAnthropicCompletion({
+            baseUrl,
+            apiKey,
+            signal,
+            stream: params.stream ?? true,
+            headers: mergeHeaders(DEFAULT_CHAT_HEADERS, normalizeProviderHeaders(providerHeaders)),
+            ...openAiParams
+        });
+    }
 
     const client = new OpenAI({
         baseURL: baseUrl,
         apiKey: getRandomItem(apiKey), // 自动处理多 Key
         dangerouslyAllowBrowser: true, // 允许在 Electron 渲染进程(如 preload)中使用
-        maxRetries: 3
+        maxRetries: 3,
+        defaultHeaders: mergeHeaders(DEFAULT_CHAT_HEADERS, normalizeProviderHeaders(providerHeaders))
     });
 
     try {
-        if (apiType === 'responses') {
+        if (apiType === 'responses' || apiType === 'codex') {
+            const isCodex = apiType === 'codex';
             // 转换历史消息格式
             const convertedInput = convertMessagesToResponsesInput(openAiParams.messages);
 
@@ -229,18 +299,32 @@ async function createChatCompletion(params) {
 
             // 处理推理配置
             if (openAiParams.reasoning_effort) {
-                responseParams.reasoning = { 
+                responseParams.reasoning = {
                     effort: openAiParams.reasoning_effort,
                     summary: "auto"
                 };
             }
 
-            // 处理 Temperature
-            if (openAiParams.temperature !== undefined) {
+            const responsesRequestOptions = { signal };
+            if (isCodex) {
+                // 对齐 CPA(ConvertOpenAIRequestToCodex)：instructions 留空，system 保留在 input 的 developer 项；
+                // 补 prompt_cache_key 与 session_id（缺失会被 anyrouter 判 invalid codex request）
+                const codexSessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+                responseParams.instructions = typeof openAiParams.instructions === 'string' ? openAiParams.instructions : '';
+                responseParams.store = false;
+                responseParams.include = ['reasoning.encrypted_content'];
+                responseParams.parallel_tool_calls = true;
+                responseParams.prompt_cache_key = codexSessionId;
+                // Codex 客户端指纹：codex UA + Originator + session_id（插件端用 SDK 默认 fetch，无需 User-Agent 桥接）；用户自定义 headers 优先
+                responsesRequestOptions.headers = mergeHeaders(
+                    { 'User-Agent': CODEX_USER_AGENT, 'Originator': CODEX_ORIGINATOR, 'session_id': codexSessionId },
+                    normalizeProviderHeaders(providerHeaders)
+                );
+            } else if (openAiParams.temperature !== undefined) {
                 responseParams.temperature = openAiParams.temperature;
             }
 
-            return await client.responses.create(responseParams, { signal });
+            return await client.responses.create(responseParams, responsesRequestOptions);
         } else {
             // 标准 Chat Completions API
             const normalizedMessages = normalizeMessagesForChatCompletions(openAiParams.messages, openAiParams.reasoning_effort);

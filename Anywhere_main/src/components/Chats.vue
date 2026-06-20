@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch, onUnmounted, nextTick, onActivated, onDeactivated, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
-import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush, Operation, Share } from '@element-plus/icons-vue'
+import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush, Share } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n();
@@ -24,6 +24,7 @@ const pageSize = ref(20);
 const singleFileSyncing = ref({});
 const isDeletingFiles = ref(false);
 const sortMode = ref('createdAt');
+const sortDirection = ref('desc');
 
 watch(() => currentConfig.value?.webdav, (newWebdav) => {
     if (newWebdav) {
@@ -119,26 +120,54 @@ const normalizeSessionFile = (file, sessionData = null) => {
 };
 
 
-const getSortModeLabel = (mode = sortMode.value) => {
-    return t(`chats.sort.${mode}`);
+const isCloudView = computed(() => activeView.value === 'cloud');
+const showCreatedAtColumn = computed(() => !isCloudView.value);
+const chatTableColumns = computed(() => (
+    showCreatedAtColumn.value
+        ? '22px minmax(0, 1.3fr) minmax(96px, 0.9fr) minmax(96px, 0.9fr) minmax(58px, 0.5fr) 120px'
+        : '22px minmax(0, 1.8fr) minmax(104px, 0.9fr) minmax(64px, 0.5fr) 120px'
+));
+
+const getSortDirectionLabel = () => sortDirection.value === 'asc' ? '↑' : '↓';
+
+const getColumnSortLabel = (mode) => `${t(`chats.sort.${mode}`)} ${getSortDirectionLabel()}`;
+
+const toggleSort = (mode) => {
+    if (mode === 'createdAt' && isCloudView.value) {
+        return;
+    }
+
+    if (sortMode.value === mode) {
+        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortMode.value = mode;
+        sortDirection.value = mode === 'name' ? 'asc' : 'desc';
+    }
+
+    currentPage.value = 1;
 };
 
-const formatFileTimeSummary = (file) => {
-    const created = formatDate(file.createdAt || file.lastmod);
-    const updated = formatDate(file.updatedAt || file.lastmod || file.createdAt);
-    return `${created} | ${updated}`;
+const ensureValidSortModeForView = () => {
+    if (isCloudView.value && sortMode.value === 'createdAt') {
+        sortMode.value = 'updatedAt';
+        sortDirection.value = 'desc';
+    }
 };
 
 const compareFilesBySortMode = (a, b) => {
+    let result = 0;
+
     if (sortMode.value === 'name') {
-        return normalizeTitleValue(a).localeCompare(normalizeTitleValue(b), undefined, { numeric: true, sensitivity: 'base' });
+        result = normalizeTitleValue(a).localeCompare(normalizeTitleValue(b), undefined, { numeric: true, sensitivity: 'base' });
+    } else if (sortMode.value === 'updatedAt') {
+        result = safeDateValue(b.updatedAt || b.lastmod || b.createdAt) - safeDateValue(a.updatedAt || a.lastmod || a.createdAt);
+    } else if (sortMode.value === 'size') {
+        result = Number(b.size || 0) - Number(a.size || 0);
+    } else {
+        result = safeDateValue(b.createdAt || b.lastmod) - safeDateValue(a.createdAt || a.lastmod);
     }
 
-    if (sortMode.value === 'updatedAt') {
-        return safeDateValue(b.updatedAt || b.lastmod) - safeDateValue(a.updatedAt || a.lastmod);
-    }
-
-    return safeDateValue(b.createdAt || b.lastmod) - safeDateValue(a.createdAt || a.lastmod);
+    return sortDirection.value === 'asc' ? -result : result;
 };
 
 const getCompareTimestamp = (file) => {
@@ -400,6 +429,10 @@ const handleKeyDown = (e) => {
 watch(sortMode, () => {
     currentPage.value = 1;
 });
+
+watch(activeView, () => {
+    ensureValidSortModeForView();
+}, { immediate: true });
 
 watch(activeView, async (newView) => {
     if (newView === 'cloud' && !isCloudDataLoaded.value && isWebdavConfigValid.value) {
@@ -924,24 +957,6 @@ const toggleSelectAll = () => {
                         }}</el-radio-button>
                 </el-radio-group>
             </div>
-            <div class="sort-button-container">
-                <el-dropdown trigger="click" @command="(command) => sortMode = command">
-                    <el-button :icon="Operation" circle :title="`${t('chats.sort.button')}: ${getSortModeLabel()}`" />
-                    <template #dropdown>
-                        <el-dropdown-menu>
-                            <el-dropdown-item command="createdAt" :class="{ 'is-active-sort': sortMode === 'createdAt' }">
-                                {{ t('chats.sort.createdAt') }}
-                            </el-dropdown-item>
-                            <el-dropdown-item command="updatedAt" :class="{ 'is-active-sort': sortMode === 'updatedAt' }">
-                                {{ t('chats.sort.updatedAt') }}
-                            </el-dropdown-item>
-                            <el-dropdown-item command="name" :class="{ 'is-active-sort': sortMode === 'name' }">
-                                {{ t('chats.sort.name') }}
-                            </el-dropdown-item>
-                        </el-dropdown-menu>
-                    </template>
-                </el-dropdown>
-            </div>
 
             <div class="table-container">
                 <!-- 拖拽选框 -->
@@ -980,7 +995,32 @@ const toggleSelectAll = () => {
                 </div>
 
                 <!-- 列表视图 -->
-                <el-scrollbar v-else v-loading="isTableLoading" view-class="chat-list-view">
+                <div v-else class="chat-table-shell" v-loading="isTableLoading" :style="{ '--chat-table-columns': chatTableColumns }">
+                    <div class="chat-table-header">
+                        <div class="chat-column chat-column-checkbox"></div>
+                        <button type="button" class="chat-column chat-column-title sortable" :class="{ active: sortMode === 'name' }"
+                            :title="getColumnSortLabel('name')" @click="toggleSort('name')">
+                            <span>{{ t('chats.table.filename') }}</span>
+                            <span v-if="sortMode === 'name'" class="sort-indicator">{{ getSortDirectionLabel() }}</span>
+                        </button>
+                        <button v-if="showCreatedAtColumn" type="button" class="chat-column chat-column-created sortable"
+                            :class="{ active: sortMode === 'createdAt' }" :title="getColumnSortLabel('createdAt')" @click="toggleSort('createdAt')">
+                            <span>{{ t('chats.table.createdTime') }}</span>
+                            <span v-if="sortMode === 'createdAt'" class="sort-indicator">{{ getSortDirectionLabel() }}</span>
+                        </button>
+                        <button type="button" class="chat-column chat-column-updated sortable" :class="{ active: sortMode === 'updatedAt' }"
+                            :title="getColumnSortLabel('updatedAt')" @click="toggleSort('updatedAt')">
+                            <span>{{ t('chats.table.modifiedTime') }}</span>
+                            <span v-if="sortMode === 'updatedAt'" class="sort-indicator">{{ getSortDirectionLabel() }}</span>
+                        </button>
+                        <button type="button" class="chat-column chat-column-size sortable" :class="{ active: sortMode === 'size' }"
+                            :title="getColumnSortLabel('size')" @click="toggleSort('size')">
+                            <span>{{ t('chats.table.size') }}</span>
+                            <span v-if="sortMode === 'size'" class="sort-indicator">{{ getSortDirectionLabel() }}</span>
+                        </button>
+                        <div class="chat-column chat-column-actions">{{ t('chats.table.actions') }}</div>
+                    </div>
+                    <el-scrollbar view-class="chat-list-view">
                     <!-- 绑定 mousedown 启动框选 -->
                     <div class="chat-list" ref="chatListRef" @mousedown="onMouseDown">
                         <div v-for="file in paginatedFiles" :key="file.basename" class="chat-list-item"
@@ -994,18 +1034,12 @@ const toggleSelectAll = () => {
                                     @change="(val) => toggleFileSelection(file, val)" @click.stop />
                             </div>
 
-                            <!-- 中间：名称 -->
-                            <div class="list-content">
-                                <div class="list-title" :title="normalizeTitleValue(file)">
-                                    {{ normalizeTitleValue(file) }}
-                                </div>
-                                <!-- 元数据现在紧跟标题 -->
-                                <div class="list-meta">
-                                    <span class="meta-time">{{ formatFileTimeSummary(file) }}</span>
-                                    <span class="meta-separator">|</span>
-                                    <span class="meta-size">{{ formatBytes(file.size) }}</span>
-                                </div>
+                            <div class="list-title" :title="normalizeTitleValue(file)">
+                                {{ normalizeTitleValue(file) }}
                             </div>
+                            <div v-if="showCreatedAtColumn" class="meta-created">{{ formatDate(file.createdAt || file.lastmod) }}</div>
+                            <div class="meta-updated">{{ formatDate(file.updatedAt || file.lastmod || file.createdAt) }}</div>
+                            <div class="meta-size">{{ formatBytes(file.size) }}</div>
 
                             <!-- 右侧：仅操作按钮 (移除 list-right-group 容器) -->
                             <div class="list-actions">
@@ -1044,6 +1078,7 @@ const toggleSelectAll = () => {
                         </div>
                     </div>
                 </el-scrollbar>
+                </div>
             </div>
 
             <div class="footer-bar">
@@ -1150,18 +1185,6 @@ const toggleSelectAll = () => {
     flex-wrap: wrap;
 }
 
-.sort-button-container {
-    position: absolute;
-    top: 8px;
-    left: 104px;
-    z-index: 10;
-}
-
-.sort-button-container .el-button {
-    width: 32px;
-    height: 32px;
-}
-
 .chats-page-container {
     height: 100%;
     width: 100%;
@@ -1218,6 +1241,68 @@ const toggleSelectAll = () => {
     user-select: none;  /* 防止拖拽时选中文本 */
 }
 
+/* === 表头（可点击排序） === */
+.chat-table-shell {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.chat-table-header {
+    display: grid;
+    grid-template-columns: var(--chat-table-columns);
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px 8px 12px;
+    margin: 2px 10px 4px 0;
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.chat-column {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.chat-column.sortable {
+    justify-content: flex-start;
+    gap: 4px;
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.chat-column.sortable:hover,
+.chat-column.sortable.active {
+    color: var(--el-color-primary);
+}
+
+.sort-indicator {
+    font-size: 10px;
+    line-height: 1;
+}
+
+.chat-column-actions {
+    justify-content: flex-start;
+    padding-right: 0;
+}
+
+.chat-table-shell :deep(.el-scrollbar) {
+    min-height: 0;
+    flex: 1;
+}
+
 /* === 紧凑列表样式 Start === */
 .chat-list {
     display: flex;
@@ -1229,15 +1314,17 @@ const toggleSelectAll = () => {
 }
 
 .chat-list-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: var(--chat-table-columns);
     align-items: center;
-    padding: 8px 16px;
+    gap: 8px;
+    padding: 6px 12px;
     background-color: transparent;
     border-radius: 16px 8px 8px 16px;
     transition: background-color 0.2s;
     cursor: pointer;
     position: relative;
-    height: 44px;
+    height: 40px;
     box-sizing: border-box;
     width: 100%;
 }
@@ -1278,73 +1365,36 @@ const toggleSelectAll = () => {
     pointer-events: auto;
 }
 
-.list-content {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    margin-right: 8px;
-}
-
 .list-title {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 1 1 0;
     min-width: 0;
-    margin-right: 12px;
+    padding-right: 6px;
 }
 
-.list-meta {
-    font-size: 12px;
-    color: var(--text-tertiary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
-    flex: 0 0 auto;
-    min-width: fit-content;
-}
-
-.list-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: auto;
-    flex-shrink: 0;
-    
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.meta-separator {
-    opacity: 0.5;
-}
-
-.meta-time {
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
+.meta-created,
+.meta-updated,
 .meta-size {
-    flex-shrink: 0;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: left;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-
-:deep(.is-active-sort) {
-    color: var(--el-color-primary);
-    font-weight: 600;
-}
-
 
 .list-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-left: auto;
+    justify-content: flex-start;
+    gap: 2px;
+    min-width: 0;
+    flex-shrink: 0;
     opacity: 0;
     transition: opacity 0.2s;
 }
@@ -1355,8 +1405,8 @@ const toggleSelectAll = () => {
 }
 
 .action-icon-btn {
-    font-size: 16px;
-    padding: 6px;
+    font-size: 14px;
+    padding: 4px;
     margin-left: 0 !important;
     color: var(--text-secondary);
 }

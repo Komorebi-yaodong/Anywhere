@@ -23,6 +23,7 @@ const defaultConfig = {
         url: "https://api.openai.com/v1",
         api_key: "",
         apiType: "chat_completions",
+        headers: {},
         modelList: [],
         enable: true,
       },
@@ -602,6 +603,7 @@ function checkConfig(config) {
       if (prov.enable === undefined) { prov.enable = true; flag = true; }
       if (prov.folderId === undefined) { prov.folderId = ""; flag = true; }
       if (prov.apiType === undefined) { prov.apiType = "chat_completions"; flag = true; }
+      if (!prov.headers || typeof prov.headers !== 'object' || Array.isArray(prov.headers)) { prov.headers = {}; flag = true; }
     }
   }
 
@@ -1365,6 +1367,7 @@ async function openFastInputWindow(config, msg) {
   let apiUrl = config.providers["0"]?.url; // 默认 fallback
   let apiKey = config.providers["0"]?.api_key;
   let apiType = config.providers["0"]?.apiType || 'chat_completions'; // 默认 API 类型
+  let providerHeaders = config.providers["0"]?.headers || {};
   let modelName = "";
 
   if (promptConfig && promptConfig.model) {
@@ -1374,6 +1377,7 @@ async function openFastInputWindow(config, msg) {
           apiUrl = provider.url;
           apiKey = provider.api_key;
           apiType = provider.apiType || 'chat_completions';
+          providerHeaders = provider.headers || {};
           modelName = mName;
       }
   }
@@ -1401,6 +1405,7 @@ async function openFastInputWindow(config, msg) {
       apiKey: apiKey,
       model: modelName,
       apiType: apiType, // 传递 API 类型
+      headers: providerHeaders,
       messages: [
           { role: "system", content: promptConfig.prompt },
           { role: "user", content: content }

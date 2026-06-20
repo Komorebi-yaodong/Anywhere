@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, computed, inject, onActivated, onDeactivated } from 'vue'
+import { ref, reactive, watch, onMounted, computed, inject, onActivated, onDeactivated } from 'vue'
 import { Plus, Delete, Edit, ArrowUp, ArrowDown, Refresh, CirclePlus, Remove, Search, Folder, FolderOpened, FolderAdd } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -270,7 +270,8 @@ function add_prvider_function() {
       modelList: [],
       enable: true,
       folderId: "",
-      apiType: "chat_completions"
+      apiType: "chat_completions",
+      headers: {}
     };
     config.providerOrder.push(timestamp);
     provider_key.value = timestamp;
@@ -368,19 +369,31 @@ async function activate_get_model_function() {
 
   const url = selectedProvider.value.url;
   const apiKey = selectedProvider.value.api_key;
+  const apiType = selectedProvider.value.apiType || 'chat_completions';
+  const isClaude = apiType === 'claude';
   const apiKeyToUse = window.api && typeof window.api.getRandomItem === 'function' && apiKey ? window.api.getRandomItem(apiKey) : apiKey;
 
-
+  // 合并服务商自定义请求头（用户配置优先级最低，认证头随后覆盖）
+  const customHeaders = (selectedProvider.value.headers && typeof selectedProvider.value.headers === 'object') ? selectedProvider.value.headers : {};
   const options = {
     method: 'GET',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json', ...customHeaders }
   };
-  if (apiKeyToUse) {
-    options.headers['Authorization'] = `Bearer ${apiKeyToUse}`;
+
+  let endpoint;
+  if (isClaude) {
+    // Anthropic：URL 去掉末尾 / 与 /v1，模型端点为 /v1/models，认证用 x-api-key + anthropic-version
+    const base = String(url || '').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+    endpoint = `${base}/v1/models`;
+    if (apiKeyToUse) options.headers['x-api-key'] = apiKeyToUse;
+    options.headers['anthropic-version'] = '2023-06-01';
+  } else {
+    endpoint = `${url}/models`;
+    if (apiKeyToUse) options.headers['Authorization'] = `Bearer ${apiKeyToUse}`;
   }
 
   try {
-    const response = await fetch(`${url}/models`, options);
+    const response = await fetch(endpoint, options);
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
       const errorMessage = t('providers.alerts.fetchModelsError', { status: response.status, message: errorData.message || t('providers.alerts.fetchModelsFailedDefault') });
@@ -503,6 +516,47 @@ async function saveSingleProviderSetting(key, value) {
   }
 }
 
+// --- 服务商自定义请求头 ---
+let headerRowIdSeq = 0;
+const headerRows = ref([]);
+
+function createHeaderRow(key = '', value = '') {
+  headerRowIdSeq += 1;
+  return { _id: `hr_${headerRowIdSeq}`, key, value };
+}
+
+function rebuildHeaderRows() {
+  const headers = (selectedProvider.value && selectedProvider.value.headers && typeof selectedProvider.value.headers === 'object')
+    ? selectedProvider.value.headers
+    : {};
+  headerRows.value = Object.entries(headers).map(([key, value]) => createHeaderRow(String(key), value == null ? '' : String(value)));
+}
+
+// 仅在切换服务商时重建；编辑过程中绝不重建，避免正在填写的半成品行消失
+watch(provider_key, () => { rebuildHeaderRows(); }, { immediate: true });
+
+function persistProviderHeaders() {
+  if (!provider_key.value) return;
+  const normalized = {};
+  for (const row of headerRows.value) {
+    const key = String(row?.key || '').trim();
+    const value = String(row?.value || '').trim();
+    if (!key || !value) continue;
+    if (/[\r\n]/.test(key) || /[\r\n]/.test(value)) continue;
+    normalized[key] = value;
+  }
+  saveSingleProviderSetting('headers', normalized);
+}
+
+function addHeaderRow() {
+  headerRows.value.push(createHeaderRow());
+}
+
+function removeHeaderRow(index) {
+  headerRows.value.splice(index, 1);
+  persistProviderHeaders();
+}
+
 const apiKeyCount = computed(() => {
   if (!selectedProvider.value || !selectedProvider.value.api_key || !selectedProvider.value.api_key.trim()) {
     return 0;
@@ -616,6 +670,8 @@ const apiKeyCount = computed(() => {
                       placeholder="Chat Completions">
                       <el-option :label="t('providers.apiTypes.chatCompletions')" value="chat_completions" />
                       <el-option :label="t('providers.apiTypes.responses')" value="responses" />
+                      <el-option :label="t('providers.apiTypes.codex')" value="codex" />
+                      <el-option :label="t('providers.apiTypes.claude')" value="claude" />
                     </el-select>
                   </el-tooltip>
                   <el-switch v-model="selectedProvider.enable"
@@ -636,7 +692,7 @@ const apiKeyCount = computed(() => {
                     @change="(value) => saveSingleProviderSetting('api_key', value)" />
                 </el-form-item>
                 <el-form-item :label="t('providers.apiUrlLabel')">
-                  <el-input v-model="selectedProvider.url" :placeholder="t('providers.apiUrlPlaceholder')" clearable
+                  <el-input v-model="selectedProvider.url" :placeholder="selectedProvider.apiType === 'claude' ? t('providers.apiUrlPlaceholderClaude') : t('providers.apiUrlPlaceholder')" clearable
                     @change="(value) => saveSingleProviderSetting('url', value)" />
                 </el-form-item>
 
@@ -666,6 +722,28 @@ const apiKeyCount = computed(() => {
                     <div class="no-models-message">
                       {{ t('providers.noModelsAdded') }}
                     </div>
+                  </div>
+                </div>
+
+                <!-- 自定义请求头编辑器 -->
+                <el-form-item :label="t('providers.headersLabel')">
+                  <div class="header-actions-row">
+                    <el-button :icon="Plus" plain @click="addHeaderRow">{{
+                      t('providers.addHeaderBtn')
+                    }}</el-button>
+                  </div>
+                </el-form-item>
+                <div class="provider-headers-list">
+                  <div v-for="(row, index) in headerRows" :key="row._id" class="header-row">
+                    <el-input v-model="row.key" :placeholder="t('providers.headerKeyPlaceholder')"
+                      class="header-key-input" @change="persistProviderHeaders" />
+                    <el-input v-model="row.value" :placeholder="t('providers.headerValuePlaceholder')"
+                      class="header-value-input" @change="persistProviderHeaders" />
+                    <el-button :icon="Delete" plain circle class="header-delete-btn"
+                      @click="removeHeaderRow(index)" />
+                  </div>
+                  <div v-if="headerRows.length === 0" class="no-headers-message">
+                    {{ t('providers.noHeaders') }}
                   </div>
                 </div>
 
@@ -1028,6 +1106,45 @@ html.dark .api-type-select {
   color: var(--text-secondary);
   font-size: 13px;
   padding: 12px 0;
+}
+
+/* 自定义请求头编辑器样式 */
+.header-actions-row {
+  display: flex;
+  gap: 10px;
+}
+
+.provider-headers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 18px;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-key-input {
+  flex: 0 0 35%;
+}
+
+.header-value-input {
+  flex: 1 1 auto;
+}
+
+.header-delete-btn {
+  flex: 0 0 auto;
+}
+
+.no-headers-message {
+  width: 100%;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 4px 0;
 }
 
 .model-tag {

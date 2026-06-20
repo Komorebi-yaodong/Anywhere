@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
     "@langchain/mcp-adapters": "^1.0.0",
     "adm-zip": "^0.5.16",
     "mammoth": "^1.11.0",

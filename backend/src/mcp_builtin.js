@@ -127,7 +127,8 @@ function resolveProviderConfigByModel(fullConfig = {}, modelValue = '') {
         provider,
         apiType: provider?.apiType || 'chat_completions',
         baseUrl: provider?.url || '',
-        apiKey: provider?.api_key || ''
+        apiKey: provider?.api_key || '',
+        headers: provider?.headers || {}
     };
 }
 
@@ -1284,6 +1285,7 @@ async function runSubAgent(args, globalContext, signal) {
     const baseUrl = providerInfo.baseUrl;
     const apiKey = providerInfo.apiKey;
     const apiType = providerInfo.apiType;
+    const providerHeaders = providerInfo.headers || {};
     const requestModelName = providerInfo.modelName || '';
 
     if (!baseUrl || !apiKey || !requestModelName) {
@@ -1356,6 +1358,7 @@ ${userContext || 'No additional context provided.'}
                 apiKey: apiKey,
                 model: requestModelName,
                 apiType: currentApiType,
+                headers: providerHeaders,
                 messages: messages,
                 tools: availableTools.length > 0 ? availableTools : undefined,
                 tool_choice: availableTools.length > 0 ? "auto" : undefined,
@@ -1485,6 +1488,7 @@ ${userContext || 'No additional context provided.'}
             apiKey: apiKey,
             model: requestModelName,
             apiType: currentApiType,
+            headers: providerHeaders,
             messages: messages,
             tools: availableTools.length > 0 ? availableTools : undefined,
             tool_choice: availableTools.length > 0 ? "auto" : undefined,

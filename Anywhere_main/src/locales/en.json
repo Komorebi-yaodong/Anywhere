@@ -50,7 +50,8 @@
       "button": "Sort",
       "createdAt": "Sort by Created Time",
       "updatedAt": "Sort by Edited Time",
-      "name": "Sort by Name"
+      "name": "Sort by Name",
+      "size": "Sort by Size"
     },
     "configRequired": {
       "title": "Cloud Chats",
@@ -59,6 +60,7 @@
     },
     "table": {
       "filename": "Chat Name",
+      "createdTime": "Created Time",
       "modifiedTime": "Modified Time",
       "size": "Size",
       "actions": "Actions"
@@ -587,18 +589,26 @@
     "apiTypeTooltip": "Select API Protocol",
     "apiTypes": {
       "chatCompletions": "OpenAI-Chat",
-      "responses": "OpenAI-Response"
+      "responses": "OpenAI-Response",
+      "codex": "Codex",
+      "claude": "Claude"
     },
     "apiKeyLabel": "API Key",
     "apiKeyPlaceholder": "Enter API Key (multiple can be entered, separated by commas)",
     "apiKeyDescription": "You can enter multiple API keys separated by commas.",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "e.g., https://api.openai.com/v1",
+    "apiUrlPlaceholderClaude": "e.g., https://api.anthropic.com",
     "modelsLabel": "Models",
     "searchModelsPlaceholder": "Search models",
     "noModelsAdded": "No models added yet.",
     "getModelsFromApiBtn": "Get Models from API",
     "addManuallyBtn": "Add Manually",
+    "headersLabel": "Request Headers",
+    "addHeaderBtn": "Add Header",
+    "headerKeyPlaceholder": "Header name (e.g. User-Agent)",
+    "headerValuePlaceholder": "Header value",
+    "noHeaders": "No custom headers configured.",
     "selectProviderOrAdd": "Select a provider or add a new one",
     "addProviderDialogTitle": "Add New Provider",
     "providerNameLabel": "Provider Name",

@@ -2259,7 +2259,7 @@ const extractAutoNamingResponseText = async (response, apiType = 'chat_completio
     return extractAssistantTextFromContent(message?.content);
   }
 
-  if (apiType === 'responses') {
+  if (apiType === 'responses' || apiType === 'codex') {
     if (typeof response.output_text === 'string' && response.output_text.trim()) {
       return response.output_text;
     }
@@ -2303,6 +2303,7 @@ const generateConversationNamePrefixWithFastModel = async (firstUserMsg, signal 
       apiKey: provider.api_key,
       model: modelName,
       apiType,
+      headers: JSON.parse(JSON.stringify(provider?.headers || {})),
       messages: [
         { role: 'system', content: buildAutoNamingSystemPrompt() },
         { role: 'user', content: userContent }
@@ -4482,6 +4483,7 @@ const askAI = async (forceSend = false) => {
         apiKey: api_key.value,
         model: model.value.split("|")[1],
         apiType: apiType,
+        headers: JSON.parse(JSON.stringify(currentProviderConfig?.headers || {})),
         messages: messagesForThisRequest,
         stream: useStream,
         signal: signalController.value.signal
@@ -4564,7 +4566,7 @@ const askAI = async (forceSend = false) => {
           if (part?.usage) {
             aggregatedUsage = part.usage;
           }
-          if (apiType === 'responses') {
+          if (apiType === 'responses' || apiType === 'codex') {
             if (part.type === 'response.completed' && part.response?.usage) {
               aggregatedUsage = part.response.usage;
             }
@@ -4691,7 +4693,7 @@ const askAI = async (forceSend = false) => {
         // --- 非流式处理 ---
         const response = await window.api.createChatCompletion(requestParams);
 
-        if (apiType === 'responses') {
+        if (apiType === 'responses' || apiType === 'codex') {
           let contentText = "";
           let toolCalls = [];
           let reasoningText = "";

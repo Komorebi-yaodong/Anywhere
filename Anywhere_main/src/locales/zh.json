@@ -50,7 +50,8 @@
       "button": "排序方式",
       "createdAt": "按创建时间",
       "updatedAt": "按编辑时间",
-      "name": "按名称"
+      "name": "按名称",
+      "size": "按大小"
     },
     "configRequired": {
       "title": "云端对话",
@@ -59,6 +60,7 @@
     },
     "table": {
       "filename": "对话名称",
+      "createdTime": "创建时间",
       "modifiedTime": "修改时间",
       "size": "大小",
       "actions": "操作"
@@ -587,18 +589,26 @@
     "apiTypeTooltip": "选择 API 协议类型",
     "apiTypes": {
       "chatCompletions": "OpenAI-Chat",
-      "responses": "OpenAI-Response"
+      "responses": "OpenAI-Response",
+      "codex": "Codex",
+      "claude": "Claude"
     },
     "apiKeyLabel": "API 密钥",
     "apiKeyPlaceholder": "输入 API 密钥 (可输入多个，用逗号分隔)",
     "apiKeyDescription": "可以输入多个 API 密钥，用逗号分隔",
     "apiUrlLabel": "API URL",
     "apiUrlPlaceholder": "例如, https://api.openai.com/v1",
+    "apiUrlPlaceholderClaude": "例如, https://api.anthropic.com",
     "modelsLabel": "模型",
     "searchModelsPlaceholder": "搜索模型",
     "noModelsAdded": "尚未添加模型",
     "getModelsFromApiBtn": "从 API 获取模型",
     "addManuallyBtn": "手动添加",
+    "headersLabel": "请求头",
+    "addHeaderBtn": "添加请求头",
+    "headerKeyPlaceholder": "Header 名称（如 User-Agent）",
+    "headerValuePlaceholder": "Header 值",
+    "noHeaders": "未配置自定义请求头",
     "selectProviderOrAdd": "选择一个服务商或添加新的",
     "addProviderDialogTitle": "添加新服务商",
     "providerNameLabel": "服务商名称",
