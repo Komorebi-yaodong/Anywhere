@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue';
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { ElIcon } from 'element-plus';
 import { List, Close, Check, Loading } from '@element-plus/icons-vue';
 
@@ -13,25 +13,134 @@ defineEmits(['close']);
 const panelRef = ref(null);
 const pos = reactive({ x: 0, y: 64 });
 const initialized = ref(false);
+const panelMaxHeight = ref('60vh');
+const placement = reactive({ xRatio: 1, yRatio: 0 });
+
+const EDGE_GAP = 12;
+const HEADER_GAP = 8;
+const NAV_GAP = 12;
+const INPUT_GAP = 12;
+const DEFAULT_PANEL_WIDTH = 300;
+const DEFAULT_PANEL_HEIGHT = 200;
+const MIN_VISIBLE_HEIGHT = 120;
 
 const completedCount = computed(() => props.tasks.filter(t => t.status === 'completed').length);
 
-// 首次显示时定位到右上角
+const getRect = (selector) => document.querySelector(selector)?.getBoundingClientRect?.() || null;
+const clampRatio = (value) => {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+};
+
+const getPanelSize = () => ({
+  width: panelRef.value?.offsetWidth || DEFAULT_PANEL_WIDTH,
+  height: panelRef.value?.offsetHeight || DEFAULT_PANEL_HEIGHT
+});
+
+const getSafeArea = () => {
+  const mainRect = getRect('.chat-main');
+  const headerRect = getRect('.model-header');
+  const navRect = getRect('.unified-nav-sidebar');
+  const inputRect = getRect('.chat-input-area-vertical');
+
+  const topBase = mainRect?.top ?? headerRect?.bottom ?? 56;
+  const top = Math.max(EDGE_GAP, Math.round(topBase + HEADER_GAP));
+
+  let right = window.innerWidth - EDGE_GAP;
+  if (navRect && navRect.left > 0) {
+    right = Math.min(right, Math.round(navRect.left - NAV_GAP));
+  }
+
+  let bottom = window.innerHeight - EDGE_GAP;
+  if (inputRect && inputRect.top > top) {
+    bottom = Math.min(bottom, Math.round(inputRect.top - INPUT_GAP));
+  }
+
+  if (bottom - top < MIN_VISIBLE_HEIGHT) {
+    bottom = window.innerHeight - EDGE_GAP;
+  }
+
+  return {
+    left: EDGE_GAP,
+    top,
+    right: Math.max(EDGE_GAP + 160, right),
+    bottom: Math.max(top + MIN_VISIBLE_HEIGHT, bottom)
+  };
+};
+
+const syncPanelMaxHeight = (area = getSafeArea()) => {
+  const availableHeight = Math.max(MIN_VISIBLE_HEIGHT, area.bottom - area.top);
+  panelMaxHeight.value = `${Math.round(Math.min(window.innerHeight * 0.6, availableHeight))}px`;
+};
+
+const clampPosition = (x = pos.x, y = pos.y, area = getSafeArea()) => {
+  syncPanelMaxHeight(area);
+  const { width, height } = getPanelSize();
+  const maxX = Math.max(area.left, area.right - width);
+  const maxY = Math.max(area.top, area.bottom - height);
+
+  return {
+    x: Math.round(Math.min(Math.max(x, area.left), maxX)),
+    y: Math.round(Math.min(Math.max(y, area.top), maxY))
+  };
+};
+
+const updatePlacementFromPosition = (x = pos.x, y = pos.y) => {
+  const area = getSafeArea();
+  syncPanelMaxHeight(area);
+  const { width, height } = getPanelSize();
+  const maxX = Math.max(area.left, area.right - width);
+  const maxY = Math.max(area.top, area.bottom - height);
+  const spanX = maxX - area.left;
+  const spanY = maxY - area.top;
+
+  placement.xRatio = spanX > 0 ? clampRatio((x - area.left) / spanX) : 0;
+  placement.yRatio = spanY > 0 ? clampRatio((y - area.top) / spanY) : 0;
+};
+
+const getPositionFromPlacement = (area = getSafeArea()) => {
+  syncPanelMaxHeight(area);
+  const { width, height } = getPanelSize();
+  const maxX = Math.max(area.left, area.right - width);
+  const maxY = Math.max(area.top, area.bottom - height);
+  const spanX = maxX - area.left;
+  const spanY = maxY - area.top;
+  const x = area.left + spanX * clampRatio(placement.xRatio);
+  const y = area.top + spanY * clampRatio(placement.yRatio);
+  return clampPosition(x, y, area);
+};
+
+const applyPlacementToSafeArea = async () => {
+  await nextTick();
+  const next = getPositionFromPlacement();
+  pos.x = next.x;
+  pos.y = next.y;
+};
+
+const placeAtDefaultAnchor = async () => {
+  await nextTick();
+  placement.xRatio = 1;
+  placement.yRatio = 0;
+  await applyPlacementToSafeArea();
+  initialized.value = true;
+};
+
+// 首次显示时吸附到 header 下方、右侧导航左侧、输入框上方的安全区域
 watch(
   () => props.visible,
   (v) => {
-    if (v && !initialized.value) {
-      nextTick(() => {
-        // 默认放右上：header（系统提示词）下方、右侧导航列左侧，避免遮挡两者
-        const w = panelRef.value?.offsetWidth || 300;
-        const navClearance = 50; // 右侧导航列 width 30 + right 10 + 间距
-        pos.x = Math.max(12, window.innerWidth - w - navClearance);
-        const mainTop = document.querySelector('.chat-main')?.getBoundingClientRect().top;
-        pos.y = (typeof mainTop === 'number' && mainTop > 8) ? mainTop + 8 : 96;
-        initialized.value = true;
-      });
-    }
+    if (!v) return;
+    if (!initialized.value) placeAtDefaultAnchor();
+    else applyPlacementToSafeArea();
   }
+);
+
+watch(
+  () => props.tasks,
+  () => {
+    if (props.visible) applyPlacementToSafeArea();
+  },
+  { deep: true }
 );
 
 // --- 自定义指针拖拽 ---
@@ -43,17 +152,17 @@ let baseY = 0;
 
 const onMouseMove = (e) => {
   if (!dragging) return;
-  const w = panelRef.value?.offsetWidth || 300;
-  const h = panelRef.value?.offsetHeight || 200;
   let nx = baseX + (e.clientX - startX);
   let ny = baseY + (e.clientY - startY);
-  nx = Math.max(0, Math.min(nx, window.innerWidth - w));
-  ny = Math.max(0, Math.min(ny, window.innerHeight - h));
-  pos.x = nx;
-  pos.y = ny;
+  const next = clampPosition(nx, ny);
+  pos.x = next.x;
+  pos.y = next.y;
 };
 
 const onMouseUp = () => {
+  if (dragging) {
+    updatePlacementFromPosition();
+  }
   dragging = false;
   window.removeEventListener('mousemove', onMouseMove);
   window.removeEventListener('mouseup', onMouseUp);
@@ -71,14 +180,26 @@ const onHeaderMouseDown = (e) => {
   e.preventDefault();
 };
 
+const onWindowResize = () => {
+  if (props.visible || initialized.value) {
+    applyPlacementToSafeArea();
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('resize', onWindowResize);
+});
+
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', onWindowResize);
   window.removeEventListener('mousemove', onMouseMove);
   window.removeEventListener('mouseup', onMouseUp);
 });
 </script>
 
 <template>
-  <div v-show="visible" ref="panelRef" class="task-panel" :style="{ left: pos.x + 'px', top: pos.y + 'px' }">
+  <div v-show="visible" ref="panelRef" class="task-panel"
+    :style="{ left: pos.x + 'px', top: pos.y + 'px', maxHeight: panelMaxHeight }">
     <div class="task-panel-header" @mousedown="onHeaderMouseDown">
       <div class="task-panel-title">
         <el-icon :size="14"><List /></el-icon>
@@ -120,7 +241,7 @@ onBeforeUnmount(() => {
 .task-panel {
   position: fixed;
   z-index: 2000;
-  width: 300px;
+  width: min(300px, calc(100vw - 24px));
   max-height: 60vh;
   display: flex;
   flex-direction: column;
