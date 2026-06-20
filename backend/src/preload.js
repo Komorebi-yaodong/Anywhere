@@ -66,6 +66,17 @@ const {
   extractSkillPackage,
 } = require('./skill.js');
 
+const {
+  readLocalProjects,
+  writeLocalProjects,
+  parseProjectsYaml,
+  serializeProjectsYaml,
+  normalizeProjects,
+  mergeFileAssignment,
+  mergeProjectAssignment,
+  findProjectByBasename,
+} = require('./projects.js');
+
 window.api = {
   getConfig,
   updateConfig,
@@ -88,6 +99,14 @@ window.api = {
   writeLocalFile,
   setFileMtime,
   coderedirect,
+  readLocalProjects,
+  writeLocalProjects,
+  parseProjectsYaml,
+  serializeProjectsYaml,
+  normalizeProjects,
+  mergeFileAssignment,
+  mergeProjectAssignment,
+  findProjectByBasename,
   setZoomFactor,
   defaultConfig,
   savePromptWindowSettings,

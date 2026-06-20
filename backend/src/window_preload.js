@@ -51,6 +51,15 @@ const {
     deleteSkill
 } = require('./skill.js');
 
+const {
+    readLocalProjects,
+    writeLocalProjects,
+    parseProjectsYaml,
+    serializeProjectsYaml,
+    mergeFileAssignment,
+    findProjectByBasename,
+} = require('./projects.js');
+
 const channel = "window";
 let senderId = null; // [新增] 用于存储当前窗口的唯一ID
 
@@ -150,6 +159,12 @@ window.api = {
     renameLocalFile,
     listJsonFiles,
     writeLocalFile,
+    readLocalProjects,
+    writeLocalProjects,
+    parseProjectsYaml,
+    serializeProjectsYaml,
+    mergeFileAssignment,
+    findProjectByBasename,
     handleCodeClick,
     sethotkey,
     setZoomFactor,

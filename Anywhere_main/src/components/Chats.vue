@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch, onUnmounted, nextTick, onActivated, onDeactivated, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createClient } from "webdav/web";
-import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush, Share } from '@element-plus/icons-vue'
+import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush, Share, Plus, ArrowRight, Folder } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n();
@@ -25,6 +25,41 @@ const singleFileSyncing = ref({});
 const isDeletingFiles = ref(false);
 const sortMode = ref('createdAt');
 const sortDirection = ref('desc');
+
+// --- 项目（目录）分组拖拽状态 ---
+const draggedFileBasenames = ref([]);
+const dragOverProjectTarget = ref('');
+const isProjectDragging = ref(false);
+const dragGhostX = ref(0);
+const dragGhostY = ref(0);
+const dragGhostLabel = ref('');
+
+// --- 项目（目录）分组状态 ---
+const COLLAPSED_PROJECTS_STORAGE_KEY = 'chats-collapsed-projects';
+
+function loadCollapsedProjectIds() {
+    try {
+        const raw = localStorage.getItem(COLLAPSED_PROJECTS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+function persistCollapsedProjectIds(ids) {
+    try {
+        localStorage.setItem(COLLAPSED_PROJECTS_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+    } catch {
+        // ignore localStorage persistence failure
+    }
+}
+
+const localProjects = ref({ version: 1, projects: [] });
+const cloudProjects = ref({ version: 1, projects: [] });
+const collapsedProjectIds = ref(new Set(loadCollapsedProjectIds()));
+const projectDeleteDialog = ref({ visible: false, id: '', name: '', busy: false });
+const PROJECT_UNGROUPED_DROP_ID = '__ungrouped__';
 
 watch(() => currentConfig.value?.webdav, (newWebdav) => {
     if (newWebdav) {
@@ -209,6 +244,105 @@ const paginatedFiles = computed(() => {
     return currentFiles.value.slice(start, end);
 });
 
+// --- 项目分组视图 ---
+const activeProjectsData = computed(() =>
+    activeView.value === 'local' ? localProjects.value : cloudProjects.value
+);
+
+const fileByBasename = computed(() => {
+    const fileList = activeView.value === 'local' ? localChatFiles.value : cloudChatFiles.value;
+    return new Map(fileList.map((f) => [f.basename, f]));
+});
+
+const getJsonBasenameCandidate = (value) => {
+    const basename = String(value || '').trim();
+    if (!basename) return '';
+    return basename.toLowerCase().endsWith('.json') ? basename : `${basename}.json`;
+};
+
+const resolveProjectFileBasename = (value, map = fileByBasename.value) => {
+    const basename = String(value || '').trim();
+    if (!basename) return '';
+    if (map.has(basename)) return basename;
+    const jsonBasename = getJsonBasenameCandidate(basename);
+    return map.has(jsonBasename) ? jsonBasename : basename;
+};
+
+const isSameProjectFile = (projectFile, basename) => {
+    const rawProjectFile = String(projectFile || '').trim();
+    const rawBasename = String(basename || '').trim();
+    if (!rawProjectFile || !rawBasename) return false;
+    return rawProjectFile === rawBasename || getJsonBasenameCandidate(rawProjectFile) === rawBasename;
+};
+
+const assignedBasenames = computed(() => {
+    const set = new Set();
+    const projects = Array.isArray(activeProjectsData.value?.projects) ? activeProjectsData.value.projects : [];
+    const map = fileByBasename.value;
+    projects.forEach((project) => {
+        (Array.isArray(project?.files) ? project.files : []).forEach((bn) => {
+            const basename = resolveProjectFileBasename(bn, map);
+            if (basename) set.add(basename);
+        });
+    });
+    return set;
+});
+
+// 项目按 name 字典序置顶；项目内文件按当前排序模式排序；保留空项目以便拖入。
+const projectGroups = computed(() => {
+    const projects = Array.isArray(activeProjectsData.value?.projects) ? [...activeProjectsData.value.projects] : [];
+    projects.sort((a, b) =>
+        String(a?.name || '').localeCompare(String(b?.name || ''), undefined, { numeric: true, sensitivity: 'base' })
+    );
+    const map = fileByBasename.value;
+    return projects.map((project) => {
+        const files = (Array.isArray(project?.files) ? project.files : [])
+            .map((bn) => map.get(resolveProjectFileBasename(bn, map)))
+            .filter(Boolean)
+            .sort(compareFilesBySortMode);
+        return {
+            id: project.id,
+            name: project.name || project.id,
+            files,
+            count: files.length,
+            collapsed: collapsedProjectIds.value.has(project.id)
+        };
+    });
+});
+
+// 未分组文件（参与分页）
+const ungroupedFiles = computed(() => {
+    const assigned = assignedBasenames.value;
+    return currentFiles.value.filter((f) => !assigned.has(f.basename));
+});
+
+const paginatedUngrouped = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    const end = start + pageSize.value;
+    return ungroupedFiles.value.slice(start, end);
+});
+
+// 扁平渲染行：项目头 + 项目内文件 + 未分组标签 + 未分组文件
+const displayRows = computed(() => {
+    const rows = [];
+    const groups = projectGroups.value;
+    groups.forEach((group) => {
+        rows.push({ kind: 'project', id: group.id, name: group.name, count: group.count, collapsed: group.collapsed });
+        if (!group.collapsed) {
+            group.files.forEach((file) => rows.push({ kind: 'file', file, projectId: group.id }));
+        }
+    });
+    const ungrouped = paginatedUngrouped.value;
+    if (groups.length > 0) {
+        rows.push({ kind: 'ungrouped-label' });
+    }
+    ungrouped.forEach((file) => rows.push({ kind: 'file', file, projectId: null }));
+    return rows;
+});
+
+// 当前可见文件（用于全选/框选）
+const visibleFiles = computed(() => displayRows.value.filter((r) => r.kind === 'file').map((r) => r.file));
+
 // --- Helper Functions ---
 const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -245,6 +379,7 @@ onActivated(() => {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('mouseup', onGlobalMouseUp);
     window.addEventListener('mousemove', onGlobalMouseMove);
+    window.addEventListener('wheel', onProjectDragWheel, { passive: false });
     refreshData(true);
 });
 
@@ -253,6 +388,7 @@ onDeactivated(() => {
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('mouseup', onGlobalMouseUp);
     window.removeEventListener('mousemove', onGlobalMouseMove);
+    window.removeEventListener('wheel', onProjectDragWheel);
 });
 
 onUnmounted(() => {
@@ -260,6 +396,7 @@ onUnmounted(() => {
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('mouseup', onGlobalMouseUp);
     window.removeEventListener('mousemove', onGlobalMouseMove);
+    window.removeEventListener('wheel', onProjectDragWheel);
 });
 
 // --- 框选核心逻辑 ---
@@ -267,8 +404,8 @@ onUnmounted(() => {
 const onMouseDown = (e) => {
     if (e.button !== 0) return; // 仅左键
 
-    // 排除特定交互元素（避免点复选框或按钮时触发选框）
-    if (e.target.closest('.list-checkbox') || e.target.closest('.list-actions') || e.target.closest('.el-button')) {
+    // 排除特定交互元素（名称区改用拖拽改归属，时间/大小区才触发框选）
+    if (e.target.closest('.list-checkbox') || e.target.closest('.list-actions') || e.target.closest('.el-button') || e.target.closest('.project-header') || e.target.closest('.list-title')) {
         return;
     }
 
@@ -286,6 +423,10 @@ const onMouseDown = (e) => {
 };
 
 const onGlobalMouseMove = (e) => {
+    if (dragPending) {
+        handleProjectDragMove(e);
+        return;
+    }
     if (!isMouseDown) return;
 
     const currentX = e.clientX;
@@ -328,10 +469,12 @@ const updateSelectionInvert = () => {
 
     const currentInBox = new Set();
 
-    // 1. 找出当前所有在框内的文件
-    items.forEach((item, index) => {
+    // 1. 找出当前所有在框内的文件（以 data-basename 标识，兼容分组渲染）
+    items.forEach((item) => {
+        const basename = item.dataset?.basename;
+        if (!basename) return;
         const itemRect = item.getBoundingClientRect();
-        
+
         // AABB 碰撞检测
         const isIntersecting = !(
             boxRect.left > itemRect.right ||
@@ -341,19 +484,13 @@ const updateSelectionInvert = () => {
         );
 
         if (isIntersecting) {
-            const file = paginatedFiles.value[index];
-            if (file) currentInBox.add(file.basename);
+            currentInBox.add(basename);
         }
     });
 
-    // 2. 应用反转逻辑 (XOR)
+    // 2. 应用反转逻辑 (XOR)，仅作用于当前可见文件
     // 最终状态 = 初始状态 XOR 框选状态
-    // - 原来已选 && 在框内 -> 变未选
-    // - 原来已选 && 不在框内 -> 保持已选
-    // - 原来未选 && 在框内 -> 变已选
-    // - 原来未选 && 不在框内 -> 保持未选
-    
-    selectedFiles.value = paginatedFiles.value.filter(file => {
+    selectedFiles.value = visibleFiles.value.filter(file => {
         const wasSelected = initialSelectionSnap.has(file.basename);
         const isInBox = currentInBox.has(file.basename);
 
@@ -366,6 +503,10 @@ const updateSelectionInvert = () => {
 };
 
 const onGlobalMouseUp = (e) => {
+    if (dragPending) {
+        finishProjectDrag();
+        return;
+    }
     if (isMouseDown) {
         // 如果没有发生拖拽，且没有按住 Ctrl/Shift，且点击的是空白处（不是列表项），则清空选择
         // 这是为了符合“点击空白处取消选择”的直觉
@@ -391,8 +532,8 @@ const onGlobalMouseUp = (e) => {
 
 // 列表项点击处理 (保持原有逻辑)
 const handleItemClick = (file) => {
-    // 如果刚刚发生了拖拽，则忽略此次点击（避免抬起鼠标时触发 click 导致状态再次反转）
-    if (hasMoved) return;
+    // 如果刚刚发生了框选或项目拖拽，则忽略此次点击（避免抬起鼠标时触发 click 导致状态再次反转）
+    if (hasMoved || justDraggedProject) return;
 
     toggleFileSelection(file, !isFileSelected(file));
 };
@@ -451,6 +592,7 @@ async function fetchLocalFiles(silent = false) {
     try {
         const files = await window.api.listJsonFiles(localChatPath.value);
         localChatFiles.value = files.map(file => normalizeSessionFile(file));
+        await fetchLocalProjects();
     } catch (error) {
         ElMessage.error(`读取本地文件列表失败: ${error.message}`);
         localChatFiles.value = [];
@@ -471,6 +613,7 @@ async function fetchCloudFiles(silent = false) {
         const directoryItems = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
         const jsonFiles = directoryItems.filter(item => item.type === 'file' && item.basename && item.basename.endsWith('.json'));
         cloudChatFiles.value = jsonFiles.map(file => normalizeSessionFile(file));
+        await fetchCloudProjects();
     } catch (error) {
         ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`);
         cloudChatFiles.value = [];
@@ -489,6 +632,501 @@ async function refreshData(silent = false) {
             await fetchCloudFiles(silent);
             isCloudDataLoaded.value = true;
         }
+    }
+}
+
+
+// --- 项目分组：数据装载 / 持久化 ---
+const normalizeProjectsResult = (result) => {
+    const projects = Array.isArray(result?.projects) ? result.projects : [];
+    return {
+        version: Number(result?.version) || 1,
+        projects: projects
+            .filter((p) => p && typeof p === 'object')
+            .map((p) => ({
+                id: String(p.id || '').trim(),
+                name: String(p.name || '').trim() || String(p.id || '').trim(),
+                files: Array.isArray(p.files) ? p.files.map((f) => String(f || '').trim()).filter(Boolean) : []
+            }))
+            .filter((p) => p.id)
+    };
+};
+
+const buildCloudProjectsRemotePath = () => {
+    const dp = String(webdavConfig.value?.data_path || '');
+    const dir = dp.endsWith('/') ? dp.slice(0, -1) : dp;
+    return `${dir}/projects.yaml`;
+};
+
+async function readCloudProjectsViaWebdav() {
+    const { url, username, password } = webdavConfig.value;
+    const client = createClient(url, { username, password });
+    const remotePath = buildCloudProjectsRemotePath();
+    try {
+        if (!(await client.exists(remotePath))) return { version: 1, projects: [] };
+        const text = await client.getFileContents(remotePath, { format: 'text' });
+        const parsed = await window.api.parseProjectsYaml(typeof text === 'string' ? text : String(text));
+        return normalizeProjectsResult(parsed);
+    } catch (error) {
+        console.warn('[chats] 读取云端项目失败:', error);
+        return { version: 1, projects: [] };
+    }
+}
+
+async function writeCloudProjectsViaWebdav(data) {
+    const { url, username, password } = webdavConfig.value;
+    const client = createClient(url, { username, password });
+    const remotePath = buildCloudProjectsRemotePath();
+    const content = await window.api.serializeProjectsYaml(data);
+    await client.putFileContents(remotePath, content, { overwrite: true });
+}
+
+async function fetchLocalProjects() {
+    if (!localChatPath.value) {
+        localProjects.value = { version: 1, projects: [] };
+        return;
+    }
+    try {
+        const result = await window.api.readLocalProjects(localChatPath.value);
+        localProjects.value = normalizeProjectsResult(result);
+    } catch (error) {
+        console.warn('[chats] 读取本地项目失败:', error);
+        localProjects.value = { version: 1, projects: [] };
+    }
+}
+
+async function fetchCloudProjects() {
+    if (!isWebdavConfigValid.value) {
+        cloudProjects.value = { version: 1, projects: [] };
+        return;
+    }
+    cloudProjects.value = await readCloudProjectsViaWebdav();
+}
+
+async function persistLocalProjects() {
+    if (!localChatPath.value) return;
+    await window.api.writeLocalProjects(localChatPath.value, localProjects.value);
+}
+
+async function persistCloudProjects() {
+    if (!isWebdavConfigValid.value) return;
+    await writeCloudProjectsViaWebdav(cloudProjects.value);
+}
+
+const toggleProjectCollapse = (projectId) => {
+    const id = String(projectId || '');
+    if (!id) return;
+    const next = new Set(collapsedProjectIds.value);
+    if (next.has(id)) {
+        next.delete(id);
+    } else {
+        next.add(id);
+    }
+    collapsedProjectIds.value = next;
+    persistCollapsedProjectIds(next);
+};
+
+// --- 项目 CRUD ---
+const setActiveProjectsData = (data) => {
+    if (activeView.value === 'local') {
+        localProjects.value = data;
+    } else {
+        cloudProjects.value = data;
+    }
+};
+
+async function persistActiveProjects() {
+    if (activeView.value === 'local') {
+        await persistLocalProjects();
+    } else {
+        await persistCloudProjects();
+    }
+}
+
+function generateProjectId(name) {
+    const base = String(name || '').trim().toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, '-')
+        .replace(/^-+|-+$/g, '');
+    let id = base || `project-${Date.now().toString(36)}`;
+    const existing = new Set((activeProjectsData.value.projects || []).map((p) => p.id));
+    if (!existing.has(id)) return id;
+    let suffix = 2;
+    while (existing.has(`${id}-${suffix}`)) suffix += 1;
+    return `${id}-${suffix}`;
+}
+
+async function createProject() {
+    if (activeView.value === 'local' ? !localChatPath.value : !isWebdavConfigValid.value) return;
+    try {
+        const { value } = await ElMessageBox.prompt(t('chats.projects.createPrompt'), t('chats.projects.create'), {
+            inputPattern: /\S/,
+            inputErrorMessage: t('chats.projects.nameRequired')
+        });
+        const name = String(value || '').trim();
+        if (!name) return;
+        const projects = [...(activeProjectsData.value.projects || [])];
+        if (projects.some((p) => p.name === name)) {
+            ElMessage.warning(t('chats.projects.nameExists'));
+            return;
+        }
+        projects.push({ id: generateProjectId(name), name, files: [] });
+        setActiveProjectsData({ version: activeProjectsData.value.version || 1, projects });
+        await persistActiveProjects();
+        ElMessage.success(t('chats.projects.createSuccess'));
+    } catch (error) {
+        if (error !== 'cancel' && error !== 'close') ElMessage.error(String(error?.message || error));
+    }
+}
+
+async function renameProject(projectId) {
+    const project = (activeProjectsData.value.projects || []).find((p) => p.id === projectId);
+    if (!project) return;
+    try {
+        const { value } = await ElMessageBox.prompt(t('chats.projects.renamePrompt'), t('chats.projects.rename'), {
+            inputValue: project.name,
+            inputPattern: /\S/,
+            inputErrorMessage: t('chats.projects.nameRequired')
+        });
+        const name = String(value || '').trim();
+        if (!name || name === project.name) return;
+        if ((activeProjectsData.value.projects || []).some((p) => p.id !== projectId && p.name === name)) {
+            ElMessage.warning(t('chats.projects.nameExists'));
+            return;
+        }
+        const projects = (activeProjectsData.value.projects || []).map((p) =>
+            p.id === projectId ? { ...p, name } : p
+        );
+        setActiveProjectsData({ version: activeProjectsData.value.version || 1, projects });
+        await persistActiveProjects();
+        ElMessage.success(t('chats.projects.renameSuccess'));
+    } catch (error) {
+        if (error !== 'cancel' && error !== 'close') ElMessage.error(String(error?.message || error));
+    }
+}
+
+function deleteProject(projectId) {
+    const project = (activeProjectsData.value.projects || []).find((p) => p.id === projectId);
+    if (!project) return;
+    projectDeleteDialog.value = { visible: true, id: project.id, name: project.name, busy: false };
+}
+
+// 仅删除项目：内部对话移回未分组，不删除对话文件
+async function confirmDeleteProjectKeepChats() {
+    const { id } = projectDeleteDialog.value;
+    if (!id) return;
+    projectDeleteDialog.value.busy = true;
+    try {
+        const projects = (activeProjectsData.value.projects || []).filter((p) => p.id !== id);
+        setActiveProjectsData({ version: activeProjectsData.value.version || 1, projects });
+        await persistActiveProjects();
+        ElMessage.success(t('chats.projects.deleteSuccess'));
+        projectDeleteDialog.value.visible = false;
+    } catch (error) {
+        ElMessage.error(String(error?.message || error));
+    } finally {
+        projectDeleteDialog.value.busy = false;
+    }
+}
+
+// 删除项目及其内部对话历史（真实删除对话文件）
+async function confirmDeleteProjectWithChats() {
+    const { id } = projectDeleteDialog.value;
+    if (!id) return;
+    projectDeleteDialog.value.busy = true;
+    try {
+        const group = projectGroups.value.find((g) => g.id === id);
+        const files = group ? group.files : [];
+        const client = (activeView.value === 'cloud' && isWebdavConfigValid.value)
+            ? createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password })
+            : null;
+        for (const file of files) {
+            if (activeView.value === 'local') {
+                const localPath = file?.path || `${localChatPath.value}/${file.basename}`;
+                await window.api.deleteLocalFile(localPath);
+            } else if (client) {
+                await client.deleteFile(`${webdavConfig.value.data_path}/${file.basename}`);
+            }
+        }
+        const projects = (activeProjectsData.value.projects || []).filter((p) => p.id !== id);
+        setActiveProjectsData({ version: activeProjectsData.value.version || 1, projects });
+        await persistActiveProjects();
+        ElMessage.success(t('chats.projects.deleteWithChatsSuccess', { count: files.length }));
+        projectDeleteDialog.value.visible = false;
+        selectedFiles.value = [];
+        await refreshData();
+    } catch (error) {
+        ElMessage.error(String(error?.message || error));
+    } finally {
+        projectDeleteDialog.value.busy = false;
+    }
+}
+
+// --- 自定义指针拖拽改归属（不用原生 HTML5 DnD，以便拖拽时滚轮可用、命中更可靠）---
+let dragPending = false;
+let dragActivated = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragPendingBasenames = [];
+let lastDragClientX = 0;
+let lastDragClientY = 0;
+let justDraggedProject = false;
+
+let projectAutoScrollRAF = null;
+let projectAutoScrollDir = 0;
+const PROJECT_AUTOSCROLL_EDGE = 56;
+const PROJECT_AUTOSCROLL_SPEED = 14;
+
+const getChatScrollWrap = () => chatListRef.value?.closest('.el-scrollbar__wrap') || null;
+
+const stopProjectAutoScroll = () => {
+    if (projectAutoScrollRAF) {
+        cancelAnimationFrame(projectAutoScrollRAF);
+        projectAutoScrollRAF = null;
+    }
+    projectAutoScrollDir = 0;
+};
+
+const runProjectAutoScroll = () => {
+    const wrap = getChatScrollWrap();
+    if (!wrap || !projectAutoScrollDir || !isProjectDragging.value) {
+        projectAutoScrollRAF = null;
+        projectAutoScrollDir = 0;
+        return;
+    }
+    wrap.scrollTop += projectAutoScrollDir * PROJECT_AUTOSCROLL_SPEED;
+    updateDragTarget(lastDragClientX, lastDragClientY);
+    projectAutoScrollRAF = requestAnimationFrame(runProjectAutoScroll);
+};
+
+const updateAutoScrollByY = (y) => {
+    const wrap = getChatScrollWrap();
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    let dir = 0;
+    if (y < rect.top + PROJECT_AUTOSCROLL_EDGE) dir = -1;
+    else if (y > rect.bottom - PROJECT_AUTOSCROLL_EDGE) dir = 1;
+    projectAutoScrollDir = dir;
+    if (dir) {
+        if (!projectAutoScrollRAF) projectAutoScrollRAF = requestAnimationFrame(runProjectAutoScroll);
+    } else {
+        stopProjectAutoScroll();
+    }
+};
+
+// 命中检测：返回项目 id、PROJECT_UNGROUPED_DROP_ID 或 ''（无效目标）
+const resolveDropTarget = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return '';
+    const header = el.closest('.project-header');
+    if (header) return header.dataset.projectId || '';
+    const label = el.closest('.ungrouped-label');
+    if (label) return PROJECT_UNGROUPED_DROP_ID;
+    const row = el.closest('.chat-list-item');
+    if (row) return row.dataset.projectId ? row.dataset.projectId : PROJECT_UNGROUPED_DROP_ID;
+    if (el.closest('.chat-list')) return PROJECT_UNGROUPED_DROP_ID;
+    return '';
+};
+
+const updateDragTarget = (x, y) => {
+    dragOverProjectTarget.value = resolveDropTarget(x, y);
+};
+
+const onTitleMouseDown = (file, event) => {
+    if (event.button !== 0) return;
+    dragPendingBasenames = (isFileSelected(file) && selectedFiles.value.length > 0)
+        ? selectedFiles.value.map((f) => f.basename)
+        : [file.basename];
+    dragStartX = event.clientX;
+    dragStartY = event.clientY;
+    lastDragClientX = event.clientX;
+    lastDragClientY = event.clientY;
+    dragPending = true;
+    dragActivated = false;
+};
+
+const handleProjectDragMove = (event) => {
+    lastDragClientX = event.clientX;
+    lastDragClientY = event.clientY;
+    if (!dragActivated) {
+        if (Math.abs(event.clientX - dragStartX) <= 5 && Math.abs(event.clientY - dragStartY) <= 5) {
+            return;
+        }
+        dragActivated = true;
+        isProjectDragging.value = true;
+        draggedFileBasenames.value = dragPendingBasenames;
+        dragGhostLabel.value = dragPendingBasenames.length > 1
+            ? t('chats.projects.dragCount', { count: dragPendingBasenames.length })
+            : formatFilenameDisplay(dragPendingBasenames[0]);
+        window.getSelection()?.removeAllRanges();
+    }
+    dragGhostX.value = event.clientX + 14;
+    dragGhostY.value = event.clientY + 14;
+    updateDragTarget(event.clientX, event.clientY);
+    updateAutoScrollByY(event.clientY);
+};
+
+const resetProjectDragState = () => {
+    dragPending = false;
+    dragActivated = false;
+    dragPendingBasenames = [];
+    isProjectDragging.value = false;
+    draggedFileBasenames.value = [];
+    dragOverProjectTarget.value = '';
+    stopProjectAutoScroll();
+};
+
+async function finishProjectDrag() {
+    const wasActivated = dragActivated;
+    const basenames = [...draggedFileBasenames.value];
+    const target = dragOverProjectTarget.value;
+    resetProjectDragState();
+    if (!wasActivated || !basenames.length) return;
+    justDraggedProject = true;
+    setTimeout(() => { justDraggedProject = false; }, 0);
+    if (!target) return; // 拖到列表外，视为取消
+    const projectId = target === PROJECT_UNGROUPED_DROP_ID ? '' : target;
+    await assignFilesToProject(basenames, projectId);
+}
+
+const onProjectDragWheel = (event) => {
+    if (!isProjectDragging.value) return;
+    const wrap = getChatScrollWrap();
+    if (!wrap) return;
+    event.preventDefault();
+    wrap.scrollTop += event.deltaY;
+    updateDragTarget(lastDragClientX, lastDragClientY);
+};
+
+async function assignFilesToProject(basenames, projectId) {
+    if (!Array.isArray(basenames) || basenames.length === 0) return;
+    try {
+        const draggedSet = new Set(basenames.map((n) => getJsonBasenameCandidate(n)));
+        // 先从所有项目移除（兼容带/不带 .json），保证单一归属
+        let projects = (activeProjectsData.value.projects || []).map((p) => ({
+            ...p,
+            files: (Array.isArray(p.files) ? p.files : []).filter((f) => !draggedSet.has(getJsonBasenameCandidate(f)))
+        }));
+        if (projectId) {
+            if (!projects.some((p) => p.id === projectId)) return;
+            projects = projects.map((p) =>
+                p.id === projectId ? { ...p, files: [...p.files, ...basenames] } : p
+            );
+        }
+        setActiveProjectsData({ version: activeProjectsData.value.version || 1, projects });
+        await persistActiveProjects();
+        selectedFiles.value = [];
+        ElMessage.success(t('chats.projects.moveSuccess'));
+    } catch (error) {
+        ElMessage.error(`${t('chats.projects.moveFailed')}: ${error?.message || error}`);
+    }
+}
+
+// --- 项目归属的云端同步 ---
+const findProjectOfBasename = (projectsData, basename) => {
+    for (const project of (projectsData?.projects || [])) {
+        if ((project.files || []).some((f) => isSameProjectFile(f, basename))) {
+            return { id: project.id, name: project.name };
+        }
+    }
+    return null;
+};
+
+// 单文件同步后，把它的项目归属同步到对端 projects.yaml（读一端归属→改对端→写对端）
+const syncFileAssignmentAcross = async (basename, direction) => {
+    try {
+        if (direction === 'upload') {
+            const proj = findProjectOfBasename(localProjects.value, basename);
+            const cloudData = await readCloudProjectsViaWebdav();
+            const merged = await window.api.mergeFileAssignment(cloudData, { basename, projectId: proj?.id || '', projectName: proj?.name || '' });
+            await writeCloudProjectsViaWebdav(merged);
+            cloudProjects.value = normalizeProjectsResult(merged);
+        } else {
+            const proj = findProjectOfBasename(cloudProjects.value, basename);
+            const localData = normalizeProjectsResult(await window.api.readLocalProjects(localChatPath.value));
+            const merged = await window.api.mergeFileAssignment(localData, { basename, projectId: proj?.id || '', projectName: proj?.name || '' });
+            await window.api.writeLocalProjects(localChatPath.value, merged);
+            localProjects.value = normalizeProjectsResult(merged);
+        }
+    } catch (error) {
+        console.warn('[projects] 同步单文件项目归属失败:', error);
+    }
+};
+
+const syncProject = (projectId) =>
+    activeView.value === 'local' ? syncProjectToCloud(projectId) : syncProjectToLocal(projectId);
+
+async function syncProjectToCloud(projectId) {
+    if (!isWebdavConfigValid.value) return ElMessage.warning(t('chats.alerts.webdavRequired'));
+    const group = projectGroups.value.find((g) => g.id === projectId);
+    if (!group) return;
+    const basenames = group.files.map((f) => f.basename);
+    try {
+        if (basenames.length > 0) {
+            const tasks = basenames.map((bn) => ({
+                name: bn,
+                action: (signal) => forceSyncFile(bn, 'upload', signal, { syncProject: false })
+            }));
+            await executeSync(tasks, t('chats.alerts.syncConfirmUploadTitle'));
+        }
+        const cloudData = await readCloudProjectsViaWebdav();
+        const merged = await window.api.mergeProjectAssignment(cloudData, { id: group.id, name: group.name, files: basenames });
+        await writeCloudProjectsViaWebdav(merged);
+        cloudProjects.value = normalizeProjectsResult(merged);
+        ElMessage.success(t('chats.projects.syncProjectSuccess'));
+        await refreshData();
+    } catch (error) {
+        if (error?.message !== 'Cancelled') ElMessage.error(String(error?.message || error));
+    }
+}
+
+async function syncProjectToLocal(projectId) {
+    if (!localChatPath.value) return ElMessage.warning(t('chats.alerts.localPathRequired'));
+    const group = projectGroups.value.find((g) => g.id === projectId);
+    if (!group) return;
+    const basenames = group.files.map((f) => f.basename);
+    try {
+        if (basenames.length > 0) {
+            const tasks = basenames.map((bn) => ({
+                name: bn,
+                action: (signal) => forceSyncFile(bn, 'download', signal, { syncProject: false })
+            }));
+            await executeSync(tasks, t('chats.alerts.syncConfirmDownloadTitle'));
+        }
+        const localData = normalizeProjectsResult(await window.api.readLocalProjects(localChatPath.value));
+        const merged = await window.api.mergeProjectAssignment(localData, { id: group.id, name: group.name, files: basenames });
+        await window.api.writeLocalProjects(localChatPath.value, merged);
+        localProjects.value = normalizeProjectsResult(merged);
+        ElMessage.success(t('chats.projects.syncProjectSuccess'));
+        await refreshData();
+    } catch (error) {
+        if (error?.message !== 'Cancelled') ElMessage.error(String(error?.message || error));
+    }
+}
+
+// 批量同步结束后，一次性把多文件的项目归属合并进对端 yaml（读一次、改、写一次，避免并发竞争）
+async function syncProjectsBulk(basenames, direction) {
+    if (!Array.isArray(basenames) || basenames.length === 0) return;
+    try {
+        if (direction === 'upload') {
+            let cloudData = await readCloudProjectsViaWebdav();
+            for (const bn of basenames) {
+                const proj = findProjectOfBasename(localProjects.value, bn);
+                cloudData = await window.api.mergeFileAssignment(cloudData, { basename: bn, projectId: proj?.id || '', projectName: proj?.name || '' });
+            }
+            await writeCloudProjectsViaWebdav(cloudData);
+            cloudProjects.value = normalizeProjectsResult(cloudData);
+        } else {
+            let localData = normalizeProjectsResult(await window.api.readLocalProjects(localChatPath.value));
+            for (const bn of basenames) {
+                const proj = findProjectOfBasename(cloudProjects.value, bn);
+                localData = await window.api.mergeFileAssignment(localData, { basename: bn, projectId: proj?.id || '', projectName: proj?.name || '' });
+            }
+            await window.api.writeLocalProjects(localChatPath.value, localData);
+            localProjects.value = normalizeProjectsResult(localData);
+        }
+        await refreshData();
+    } catch (error) {
+        console.warn('[projects] 批量同步项目归属失败:', error);
     }
 }
 
@@ -740,8 +1378,10 @@ async function intelligentUpload() {
             t('chats.alerts.syncConfirmUploadTitle'),
             { type: 'info' }
         );
-        const tasks = filesToUpload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'upload', signal) }));
+        const tasks = filesToUpload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'upload', signal, { syncProject: false }) }));
         await executeSync(tasks, t('chats.alerts.syncConfirmUploadTitle'));
+        // 批量结束后统一把这些文件的项目归属合并进云端 yaml（避免并发读写竞争）
+        await syncProjectsBulk(filesToUpload.map(f => f.basename), 'upload');
     } catch (error) {
         if (error === 'cancel' || error === 'close') return;
         ElMessage.error(`${error.message}`);
@@ -759,8 +1399,9 @@ async function intelligentDownload() {
             t('chats.alerts.syncConfirmDownloadTitle'),
             { type: 'info' }
         );
-        const tasks = filesToDownload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'download', signal) }));
+        const tasks = filesToDownload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'download', signal, { syncProject: false }) }));
         await executeSync(tasks, t('chats.alerts.syncConfirmDownloadTitle'));
+        await syncProjectsBulk(filesToDownload.map(f => f.basename), 'download');
     } catch (error) {
         if (error === 'cancel' || error === 'close') return;
         ElMessage.error(`${error.message}`);
@@ -791,7 +1432,8 @@ async function executeSync(tasks, title) {
     }
 }
 
-async function forceSyncFile(basename, direction, signal) {
+async function forceSyncFile(basename, direction, signal, options = {}) {
+    const { syncProject = true } = options;
     singleFileSyncing.value[basename] = true;
     try {
         const client = createClient(webdavConfig.value.url, { username: webdavConfig.value.username, password: webdavConfig.value.password });
@@ -813,6 +1455,11 @@ async function forceSyncFile(basename, direction, signal) {
             await window.api.writeLocalFile(localPath, content, signal);
 
             await window.api.setFileMtime(localPath, cloudFile.updatedAt || cloudFile.lastmod);
+        }
+
+        // 单文件同步时连带把该文件的项目归属同步到对端 projects.yaml（批量同步走末尾统一合并）
+        if (syncProject) {
+            await syncFileAssignmentAcross(basename, direction);
         }
     } catch (error) {
         if (error.name === 'AbortError') throw new Error("Cancelled");
@@ -900,16 +1547,16 @@ const formatFilenameDisplay = (basename) => {
 };
 
 const isAllSelected = computed(() => {
-    if (paginatedFiles.value.length === 0) return false;
-    return paginatedFiles.value.every(f => isFileSelected(f));
+    if (visibleFiles.value.length === 0) return false;
+    return visibleFiles.value.every(f => isFileSelected(f));
 });
 
 const toggleSelectAll = () => {
     if (isAllSelected.value) {
-        const visibleNames = new Set(paginatedFiles.value.map(f => f.basename));
+        const visibleNames = new Set(visibleFiles.value.map(f => f.basename));
         selectedFiles.value = selectedFiles.value.filter(f => !visibleNames.has(f.basename));
     } else {
-        paginatedFiles.value.forEach(f => {
+        visibleFiles.value.forEach(f => {
             if (!isFileSelected(f)) selectedFiles.value.push(f);
         });
     }
@@ -933,6 +1580,10 @@ const toggleSelectAll = () => {
                 </el-popover>
                 <el-tooltip :content="t('chats.clean.button')" placement="bottom">
                     <el-button :icon="Brush" circle @click="openCleanDialog" />
+                </el-tooltip>
+                <el-tooltip :content="t('chats.projects.create')" placement="bottom">
+                    <el-button :icon="Plus" circle @click="createProject"
+                        :disabled="activeView === 'local' ? !localChatPath : !isWebdavConfigValid" />
                 </el-tooltip>
             </div>
             <div class="sync-buttons-container">
@@ -990,7 +1641,7 @@ const toggleSelectAll = () => {
                 </div>
 
                 <!-- 空状态：无文件 -->
-                <div v-else-if="paginatedFiles.length === 0 && !isTableLoading" class="config-prompt-small">
+                <div v-else-if="displayRows.length === 0 && !isTableLoading" class="config-prompt-small">
                     <el-empty :description="t('common.noFileSelected').replace('选中', '')" :image-size="80" />
                 </div>
 
@@ -1021,61 +1672,101 @@ const toggleSelectAll = () => {
                         <div class="chat-column chat-column-actions">{{ t('chats.table.actions') }}</div>
                     </div>
                     <el-scrollbar view-class="chat-list-view">
-                    <!-- 绑定 mousedown 启动框选 -->
+                    <!-- 绑定 mousedown 启动框选；项目拖拽改用自定义指针拖拽（见 onTitleMouseDown） -->
                     <div class="chat-list" ref="chatListRef" @mousedown="onMouseDown">
-                        <div v-for="file in paginatedFiles" :key="file.basename" class="chat-list-item"
-                            :class="{ 'is-selected': isFileSelected(file) }"
-                            @click="handleItemClick(file)"
-                            @contextmenu.prevent.stop="handleItemContextMenu(file, $event)">
+                        <template v-for="row in displayRows" :key="row.kind === 'file' ? `file-${row.file.basename}` : (row.kind === 'project' ? `proj-${row.id}` : 'ungrouped-label')">
 
-                            <!-- 左侧：选择框 -->
-                            <div class="list-checkbox">
-                                <el-checkbox :model-value="isFileSelected(file)"
-                                    @change="(val) => toggleFileSelection(file, val)" @click.stop />
+                            <!-- 项目头行 -->
+                            <div v-if="row.kind === 'project'" class="project-header"
+                                :class="{ 'drag-over': dragOverProjectTarget === row.id }"
+                                :data-project-id="row.id"
+                                @click="toggleProjectCollapse(row.id)">
+                                <el-icon class="project-caret" :class="{ expanded: !row.collapsed }"><ArrowRight /></el-icon>
+                                <el-icon class="project-folder"><Folder /></el-icon>
+                                <span class="project-name" :title="row.name">{{ row.name }}</span>
+                                <span class="project-count">{{ row.count }}</span>
+                                <div class="project-actions" @click.stop>
+                                    <el-tooltip v-if="isWebdavConfigValid"
+                                        :content="activeView === 'local' ? t('chats.projects.syncToCloud') : t('chats.projects.syncToLocal')"
+                                        placement="top" :show-after="500">
+                                        <el-button link type="primary" :icon="Switch" class="action-icon-btn"
+                                            @click.stop="syncProject(row.id)" />
+                                    </el-tooltip>
+                                    <el-tooltip :content="t('chats.projects.rename')" placement="top" :show-after="500">
+                                        <el-button link type="warning" :icon="Edit" class="action-icon-btn"
+                                            @click.stop="renameProject(row.id)" />
+                                    </el-tooltip>
+                                    <el-tooltip :content="t('chats.projects.delete')" placement="top" :show-after="500">
+                                        <el-button link type="danger" :icon="DeleteIcon" class="action-icon-btn"
+                                            @click.stop="deleteProject(row.id)" />
+                                    </el-tooltip>
+                                </div>
                             </div>
 
-                            <div class="list-title" :title="normalizeTitleValue(file)">
-                                {{ normalizeTitleValue(file) }}
+                            <!-- 未分组分隔标签（同时作为"移出项目"放置目标） -->
+                            <div v-else-if="row.kind === 'ungrouped-label'" class="ungrouped-label"
+                                :class="{ 'drag-over': dragOverProjectTarget === PROJECT_UNGROUPED_DROP_ID }">
+                                {{ t('chats.projects.ungrouped') }}
                             </div>
-                            <div v-if="showCreatedAtColumn" class="meta-created">{{ formatDate(file.createdAt || file.lastmod) }}</div>
-                            <div class="meta-updated">{{ formatDate(file.updatedAt || file.lastmod || file.createdAt) }}</div>
-                            <div class="meta-size">{{ formatBytes(file.size) }}</div>
 
-                            <!-- 右侧：仅操作按钮 (移除 list-right-group 容器) -->
-                            <div class="list-actions">
-                                <!-- 1. 聊天按钮 -->
-                                <el-tooltip :content="t('chats.actions.chat')" placement="top" :show-after="500">
-                                    <el-button link type="primary" :icon="ChatDotRound"
-                                        class="action-icon-btn chat-highlight" @click.stop="startChat(file)" />
-                                </el-tooltip>
-                                <!-- 2. 分享/导出按钮（仅本地） -->
-                                <el-tooltip v-if="activeView === 'local'" :content="t('chats.actions.share')" placement="top" :show-after="500">
-                                    <el-button link type="success" :icon="Share" class="action-icon-btn"
-                                        @click.stop="exportLocalChat(file)" />
-                                </el-tooltip>
+                            <!-- 文件行 -->
+                            <div v-else class="chat-list-item"
+                                :class="{ 'is-selected': isFileSelected(row.file), 'in-project': row.projectId }"
+                                :data-basename="row.file.basename"
+                                :data-project-id="row.projectId || ''"
+                                @click="handleItemClick(row.file)"
+                                @contextmenu.prevent.stop="handleItemContextMenu(row.file, $event)">
 
-                                <!-- 3. 同步按钮 -->
-                                <el-tooltip
-                                    :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')"
-                                    placement="top" :show-after="500">
-                                    <el-button link type="primary" :icon="Switch" class="action-icon-btn"
-                                        @click.stop="forceSyncFile(file.basename, activeView === 'local' ? 'upload' : 'download')"
-                                        :loading="singleFileSyncing[file.basename]" />
-                                </el-tooltip>
+                                <!-- 左侧：选择框 -->
+                                <div class="list-checkbox">
+                                    <el-checkbox :model-value="isFileSelected(row.file)"
+                                        @change="(val) => toggleFileSelection(row.file, val)" @click.stop />
+                                </div>
 
-                                <!-- 4. 重命名按钮 -->
-                                <el-tooltip :content="t('chats.actions.rename')" placement="top" :show-after="500">
-                                    <el-button link type="warning" :icon="Edit" class="action-icon-btn"
-                                        @click.stop="renameFile(file)" />
-                                </el-tooltip>
+                                <div class="list-title" :title="normalizeTitleValue(row.file)"
+                                    @mousedown="onTitleMouseDown(row.file, $event)">
+                                    {{ normalizeTitleValue(row.file) }}
+                                </div>
+                                <div v-if="showCreatedAtColumn" class="meta-created">{{ formatDate(row.file.createdAt || row.file.lastmod) }}</div>
+                                <div class="meta-updated">{{ formatDate(row.file.updatedAt || row.file.lastmod || row.file.createdAt) }}</div>
+                                <div class="meta-size">{{ formatBytes(row.file.size) }}</div>
 
-                                <!-- 5. 删除按钮 -->
-                                <el-tooltip :content="t('chats.actions.delete')" placement="top" :show-after="500">
-                                    <el-button link type="danger" :icon="DeleteIcon" class="action-icon-btn"
-                                        @click.stop="deleteFiles([file])" />
-                                </el-tooltip>
+                                <!-- 右侧：仅操作按钮 -->
+                                <div class="list-actions">
+                                    <!-- 1. 聊天按钮 -->
+                                    <el-tooltip :content="t('chats.actions.chat')" placement="top" :show-after="500">
+                                        <el-button link type="primary" :icon="ChatDotRound"
+                                            class="action-icon-btn chat-highlight" @click.stop="startChat(row.file)" />
+                                    </el-tooltip>
+                                    <!-- 2. 分享/导出按钮（仅本地） -->
+                                    <el-tooltip v-if="activeView === 'local'" :content="t('chats.actions.share')" placement="top" :show-after="500">
+                                        <el-button link type="success" :icon="Share" class="action-icon-btn"
+                                            @click.stop="exportLocalChat(row.file)" />
+                                    </el-tooltip>
+
+                                    <!-- 3. 同步按钮 -->
+                                    <el-tooltip
+                                        :content="activeView === 'local' ? t('chats.tooltips.forceUpload') : t('chats.tooltips.forceDownload')"
+                                        placement="top" :show-after="500">
+                                        <el-button link type="primary" :icon="Switch" class="action-icon-btn"
+                                            @click.stop="forceSyncFile(row.file.basename, activeView === 'local' ? 'upload' : 'download')"
+                                            :loading="singleFileSyncing[row.file.basename]" />
+                                    </el-tooltip>
+
+                                    <!-- 4. 重命名按钮 -->
+                                    <el-tooltip :content="t('chats.actions.rename')" placement="top" :show-after="500">
+                                        <el-button link type="warning" :icon="Edit" class="action-icon-btn"
+                                            @click.stop="renameFile(row.file)" />
+                                    </el-tooltip>
+
+                                    <!-- 5. 删除按钮 -->
+                                    <el-tooltip :content="t('chats.actions.delete')" placement="top" :show-after="500">
+                                        <el-button link type="danger" :icon="DeleteIcon" class="action-icon-btn"
+                                            @click.stop="deleteFiles([row.file])" />
+                                    </el-tooltip>
+                                </div>
                             </div>
-                        </div>
+                        </template>
                     </div>
                 </el-scrollbar>
                 </div>
@@ -1084,12 +1775,12 @@ const toggleSelectAll = () => {
             <div class="footer-bar">
                 <div class="footer-left">
                     <el-checkbox :model-value="isAllSelected" @change="toggleSelectAll" :label="t('common.selectAll')" size="large"
-                        :disabled="paginatedFiles.length === 0" />
+                        :disabled="visibleFiles.length === 0" />
                     <span v-if="selectedFiles.length > 0" class="selection-count">{{ t('chats.selection.count', { count: selectedFiles.length }) }}</span>
                 </div>
                 <div class="footer-center">
-                    <el-pagination v-if="currentFiles.length > 0" v-model:current-page="currentPage"
-                        v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="currentFiles.length"
+                    <el-pagination v-if="ungroupedFiles.length > 0" v-model:current-page="currentPage"
+                        v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="ungroupedFiles.length"
                         :pager-count="5" layout="total, sizes, prev, pager, next, jumper" background size="small" />
                 </div>
                 <div class="footer-right">
@@ -1157,6 +1848,34 @@ const toggleSelectAll = () => {
             </el-button>
         </template>
     </el-dialog>
+
+    <!-- 删除项目：三选项 -->
+    <el-dialog v-model="projectDeleteDialog.visible" :title="t('chats.projects.delete')" width="420px" append-to-body
+        align-center class="project-delete-dialog">
+        <p class="project-delete-message">{{ t('chats.projects.deleteDialogMessage', { name: projectDeleteDialog.name }) }}</p>
+        <div class="project-delete-options">
+            <button type="button" class="project-delete-option" :disabled="projectDeleteDialog.busy"
+                @click="confirmDeleteProjectKeepChats">
+                <span class="opt-title">{{ t('chats.projects.deleteKeepChats') }}</span>
+                <span class="opt-desc">{{ t('chats.projects.deleteKeepChatsDesc') }}</span>
+            </button>
+            <button type="button" class="project-delete-option danger" :disabled="projectDeleteDialog.busy"
+                @click="confirmDeleteProjectWithChats">
+                <span class="opt-title">{{ t('chats.projects.deleteWithChats') }}</span>
+                <span class="opt-desc">{{ t('chats.projects.deleteWithChatsDesc') }}</span>
+            </button>
+        </div>
+        <template #footer>
+            <el-button :disabled="projectDeleteDialog.busy" @click="projectDeleteDialog.visible = false">
+                {{ t('chats.projects.deleteCancel') }}
+            </el-button>
+        </template>
+    </el-dialog>
+
+    <!-- 自定义拖拽悬浮提示 -->
+    <div v-show="isProjectDragging" class="drag-ghost" :style="{ top: dragGhostY + 'px', left: dragGhostX + 'px' }">
+        {{ dragGhostLabel }}
+    </div>
 </template>
 
 <style scoped>
@@ -1668,5 +2387,201 @@ html.dark .custom-clean-scrollbar :deep(.el-scrollbar__thumb:hover) {
     flex-shrink: 0;
     color: var(--text-tertiary);
     margin-right: 12px;
+}
+
+/* --- 项目分组 --- */
+.project-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-top: 2px;
+    border-radius: 10px;
+    cursor: pointer;
+    user-select: none;
+    background-color: var(--bg-tertiary);
+    transition: background-color 0.2s;
+}
+
+.project-header:hover {
+    background-color: var(--bg-accent-soft, var(--bg-tertiary));
+}
+
+.project-header.drag-over {
+    outline: 2px dashed var(--el-color-primary);
+    outline-offset: -2px;
+    background-color: var(--el-color-primary-light-9);
+}
+
+.ungrouped-label.drag-over {
+    outline: 2px dashed var(--el-color-primary);
+    outline-offset: -2px;
+    border-radius: 8px;
+    color: var(--el-color-primary);
+}
+
+.project-caret {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease;
+}
+
+.project-caret.expanded {
+    transform: rotate(90deg);
+}
+
+.project-folder {
+    font-size: 14px;
+    color: var(--el-color-primary);
+}
+
+.project-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+.project-count {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    background-color: var(--bg-primary);
+    border-radius: 10px;
+    padding: 0 8px;
+    line-height: 18px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.project-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.project-header:hover .project-actions {
+    opacity: 1;
+}
+
+/* 未分组分隔标签 */
+.ungrouped-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    padding: 10px 12px 4px;
+    letter-spacing: 0.02em;
+}
+
+/* 项目内文件行缩进 */
+.chat-list-item.in-project {
+    padding-left: 28px;
+}
+
+/* 自定义拖拽悬浮提示 */
+.drag-ghost {
+    position: fixed;
+    z-index: 99999;
+    pointer-events: none;
+    max-width: 260px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background-color: var(--el-color-primary);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.project-delete-message {
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.project-delete-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.project-delete-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md, 10px);
+    background-color: var(--bg-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+}
+
+.project-delete-option:hover {
+    border-color: var(--el-color-primary);
+    background-color: var(--el-color-primary-light-9);
+}
+
+.project-delete-option:active {
+    transform: scale(0.995);
+}
+
+.project-delete-option:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.project-delete-option.danger:hover {
+    border-color: var(--el-color-danger);
+    background-color: var(--el-color-danger-light-9);
+}
+
+.project-delete-option .opt-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.project-delete-option.danger .opt-title {
+    color: var(--el-color-danger);
+}
+
+.project-delete-option .opt-desc {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+</style>
+
+<style>
+.project-delete-dialog .el-dialog__header {
+    padding: 20px 20px 14px;
+    margin-right: 0;
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.project-delete-dialog .el-dialog__body {
+    padding: 18px 20px 6px;
+}
+
+.project-delete-dialog .el-dialog__footer {
+    padding: 8px 20px 18px;
+}
+
+.project-delete-dialog .el-dialog__title {
+    font-size: 16px;
+    font-weight: 600;
 }
 </style>

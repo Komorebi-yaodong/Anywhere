@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar, ElSwitch } from 'element-plus';
+import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar, ElSwitch, ElSelect, ElOption } from 'element-plus';
 import { createClient } from "webdav/web";
 import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning, Cpu, ArrowUp, ArrowDown, Refresh } from '@element-plus/icons-vue';
 
@@ -2627,6 +2627,123 @@ const getSessionDataAsObject = () => {
     isAutoApproveTools: isAutoApproveTools.value
   };
 }
+// --- 项目（目录）归属：窗口端 helper ---
+const stripJsonName = (value) => {
+  const name = String(value || '').trim();
+  return name.toLowerCase().endsWith('.json') ? name.slice(0, -5) : name;
+};
+
+const normalizeWindowProjects = (data) => {
+  const projects = Array.isArray(data?.projects) ? data.projects : [];
+  return {
+    version: Number(data?.version) || 1,
+    projects: projects
+      .filter((p) => p && typeof p === 'object')
+      .map((p) => ({
+        id: String(p.id || '').trim(),
+        name: String(p.name || '').trim() || String(p.id || '').trim(),
+        files: Array.isArray(p.files) ? p.files.map((f) => String(f || '').trim()).filter(Boolean) : []
+      }))
+      .filter((p) => p.id)
+  };
+};
+
+const loadProjectsForScope = async (scope) => {
+  try {
+    if (scope === 'cloud') {
+      const { url, username, password, data_path } = currentConfig.value?.webdav || {};
+      if (!url || !data_path) return { version: 1, projects: [] };
+      const client = createClient(url, { username, password });
+      const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
+      const remotePath = `${remoteDir}/projects.yaml`;
+      if (!(await client.exists(remotePath))) return { version: 1, projects: [] };
+      const text = await client.getFileContents(remotePath, { format: 'text' });
+      return normalizeWindowProjects(await window.api.parseProjectsYaml(typeof text === 'string' ? text : String(text)));
+    }
+    const localPath = currentConfig.value?.webdav?.localChatPath || '';
+    if (!localPath) return { version: 1, projects: [] };
+    return normalizeWindowProjects(await window.api.readLocalProjects(localPath));
+  } catch (error) {
+    console.warn('[projects] load for scope failed:', error);
+    return { version: 1, projects: [] };
+  }
+};
+
+const findProjectIdByFilename = (projectsData, filename) => {
+  const stripped = stripJsonName(filename);
+  const project = (projectsData?.projects || []).find((p) =>
+    (p.files || []).some((f) => stripJsonName(f) === stripped)
+  );
+  return project?.id || '';
+};
+
+const renderProjectSelectRow = ({ projects, selectedProjectId }) => h(
+  'div',
+  { class: 'filename-project-row' },
+  [
+    h('span', { class: 'filename-project-label' }, '项目'),
+    h(ElSelect, {
+      modelValue: selectedProjectId.value,
+      'onUpdate:modelValue': (val) => { selectedProjectId.value = val; },
+      placeholder: '未分组',
+      clearable: true,
+      class: 'filename-project-select',
+      popperClass: 'filename-project-popper',
+      teleported: true,
+      placement: 'bottom-start'
+    }, () => [
+      h(ElOption, { label: '未分组', value: '' }),
+      ...projects.map((p) => h(ElOption, { key: p.id, label: p.name, value: p.id }))
+    ])
+  ]
+);
+
+// 本地项目归属重写：移除旧名 + 当前名，按需加入目标项目（projectId 为空=未分组）。
+const reassignLocalProject = async ({ projectId, projectName, addFilename, removeFilenames = [] }) => {
+  const localPath = currentConfig.value?.webdav?.localChatPath || '';
+  if (!localPath) return;
+  const data = normalizeWindowProjects(await window.api.readLocalProjects(localPath));
+  const removeSet = new Set([addFilename, ...removeFilenames].map((n) => stripJsonName(n)).filter(Boolean));
+  let projects = data.projects.map((p) => ({
+    ...p,
+    files: (p.files || []).filter((f) => !removeSet.has(stripJsonName(f)))
+  }));
+  if (projectId && addFilename) {
+    if (!projects.some((p) => p.id === projectId)) {
+      projects.push({ id: projectId, name: projectName || projectId, files: [] });
+    }
+    projects = projects.map((p) =>
+      p.id === projectId ? { ...p, files: [...p.files, addFilename] } : p
+    );
+  }
+  await window.api.writeLocalProjects(localPath, { version: data.version || 1, projects });
+};
+
+// 云端项目归属：读取云端 projects.yaml → 单文件归属合并 → 写回（webdav 在渲染层）。
+const assignCloudProject = async ({ projectId, projectName, basename }) => {
+  const { url, username, password, data_path } = currentConfig.value?.webdav || {};
+  if (!url || !data_path) return;
+  const client = createClient(url, { username, password });
+  const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
+  const remotePath = `${remoteDir}/projects.yaml`;
+  let current = { version: 1, projects: [] };
+  try {
+    if (await client.exists(remotePath)) {
+      const text = await client.getFileContents(remotePath, { format: 'text' });
+      current = await window.api.parseProjectsYaml(typeof text === 'string' ? text : String(text));
+    }
+  } catch {
+    current = { version: 1, projects: [] };
+  }
+  const merged = await window.api.mergeFileAssignment(current, {
+    basename,
+    projectId: projectId || '',
+    projectName: projectName || ''
+  });
+  const content = await window.api.serializeProjectsYaml(merged);
+  await client.putFileContents(remotePath, content, { overwrite: true });
+};
+
 const saveSessionToCloud = async () => {
   const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
@@ -2638,6 +2755,8 @@ const saveSessionToCloud = async () => {
     uniqueDirPath: currentConfig.value?.webdav?.localChatPath || '',
     fallbackBasename: defaultBasename
   });
+  const projectsData = await loadProjectsForScope('cloud');
+  const selectedProjectId = ref(findProjectIdByFilename(projectsData, `${defaultBasename}.json`));
   try {
     await ElMessageBox({
       title: '保存到云端',
@@ -2664,7 +2783,8 @@ const saveSessionToCloud = async () => {
             }
           }
         },
-          { append: () => h('div', { class: 'input-suffix-display' }, '.json') })]),
+          { append: () => h('div', { class: 'input-suffix-display' }, '.json') }),
+        renderProjectSelectRow({ projects: projectsData.projects, selectedProjectId })]),
       showCancelButton: true, confirmButtonText: '确认', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
       beforeClose: async (action, instance, done) => {
         if (action === 'confirm') {
@@ -2684,6 +2804,12 @@ const saveSessionToCloud = async () => {
             if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
             await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
             defaultConversationName.value = finalBasename;
+            try {
+              const projectName = projectsData.projects.find((p) => p.id === selectedProjectId.value)?.name || '';
+              await assignCloudProject({ projectId: selectedProjectId.value, projectName, basename: filename });
+            } catch (projectError) {
+              console.warn('[projects] 更新云端项目归属失败:', projectError);
+            }
             showDismissibleMessage.success('会话已成功保存到云端！');
             done();
           } catch (error) {
@@ -3231,6 +3357,8 @@ const saveSessionAsJson = async () => {
     uniqueDirPath: currentConfig.value?.webdav?.localChatPath || '',
     fallbackBasename: defaultBasename
   });
+  const projectsData = await loadProjectsForScope('local');
+  const selectedProjectId = ref(findProjectIdByFilename(projectsData, `${defaultBasename}.json`));
   try {
     await ElMessageBox({
       title: '保存为 JSON',
@@ -3257,7 +3385,8 @@ const saveSessionAsJson = async () => {
             }
           }
         },
-          { append: () => h('div', { class: 'input-suffix-display' }, '.json') })]),
+          { append: () => h('div', { class: 'input-suffix-display' }, '.json') }),
+        renderProjectSelectRow({ projects: projectsData.projects, selectedProjectId })]),
       showCancelButton: true, confirmButtonText: '保存', cancelButtonText: '取消', customClass: 'filename-prompt-dialog',
       beforeClose: async (action, instance, done) => {
         if (action === 'confirm') {
@@ -3272,6 +3401,20 @@ const saveSessionAsJson = async () => {
             // 优化逻辑：如果有本地路径，直接写入；否则弹出保存框
             if (localChatPath) {
               await persistSessionToLocalJsonFile(finalBasename);
+              // 更新项目归属（仅在已配置本地路径时维护 projects.yaml）
+              try {
+                const oldFilename = defaultConversationName.value ? `${defaultConversationName.value}.json` : '';
+                const removeFilenames = oldFilename && oldFilename !== finalFilename ? [oldFilename] : [];
+                const projectName = projectsData.projects.find((p) => p.id === selectedProjectId.value)?.name || '';
+                await reassignLocalProject({
+                  projectId: selectedProjectId.value,
+                  projectName,
+                  addFilename: finalFilename,
+                  removeFilenames
+                });
+              } catch (projectError) {
+                console.warn('[projects] 更新本地项目归属失败:', projectError);
+              }
             } else {
               // 未配置路径，弹出系统选择框
               await window.api.saveFile({
@@ -3349,70 +3492,150 @@ const handleRenameSession = async () => {
   const oldFilename = `${oldBaseName}.json`;
   // 简单拼接路径，electron/node 环境下通常能正确处理
   const oldFilePath = `${localPath}/${oldFilename}`;
+  const inputValue = ref(oldBaseName);
+  const projectsData = await loadProjectsForScope('local');
+  const originalProjectId = findProjectIdByFilename(projectsData, oldFilename);
+  const selectedProjectId = ref(originalProjectId);
 
   try {
-    const { value: userInput } = await ElMessageBox.prompt(
-      '请输入新的会话名称',
-      '重命名对话',
-      {
-        inputValue: oldBaseName,
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-        inputValidator: (val) => {
-          if (!val || !val.trim()) return '名称不能为空';
-          if (/[\\/:*?"<>|]/.test(val)) return '文件名包含非法字符';
-          return true;
-        },
-        customClass: 'filename-prompt-dialog', // 复用已有的弹窗样式
-      }
-    );
-
-    let newBaseName = (userInput || "").trim();
-    if (newBaseName.toLowerCase().endsWith('.json')) newBaseName = newBaseName.slice(0, -5);
-
-    if (newBaseName === oldBaseName) return;
-
-    const newFilename = `${newBaseName}.json`;
-    const newFilePath = `${localPath}/${newFilename}`;
-
-    // 检查本地是否存在同名文件
-    const files = await window.api.listJsonFiles(localPath);
-    if (files.some(f => f.basename === newFilename)) {
-      showDismissibleMessage.error(`文件名 "${newFilename}" 已存在，操作取消`);
-      return;
-    }
-
-    // 执行本地重命名
-    await window.api.renameLocalFile(oldFilePath, newFilePath);
-    defaultConversationName.value = newBaseName;
-    showDismissibleMessage.success('本地重命名成功');
-
-    // 尝试同步重命名云端文件
-    const { url, username, password, data_path } = currentConfig.value.webdav || {};
-    if (url && data_path) {
-      try {
-        const client = createClient(url, { username, password });
-        const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
-        const oldRemotePath = `${remoteDir}/${oldFilename}`;
-        const newRemotePath = `${remoteDir}/${newFilename}`;
-
-        // 检查云端是否存在该文件
-        if (await client.exists(oldRemotePath)) {
-          await ElMessageBox.confirm(
-            '云端也存在同名文件，是否同步重命名？',
-            '同步操作提示',
-            { confirmButtonText: '是', cancelButtonText: '否', type: 'info' }
-          );
-          await renameRemoteSessionFileWithMetadata(client, remoteDir, oldFilename, newFilename);
-          showDismissibleMessage.success('云端同步重命名成功');
+    await ElMessageBox({
+      title: '重命名对话',
+      message: () => h('div', null, [
+        renderFilenamePromptTitleRow({
+          text: '请输入新的会话名称',
+          canUseAutoNaming: false,
+          isAutoNaming: null,
+          onClick: null
+        }),
+        h(ElInput, {
+          modelValue: inputValue.value,
+          'onUpdate:modelValue': (val) => { inputValue.value = val; },
+          placeholder: '会话名称',
+          ref: (elInputInstance) => {
+            if (elInputInstance) {
+              setTimeout(() => elInputInstance.focus(), 100);
+            }
+          },
+          onKeydown: (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              document.querySelector('.filename-prompt-dialog .el-message-box__btns .el-button--primary')?.click();
+            }
+          }
+        }),
+        renderProjectSelectRow({ projects: projectsData.projects, selectedProjectId })
+      ]),
+      showCancelButton: true,
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      customClass: 'filename-prompt-dialog',
+      beforeClose: async (action, instance, done) => {
+        if (action !== 'confirm') {
+          done();
+          return;
         }
-      } catch (e) {
-        if (e !== 'cancel' && e !== 'close') {
-          console.warn('Cloud rename skipped:', e);
+
+        let newBaseName = (inputValue.value || '').trim();
+        if (!newBaseName) {
+          showDismissibleMessage.error('名称不能为空');
+          return;
+        }
+        if (/[\\/:*?"<>|]/.test(newBaseName)) {
+          showDismissibleMessage.error('文件名包含非法字符');
+          return;
+        }
+        if (newBaseName.toLowerCase().endsWith('.json')) newBaseName = newBaseName.slice(0, -5);
+        if (!newBaseName) {
+          showDismissibleMessage.error('名称不能为空');
+          return;
+        }
+
+        const projectChanged = selectedProjectId.value !== originalProjectId;
+        if (newBaseName === oldBaseName) {
+          // 名称未变，仅在项目归属变化时更新 projects.yaml
+          if (projectChanged) {
+            instance.confirmButtonLoading = true;
+            try {
+              const projectName = projectsData.projects.find((p) => p.id === selectedProjectId.value)?.name || '';
+              await reassignLocalProject({
+                projectId: selectedProjectId.value,
+                projectName,
+                addFilename: oldFilename,
+                removeFilenames: []
+              });
+              showDismissibleMessage.success('项目归属已更新');
+            } catch (projectError) {
+              console.warn('[projects] 更新本地项目归属失败:', projectError);
+              showDismissibleMessage.error('更新项目归属失败');
+            } finally {
+              instance.confirmButtonLoading = false;
+            }
+          }
+          done();
+          return;
+        }
+
+        const newFilename = `${newBaseName}.json`;
+        const newFilePath = `${localPath}/${newFilename}`;
+
+        // 检查本地是否存在同名文件
+        const files = await window.api.listJsonFiles(localPath);
+        if (files.some(f => f.basename === newFilename)) {
+          showDismissibleMessage.error(`文件名 "${newFilename}" 已存在，操作取消`);
+          return;
+        }
+
+        instance.confirmButtonLoading = true;
+        try {
+          // 执行本地重命名
+          await window.api.renameLocalFile(oldFilePath, newFilePath);
+          defaultConversationName.value = newBaseName;
+          // 同步更新项目归属：移除旧名，新名按所选项目归属
+          try {
+            const projectName = projectsData.projects.find((p) => p.id === selectedProjectId.value)?.name || '';
+            await reassignLocalProject({
+              projectId: selectedProjectId.value,
+              projectName,
+              addFilename: newFilename,
+              removeFilenames: [oldFilename]
+            });
+          } catch (projectError) {
+            console.warn('[projects] 重命名后更新本地项目归属失败:', projectError);
+          }
+          showDismissibleMessage.success('本地重命名成功');
+          done();
+
+          // 尝试同步重命名云端文件
+          const { url, username, password, data_path } = currentConfig.value.webdav || {};
+          if (url && data_path) {
+            try {
+              const client = createClient(url, { username, password });
+              const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
+              const oldRemotePath = `${remoteDir}/${oldFilename}`;
+
+              // 检查云端是否存在该文件
+              if (await client.exists(oldRemotePath)) {
+                await ElMessageBox.confirm(
+                  '云端也存在同名文件，是否同步重命名？',
+                  '同步操作提示',
+                  { confirmButtonText: '是', cancelButtonText: '否', type: 'info' }
+                );
+                await renameRemoteSessionFileWithMetadata(client, remoteDir, oldFilename, newFilename);
+                showDismissibleMessage.success('云端同步重命名成功');
+              }
+            } catch (e) {
+              if (e !== 'cancel' && e !== 'close') {
+                console.warn('Cloud rename skipped:', e);
+              }
+            }
+          }
+        } catch (error) {
+          showDismissibleMessage.error(`操作失败: ${error.message}`);
+        } finally {
+          instance.confirmButtonLoading = false;
         }
       }
-    }
-
+    });
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
       showDismissibleMessage.error(`操作失败: ${error.message}`);
@@ -6100,6 +6323,26 @@ html.dark .filename-prompt-dialog .el-input-group__append {
   background-color: var(--el-bg-color);
   color: var(--el-text-color-placeholder);
   border-color: var(--el-border-color);
+}
+
+.filename-project-row {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.filename-project-label {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+.filename-project-select {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Custom Viewer Actions */
