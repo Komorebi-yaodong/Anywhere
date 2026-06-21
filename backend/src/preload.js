@@ -542,6 +542,10 @@ const commandHandlers = {
     }
 
     if (promptConfig.showMode === 'window') {
+      if (type === "files" && payload[0].isDirectory) {
+        payload = "`"+payload[0].path+"`";
+        type = "over";
+      }
       const msg = {
         os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
         code,
@@ -562,7 +566,14 @@ const commandHandlers = {
       } else if (type === "img") {
         content = [{ type: "image_url", image_url: { url: payload } }];
       } else if (type === "files") {
-        content = await sendfileDirect(payload);
+        const isDirectory = payload[0].isDirectory;
+        if (isDirectory) {
+          content = "`"+payload[0].path+"`";
+          msg.type = "over";
+        }
+        else{
+          content = await sendfileDirect(payload);
+        }
       }
 
       if (content) {

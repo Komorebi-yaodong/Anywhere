@@ -392,7 +392,7 @@ async function getConfig() {
 
 function checkConfig(config) {
   let flag = false;
-  const CURRENT_VERSION = "2.6.10";
+  const CURRENT_VERSION = "2.8.8";
 
   // --- 1. 版本检查与旧数据迁移 ---
   if (config.version !== CURRENT_VERSION) {
@@ -889,6 +889,7 @@ function updateConfig(newConfig) {
         expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
         expectedMatchFeature.cmds.push({ type: "img", label: key });
         expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file" });
+        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "directory" });
       } else if (prompt.type === "files") {
         expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file" });
       } else if (prompt.type === "img") {
@@ -903,6 +904,7 @@ function updateConfig(newConfig) {
           });
         } else {
           expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
+          expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "directory" });
         }
       }
       utools.setFeature(expectedMatchFeature);
@@ -1210,7 +1212,8 @@ async function openWindow(config, msg) {
         cmds: [
           { type: "over", label: displayName, maxLength: 99999999999 },
           { type: "img", label: displayName },
-          { type: "files", label: displayName, fileType: "file" }
+          { type: "files", label: displayName, fileType: "file" },
+          { type: "files", label: displayName, fileType: "directory" }
         ]
       });
     } catch (e) {
