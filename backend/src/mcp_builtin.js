@@ -566,7 +566,11 @@ const BUILTIN_TOOLS = {
                         enum: ["content", "files_with_matches", "count"],
                         description: "Output mode: 'content' (lines), 'files_with_matches' (paths only), 'count'."
                     },
-                    multiline: { type: "boolean", description: "Enable multiline matching. When true, enables 'm' and 's' (dotAll) regex flags so '.' matches newlines." }
+                    multiline: { type: "boolean", description: "Enable multiline matching. When true, enables 'm' and 's' (dotAll) regex flags so '.' matches newlines." },
+                    max_results: { type: "integer", description: "Optional. Maximum result blocks to return for content/files modes. Defaults to 20, max 100." },
+                    context_lines: { type: "integer", description: "Optional. Number of lines before and after each content match. Defaults to 2, max 10." },
+                    max_output_chars: { type: "integer", description: "Optional. Maximum total characters returned. Defaults to 20000, max 80000." },
+                    max_line_length: { type: "integer", description: "Optional. Maximum characters per context line before truncation. Defaults to 500, max 2000." }
                 },
                 required: ["pattern", "path"]
             }
@@ -1818,7 +1822,17 @@ const handlers = {
     },
 
     // 2. Grep Search
-    grep_search: async ({ pattern, path: searchPath, glob, output_mode = 'content', multiline = false }, context, signal) => {
+    grep_search: async ({
+        pattern,
+        path: searchPath,
+        glob,
+        output_mode = 'content',
+        multiline = false,
+        max_results,
+        context_lines,
+        max_output_chars,
+        max_line_length
+    }, context, signal) => {
         try {
             if (!searchPath) {
                 return "Error: You MUST provide a 'path' argument to specify the directory.";
@@ -1861,19 +1875,62 @@ const handlers = {
             const globRegex = glob ? globToRegex(glob) : null;
             const normalizedRoot = normalizePath(isSingleFile ? path.dirname(targetPath) : targetPath);
 
+            const clampInteger = (value, fallback, min, max) => {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric)) return fallback;
+                return Math.max(min, Math.min(max, Math.floor(numeric)));
+            };
+
+            const effectiveMaxResults = clampInteger(max_results, 20, 1, 100);
+            const effectiveContextLines = clampInteger(context_lines, 2, 0, 10);
+            const effectiveMaxOutputChars = clampInteger(max_output_chars, 20000, 1000, 80000);
+            const effectiveMaxLineLength = clampInteger(max_line_length, 500, 80, 2000);
+            const outputBudgetApplies = output_mode !== 'count';
+
             const results = [];
+            let outputChars = 0;
+            let outputTruncated = false;
             let matchCount = 0;
             const MAX_SCANNED = 5000;
-            const MAX_RESULTS_BLOCKS = 100;
             let scanned = 0;
             const filesToSearch = isSingleFile ? [targetPath] : walkDir(targetPath, 20, 0, signal);
+
+            const truncateLine = (line = '') => {
+                const text = String(line ?? '');
+                if (text.length <= effectiveMaxLineLength) return text;
+                return `${text.slice(0, effectiveMaxLineLength)}... [line truncated, ${text.length - effectiveMaxLineLength} chars omitted]`;
+            };
+
+            const pushResult = (block, { force = false } = {}) => {
+                const text = String(block ?? '');
+                if (!outputBudgetApplies) {
+                    results.push(text);
+                    return true;
+                }
+
+                if (!force && outputChars + text.length > effectiveMaxOutputChars) {
+                    const remaining = Math.max(0, effectiveMaxOutputChars - outputChars);
+                    if (remaining > 200) {
+                        results.push(`${text.slice(0, remaining)}\n[System Warning] Current result block truncated by max_output_chars=${effectiveMaxOutputChars}.`);
+                        outputChars = effectiveMaxOutputChars;
+                    }
+                    outputTruncated = true;
+                    return false;
+                }
+
+                results.push(text);
+                outputChars += text.length + 1;
+                return true;
+            };
 
             for await (const filePath of filesToSearch) {
                 if (signal && signal.aborted) throw new Error("Operation aborted by user.");
                 if (scanned++ > MAX_SCANNED) {
-                    results.push(`\n[System] Scan limit reached (${MAX_SCANNED} files). Please narrow down your search path or use a glob filter.`);
+                    pushResult(`\n[System] Scan limit reached (${MAX_SCANNED} files). Please narrow down your search path or use a glob filter.`, { force: true });
                     break;
                 }
+
+                if (outputTruncated) break;
 
                 if (globRegex) {
                     const normalizedFilePath = normalizePath(filePath);
@@ -1893,9 +1950,9 @@ const handlers = {
 
                     if (output_mode === 'files_with_matches') {
                         if (searchRegex.test(content)) {
-                            results.push(filePath);
                             searchRegex.lastIndex = 0;
-                            if (results.length >= MAX_RESULTS_BLOCKS) break;
+                            if (!pushResult(filePath)) break;
+                            if (results.length >= effectiveMaxResults) break;
                         }
                     } else {
                         const matches = [...content.matchAll(searchRegex)];
@@ -1906,7 +1963,8 @@ const handlers = {
                             const lines = content.split(/\r?\n/);
 
                             for (const m of matches) {
-                                if (results.length >= MAX_RESULTS_BLOCKS) break;
+                                if (results.length >= effectiveMaxResults) break;
+                                if (outputTruncated) break;
 
                                 const offset = m.index;
                                 const lineNum = content.substring(0, offset).split(/\r?\n/).length;
@@ -1919,14 +1977,13 @@ const handlers = {
                                 const newLinesInMatch = (matchText.match(/\n/g) || []).length;
                                 const endLineNum = lineNum + newLinesInMatch;
 
-                                const contextLines = 10;
-                                const startLineIdx = Math.max(0, lineNum - 1 - contextLines);
-                                const endLineIdx = Math.min(lines.length, endLineNum - 1 + 1 + contextLines);
+                                const startLineIdx = Math.max(0, lineNum - 1 - effectiveContextLines);
+                                const endLineIdx = Math.min(lines.length, endLineNum - 1 + 1 + effectiveContextLines);
 
                                 let contextBlock = "";
                                 for (let i = startLineIdx; i < endLineIdx; i++) {
                                     const currentLineNum = i + 1;
-                                    const lineContent = lines[i];
+                                    const lineContent = truncateLine(lines[i]);
                                     const isMatch = (currentLineNum >= lineNum && currentLineNum <= endLineNum);
                                     const marker = isMatch ? "=>" : "  ";
                                     contextBlock += `${marker} ${String(currentLineNum).padStart(4)} | ${lineContent}\n`;
@@ -1937,21 +1994,24 @@ Location: Line ${lineNum}, Col ${colNum} (Start Offset: ${offset})
 Context:
 ${contextBlock}
 --------------------------------------------------`;
-                                results.push(block);
+                                if (!pushResult(block)) break;
                             }
                         }
                     }
                 } catch (readErr) { /* ignore */ }
 
-                if (output_mode !== 'count' && results.length >= MAX_RESULTS_BLOCKS) {
-                    results.push(`\n[System Warning] Output truncated. Reached maximum of ${MAX_RESULTS_BLOCKS} result blocks. Please use a more specific pattern.`);
+                if (output_mode !== 'count' && results.length >= effectiveMaxResults) {
+                    pushResult(`\n[System Warning] Output truncated. Reached maximum of ${effectiveMaxResults} result blocks. Use a more specific pattern, output_mode='files_with_matches', or increase max_results.`, { force: true });
                     break;
                 }
             }
 
             if (output_mode === 'count') return `Total matches: ${matchCount}`;
             if (results.length === 0) return "No matches found.";
-            return results.join('\n');
+            const suffix = outputTruncated
+                ? `\n[System Warning] Output truncated. Reached max_output_chars=${effectiveMaxOutputChars}. Use a narrower path/glob/pattern, output_mode='files_with_matches', or increase max_output_chars.`
+                : '';
+            return results.join('\n') + suffix;
         } catch (e) {
             return `Grep error: ${e.message}`;
         }
