@@ -15,6 +15,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import html2canvas from 'html2canvas';
 
+import { encode as encodeGptTokens } from 'gpt-tokenizer';
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
 
@@ -2250,6 +2251,7 @@ onMounted(async () => {
 const AUTO_NAMING_TIMEOUT_MS = 30000;
 const AUTO_NAMING_MAX_TEXT_CHARS = 1000;
 const AUTO_NAMING_MAX_IMAGES = 3;
+const AUTO_NAMING_MAX_TITLE_TOKENS = 40;
 const buildAutoNamingSystemPrompt = () => {
   const locale = currentConfig.value?.language === 'en'
     ? 'English'
@@ -2264,7 +2266,7 @@ Rules:
 2. Do not use punctuation, separators, quotes, emoji, or other special symbols.
 3. Reply directly with the title only.
 4. If the user's primary language is unclear, summarize using ${locale}.
-5. Keep the title brief and natural for mixed-language display. Prefer a short title that fits within about 16 display-width units (for example, around 8 Chinese/Japanese characters or around 16 ASCII letters, with mixed-language text balanced naturally).`;
+5. Keep the title natural and concise. Titles within about ${AUTO_NAMING_MAX_TITLE_TOKENS} tokenizer tokens are acceptable; do not intentionally shorten a clear normal-length mixed-language title.`;
 };
 
 const sanitizeConversationTitlePart = (value, maxLength = 30) => {
@@ -2280,38 +2282,39 @@ const sanitizeConversationTitlePart = (value, maxLength = 30) => {
 };
 
 
-const computeConversationTitleDisplayWidth = (value = '') => {
-  return Array.from(String(value || '')).reduce((total, char) => {
-    if (/\s/u.test(char)) return total + 0.5;
-    if (/^[\u0000-\u00ff]$/u.test(char)) return total + 1;
-    return total + 2;
-  }, 0);
+const countConversationTitleTokens = (value = '') => {
+  try {
+    return encodeGptTokens(String(value || '')).length;
+  } catch {
+    return Array.from(String(value || '')).length;
+  }
 };
 
-const truncateConversationTitleByDisplayWidth = (value, maxDisplayWidth = 16) => {
-  const normalized = typeof value === 'string' ? value : String(value ?? '');
-  let result = '';
-  let usedWidth = 0;
+const truncateConversationTitleByTokens = (value, maxTokens = AUTO_NAMING_MAX_TITLE_TOKENS) => {
+  const normalized = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+  if (!normalized) return '';
 
+  if (countConversationTitleTokens(normalized) <= maxTokens) {
+    return normalized;
+  }
+
+  let result = '';
   for (const char of Array.from(normalized)) {
-    const charWidth = /\s/u.test(char)
-      ? 0.5
-      : (/^[\u0000-\u00ff]$/u.test(char) ? 1 : 2);
-    if (usedWidth + charWidth > maxDisplayWidth) break;
-    result += char;
-    usedWidth += charWidth;
+    const next = result + char;
+    if (countConversationTitleTokens(next) > maxTokens) break;
+    result = next;
   }
 
   return result.trim();
 };
 
 const sanitizeAutoNamingTitlePart = (value) => {
-  const normalized = sanitizeConversationTitlePart(value, 60)
+  const normalized = sanitizeConversationTitlePart(value, 1000)
     .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  return truncateConversationTitleByDisplayWidth(normalized, 16);
+  return truncateConversationTitleByTokens(normalized, AUTO_NAMING_MAX_TITLE_TOKENS);
 };
 
 const buildConversationTimestampSuffix = (date = new Date()) => {
