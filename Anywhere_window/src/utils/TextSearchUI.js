@@ -423,6 +423,46 @@ export default class TextSearchUI {
     this.updateCount();
   }
 
+
+  _getScrollableAncestor(element) {
+    let node = element?.parentElement || null;
+    while (node && node !== document.body && node !== document.documentElement) {
+      const style = window.getComputedStyle(node);
+      const overflowY = style.overflowY;
+      const canScroll = /(auto|scroll|overlay)/.test(overflowY) && node.scrollHeight > node.clientHeight;
+      if (canScroll) return node;
+      node = node.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+
+  _scrollMarkIntoView(mark) {
+    if (!mark) return;
+
+    const container = this.searchScope?.contains(mark)
+      ? this._getScrollableAncestor(mark)
+      : (document.scrollingElement || document.documentElement);
+
+    if (!container) {
+      mark.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+      return;
+    }
+
+    const markRect = mark.getBoundingClientRect();
+    const containerRect = container === document.scrollingElement || container === document.documentElement
+      ? { top: 0, height: window.innerHeight }
+      : container.getBoundingClientRect();
+    const currentTop = container.scrollTop || 0;
+    const targetTop = currentTop + (markRect.top - containerRect.top) - (containerRect.height / 2) + (markRect.height / 2);
+    const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const nextTop = Math.max(0, Math.min(maxTop, targetTop));
+
+    container.scrollTo({
+      top: nextTop,
+      behavior: 'auto'
+    });
+  }
+
   jumpTo(index) {
     if (this.matches.length === 0) return;
 
@@ -435,10 +475,7 @@ export default class TextSearchUI {
     const currentMark = this.matches[this.currentIndex];
     currentMark.classList.add('current');
     
-    currentMark.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center'
-    });
+    this._scrollMarkIntoView(currentMark);
 
     this.updateCount();
   }

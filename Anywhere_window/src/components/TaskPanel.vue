@@ -239,6 +239,18 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .task-panel {
+  --task-panel-bg: rgba(255, 255, 255, 0.55);
+  --task-panel-border: rgba(15, 23, 42, 0.12);
+  --task-panel-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  --task-panel-header-border: rgba(15, 23, 42, 0.1);
+  --task-panel-text-primary: #1f2937;
+  --task-panel-text-regular: #374151;
+  --task-panel-text-secondary: #64748b;
+  --task-panel-text-placeholder: #94a3b8;
+  --task-panel-fill: rgba(15, 23, 42, 0.06);
+  --task-panel-fill-hover: rgba(15, 23, 42, 0.09);
+  --task-panel-scroll-thumb: rgba(100, 116, 139, 0.45);
+
   position: fixed;
   z-index: 2000;
   width: min(300px, calc(100vw - 24px));
@@ -247,17 +259,26 @@ onBeforeUnmount(() => {
   flex-direction: column;
   border-radius: 12px;
   overflow: hidden;
-  background-color: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(14px) saturate(120%);
-  -webkit-backdrop-filter: blur(14px) saturate(120%);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  background-color: var(--task-panel-bg);
+  color: var(--task-panel-text-primary);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--task-panel-border);
+  box-shadow: var(--task-panel-shadow);
 }
 
 html.dark .task-panel {
-  background-color: rgba(32, 32, 32, 0.5);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  --task-panel-bg: rgba(32, 32, 32, 0.86);
+  --task-panel-border: rgba(255, 255, 255, 0.12);
+  --task-panel-shadow: 0 10px 30px rgba(0, 0, 0, 0.42);
+  --task-panel-header-border: rgba(255, 255, 255, 0.1);
+  --task-panel-text-primary: #f3f4f6;
+  --task-panel-text-regular: #d1d5db;
+  --task-panel-text-secondary: #aeb6c2;
+  --task-panel-text-placeholder: #7f8794;
+  --task-panel-fill: rgba(255, 255, 255, 0.08);
+  --task-panel-fill-hover: rgba(255, 255, 255, 0.12);
+  --task-panel-scroll-thumb: rgba(156, 163, 175, 0.45);
 }
 
 .task-panel-header {
@@ -267,7 +288,7 @@ html.dark .task-panel {
   padding: 8px 10px 8px 12px;
   cursor: grab;
   user-select: none;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--task-panel-header-border);
 }
 
 .task-panel-header:active {
@@ -280,16 +301,16 @@ html.dark .task-panel {
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--task-panel-text-primary);
 }
 
 .task-progress-count {
   font-size: 11px;
   font-weight: 500;
-  color: var(--el-text-color-secondary);
+  color: var(--task-panel-text-secondary);
   padding: 1px 6px;
   border-radius: 8px;
-  background-color: var(--el-fill-color);
+  background-color: var(--task-panel-fill);
 }
 
 .task-panel-close {
@@ -300,13 +321,13 @@ html.dark .task-panel {
   height: 22px;
   border-radius: 6px;
   cursor: pointer;
-  color: var(--el-text-color-secondary);
+  color: var(--task-panel-text-secondary);
   transition: all 0.18s ease;
 }
 
 .task-panel-close:hover {
-  background-color: var(--el-fill-color);
-  color: var(--el-text-color-primary);
+  background-color: var(--task-panel-fill-hover);
+  color: var(--task-panel-text-primary);
 }
 
 .task-panel-body {
@@ -316,7 +337,7 @@ html.dark .task-panel {
 
 .task-empty {
   font-size: 12px;
-  color: var(--el-text-color-placeholder);
+  color: var(--task-panel-text-placeholder);
   text-align: center;
   padding: 16px 0;
 }
@@ -370,7 +391,7 @@ html.dark .task-panel {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background-color: var(--el-text-color-placeholder);
+  background-color: var(--task-panel-text-placeholder);
 }
 
 .ts-pending-sm {
@@ -381,12 +402,12 @@ html.dark .task-panel {
 .task-content {
   font-size: 13px;
   line-height: 1.5;
-  color: var(--el-text-color-primary);
+  color: var(--task-panel-text-primary);
   word-break: break-word;
 }
 
 .task-content.done {
-  color: var(--el-text-color-secondary);
+  color: var(--task-panel-text-secondary);
   text-decoration: line-through;
 }
 
@@ -406,12 +427,12 @@ html.dark .task-panel {
 .step-content {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--el-text-color-regular);
+  color: var(--task-panel-text-regular);
   word-break: break-word;
 }
 
 .step-content.done {
-  color: var(--el-text-color-placeholder);
+  color: var(--task-panel-text-placeholder);
   text-decoration: line-through;
 }
 
@@ -430,7 +451,7 @@ html.dark .task-panel {
 }
 
 .task-panel-body::-webkit-scrollbar-thumb {
-  background-color: var(--el-border-color);
+  background-color: var(--task-panel-scroll-thumb);
   border-radius: 3px;
 }
 </style>
