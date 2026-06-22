@@ -375,6 +375,17 @@ const commandHandlers = {
         return;
       }
 
+      let type_new = type;
+      let payload_new = payload;
+      console.log(type, payload);
+
+      if (type === "files") {
+        if (payload[0].isDirectory){
+          payload_new = "`"+payload[0].path+"`";
+          type_new = "over";
+        } 
+      }
+
       // 如果只有一个窗口，直接跳过选择，智能追加
       if (features.length === 1) {
         const senderId = features[0].code.replace('append_to_', '');
@@ -384,14 +395,17 @@ const commandHandlers = {
           if (!win.isVisible()) win.show();
           win.focus();
           
-          win.webContents.send('window-append-msg', { type, payload });
+          win.webContents.send('window-append-msg', {
+            type: type_new,
+            payload: payload_new
+          });
         }
         utools.outPlugin();
         return;
       }
 
       // 多个窗口时，弹出选择器
-      openAppendSelectorWindow(features, payload, type);
+      openAppendSelectorWindow(features, payload_new, type_new);
       utools.outPlugin();
     }, 10); // 10ms 延迟足以让出渲染线程
   },

@@ -888,8 +888,7 @@ function updateConfig(newConfig) {
       if (prompt.type === "general") {
         expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
         expectedMatchFeature.cmds.push({ type: "img", label: key });
-        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file" });
-        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "directory" });
+        expectedMatchFeature.cmds.push({ type: "files", label: key});
       } else if (prompt.type === "files") {
         expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file" });
       } else if (prompt.type === "img") {
@@ -1212,8 +1211,7 @@ async function openWindow(config, msg) {
         cmds: [
           { type: "over", label: displayName, maxLength: 99999999999 },
           { type: "img", label: displayName },
-          { type: "files", label: displayName, fileType: "file" },
-          { type: "files", label: displayName, fileType: "directory" }
+          { type: "files", label: displayName},
         ]
       });
     } catch (e) {

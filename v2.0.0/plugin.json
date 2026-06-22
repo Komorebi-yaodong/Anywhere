@@ -53,13 +53,6 @@
 				{
 					"type": "files",
 					"label": "追问",
-					"fileType": "file",
-					"match": "/.*/i"
-				},
-				{
-					"type": "files",
-					"label": "追问",
-					"fileType": "directory",
 					"match": "/.*/i"
 				}
 			],
