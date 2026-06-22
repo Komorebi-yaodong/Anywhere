@@ -5,10 +5,17 @@ import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon, ElChe
 import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close, CloseBold, Picture } from '@element-plus/icons-vue';
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
-import html2canvas from 'html2canvas';
 
 import { formatTimestamp, formatMessageText, sanitizeToolArgs, formatToolResult } from '../utils/formatters.js';
 import ChoiceCard from './ChoiceCard.vue';
+
+let html2canvasPromise = null;
+const loadHtml2Canvas = () => {
+  if (!html2canvasPromise) {
+    html2canvasPromise = import('html2canvas').then(mod => mod.default || mod);
+  }
+  return html2canvasPromise;
+};
 
 const props = defineProps({
   message: Object,
@@ -234,6 +241,7 @@ const onCopyImage = async () => {
       await new Promise(r => requestAnimationFrame(() => setTimeout(r, 200)));
 
       // 5. 截图
+      const html2canvas = await loadHtml2Canvas();
       const canvas = await html2canvas(wrapper, {
         useCORS: true,
         allowTaint: true,

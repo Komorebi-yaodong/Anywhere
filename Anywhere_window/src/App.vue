@@ -11,13 +11,38 @@ import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 import TaskPanel from './components/TaskPanel.vue';
 
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
-import html2canvas from 'html2canvas';
-
-import { encode as encodeGptTokens } from 'gpt-tokenizer';
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
+
+let gptTokenizerEncodePromise = null;
+const loadGptTokenizerEncode = () => {
+  if (!gptTokenizerEncodePromise) {
+    gptTokenizerEncodePromise = import('gpt-tokenizer').then(mod => mod.encode || mod.default?.encode);
+  }
+  return gptTokenizerEncodePromise;
+};
+
+let html2canvasPromise = null;
+const loadHtml2Canvas = () => {
+  if (!html2canvasPromise) {
+    html2canvasPromise = import('html2canvas').then(mod => mod.default || mod);
+  }
+  return html2canvasPromise;
+};
+
+let exportHtmlDepsPromise = null;
+const loadExportHtmlDeps = () => {
+  if (!exportHtmlDepsPromise) {
+    exportHtmlDepsPromise = Promise.all([
+      import('dompurify'),
+      import('marked')
+    ]).then(([dompurifyMod, markedMod]) => ({
+      DOMPurify: dompurifyMod.default || dompurifyMod,
+      marked: markedMod.marked || markedMod.default || markedMod
+    }));
+  }
+  return exportHtmlDepsPromise;
+};
 
 const showDismissibleMessage = (options) => {
   const opts = typeof options === 'string' ? { message: options } : options;
@@ -2282,33 +2307,37 @@ const sanitizeConversationTitlePart = (value, maxLength = 30) => {
 };
 
 
-const countConversationTitleTokens = (value = '') => {
+const countConversationTitleTokens = async (value = '') => {
   try {
+    const encodeGptTokens = await loadGptTokenizerEncode();
+    if (typeof encodeGptTokens !== 'function') {
+      throw new Error('gpt-tokenizer encode export is unavailable');
+    }
     return encodeGptTokens(String(value || '')).length;
   } catch {
     return Array.from(String(value || '')).length;
   }
 };
 
-const truncateConversationTitleByTokens = (value, maxTokens = AUTO_NAMING_MAX_TITLE_TOKENS) => {
+const truncateConversationTitleByTokens = async (value, maxTokens = AUTO_NAMING_MAX_TITLE_TOKENS) => {
   const normalized = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
   if (!normalized) return '';
 
-  if (countConversationTitleTokens(normalized) <= maxTokens) {
+  if (await countConversationTitleTokens(normalized) <= maxTokens) {
     return normalized;
   }
 
   let result = '';
   for (const char of Array.from(normalized)) {
     const next = result + char;
-    if (countConversationTitleTokens(next) > maxTokens) break;
+    if (await countConversationTitleTokens(next) > maxTokens) break;
     result = next;
   }
 
   return result.trim();
 };
 
-const sanitizeAutoNamingTitlePart = (value) => {
+const sanitizeAutoNamingTitlePart = async (value) => {
   const normalized = sanitizeConversationTitlePart(value, 1000)
     .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
@@ -2638,7 +2667,7 @@ const generateConversationNamePrefixWithFastModel = async (firstUserMsg, signal 
     }
 
     const rawTitle = await extractAutoNamingResponseText(response, apiType);
-    return sanitizeAutoNamingTitlePart(rawTitle);
+    return await sanitizeAutoNamingTitlePart(rawTitle);
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw error;
@@ -3268,7 +3297,8 @@ const saveSessionAsHtml = async () => {
 
   const defaultAiSvg = `<svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#FDA5A5" /><g stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="25" y="32" width="50" height="42" rx="8" /><line x1="40" y1="63" x2="60" y2="63" /><line x1="35" y1="32" x2="32" y2="22" /><line x1="65" y1="32" x2="68" y2="22" /></g><g fill="white" stroke="none"><circle cx="40" cy="48" r="3.5" /><circle cx="60" cy="48" r="3.5" /><circle cx="32" cy="20" r="3" /><circle cx="68" cy="20" r="3" /></g></svg>`;
 
-  const generateHtmlContent = () => {
+  const generateHtmlContent = async () => {
+    const { DOMPurify, marked } = await loadExportHtmlDeps();
     let bodyContent = '';
     let tocContent = '';
 
@@ -3633,7 +3663,7 @@ const saveSessionAsHtml = async () => {
           const finalFilename = finalBasename + '.html';
           instance.confirmButtonLoading = true;
           try {
-            const htmlContent = generateHtmlContent();
+            const htmlContent = await generateHtmlContent();
             await window.api.saveFile({ title: '保存为 HTML', defaultPath: finalFilename, buttonLabel: '保存', filters: [{ name: 'HTML 文件', extensions: ['html'] }, { name: '所有文件', extensions: ['*'] }], fileContent: htmlContent });
             showDismissibleMessage.success('HTML 文件已成功导出！');
             done();
@@ -4005,6 +4035,8 @@ const saveSessionAsImage = async () => {
 
           try {
             const chatMain = chatContainerRef.value.$el;
+
+            const html2canvas = await loadHtml2Canvas();
             const messageNodes = Array.from(chatMain.querySelectorAll('.chat-message'));
 
             const computedStyle = getComputedStyle(document.documentElement);
