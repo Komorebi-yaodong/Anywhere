@@ -4,8 +4,8 @@
   "description": "Bundler for Utools plugin preload scripts",
   "main": "index.js",
   "scripts": {
-    "build": "esbuild src/preload.js src/window_preload.js src/fast_window_preload.js --bundle --minify --platform=node --outdir=./public --format=cjs --external:electron --external:@aws-sdk/client-s3 --legal-comments=none",
-    "watch": "esbuild src/preload.js src/window_preload.js src/fast_window_preload.js --bundle --platform=node --outdir=./public --format=cjs --external:electron --external:@aws-sdk/client-s3 --watch"
+    "build": "esbuild src/preload.js src/window_preload.js src/fast_window_preload.js --bundle --minify --platform=node --outdir=./public --format=cjs --external:electron --external:@aws-sdk/client-s3 --legal-comments=none && esbuild src/lazy_runtime.js --bundle --minify --platform=node --outfile=./public/lazy_runtime.js --format=cjs --external:electron --external:@aws-sdk/client-s3 --legal-comments=none && esbuild src/file_runtime.js --bundle --minify --platform=node --outfile=./public/file_runtime.js --format=cjs --external:electron --legal-comments=none && esbuild src/projects_runtime.js --bundle --minify --platform=node --outfile=./public/projects_runtime.js --format=cjs --external:electron --legal-comments=none",
+    "watch": "esbuild src/preload.js src/window_preload.js src/fast_window_preload.js src/lazy_runtime.js src/file_runtime.js src/projects_runtime.js --bundle --platform=node --outdir=./public --format=cjs --external:electron --external:@aws-sdk/client-s3 --watch"
   },
   "keywords": [],
   "author": "",

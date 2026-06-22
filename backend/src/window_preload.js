@@ -2,8 +2,6 @@ const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-const { createChatCompletion, getRandomItem } = require('./chat.js');
-
 const {
     getConfig,
     updateConfig,
@@ -31,34 +29,31 @@ const {
     listJsonFiles,
 } = require('./file.js');
 
-const { 
-  invokeBuiltinTool,
-} = require('./mcp_builtin.js');
+function getLazyRuntime() {
+    const runtimePath = './' + 'lazy_runtime.js';
+    return require(runtimePath);
+}
 
-const { 
-  initializeMcpClient, 
-  invokeMcpTool,
-  closeMcpClient,
-  connectAndFetchTools,
-} = require('./mcp.js');
+function getChatModule() {
+    return getLazyRuntime();
+}
 
-const {
-    listSkills,
-    getSkillDetails,
-    generateSkillToolDefinition,
-    resolveSkillInvocation,
-    saveSkill,
-    deleteSkill
-} = require('./skill.js');
+function getMcpBuiltinModule() {
+    return getLazyRuntime();
+}
 
-const {
-    readLocalProjects,
-    writeLocalProjects,
-    parseProjectsYaml,
-    serializeProjectsYaml,
-    mergeFileAssignment,
-    findProjectByBasename,
-} = require('./projects.js');
+function getMcpModule() {
+    return getLazyRuntime();
+}
+
+function getSkillModule() {
+    return getLazyRuntime();
+}
+
+function getProjectsModule() {
+    const runtimePath = './' + 'projects_runtime.js';
+    return require(runtimePath);
+}
 
 const channel = "window";
 let senderId = null; // [新增] 用于存储当前窗口的唯一ID
@@ -149,9 +144,9 @@ window.api = {
     updateConfig,
     saveSetting,
     getUser,
-    getRandomItem,
+    getRandomItem: (list) => getChatModule().getRandomItem(list),
     createChatCompletion: async (params) => {
-        return await createChatCompletion(params);
+        return await getChatModule().createChatCompletion(params);
     },
     copyText,
     handleFilePath,
@@ -159,12 +154,12 @@ window.api = {
     renameLocalFile,
     listJsonFiles,
     writeLocalFile,
-    readLocalProjects,
-    writeLocalProjects,
-    parseProjectsYaml,
-    serializeProjectsYaml,
-    mergeFileAssignment,
-    findProjectByBasename,
+    readLocalProjects: (...args) => getProjectsModule().readLocalProjects(...args),
+    writeLocalProjects: (...args) => getProjectsModule().writeLocalProjects(...args),
+    parseProjectsYaml: (...args) => getProjectsModule().parseProjectsYaml(...args),
+    serializeProjectsYaml: (...args) => getProjectsModule().serializeProjectsYaml(...args),
+    mergeFileAssignment: (...args) => getProjectsModule().mergeFileAssignment(...args),
+    findProjectByBasename: (...args) => getProjectsModule().findProjectByBasename(...args),
     handleCodeClick,
     sethotkey,
     setZoomFactor,
@@ -174,6 +169,7 @@ window.api = {
     copyImage: utools.copyImage,
     getMcpToolCache,
     initializeMcpClient: async (activeServerConfigs) => {
+        const { initializeMcpClient } = getMcpModule();
         try {
             const cache = await getMcpToolCache();            
             return await initializeMcpClient(activeServerConfigs, cache, saveMcpToolCache);
@@ -184,6 +180,7 @@ window.api = {
     },
     testMcpConnection: async (serverConfig) => {
         try {
+            const { connectAndFetchTools } = getMcpModule();
             // 连接并获取最新工具
             const rawTools = await connectAndFetchTools(serverConfig.id, {
                 transport: serverConfig.type,
@@ -236,11 +233,14 @@ window.api = {
         }
     },
     invokeMcpTool: async (toolName, toolArgs, signal, context = null) => {
+        const { invokeMcpTool } = getMcpModule();
         const extContext = context ? { ...context, senderId } : { senderId };
         return await invokeMcpTool(toolName, toolArgs, signal, extContext);
     },
     saveMcpToolCache,
-    closeMcpClient,
+    closeMcpClient: async (...args) => {
+        return await getMcpModule().closeMcpClient(...args);
+    },
     isFileTypeSupported,
     parseFileObject,
     shellOpenPath: (fullPath) => {
@@ -281,27 +281,28 @@ window.api = {
     // Skill 相关 API
     listSkills: async (path) => {
         try {
-            return listSkills(path);
+            return getSkillModule().listSkills(path);
         } catch (e) {
             console.error("listSkills error:", e);
             return [];
         }
     },
     getSkillDetails: async (rootPath, id) => {
-        return getSkillDetails(rootPath, id);
+        return getSkillModule().getSkillDetails(rootPath, id);
     },
     saveSkill: async (rootPath, id, content) => {
-        const res = await saveSkill(rootPath, id, content);
+        const res = await getSkillModule().saveSkill(rootPath, id, content);
         broadcastEvent('skills-updated');
         return res;
     },
     deleteSkill: async (rootPath, id) => {
-        const res = await deleteSkill(rootPath, id);
+        const res = await getSkillModule().deleteSkill(rootPath, id);
         broadcastEvent('skills-updated');
         return res;
     },
     toggleSkillForkMode: async (rootPath, skillId, enableFork) => {
         try {
+            const { getSkillDetails, saveSkill } = getSkillModule();
             const details = await getSkillDetails(rootPath, skillId);
             const meta = details.metadata;
             const body = details.content;
@@ -364,6 +365,7 @@ window.api = {
     // 生成 Skill Tool 定义
     getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
         try {
+            const { listSkills, generateSkillToolDefinition } = getSkillModule();
             const allSkills = listSkills(rootPath);
             const activeSkills = allSkills.filter(s => enabledSkillNames.includes(s.name));
             if (activeSkills.length === 0) return null;
@@ -374,6 +376,7 @@ window.api = {
     },
     // 执行 Skill
     resolveSkillInvocation: async (rootPath, skillName, toolArgs, globalContext = null, signal = null) => {
+        const { resolveSkillInvocation } = getSkillModule();
         // 1. 获取 Skill 解析结果
         const result = resolveSkillInvocation(rootPath, skillName, toolArgs);
 
@@ -389,7 +392,7 @@ window.api = {
             
             // 3. 自动调用内置的 sub_agent 工具
             // 注意：invokeBuiltinTool 已经修复为返回序列化的 JSON 字符串，直接透传即可
-            return await invokeBuiltinTool(
+            return await getMcpBuiltinModule().invokeBuiltinTool(
                 'sub_agent', 
                 result.subAgentArgs, 
                 signal, 

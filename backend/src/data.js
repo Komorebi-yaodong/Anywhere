@@ -1,14 +1,21 @@
 const { webFrame, nativeImage } = require('electron');
 const crypto = require('crypto');
 
-const { createChatCompletion, getRandomItem } = require('./chat.js'); 
-
 const windowMap = new Map();
 const feature_suffix = "anywhere助手^_^"
 
-const { 
-  getBuiltinServers
-} = require('./mcp_builtin.js');
+function getLazyRuntime() {
+  const runtimePath = './' + 'lazy_runtime.js';
+  return require(runtimePath);
+}
+
+function getChatModule() {
+  return getLazyRuntime();
+}
+
+function getBuiltinServers() {
+  return require('./mcp_servers_manifest.js').getBuiltinServers();
+}
 
 // 默认配置 (保持不变)
 const defaultConfig = {
@@ -890,7 +897,7 @@ function updateConfig(newConfig) {
         expectedMatchFeature.cmds.push({ type: "img", label: key });
         expectedMatchFeature.cmds.push({ type: "files", label: key});
       } else if (prompt.type === "files") {
-        expectedMatchFeature.cmds.push({ type: "files", label: key, fileType: "file" });
+        expectedMatchFeature.cmds.push({ type: "files", label: key});
       } else if (prompt.type === "img") {
         expectedMatchFeature.cmds.push({ type: "img", label: key });
       } else if (prompt.type === "over") {
@@ -1400,7 +1407,8 @@ async function openFastInputWindow(config, msg) {
 
   const isStream = promptConfig.stream ?? true;
 
-  // 2. 发起请求 (使用 chat.js)
+  // 2. 发起请求 (使用 chat.js，按需加载避免拖慢窗口 preload 初始化)
+  const { createChatCompletion } = getChatModule();
   createChatCompletion({
       baseUrl: apiUrl,
       apiKey: apiKey,
