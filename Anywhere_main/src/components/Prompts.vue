@@ -574,7 +574,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
 
   Object.assign(editingPrompt, {
     originalKey: promptKey, key: promptKey, type: p.type, prompt: p.prompt,
-    showMode: p.showMode, model: p.model, enable: p.enable, icon: p.icon || "",
+    showMode: p.showMode, model: p.model ?? '', enable: p.enable, icon: p.icon || "",
     selectedTag: belongingTags,
     stream: p.stream ?? true, isTemperature: p.isTemperature ?? false,
     temperature: p.temperature ?? 0.7, isDirectSend_file: p.isDirectSend_file ?? false,
@@ -611,7 +611,7 @@ function savePrompt() {
 
     const promptData = {
       type: editingPrompt.type, prompt: editingPrompt.prompt, showMode: editingPrompt.showMode,
-      model: editingPrompt.model, enable: editingPrompt.enable, icon: editingPrompt.icon || "",
+      model: editingPrompt.model || '', enable: editingPrompt.enable, icon: editingPrompt.icon || "",
       stream: editingPrompt.stream, isTemperature: editingPrompt.isTemperature,
       temperature: editingPrompt.temperature, isDirectSend_file: editingPrompt.isDirectSend_file,
       isDirectSend_normal: editingPrompt.isDirectSend_normal, isDirectSend_image: editingPrompt.isDirectSend_image, ifTextNecessary: editingPrompt.ifTextNecessary,
@@ -1053,7 +1053,8 @@ async function refreshPromptsConfig() {
 
                 <label class="el-form-item__label">{{ t('prompts.modelLabel') }}</label>
                 <el-form-item class="grid-item full-width no-margin">
-                  <el-select v-model="editingPrompt.model" filterable clearable style="width: 100%;">
+                  <el-select v-model="editingPrompt.model" filterable clearable :empty-values="[null, undefined, '']"
+                    :value-on-clear="''" style="width: 100%;">
                     <el-option v-for="item in availableModels" :key="item.value" :label="item.label"
                       :value="item.value" />
                   </el-select>

@@ -541,11 +541,18 @@ function checkConfig(config) {
     for (const key of Object.keys(config.prompts)) {
       const p = config.prompts[key];
 
-      // 4.1 结构有效性检查 (你要求的逻辑)
-      if (!p || typeof p !== 'object' || '0' in p || !p.type || p.prompt === undefined || p.model === undefined) {
+      // 4.1 结构有效性检查
+      // model 允许为空：表示快捷助手不绑定专属模型，运行时走默认模型/首个可用模型兜底。
+      // 注意：前端清空 el-select 时可能得到 undefined，完整配置保存经过 JSON.stringify 后会丢失该字段；
+      // 这里必须归一化而不是删除整个快捷助手，避免重启插件后快捷助手消失。
+      if (!p || typeof p !== 'object' || '0' in p || !p.type || p.prompt === undefined) {
         delete config.prompts[key];
         flag = true;
         continue;
+      }
+      if (typeof p.model !== 'string') {
+        p.model = '';
+        flag = true;
       }
 
       // 4.2 字段迁移与清理
@@ -568,13 +575,13 @@ function checkConfig(config) {
       if (p.voice === null) { p.voice = ''; flag = true; }
       if (typeof p.autoSaveChat !== 'boolean') { p.autoSaveChat = false; flag = true; }
 
-      // 4.4 模型自动修复
-      const resolvedPromptModel = isValidProviderModelKey(config, p.model)
-        ? p.model
-        : resolveDefaultAssistantModel(config);
-      if (p.model !== resolvedPromptModel) {
-        p.model = resolvedPromptModel;
-        flag = true;
+      // 4.4 模型自动修复：仅修复“非空但已失效”的旧模型；空模型表示不绑定专属模型。
+      if (p.model && !isValidProviderModelKey(config, p.model)) {
+        const resolvedPromptModel = resolveDefaultAssistantModel(config);
+        if (p.model !== resolvedPromptModel) {
+          p.model = resolvedPromptModel;
+          flag = true;
+        }
       }
     }
   }
@@ -1371,15 +1378,19 @@ async function openFastInputWindow(config, msg) {
   const code = msg.code;
   const promptConfig = config.prompts[code];
   
-  // 解析模型配置
+  // 解析模型配置：快捷助手 model 允许为空，空值回退到默认助手模型/首个可用模型。
   let apiUrl = config.providers["0"]?.url; // 默认 fallback
   let apiKey = config.providers["0"]?.api_key;
   let apiType = config.providers["0"]?.apiType || 'chat_completions'; // 默认 API 类型
   let providerHeaders = config.providers["0"]?.headers || {};
   let modelName = "";
 
-  if (promptConfig && promptConfig.model) {
-      const [providerId, mName] = promptConfig.model.split("|");
+  const promptModelKey = isValidProviderModelKey(config, promptConfig?.model)
+      ? promptConfig.model
+      : resolveDefaultAssistantModel(config);
+  if (promptModelKey) {
+      const [providerId, ...modelParts] = promptModelKey.split("|");
+      const mName = modelParts.join("|");
       const provider = config.providers[providerId];
       if (provider) {
           apiUrl = provider.url;
