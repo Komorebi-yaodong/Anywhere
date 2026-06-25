@@ -1,6 +1,7 @@
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { fileURLToPath } = require('url');
 
 const {
     getConfig,
@@ -28,6 +29,41 @@ const {
     renameLocalFile,
     listJsonFiles,
 } = require('./file.js');
+
+const BLOCKED_EXTERNAL_PROTOCOLS = new Set(['javascript:', 'data:', 'blob:', 'about:']);
+
+function isBlockedExternalProtocol(protocol = '') {
+    return BLOCKED_EXTERNAL_PROTOCOLS.has(String(protocol || '').toLowerCase());
+}
+
+function openLinkWithSystemDefault(rawUrl = '') {
+    const targetUrl = String(rawUrl || '').trim();
+    if (!targetUrl || targetUrl.startsWith('#')) {
+        return { ok: false, reason: 'ignored_anchor' };
+    }
+
+    try {
+        const parsedUrl = new URL(targetUrl);
+        const protocol = parsedUrl.protocol.toLowerCase();
+
+        if (isBlockedExternalProtocol(protocol)) {
+            console.warn('[window_preload] Blocked external url with unsafe protocol:', protocol);
+            return { ok: false, reason: 'blocked_protocol' };
+        }
+
+        if (protocol === 'file:') {
+            const localPath = fileURLToPath(parsedUrl);
+            utools.shellOpenPath(localPath);
+            return { ok: true, type: 'path' };
+        }
+    } catch (error) {
+        console.warn('[window_preload] Failed to parse link url, fallback to shellOpenExternal:', error.message);
+    }
+
+    utools.shellOpenExternal(targetUrl);
+    return { ok: true, type: 'url' };
+}
+
 
 function getLazyRuntime() {
     const runtimePath = './' + 'lazy_runtime.js';
@@ -85,8 +121,11 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         if (target && target.tagName === 'A' && target.href) {
+            const rawHref = String(target.getAttribute('href') || '').trim();
+            if (!rawHref || rawHref.startsWith('#')) return;
+
             event.preventDefault();
-            utools.shellOpenExternal(target.href);
+            openLinkWithSystemDefault(target.href);
         }
     });
 });
@@ -102,8 +141,13 @@ async function handleCodeClick(text) {
   const content = text.trim().replace(/^["']|["']$/g, '');
 
   // 1. 检查是否为 URL
+  if (/^file:\/\//i.test(content)) {
+    const result = openLinkWithSystemDefault(content);
+    return result.type === 'path' ? 'opened-path' : 'opened-url';
+  }
+
   if (/^https?:\/\//i.test(content) || /^mailto:/i.test(content)) {
-    utools.shellOpenExternal(content);
+    openLinkWithSystemDefault(content);
     return 'opened-url';
   }
 
