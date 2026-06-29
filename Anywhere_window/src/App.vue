@@ -2284,7 +2284,7 @@ const buildAutoNamingSystemPrompt = () => {
       ? 'Chinese'
       : (currentConfig.value?.language || 'the user primary language');
 
-  return `You are a conversation title generator. I will provide dialogue content in a <content> block. Summarize the conversation between the user and assistant into a short title that captures the main topic of this conversation.
+  return `You are a conversation title generator. I will provide dialogue content with clearly labeled <system_prompt> and <user_prompt> blocks. Summarize the conversation into a short title that captures the main topic of this conversation.
 
 Rules:
 1. The title language must match the user's primary language.
@@ -2516,6 +2516,13 @@ const getFirstUserMessageTextTail = (firstUserMsg) => {
   return takeLastTextChars(textContent, AUTO_NAMING_MAX_TEXT_CHARS);
 };
 
+const wrapAutoNamingPromptBlock = (tag, content) => {
+  const normalizedTag = String(tag || '').trim();
+  const normalizedContent = typeof content === 'string' ? content.trim() : String(content ?? '').trim();
+  if (!normalizedTag || !normalizedContent) return '';
+  return `<${normalizedTag}>\n${normalizedContent}\n</${normalizedTag}>`;
+};
+
 const buildAutoNamingUserMessageText = (firstUserMsg) => {
   const sections = [];
   const conversationSystemPrompt = getCurrentConversationSystemPromptTail();
@@ -2523,11 +2530,11 @@ const buildAutoNamingUserMessageText = (firstUserMsg) => {
   const fileNames = [];
 
   if (conversationSystemPrompt) {
-    sections.push(`Conversation system prompt:\n${conversationSystemPrompt}`);
+    sections.push(`Conversation system prompt:\n${wrapAutoNamingPromptBlock('system_prompt', conversationSystemPrompt)}`);
   }
 
   if (firstUserMessage) {
-    sections.push(`First user message:\n${firstUserMessage}`);
+    sections.push(`First user message:\n${wrapAutoNamingPromptBlock('user_prompt', firstUserMessage)}`);
   }
 
   if (Array.isArray(firstUserMsg?.content)) {
@@ -2565,7 +2572,7 @@ const buildAutoNamingImageParts = (firstUserMsg) => {
     .filter(Boolean);
 };
 
-const buildAutoNamingPromptText = (content) => `<content>\n${content}\n</content>`;
+const buildAutoNamingPromptText = (content) => String(content ?? '').trim();
 
 const buildAutoNamingUserContent = (firstUserMsg) => {
   const userMessageText = buildAutoNamingUserMessageText(firstUserMsg);

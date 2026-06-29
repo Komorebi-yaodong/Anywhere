@@ -559,8 +559,7 @@ function exportSkillToPackage(skillRootPath, skillId, outputDir) {
             // 将整个文件夹添加到 zip，不包含根文件夹本身，直接将内容放在根下
             zip.addLocalFolder(skillDir);
 
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const outputFilename = `${skillId}_${timestamp}.skill`;
+            const outputFilename = `${skillId}.skill`;
             const outputPath = path.join(outputDir, outputFilename);
 
             zip.writeZip(outputPath);
