@@ -107,6 +107,15 @@ const centerActiveNavNode = async (targetIndex = focusedMessageIndex.value) => {
 
 // 核心状态：是否粘滞在底部
 const isSticky = ref(true);
+let chatObserver = null;    // ResizeObserver 实例，用于兜底监听消息高度变化
+let stickyObservedContainer = null;
+let stickyObservedMessage = null;
+let stickyScrollGuardUntil = 0;
+let lastUserScrollIntentAt = 0;
+let lastKnownChatScrollTop = 0;
+let stickyScrollRafIds = [];
+const STICKY_SCROLL_GUARD_MS = 220;
+const USER_SCROLL_INTENT_MS = 260;
 
 const AUTO_SAVE_INPUT_DEBOUNCE_MS = 800;
 const AUTO_SAVE_LOADING_THROTTLE_MS = 2500;
@@ -136,6 +145,14 @@ const getMessageElementByIndex = (index) => {
   const target = getMessageComponentByIndex(index);
   return target?.$el?.nodeType === 1 ? target.$el : null;
 };
+
+const getLastMessageElement = () => {
+  const lastIndex = getLastNavigableMessageIndex();
+  return lastIndex === null || lastIndex === undefined
+    ? null
+    : getMessageElementByIndex(lastIndex);
+};
+
 
 const updateModelListAndMap = (config) => {
   const newModelList = [];
@@ -1126,6 +1143,11 @@ const findFocusedMessageIndex = () => {
   else if (isSticky.value || isAtBottom.value) focusedMessageIndex.value = getLastNavigableMessageIndex();
 };
 
+const markUserScrollIntent = () => {
+  lastUserScrollIntentAt = Date.now();
+};
+
+
 // 滚动监听：仅负责更新 isSticky 状态和 UI 按钮显示
 const handleScroll = (event) => {
   if (isForcingScroll.value) return;
@@ -1136,6 +1158,9 @@ const handleScroll = (event) => {
   // 计算距离底部的距离
   const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
   const tolerance = 20; // 容差值
+  const previousScrollTop = lastKnownChatScrollTop;
+  const scrollTopDelta = el.scrollTop - previousScrollTop;
+  lastKnownChatScrollTop = el.scrollTop;
 
   // 核心逻辑：用户只要向上滚动离开底部，就取消粘滞；一旦触底，重新激活粘滞
   const atBottom = distanceToBottom <= tolerance;
@@ -1146,6 +1171,19 @@ const handleScroll = (event) => {
     showScrollToBottomButton.value = false;
     focusedMessageIndex.value = getLastNavigableMessageIndex();
   } else {
+    const hasRecentUserIntent = Date.now() - lastUserScrollIntentAt <= USER_SCROLL_INTENT_MS;
+    const isLikelyProgrammaticStickyScroll = isSticky.value
+      && !hasRecentUserIntent
+      && (Date.now() <= stickyScrollGuardUntil || scrollTopDelta >= -1);
+
+    if (isLikelyProgrammaticStickyScroll) {
+      // 流式 Markdown/代码块后续排版会让 scrollHeight 继续增长；不要误判为用户离开底部。
+      isAtBottom.value = true;
+      showScrollToBottomButton.value = false;
+      scheduleStickyScrollFrames();
+      return;
+    }
+
     if (isSticky.value) isSticky.value = false; // 用户主动离开了底部
     if (isAtBottom.value) isAtBottom.value = false;
     showScrollToBottomButton.value = true;
@@ -1332,14 +1370,44 @@ const withTemporaryAutoScroll = (chatContainer, updater) => {
   chatContainer.style.scrollBehavior = previousBehavior || 'smooth';
 };
 
+const markStickyProgrammaticScroll = () => {
+  stickyScrollGuardUntil = Date.now() + STICKY_SCROLL_GUARD_MS;
+};
+
+const clearStickyScrollFrames = () => {
+  stickyScrollRafIds.forEach((id) => cancelAnimationFrame(id));
+  stickyScrollRafIds = [];
+};
+
 const scrollToBottomImmediately = () => {
   const chatContainer = chatContainerRef.value?.$el;
   if (!chatContainer) return;
+  markStickyProgrammaticScroll();
   withTemporaryAutoScroll(chatContainer, () => {
     chatContainer.scrollTop = chatContainer.scrollHeight;
+    lastKnownChatScrollTop = chatContainer.scrollTop;
   });
   isAtBottom.value = true;
   showScrollToBottomButton.value = false;
+};
+
+const scheduleStickyScrollFrames = () => {
+  if (!isSticky.value) return;
+  clearStickyScrollFrames();
+  scrollToBottomImmediately();
+
+  const firstFrameId = requestAnimationFrame(() => {
+    stickyScrollRafIds = stickyScrollRafIds.filter((id) => id !== firstFrameId);
+    if (!isSticky.value) return;
+    scrollToBottomImmediately();
+
+    const secondFrameId = requestAnimationFrame(() => {
+      stickyScrollRafIds = stickyScrollRafIds.filter((id) => id !== secondFrameId);
+      if (isSticky.value) scrollToBottomImmediately();
+    });
+    stickyScrollRafIds.push(secondFrameId);
+  });
+  stickyScrollRafIds.push(firstFrameId);
 };
 
 const scrollChatContainerToMessage = (index, behavior = 'smooth') => {
@@ -1370,7 +1438,7 @@ const keepMessageAnchor = async (messageElement, updater, fallbackToBottom = fal
   if (fallbackToBottom && isSticky.value) {
     await updater();
     await nextTick();
-    scrollToBottomImmediately();
+    scheduleStickyScrollFrames();
     return;
   }
 
@@ -1384,13 +1452,56 @@ const keepMessageAnchor = async (messageElement, updater, fallbackToBottom = fal
   const newElementTop = messageElement.offsetTop;
   withTemporaryAutoScroll(chatContainer, () => {
     chatContainer.scrollTop = newElementTop - originalVisualPosition;
+    lastKnownChatScrollTop = chatContainer.scrollTop;
   });
+};
+
+const ensureStickyResizeObserver = () => {
+  if (chatObserver || typeof ResizeObserver === 'undefined') return chatObserver;
+  chatObserver = new ResizeObserver(() => {
+    if (!isSticky.value) return;
+    if (Date.now() - lastUserScrollIntentAt <= USER_SCROLL_INTENT_MS) return;
+    scheduleStickyScrollFrames();
+  });
+  return chatObserver;
+};
+
+const updateStickyResizeObserver = async () => {
+  await nextTick();
+  const observer = ensureStickyResizeObserver();
+  if (!observer) return;
+
+  const chatContainer = chatContainerRef.value?.$el || null;
+  const lastMessageElement = getLastMessageElement();
+
+  if (stickyObservedContainer !== chatContainer) {
+    if (stickyObservedContainer) observer.unobserve(stickyObservedContainer);
+    stickyObservedContainer = chatContainer;
+    if (stickyObservedContainer) observer.observe(stickyObservedContainer);
+  }
+
+  if (stickyObservedMessage !== lastMessageElement) {
+    if (stickyObservedMessage) observer.unobserve(stickyObservedMessage);
+    stickyObservedMessage = lastMessageElement;
+    if (stickyObservedMessage) observer.observe(stickyObservedMessage);
+  }
+};
+
+const cleanupStickyResizeObserver = () => {
+  clearStickyScrollFrames();
+  if (chatObserver) {
+    chatObserver.disconnect();
+    chatObserver = null;
+  }
+  stickyObservedContainer = null;
+  stickyObservedMessage = null;
 };
 
 const syncStickyScrollAfterRender = () => {
   if (!isSticky.value) return;
   nextTick(() => {
-    scrollToBottomImmediately();
+    updateStickyResizeObserver();
+    scheduleStickyScrollFrames();
   });
 };
 
@@ -1719,6 +1830,7 @@ watch(zoomLevel, (newZoom) => {
 });
 watch(chat_show, async () => {
   await addCopyButtonsToCodeBlocks();
+  await updateStickyResizeObserver();
 }, { deep: true, flush: 'post' });
 watch(() => currentConfig.value?.isDarkMode, (isDark) => {
   if (isDark) {
@@ -1735,6 +1847,8 @@ watch(() => currentConfig.value?.isDarkMode, (isDark) => {
 onMounted(async () => {
   if (isInit.value) return;
   isInit.value = true;
+
+  await updateStickyResizeObserver();
 
   if (window.api && window.api.onAlwaysOnTopChanged) {
     window.api.onAlwaysOnTopChanged((newState) => {
@@ -2932,6 +3046,8 @@ onBeforeUnmount(async () => {  // 15s 轮询自动保存已移除；当前仅保
   await window.api.closeMcpClient();
   window.removeEventListener('error', handleGlobalImageError, true);
   window.removeEventListener('keydown', handleGlobalKeyDown);
+
+  cleanupStickyResizeObserver();
   clearScheduledAutoSave();
 
 });
@@ -6261,7 +6377,8 @@ const scrollToMessageByIndex = (index) => {
 
       <div class="main-area-wrapper">
         <el-main ref="chatContainerRef" class="chat-main custom-scrollbar" @click="handleMainClick"
-          @scroll="handleScroll">
+          @wheel.passive="markUserScrollIntent" @touchstart.passive="markUserScrollIntent"
+          @pointerdown="markUserScrollIntent" @scroll="handleScroll">
           <ChatMessage v-for="(message, index) in chat_show" :key="message.id" :is-auto-approve="isAutoApproveTools"
             @update-auto-approve="handleToggleAutoApprove" @confirm-tool="handleToolApproval"
             @reject-tool="handleToolApproval" :ref="el => setMessageRef(el, message.id)" :message="message"
