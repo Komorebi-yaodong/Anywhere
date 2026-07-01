@@ -1572,25 +1572,96 @@ const handleWindowBlur = () => {
   }
 };
 
+
+const getChatInputTextarea = () => chatInputRef.value?.senderRef?.$refs.textarea || null;
+
+const isVisibleElement = (element) => {
+  if (!(element instanceof Element)) return false;
+  const style = window.getComputedStyle(element);
+  if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 || rect.height > 0;
+};
+
+const hasVisibleElement = (selector) => Array.from(document.querySelectorAll(selector)).some(isVisibleElement);
+
+const isEditableElement = (element) => {
+  if (!(element instanceof HTMLElement)) return false;
+  const tagName = element.tagName.toLowerCase();
+  return tagName === 'input' || tagName === 'textarea' || element.isContentEditable;
+};
+
+const isInteractiveElement = (element) => {
+  if (!(element instanceof HTMLElement)) return false;
+  return Boolean(element.closest('button, [role="button"], a[href], select, .el-button, .el-select, .el-checkbox, .el-switch'));
+};
+
+const isChatInputInternalElement = (element) => {
+  if (!(element instanceof Element)) return false;
+  return Boolean(element.closest('.input-footer, .chat-input-area-vertical'));
+};
+
+const hasOpenChatInputSelector = () => hasVisibleElement('.mcp-quick-select, .option-selector-row');
+
+const hasBlockingOverlay = () => {
+  if (
+    systemPromptDialogVisible.value ||
+    changeModel_page.value ||
+    isMcpDialogVisible.value ||
+    isSkillDialogVisible.value ||
+    imageViewerVisible.value
+  ) {
+    return true;
+  }
+
+  return hasVisibleElement('.el-message-box, .el-overlay-message-box, .el-dialog__wrapper, .el-overlay-dialog, .el-image-viewer__wrapper');
+};
+
+const shouldAutoFocusChatInput = () => {
+  const textarea = getChatInputTextarea();
+  if (!textarea) return false;
+  const activeElement = document.activeElement;
+
+  if (!activeElement || activeElement === document.body || activeElement === document.documentElement) {
+    return !hasBlockingOverlay() && !hasOpenChatInputSelector();
+  }
+
+  if (activeElement === textarea) return true;
+
+  if (hasBlockingOverlay() || hasOpenChatInputSelector()) return false;
+
+  if (hasVisibleElement('.editing-wrapper, .text-search-container, .tool-choice-wrapper, .tool-approval-actions')) {
+    return false;
+  }
+
+  if (activeElement.closest?.('.editing-wrapper, .text-search-container, .tool-choice-wrapper, .tool-approval-actions')) {
+    return false;
+  }
+
+  if (isEditableElement(activeElement)) return false;
+
+  if (isInteractiveElement(activeElement) && !isChatInputInternalElement(activeElement)) {
+    return false;
+  }
+
+  return true;
+};
+
+const focusChatInputIfSafe = (options = { cursor: 'end' }) => {
+  if (!shouldAutoFocusChatInput()) return false;
+  chatInputRef.value?.focus(options);
+  return true;
+};
+
 const handleWindowFocus = () => {
   if (isFilePickerOpen.value) {
     isFilePickerOpen.value = false;
   }
   setTimeout(() => {
-    if (systemPromptDialogVisible.value) {
-      return;
-    }
-    if (document.activeElement && document.activeElement.tagName.toLowerCase() === 'textarea' && document.activeElement.closest('.editing-wrapper')) {
-      return;
-    }
-    if (document.activeElement && document.activeElement.closest('.text-search-container')) {
-      return;
-    }
-    const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
-    if (!textarea) return;
-    if (document.activeElement !== textarea) {
-      if (lastSelectionStart.value !== null && lastSelectionEnd.value !== null) chatInputRef.value?.focus({ position: { start: lastSelectionStart.value, end: lastSelectionEnd.value } });
-      else chatInputRef.value?.focus({ cursor: 'end' });
+    if (lastSelectionStart.value !== null && lastSelectionEnd.value !== null) {
+      focusChatInputIfSafe({ position: { start: lastSelectionStart.value, end: lastSelectionEnd.value } });
+    } else {
+      focusChatInputIfSafe({ cursor: 'end' });
     }
   }, 50);
 };
@@ -5878,10 +5949,7 @@ const askAI = async (forceSend = false) => {
       chat_show.value[currentAssistantChatShowIndex].completedTimestamp = new Date().toLocaleString('sv-SE');
     }
     await nextTick();
-    const textarea = chatInputRef.value?.senderRef?.$refs.textarea;
-    if (textarea && document.activeElement !== textarea) {
-      chatInputRef.value?.focus({ cursor: 'end' });
-    }
+    focusChatInputIfSafe({ cursor: 'end' });
 
     if (currentTaskConfig.value) {
       let savedFileName = '未保存';
@@ -5980,7 +6048,7 @@ const cancelAskAI = () => {
   loading.value = false;
   syncAutoCloseOnBlurListener();
   scheduleAutoSave({ reason: 'assistant-cancelled', immediate: true });
-  chatInputRef.value?.focus();
+  focusChatInputIfSafe({ cursor: 'end' });
 };
 const copyText = async (content, index) => { if (loading.value && index === chat_show.value.length - 1) return; await window.api.copyText(content); };
 const reaskAI = async () => {
