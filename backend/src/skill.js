@@ -562,22 +562,22 @@ function generateEnvExampleContent(envContent) {
 
 function addSkillDirectoryToZip(zip, sourceDir, options = {}) {
     const hideEnv = options?.hideEnv === true;
-    const rootEnvPath = path.join(sourceDir, '.env');
-    const hasRootEnv = hideEnv && fs.existsSync(rootEnvPath) && fs.statSync(rootEnvPath).isFile();
 
     const walk = (currentDir, relativeDir = '') => {
         const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+        const hasEnvExampleInCurrentDir = entries.some((entry) => entry.isFile() && entry.name === '.env.example');
 
         for (const entry of entries) {
             const absolutePath = path.join(currentDir, entry.name);
             const relativePath = relativeDir ? path.join(relativeDir, entry.name) : entry.name;
             const zipRelativePath = relativePath.split(path.sep).join('/');
+            const zipDir = path.posix.dirname(zipRelativePath) === '.' ? '' : path.posix.dirname(zipRelativePath);
 
-            if (hideEnv && relativeDir === '' && entry.name === '.env') {
-                continue;
-            }
-
-            if (hasRootEnv && relativeDir === '' && entry.name === '.env.example') {
+            if (hideEnv && entry.isFile() && entry.name === '.env') {
+                const envExampleName = hasEnvExampleInCurrentDir ? '.env.example2' : '.env.example';
+                const envExamplePath = zipDir ? `${zipDir}/${envExampleName}` : envExampleName;
+                const envExampleContent = generateEnvExampleContent(fs.readFileSync(absolutePath, 'utf8'));
+                zip.addFile(envExamplePath, Buffer.from(envExampleContent, 'utf8'));
                 continue;
             }
 
@@ -589,7 +589,7 @@ function addSkillDirectoryToZip(zip, sourceDir, options = {}) {
             if (entry.isFile()) {
                 zip.addLocalFile(
                     absolutePath,
-                    path.posix.dirname(zipRelativePath) === '.' ? '' : path.posix.dirname(zipRelativePath),
+                    zipDir,
                     path.posix.basename(zipRelativePath)
                 );
             }
@@ -597,11 +597,6 @@ function addSkillDirectoryToZip(zip, sourceDir, options = {}) {
     };
 
     walk(sourceDir);
-
-    if (hasRootEnv) {
-        const envContent = fs.readFileSync(rootEnvPath, 'utf8');
-        zip.addFile('.env.example', Buffer.from(generateEnvExampleContent(envContent), 'utf8'));
-    }
 }
 
 function exportSkillToPackage(skillRootPath, skillId, outputDir, options = {}) {
