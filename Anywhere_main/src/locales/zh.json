@@ -599,6 +599,7 @@
       "empty": "暂无技能可导出",
       "selectAll": "全选",
       "clear": "清空",
+      "hideEnv": "隐藏.env",
       "confirmBtn": "选择目录并导出",
       "success": "成功导出 {count} 个技能包"
     }

@@ -599,6 +599,7 @@
       "empty": "No skills available to export",
       "selectAll": "Select All",
       "clear": "Clear",
+      "hideEnv": "Hide .env",
       "confirmBtn": "Select Folder & Export",
       "success": "Successfully exported {count} skill packages"
     }

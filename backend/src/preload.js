@@ -223,8 +223,8 @@ window.api = {
     return res;
   },
   // 暴露给前端的导出/导入接口
-  exportSkillToPackage: async (rootPath, skillId, outputDir) => {
-    return exportSkillToPackage(rootPath, skillId, outputDir);
+  exportSkillToPackage: async (rootPath, skillId, outputDir, options = {}) => {
+    return exportSkillToPackage(rootPath, skillId, outputDir, options);
   },
   extractSkillPackage: async (filePath) => {
     return extractSkillPackage(filePath);

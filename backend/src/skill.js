@@ -547,7 +547,64 @@ function deleteSkill(skillRootPath, skillId) {
  * @param {string} outputDir 导出目标目录
  * @returns {Promise<string>} 导出的文件路径
  */
-function exportSkillToPackage(skillRootPath, skillId, outputDir) {
+
+function generateEnvExampleContent(envContent) {
+    return String(envContent || '')
+        .split(/\r\n|\n|\r/)
+        .map((line) => {
+            if (!line.includes('=')) return line;
+
+            const equalIndex = line.indexOf('=');
+            return `${line.slice(0, equalIndex + 1)}`;
+        })
+        .join('\n');
+}
+
+function addSkillDirectoryToZip(zip, sourceDir, options = {}) {
+    const hideEnv = options?.hideEnv === true;
+    const rootEnvPath = path.join(sourceDir, '.env');
+    const hasRootEnv = hideEnv && fs.existsSync(rootEnvPath) && fs.statSync(rootEnvPath).isFile();
+
+    const walk = (currentDir, relativeDir = '') => {
+        const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+
+        for (const entry of entries) {
+            const absolutePath = path.join(currentDir, entry.name);
+            const relativePath = relativeDir ? path.join(relativeDir, entry.name) : entry.name;
+            const zipRelativePath = relativePath.split(path.sep).join('/');
+
+            if (hideEnv && relativeDir === '' && entry.name === '.env') {
+                continue;
+            }
+
+            if (hasRootEnv && relativeDir === '' && entry.name === '.env.example') {
+                continue;
+            }
+
+            if (entry.isDirectory()) {
+                walk(absolutePath, relativePath);
+                continue;
+            }
+
+            if (entry.isFile()) {
+                zip.addLocalFile(
+                    absolutePath,
+                    path.posix.dirname(zipRelativePath) === '.' ? '' : path.posix.dirname(zipRelativePath),
+                    path.posix.basename(zipRelativePath)
+                );
+            }
+        }
+    };
+
+    walk(sourceDir);
+
+    if (hasRootEnv) {
+        const envContent = fs.readFileSync(rootEnvPath, 'utf8');
+        zip.addFile('.env.example', Buffer.from(generateEnvExampleContent(envContent), 'utf8'));
+    }
+}
+
+function exportSkillToPackage(skillRootPath, skillId, outputDir, options = {}) {
     return new Promise((resolve, reject) => {
         try {
             const skillDir = path.join(skillRootPath, skillId);
@@ -556,8 +613,8 @@ function exportSkillToPackage(skillRootPath, skillId, outputDir) {
             }
 
             const zip = new AdmZip();
-            // 将整个文件夹添加到 zip，不包含根文件夹本身，直接将内容放在根下
-            zip.addLocalFolder(skillDir);
+            // 将整个文件夹内容添加到 zip 根目录；隐藏 .env 时生成脱敏的 .env.example
+            addSkillDirectoryToZip(zip, skillDir, options);
 
             const outputFilename = `${skillId}.skill`;
             const outputPath = path.join(outputDir, outputFilename);

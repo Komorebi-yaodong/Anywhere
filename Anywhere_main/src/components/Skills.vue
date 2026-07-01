@@ -17,6 +17,7 @@ const searchQuery = ref('');
 const isLoading = ref(false);
 const showExportDialog = ref(false);
 const skillsToExport = ref([]);
+const hideEnvOnExport = ref(true);
 const isExporting = ref(false);
 
 // 编辑对话框状态
@@ -610,6 +611,7 @@ function openExportDialog() {
   }
   // 重置选择状态（默认不全选，或者你可以改为默认全选）
   skillsToExport.value = [];
+  hideEnvOnExport.value = true;
   // 打开弹窗
   showExportDialog.value = true;
 }
@@ -627,7 +629,9 @@ async function handleExportSkills() {
   isExporting.value = true;
   try {
     const exportPromises = skillsToExport.value.map(skillId =>
-      window.api.exportSkillToPackage(skillPath.value, skillId, outputDir)
+      window.api.exportSkillToPackage(skillPath.value, skillId, outputDir, {
+        hideEnv: hideEnvOnExport.value
+      })
     );
 
     const results = await Promise.all(exportPromises);
@@ -902,11 +906,16 @@ async function handleExportSkills() {
         </div>
       </div>
       <template #footer>
-        <el-button @click="showExportDialog = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleExportSkills" :loading="isExporting"
-          :disabled="skillsToExport.length === 0">
-          {{ t('skills.export.confirmBtn') }}
-        </el-button>
+        <div class="export-dialog-footer">
+          <el-checkbox v-model="hideEnvOnExport">{{ t('skills.export.hideEnv') }}</el-checkbox>
+          <div class="export-dialog-footer-actions">
+            <el-button @click="showExportDialog = false">{{ t('common.cancel') }}</el-button>
+            <el-button type="primary" @click="handleExportSkills" :loading="isExporting"
+              :disabled="skillsToExport.length === 0">
+              {{ t('skills.export.confirmBtn') }}
+            </el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -1473,4 +1482,20 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
   color: var(--text-tertiary);
   font-family: monospace;
 }
+
+.export-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.export-dialog-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 </style>
