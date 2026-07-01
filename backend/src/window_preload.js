@@ -136,7 +136,7 @@ async function handleCodeClick(text) {
   if (!text || typeof text !== 'string') {
     return 'copied';
   }
-  
+
   // 移除首尾空白和引号 (支持 'path' 或 "path")
   const content = text.trim().replace(/^["']|["']$/g, '');
 
@@ -154,19 +154,19 @@ async function handleCodeClick(text) {
   // 2. 检查是否为本地文件路径
   try {
     let resolvedPath = content;
-    
+
     // 处理 ~ 路径 (macOS/Linux)
     if (content.startsWith('~')) {
       resolvedPath = path.join(utools.getPath('home'), content.slice(1));
     }
-    
+
     // 简单的路径格式校验 (Windows盘符 或 Unix根路径 或 相对路径)
     // 增加对 C:\ 或 /Users 等格式的宽容度
     const isLikelyPath = /^[a-zA-Z]:[\\/]/.test(resolvedPath) || resolvedPath.startsWith('/') || resolvedPath.startsWith('./') || resolvedPath.startsWith('../') || resolvedPath.includes(path.sep);
 
     if (isLikelyPath) {
         const exists = fs.existsSync(resolvedPath);
-        
+
         if (exists) {
             // 尝试打开文件或目录
             utools.shellOpenPath(resolvedPath);
@@ -215,7 +215,7 @@ window.api = {
     initializeMcpClient: async (activeServerConfigs) => {
         const { initializeMcpClient } = getMcpModule();
         try {
-            const cache = await getMcpToolCache();            
+            const cache = await getMcpToolCache();
             return await initializeMcpClient(activeServerConfigs, cache, saveMcpToolCache);
         } catch (e) {
             console.error("[WindowPreload] Error loading MCP cache:", e);
@@ -233,6 +233,7 @@ window.api = {
                 url: serverConfig.baseUrl,
                 env: serverConfig.env,
                 headers: serverConfig.headers,
+                auth: serverConfig.auth,
             });
 
             const sanitizeToolAlias = (name, fallback = 'tool') => {
@@ -284,6 +285,13 @@ window.api = {
     saveMcpToolCache,
     closeMcpClient: async (...args) => {
         return await getMcpModule().closeMcpClient(...args);
+    },
+    // Read-only OAuth status passthrough (window can display auth badges but
+    // cannot drive login — that lives in the main panel via preload.js).
+    mcpOAuth_getStatus: async ({ serverId, serverConfig } = {}) => {
+        const mod = getMcpModule();
+        if (mod.getMcpAuthStatus) return { success: true, status: await mod.getMcpAuthStatus(serverId, serverConfig) };
+        return { success: false, error: 'getMcpAuthStatus unavailable' };
     },
     isFileTypeSupported,
     parseFileObject,
@@ -433,13 +441,13 @@ window.api = {
                     text: "Error: Sub-Agent skill requires execution context (API Key, etc)."
                 }], null, 2);
             }
-            
+
             // 3. 自动调用内置的 sub_agent 工具
             // 注意：invokeBuiltinTool 已经修复为返回序列化的 JSON 字符串，直接透传即可
             return await getMcpBuiltinModule().invokeBuiltinTool(
-                'sub_agent', 
-                result.subAgentArgs, 
-                signal, 
+                'sub_agent',
+                result.subAgentArgs,
+                signal,
                 globalContext
             );
         }
@@ -451,7 +459,7 @@ window.api = {
             text: result
         }], null, 2);
     },
-    // 暴露 path.join 
+    // 暴露 path.join
     pathJoin: (...args) => require('path').join(...args),
     addTaskHistory: async (taskId, logEntry) => {
         const { addTaskHistory } = require('./data.js');
