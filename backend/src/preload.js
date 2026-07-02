@@ -77,6 +77,14 @@ const {
   findProjectByBasename,
 } = require('./projects.js');
 
+const {
+  parseChatMetadataYaml,
+  serializeChatMetadataYaml,
+  normalizeChatMetadataIndex,
+  normalizeChatMetadataEntry,
+} = require('./chat_metadata.js');
+
+
 window.api = {
   getConfig,
   updateConfig,
@@ -107,6 +115,10 @@ window.api = {
   mergeFileAssignment,
   mergeProjectAssignment,
   findProjectByBasename,
+  parseChatMetadataYaml,
+  serializeChatMetadataYaml,
+  normalizeChatMetadataIndex,
+  normalizeChatMetadataEntry,
   setZoomFactor,
   defaultConfig,
   savePromptWindowSettings,

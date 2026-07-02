@@ -4,8 +4,16 @@ const {
     parseProjectsYaml,
     serializeProjectsYaml,
     mergeFileAssignment,
+    mergeProjectAssignment,
     findProjectByBasename,
 } = require('./projects.js');
+
+const {
+    parseChatMetadataYaml,
+    serializeChatMetadataYaml,
+    normalizeChatMetadataIndex,
+    normalizeChatMetadataEntry,
+} = require('./chat_metadata.js');
 
 module.exports = {
     readLocalProjects,
@@ -13,5 +21,10 @@ module.exports = {
     parseProjectsYaml,
     serializeProjectsYaml,
     mergeFileAssignment,
+    mergeProjectAssignment,
     findProjectByBasename,
+    parseChatMetadataYaml,
+    serializeChatMetadataYaml,
+    normalizeChatMetadataIndex,
+    normalizeChatMetadataEntry,
 };

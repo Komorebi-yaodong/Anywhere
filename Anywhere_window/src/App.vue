@@ -345,21 +345,8 @@ const getConversationDisplayName = () => {
 };
 
 const getSessionMetadata = () => {
-  const timestamps = [];
-  chat_show.value.forEach((message) => {
-    const candidates = [message?.timestamp, message?.completedTimestamp, message?.updatedAt, message?.createdAt];
-    candidates.forEach((candidate) => {
-      const normalized = normalizeSessionTimestamp(candidate);
-      if (normalized) timestamps.push(normalized);
-    });
-  });
-
-  timestamps.sort((a, b) => new Date(a) - new Date(b));
-
   return {
     title: getConversationDisplayName(),
-    createdAt: timestamps[0] || new Date().toISOString(),
-    updatedAt: timestamps[timestamps.length - 1] || new Date().toISOString(),
   };
 };
 
@@ -3158,12 +3145,13 @@ const saveWindowSize = async () => {
   }
 }
 
-const getSessionDataAsObject = () => {
+const getSessionDataAsObject = (options = {}) => {
   const currentPromptConfig = currentConfig.value.prompts[CODE.value] || {};
+  const explicitTitle = typeof options?.title === 'string' ? options.title.trim() : '';
   return {
     anywhere_history: true, CODE: CODE.value, basic_msg: basic_msg.value, isInit: isInit.value,
     autoCloseOnBlur: autoCloseOnBlur.value, model: model.value,
-    sessionMetadata: getSessionMetadata(),
+    sessionMetadata: { title: explicitTitle || getSessionMetadata().title },
     currentPromptConfig: currentPromptConfig, history: history.value, chat_show: chat_show.value, selectedVoice: selectedVoice.value,
     activeMcpServerIds: sessionMcpServerIds.value || [],
     activeSkillIds: sessionSkillIds.value || [],
@@ -3288,6 +3276,134 @@ const assignCloudProject = async ({ projectId, projectName, basename }) => {
   await client.putFileContents(remotePath, content, { overwrite: true });
 };
 
+
+const CHAT_METADATA_FILENAME = 'chat-metadata.yaml';
+
+const normalizeWebdavContents = (contents) => {
+  if (Array.isArray(contents)) return contents;
+  if (contents && Array.isArray(contents.data)) return contents.data;
+  return [];
+};
+
+const normalizeWebdavFileTime = (value) => normalizeSessionTimestamp(value) || '';
+const buildChatMetadataRemotePath = (remoteDir) => `${remoteDir}/${CHAT_METADATA_FILENAME}`;
+
+const resolveWindowCloudSaveFileSystemTimes = async (filename) => {
+  const localDir = currentConfig.value?.webdav?.localChatPath || '';
+  const nowIso = new Date().toISOString();
+  if (!localDir) {
+    return { createdAt: nowIso, updatedAt: nowIso, source: 'now' };
+  }
+
+  try {
+    const files = await window.api.listJsonFiles(localDir);
+    const matchedFile = (Array.isArray(files) ? files : []).find((item) => item?.basename === filename);
+    if (!matchedFile) {
+      return { createdAt: nowIso, updatedAt: nowIso, source: 'now' };
+    }
+
+    const createdAt = normalizeSessionTimestamp(matchedFile.createdAt || matchedFile.birthtime || matchedFile.ctime) || normalizeSessionTimestamp(matchedFile.updatedAt) || nowIso;
+    const updatedAt = normalizeSessionTimestamp(matchedFile.updatedAt || matchedFile.lastmod || matchedFile.mtime) || createdAt;
+    return { createdAt, updatedAt, source: 'local-file' };
+  } catch {
+    return { createdAt: nowIso, updatedAt: nowIso, source: 'now' };
+  }
+};
+
+const buildWindowChatMetadataPayload = (basename, options = {}) => {
+  const { sessionData = null, createdAt = '', updatedAt = '' } = options;
+  const metadata = sessionData?.sessionMetadata && typeof sessionData.sessionMetadata === 'object'
+    ? sessionData.sessionMetadata
+    : getSessionMetadata();
+  const normalizedCreatedAt = normalizeSessionTimestamp(createdAt);
+  const normalizedUpdatedAt = normalizeSessionTimestamp(updatedAt);
+  const fallbackNow = new Date().toISOString();
+
+  return {
+    title: typeof metadata?.title === 'string' && metadata.title.trim()
+      ? metadata.title.trim()
+      : stripJsonName(basename),
+    createdAt: normalizedCreatedAt || normalizedUpdatedAt || fallbackNow,
+    updatedAt: normalizedUpdatedAt || normalizedCreatedAt || fallbackNow
+  };
+};
+
+const readCloudChatMetadataIndex = async (client, remoteDir) => {
+  try {
+    const text = await client.getFileContents(buildChatMetadataRemotePath(remoteDir), { format: 'text' });
+    return window.api.normalizeChatMetadataIndex(
+      await window.api.parseChatMetadataYaml(typeof text === 'string' ? text : String(text || ''))
+    );
+  } catch {
+    return window.api.normalizeChatMetadataIndex({ version: 1, chats: {} });
+  }
+};
+
+const writeCloudChatMetadataIndex = async (client, remoteDir, metadata) => {
+  const content = await window.api.serializeChatMetadataYaml(metadata);
+  await client.putFileContents(buildChatMetadataRemotePath(remoteDir), content, { overwrite: true });
+};
+
+const reconcileWindowCloudChatMetadata = async (client, remoteDir, files = null) => {
+  const list = Array.isArray(files)
+    ? files
+    : normalizeWebdavContents(await client.getDirectoryContents(remoteDir, { details: true }).catch(() => []));
+  const jsonFiles = normalizeWebdavContents(list)
+    .map((item) => ({
+      ...item,
+      basename: String(item?.basename || item?.filename || item?.name || '').trim()
+    }))
+    .filter((item) => item?.type === 'file' && item.basename.toLowerCase().endsWith('.json'));
+  const metadata = await readCloudChatMetadataIndex(client, remoteDir);
+  const nextChats = { ...(metadata?.chats || {}) };
+  let changed = false;
+
+  jsonFiles.forEach((file) => {
+    const current = nextChats[file.basename];
+    const candidate = window.api.normalizeChatMetadataEntry(file.basename, {
+      title: current?.title || stripJsonName(file.basename),
+      createdAt: current?.createdAt || normalizeWebdavFileTime(file.createdAt || file.creationdate || file.birthtime || file.ctime || file.lastmod || file.props?.creationdate || file.props?.getcreationdate),
+      updatedAt: current?.updatedAt || normalizeWebdavFileTime(file.updatedAt || file.lastmod || file.lastModified || file.mtime || file.props?.getlastmodified || file.props?.lastmod || file.createdAt)
+    });
+    if (JSON.stringify(current || null) !== JSON.stringify(candidate || null)) {
+      nextChats[file.basename] = candidate;
+      changed = true;
+    }
+  });
+
+  Object.keys(nextChats).forEach((basename) => {
+    if (!jsonFiles.some((file) => file.basename === basename)) {
+      delete nextChats[basename];
+      changed = true;
+    }
+  });
+
+  const nextMetadata = window.api.normalizeChatMetadataIndex({ version: 1, chats: nextChats });
+  if (changed) {
+    await writeCloudChatMetadataIndex(client, remoteDir, nextMetadata);
+  }
+  return nextMetadata;
+};
+
+const upsertWindowCloudChatMetadata = async (client, remoteDir, filename, chatMetadata) => {
+  const remoteList = normalizeWebdavContents(await client.getDirectoryContents(remoteDir, { details: true }).catch(() => []));
+  const metadata = await reconcileWindowCloudChatMetadata(client, remoteDir, remoteList);
+  const previousEntry = metadata.chats[filename] ? { ...metadata.chats[filename] } : null;
+  metadata.chats[filename] = window.api.normalizeChatMetadataEntry(filename, chatMetadata);
+  await writeCloudChatMetadataIndex(client, remoteDir, metadata);
+  return { metadata, previousEntry };
+};
+
+const restoreWindowCloudChatMetadataEntry = async (client, remoteDir, filename, metadata, previousEntry) => {
+  if (!metadata) return;
+  if (previousEntry) {
+    metadata.chats[filename] = previousEntry;
+  } else {
+    delete metadata.chats[filename];
+  }
+  await writeCloudChatMetadataIndex(client, remoteDir, metadata).catch(() => {});
+};
+
 const saveSessionToCloud = async () => {
   const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
@@ -3339,14 +3455,30 @@ const saveSessionToCloud = async () => {
           instance.confirmButtonLoading = true;
           showDismissibleMessage.info('正在保存到云端...');
           try {
-            const sessionData = getSessionDataAsObject();
+            const sessionData = getSessionDataAsObject({ title: finalBasename });
             const jsonString = JSON.stringify(sessionData, null, 2);
             const { url, username, password, data_path } = currentConfig.value.webdav;
             const client = createClient(url, { username, password });
             const remoteDir = data_path.endsWith('/') ? data_path.slice(0, -1) : data_path;
             const remoteFilePath = `${remoteDir}/${filename}`;
             if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
-            await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
+            const fileSystemTimes = await resolveWindowCloudSaveFileSystemTimes(filename);
+            const { metadata: previousMetadataIndex, previousEntry } = await upsertWindowCloudChatMetadata(
+              client,
+              remoteDir,
+              filename,
+              buildWindowChatMetadataPayload(filename, {
+                sessionData,
+                createdAt: fileSystemTimes.createdAt,
+                updatedAt: fileSystemTimes.updatedAt
+              })
+            );
+            try {
+              await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
+            } catch (uploadError) {
+              await restoreWindowCloudChatMetadataEntry(client, remoteDir, filename, previousMetadataIndex, previousEntry);
+              throw uploadError;
+            }
             defaultConversationName.value = finalBasename;
             try {
               const projectName = projectsData.projects.find((p) => p.id === selectedProjectId.value)?.name || '';
@@ -3871,7 +4003,7 @@ const saveSessionAsHtml = async () => {
   } catch (error) { if (error !== 'cancel' && error !== 'close') console.error('MessageBox error:', error); }
 };
 
-const persistSessionToLocalJsonFile = async (baseName = defaultConversationName.value) => {
+const persistSessionToLocalJsonFile = async (baseName = defaultConversationName.value, options = {}) => {
   const localChatPath = currentConfig.value.webdav?.localChatPath;
   const normalizedBaseName = typeof baseName === 'string' ? baseName.trim() : '';
 
@@ -3880,7 +4012,7 @@ const persistSessionToLocalJsonFile = async (baseName = defaultConversationName.
   }
 
   const separator = currentOS.value === 'win' ? '\\' : '/';
-  const sessionData = getSessionDataAsObject();
+  const sessionData = getSessionDataAsObject({ title: typeof options?.title === 'string' ? options.title : normalizedBaseName });
   const jsonString = JSON.stringify(sessionData, null, 2);
   const fullPath = `${localChatPath}${separator}${normalizedBaseName}.json`;
 
@@ -3890,8 +4022,6 @@ const persistSessionToLocalJsonFile = async (baseName = defaultConversationName.
 
 
 const saveSessionAsJson = async () => {
-  const sessionData = getSessionDataAsObject();
-  const jsonString = JSON.stringify(sessionData, null, 2);
   const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
   const isAutoNaming = ref(false);
@@ -3945,7 +4075,7 @@ const saveSessionAsJson = async () => {
 
             // 优化逻辑：如果有本地路径，直接写入；否则弹出保存框
             if (localChatPath) {
-              await persistSessionToLocalJsonFile(finalBasename);
+              await persistSessionToLocalJsonFile(finalBasename, { title: finalBasename });
               // 更新项目归属（仅在已配置本地路径时维护 projects.yaml）
               try {
                 const oldFilename = defaultConversationName.value ? `${defaultConversationName.value}.json` : '';
@@ -3962,6 +4092,8 @@ const saveSessionAsJson = async () => {
               }
             } else {
               // 未配置路径，弹出系统选择框
+              const sessionData = getSessionDataAsObject({ title: finalBasename });
+              const jsonString = JSON.stringify(sessionData, null, 2);
               await window.api.saveFile({
                 title: '保存聊天会话',
                 defaultPath: finalFilename,
@@ -3994,6 +4126,8 @@ const renameRemoteSessionFileWithMetadata = async (client, remoteDir, oldFilenam
   const oldRemotePath = `${normalizedRemoteDir}/${oldFilename}`;
   const newRemotePath = `${normalizedRemoteDir}/${newFilename}`;
   const nextTitle = newFilename.toLowerCase().endsWith('.json') ? newFilename.slice(0, -5) : newFilename;
+  const metadata = await reconcileWindowCloudChatMetadata(client, normalizedRemoteDir);
+  const previousEntry = metadata.chats[oldFilename] ? { ...metadata.chats[oldFilename] } : null;
 
   await client.moveFile(oldRemotePath, newRemotePath);
 
@@ -4015,8 +4149,17 @@ const renameRemoteSessionFileWithMetadata = async (client, remoteDir, oldFilenam
       }
     }
   } catch {
-    // ignore remote metadata sync failure to preserve rename compatibility
+    // ignore remote title sync failure; YAML metadata is still updated below
   }
+
+  delete metadata.chats[oldFilename];
+  if (newFilename.toLowerCase().endsWith('.json')) {
+    metadata.chats[newFilename] = window.api.normalizeChatMetadataEntry(newFilename, {
+      ...(previousEntry || {}),
+      title: nextTitle
+    });
+  }
+  await writeCloudChatMetadataIndex(client, normalizedRemoteDir, metadata);
 };
 
 

@@ -413,16 +413,11 @@ async function readSessionMetadata(filePath, fallbackBasename, cacheContext = nu
         }
 
         const sessionMetadata = sessionData.sessionMetadata || {};
-        const timestamps = collectSessionTimestamps(sessionData);
-        const fallbackCreatedAt = timestamps[0] || null;
-        const fallbackUpdatedAt = timestamps[timestamps.length - 1] || null;
 
         const normalizedMetadata = {
             title: typeof sessionMetadata.title === 'string' && sessionMetadata.title.trim()
                 ? sessionMetadata.title.trim()
                 : (fallbackBasename.endsWith('.json') ? fallbackBasename.slice(0, -5) : fallbackBasename),
-            createdAt: normalizeSessionTimestamp(sessionMetadata.createdAt) || fallbackCreatedAt,
-            updatedAt: normalizeSessionTimestamp(sessionMetadata.updatedAt) || fallbackUpdatedAt,
         };
 
         if (cacheContext && cacheContext.stats) {
@@ -459,11 +454,21 @@ async function listJsonFiles(dirPath) {
             const filePath = path.join(resolvedDirPath, entry.name);
             try {
                 const stats = await fs_node.promises.stat(filePath);
-                return createSessionFileSummary({
+                const summary = createSessionFileSummary({
                     filePath,
                     basename: entry.name,
                     stats
                 });
+                const sessionMetadata = await readSessionMetadata(filePath, entry.name, { stats });
+
+                if (sessionMetadata) {
+                    return {
+                        ...summary,
+                        title: sessionMetadata.title || summary.title
+                    };
+                }
+
+                return summary;
             } catch (error) {
                 console.error(`无法获取文件信息: ${filePath}`, error);
                 return null;
