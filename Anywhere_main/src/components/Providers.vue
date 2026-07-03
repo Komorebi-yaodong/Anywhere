@@ -885,7 +885,7 @@ async function deleteSelectedBatchTestKeys() {
                     <el-button :icon="Plus" plain @click="addModel_page = true">{{
                       t('providers.addManuallyBtn')
                     }}</el-button>
-                    <el-button plain @click="openBatchTestDialog">批量测试 Key</el-button>
+                    <el-button plain @click="openBatchTestDialog">测试</el-button>
                   </div>
                 </el-form-item>
                 <div class="models-list-wrapper">
