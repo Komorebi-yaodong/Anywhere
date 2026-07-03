@@ -178,18 +178,18 @@ const fetchWithFallback = async (relativePath) => {
 // 预取所有文档的元数据（更新时间）
 const getAboutDocHtml = () => {
   return `
-    <section style="padding: 8px 4px; line-height: 1.75;">
-      <h1>关于 Anywhere</h1>
-      <p>插件端、桌面端与文档仓入口：</p>
-      <ul>
-        <li>Anywhere 插件 GitHub: <a href="https://github.com/Komorebi-yaodong/Anywhere" target="_blank" rel="noreferrer">GitHub</a></li>
-        <li>Anywhere 插件 Gitee: <a href="https://gitee.com/Komorebi-yaodong/Anywhere" target="_blank" rel="noreferrer">Gitee</a></li>
-        <li>Anywhere Desktop GitHub: <a href="https://github.com/Komorebi-yaodong/anywheredesktop" target="_blank" rel="noreferrer">GitHub</a></li>
-        <li>Anywhere Desktop Gitee: <a href="https://gitee.com/Komorebi-yaodong/anywheredesktop" target="_blank" rel="noreferrer">Gitee</a></li>
-        <li>文档 GitHub: <a href="https://github.com/Komorebi-yaodong/anywhere_doc" target="_blank" rel="noreferrer">GitHub</a></li>
-        <li>文档 Gitee: <a href="https://gitee.com/Komorebi-yaodong/anywhere_" target="_blank" rel="noreferrer">Gitee</a></li>
-      </ul>
-      <p>QQ群：1030363653</p>
+    <section style="padding: 8px 4px; line-height: 1.8; color: var(--text-primary);">
+      <h1 style="margin: 0 0 12px;">关于 Anywhere</h1>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div>- Anywhere 插件：<a href="https://github.com/Komorebi-yaodong/Anywhere" target="_blank" rel="noreferrer">GitHub</a> / <a href="https://gitee.com/Komorebi-yaodong/Anywhere" target="_blank" rel="noreferrer">Gitee</a></div>
+        <div>- Anywhere 客户端：<a href="https://github.com/Komorebi-yaodong/anywheredesktop" target="_blank" rel="noreferrer">GitHub</a> / <a href="https://gitee.com/Komorebi-yaodong/anywheredesktop" target="_blank" rel="noreferrer">Gitee</a></div>
+        <div>- 文档：<a href="https://github.com/Komorebi-yaodong/anywhere_doc" target="_blank" rel="noreferrer">GitHub</a> / <a href="https://gitee.com/Komorebi-yaodong/anywhere_" target="_blank" rel="noreferrer">Gitee</a></div>
+        <div>QQ群：1030363653</div>
+      </div>
+      <div style="margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-primary);">
+        <div style="font-weight: 600; margin-bottom: 6px;">作者的话</div>
+        <div>感谢你愿意使用 Anywhere。这个项目会继续围绕“更自由地调用模型、工具与知识”持续打磨，也欢迎你带着建议、反馈和想法来群里一起共建。</div>
+      </div>
     </section>
   `;
 };
