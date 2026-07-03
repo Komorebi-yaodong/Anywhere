@@ -1493,7 +1493,7 @@ async function deleteSelectedCloudSkills() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showWebdavManagerDialog" title="云端 Skill 管理" width="680px" top="5vh" :close-on-click-modal="false" class="skill-cloud-manager-dialog">
+    <el-dialog v-model="showWebdavManagerDialog" title="云端 Skill 管理" width="680px" top="3vh" :close-on-click-modal="false" class="skill-cloud-manager-dialog">
       <div v-loading="skillWebdavLoading" class="cloud-skill-manager-panel">
         <div class="selectable-toolbar">
           <span class="selectable-count">已选 {{ cloudSkillSelection.length }} / {{ cloudSkills.length }}</span>
@@ -1510,7 +1510,7 @@ async function deleteSelectedCloudSkills() {
           <span>更新时间</span>
           <span>操作</span>
         </div>
-        <el-scrollbar max-height="360px" class="selectable-list-scroll cloud-skill-scroll">
+        <el-scrollbar max-height="300px" class="selectable-list-scroll cloud-skill-scroll">
           <div class="selectable-list" :class="{ 'is-disabled': skillWebdavLoading }">
             <div
               v-for="(skill, index) in cloudSkills"
@@ -2276,8 +2276,8 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 }
 
 .selectable-hint {
-  margin-top: 8px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: 11px;
   color: var(--text-tertiary);
 }
 
@@ -2312,7 +2312,7 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 }
 
 .cloud-skill-manager-panel {
-  min-height: 180px;
+  min-height: 140px;
 }
 
 .cloud-skill-header,
@@ -2330,7 +2330,7 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 }
 
 .cloud-skill-row {
-  min-height: 44px;
+  min-height: 40px;
 }
 
 .cloud-skill-name,
@@ -2360,15 +2360,15 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 
 
 :deep(.skill-cloud-manager-dialog .el-dialog__header) {
-  padding: 14px 16px 8px;
+  padding: 12px 14px 6px;
 }
 
 :deep(.skill-cloud-manager-dialog .el-dialog__body) {
-  padding: 8px 12px 10px;
+  padding: 6px 10px 8px;
 }
 
 :deep(.skill-cloud-manager-dialog .el-dialog__footer) {
-  padding: 8px 12px 12px;
+  padding: 6px 10px 10px;
 }
 
 .skill-cloud-manager-dialog .export-dialog-footer-actions :deep(.el-button),
