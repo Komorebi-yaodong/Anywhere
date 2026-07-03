@@ -1493,7 +1493,7 @@ async function deleteSelectedCloudSkills() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showWebdavManagerDialog" title="云端 Skill 管理" width="820px" top="6vh" :close-on-click-modal="false" class="skill-cloud-manager-dialog">
+    <el-dialog v-model="showWebdavManagerDialog" title="云端 Skill 管理" width="680px" top="5vh" :close-on-click-modal="false" class="skill-cloud-manager-dialog">
       <div v-loading="skillWebdavLoading" class="cloud-skill-manager-panel">
         <div class="selectable-toolbar">
           <span class="selectable-count">已选 {{ cloudSkillSelection.length }} / {{ cloudSkills.length }}</span>
@@ -1794,8 +1794,8 @@ async function deleteSelectedCloudSkills() {
   width: 100%;
   display: flex;
   justify-content: center;
-  gap: 16px;
-  padding: 12px 24px;
+  gap: 10px;
+  padding: 8px 14px;
   background-color: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -1820,8 +1820,8 @@ html.dark .bottom-actions-container {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 18px;
-  min-height: 32px;
+  padding: 0 12px;
+  min-height: 30px;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -1850,8 +1850,12 @@ html.dark .bottom-actions-container {
 
 .action-btn {
   flex-grow: 0;
-  min-width: 180px;
+  min-width: 132px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
   font-weight: 500;
+  letter-spacing: 0;
 }
 
 /* 修复刷新按钮位置 */
@@ -2197,19 +2201,19 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .selectable-count {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
 .selectable-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .selectable-list-scroll {
@@ -2231,9 +2235,9 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 .selectable-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 8px 10px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 8px;
   border-radius: 8px;
   cursor: pointer;
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
@@ -2254,7 +2258,7 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 }
 
 .selectable-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -2263,8 +2267,8 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 }
 
 .selectable-subtitle {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 1px;
+  font-size: 11px;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2314,19 +2318,19 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 .cloud-skill-header,
 .cloud-skill-row {
   display: grid;
-  grid-template-columns: 36px minmax(180px, 1.4fr) minmax(140px, 1fr) 150px 70px;
+  grid-template-columns: 28px minmax(140px, 1.2fr) minmax(110px, 0.95fr) 112px 44px;
   align-items: center;
-  column-gap: 10px;
+  column-gap: 8px;
 }
 
 .cloud-skill-header {
-  padding: 0 16px 6px 16px;
-  font-size: 12px;
+  padding: 0 10px 4px 10px;
+  font-size: 11px;
   color: var(--text-tertiary);
 }
 
 .cloud-skill-row {
-  min-height: 50px;
+  min-height: 44px;
 }
 
 .cloud-skill-name,
@@ -2340,12 +2344,12 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
 
 .cloud-skill-id {
   font-family: monospace;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 
 .cloud-skill-time {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 
@@ -2353,5 +2357,26 @@ html.dark :deep(.textarea-scrollbar-wrapper .el-scrollbar__thumb:hover) {
   display: flex;
   justify-content: center;
 }
+
+
+:deep(.skill-cloud-manager-dialog .el-dialog__header) {
+  padding: 14px 16px 8px;
+}
+
+:deep(.skill-cloud-manager-dialog .el-dialog__body) {
+  padding: 8px 12px 10px;
+}
+
+:deep(.skill-cloud-manager-dialog .el-dialog__footer) {
+  padding: 8px 12px 12px;
+}
+
+.skill-cloud-manager-dialog .export-dialog-footer-actions :deep(.el-button),
+.skill-cloud-manager-dialog .selectable-actions :deep(.el-button) {
+  font-size: 12px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 
 </style>
