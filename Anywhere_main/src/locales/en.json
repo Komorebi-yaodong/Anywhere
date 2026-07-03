@@ -32,7 +32,8 @@
       "mcp": "MCP Servers",
       "skill": "Skill Library",
       "provider": "Providers",
-      "setting": "Settings"
+      "setting": "Settings",
+      "about": "About"
     }
   },
   "chats": {
@@ -386,6 +387,7 @@
       "moveLeft": "Move Left",
       "moveRight": "Move Right",
       "removeFromTag": "Remove prompt from this tag",
+      "deleteTag": "Delete current tag",
       "sendDirect": "When enabled, selected text will be sent directly to the AI.",
       "sendImageDirect": "When enabled, selected screenshot/image will be sent directly to the AI.",
       "sendFile": "When enabled, selected files will be sent directly to the AI for processing.",

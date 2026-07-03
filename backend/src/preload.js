@@ -1,4 +1,4 @@
-const { createChatCompletion, getRandomItem } = require('./chat.js');
+const { createChatCompletion, getRandomItem, batchTestProviderKeys } = require('./chat.js');
 
 const {
   getConfig,
@@ -63,7 +63,9 @@ const {
   saveSkill,
   deleteSkill,
   exportSkillToPackage,
+  exportSkillPackageBuffer,
   extractSkillPackage,
+  importSkillPackageBuffer,
 } = require('./skill.js');
 
 const {
@@ -92,6 +94,7 @@ window.api = {
   updateConfigWithoutFeatures,
   getUser,
   getRandomItem,
+  batchTestProviderKeys,
   createChatCompletion: async (params) => {
     return await createChatCompletion(params);
   },
@@ -238,8 +241,16 @@ window.api = {
   exportSkillToPackage: async (rootPath, skillId, outputDir, options = {}) => {
     return exportSkillToPackage(rootPath, skillId, outputDir, options);
   },
+  exportSkillPackageBuffer: async (rootPath, skillId, options = {}) => {
+    return exportSkillPackageBuffer(rootPath, skillId, options);
+  },
   extractSkillPackage: async (filePath) => {
     return extractSkillPackage(filePath);
+  },
+  importSkillPackageBuffer: async (rootPath, skillId, packageBuffer) => {
+    const result = importSkillPackageBuffer(rootPath, skillId, packageBuffer);
+    broadcastEvent('skills-updated');
+    return result;
   },
   // 按系统默认方式打开文件或目录
   shellOpenPath: (fullPath) => {

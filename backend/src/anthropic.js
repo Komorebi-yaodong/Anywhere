@@ -5,6 +5,14 @@ const Anthropic = AnthropicModule?.Anthropic || AnthropicModule?.default || Anth
 const DEFAULT_MAX_TOKENS = 8192;
 
 // 独立实现，避免与 chat.js 循环依赖
+function normalizeProviderRetryCount(value) {
+    const numericValue = typeof value === 'number'
+        ? value
+        : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
+    return Number.isInteger(numericValue)
+        ? Math.min(Math.max(numericValue, 0), 10)
+        : 3;
+}
 function pickApiKey(list) {
     if (!list) return '';
     if (Array.isArray(list)) {
@@ -276,11 +284,13 @@ function convertAnthropicMessageToOpenAI(message) {
  * 插件端使用 SDK 默认 fetch（dangerouslyAllowBrowser），无需 net.js 桥接。
  */
 async function createAnthropicCompletion(params = {}) {
-    const { baseUrl, apiKey, signal, stream = true, headers: providerHeaders, ...openAiParams } = params;
+    const { baseUrl, apiKey, signal, stream = true, headers: providerHeaders, retryCount: providerRetryCount, ...openAiParams } = params;
+
+    const normalizedRetryCount = normalizeProviderRetryCount(providerRetryCount);
 
     const clientOptions = {
         apiKey: pickApiKey(apiKey),
-        maxRetries: 3,
+        maxRetries: normalizedRetryCount,
         dangerouslyAllowBrowser: true
     };
     if (baseUrl && typeof baseUrl === 'string') {

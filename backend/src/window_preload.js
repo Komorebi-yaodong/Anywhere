@@ -189,6 +189,9 @@ window.api = {
     saveSetting,
     getUser,
     getRandomItem: (list) => getChatModule().getRandomItem(list),
+    batchTestProviderKeys: async (input = {}) => {
+        return await getChatModule().batchTestProviderKeys(input);
+    },
     createChatCompletion: async (params) => {
         return await getChatModule().createChatCompletion(params);
     },
@@ -387,6 +390,22 @@ window.api = {
             throw e;
         }
     },
+
+    exportSkillToPackage: async (rootPath, skillId, outputDir, options = {}) => {
+        return getSkillModule().exportSkillToPackage(rootPath, skillId, outputDir, options);
+    },
+    exportSkillPackageBuffer: async (rootPath, skillId, options = {}) => {
+        return getSkillModule().exportSkillPackageBuffer(rootPath, skillId, options);
+    },
+    extractSkillPackage: async (filePath) => {
+        return getSkillModule().extractSkillPackage(filePath);
+    },
+    importSkillPackageBuffer: async (rootPath, skillId, packageBuffer) => {
+        const res = await getSkillModule().importSkillPackageBuffer(rootPath, skillId, packageBuffer);
+        broadcastEvent('skills-updated');
+        return res;
+    },
+
     onMcpCacheUpdated: (callback) => {
         const normalizePayload = (payload) => {
             if (payload && typeof payload === 'object' && !Array.isArray(payload)) {

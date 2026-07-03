@@ -889,8 +889,10 @@ async function refreshPromptsConfig() {
             :disabled="activeTabName === '__ALL_PROMPTS__' || !promptsAvailableToAssign(activeTabName) || promptsAvailableToAssign(activeTabName).length === 0" />
         </el-tooltip>
 
-        <el-button type="danger" :icon="Delete" circle plain size="small" @click.stop="deleteTag(activeTabName)"
-          class="delete-tag-btn" :disabled="activeTabName === '__ALL_PROMPTS__'" />
+        <el-tooltip :content="t('prompts.tooltips.deleteTag')" placement="top">
+          <el-button type="danger" :icon="Delete" circle plain size="small" @click.stop="deleteTag(activeTabName)"
+            class="delete-tag-btn" :disabled="activeTabName === '__ALL_PROMPTS__'" />
+        </el-tooltip>
       </div>
     </div>
 

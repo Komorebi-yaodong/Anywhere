@@ -31,6 +31,7 @@ const defaultConfig = {
         api_key: "",
         apiType: "chat_completions",
         headers: {},
+        retryCount: 3,
         modelList: [],
         enable: true,
       },
@@ -618,6 +619,10 @@ function checkConfig(config) {
       if (prov.folderId === undefined) { prov.folderId = ""; flag = true; }
       if (prov.apiType === undefined) { prov.apiType = "chat_completions"; flag = true; }
       if (!prov.headers || typeof prov.headers !== 'object' || Array.isArray(prov.headers)) { prov.headers = {}; flag = true; }
+      const normalizedRetryCount = Number.isInteger(prov.retryCount)
+        ? Math.min(Math.max(prov.retryCount, 0), 10)
+        : 3;
+      if (prov.retryCount !== normalizedRetryCount) { prov.retryCount = normalizedRetryCount; flag = true; }
     }
   }
 
@@ -1383,6 +1388,7 @@ async function openFastInputWindow(config, msg) {
   let apiKey = config.providers["0"]?.api_key;
   let apiType = config.providers["0"]?.apiType || 'chat_completions'; // 默认 API 类型
   let providerHeaders = config.providers["0"]?.headers || {};
+  let providerRetryCount = Number.isInteger(config.providers["0"]?.retryCount) ? config.providers["0"]?.retryCount : 3;
   let modelName = "";
 
   const promptModelKey = isValidProviderModelKey(config, promptConfig?.model)
@@ -1397,6 +1403,7 @@ async function openFastInputWindow(config, msg) {
           apiKey = provider.api_key;
           apiType = provider.apiType || 'chat_completions';
           providerHeaders = provider.headers || {};
+          providerRetryCount = Number.isInteger(provider.retryCount) ? provider.retryCount : 3;
           modelName = mName;
       }
   }
@@ -1426,6 +1433,7 @@ async function openFastInputWindow(config, msg) {
       model: modelName,
       apiType: apiType, // 传递 API 类型
       headers: providerHeaders,
+      retryCount: providerRetryCount,
       messages: [
           { role: "system", content: promptConfig.prompt },
           { role: "user", content: content }

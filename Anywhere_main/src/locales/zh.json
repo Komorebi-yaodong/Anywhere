@@ -32,7 +32,8 @@
       "mcp": "MCP 服务",
       "skill": "Skill 技能",
       "provider": "服务商",
-      "setting": "设置"
+      "setting": "设置",
+      "about": "关于"
     }
   },
   "chats": {
@@ -386,6 +387,7 @@
       "moveLeft": "左移",
       "moveRight": "右移",
       "removeFromTag": "从此标签移除快捷助手",
+      "deleteTag": "删除当前标签",
       "sendDirect": "开启后，选中文字后将直接发送给AI",
       "sendImageDirect": "开启后，选中截图后将直接发送给AI",
       "sendFile": "开启后，选中文件后将直接发送给AI并处理结果",

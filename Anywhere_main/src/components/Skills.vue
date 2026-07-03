@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted, computed, inject, watch, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { createClient } from 'webdav/web';
 import {
   FolderOpened, Refresh, Edit, Delete, Plus,
   Document, UploadFilled, QuestionFilled, Search,
@@ -19,6 +20,15 @@ const showExportDialog = ref(false);
 const skillsToExport = ref([]);
 const hideEnvOnExport = ref(true);
 const isExporting = ref(false);
+
+const showWebdavSyncDialog = ref(false);
+const showWebdavManagerDialog = ref(false);
+const skillWebdavLoading = ref(false);
+const localSkillsForSync = ref([]);
+const skillsToSync = ref([]);
+const cloudSkills = ref([]);
+const cloudSkillSelection = ref([]);
+
 
 // 编辑对话框状态
 const showEditDialog = ref(false);
@@ -650,6 +660,227 @@ async function handleExportSkills() {
     isExporting.value = false;
   }
 }
+
+
+function buildSkillWebdavConfig() {
+  return {
+    url: currentConfig.value?.webdav?.url || '',
+    username: currentConfig.value?.webdav?.username || '',
+    password: currentConfig.value?.webdav?.password || ''
+  };
+}
+
+function getSkillWebdavRemoteRoot() {
+  const basePath = String(currentConfig.value?.webdav?.path || '/anywhere').trim() || '/anywhere';
+  return `${basePath.endsWith('/') ? basePath.slice(0, -1) : basePath}/skill`;
+}
+
+function formatCloudTime(value = '') {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || '';
+  const yy = String(date.getFullYear()).slice(-2);
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${yy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+}
+
+async function ensureSkillWebdavDirectory(client, remoteRoot) {
+  try {
+    if (!(await client.exists(remoteRoot))) {
+      await client.createDirectory(remoteRoot, { recursive: true });
+    }
+  } catch (error) {
+    console.warn('[Skills] ensure remote dir failed:', error);
+    throw error;
+  }
+}
+
+async function openWebdavSyncDialog() {
+  if (!skillPath.value) {
+    ElMessage.warning(t('skills.pathNotSet'));
+    return;
+  }
+  if (!currentConfig.value?.webdav?.url) {
+    ElMessage.warning('请先在设置中配置 WebDAV');
+    return;
+  }
+  localSkillsForSync.value = Array.isArray(skillsList.value) ? skillsList.value : [];
+  skillsToSync.value = localSkillsForSync.value.map(item => item.id);
+  showWebdavSyncDialog.value = true;
+}
+
+async function syncSelectedSkillsToWebdav() {
+  if (!skillPath.value || skillsToSync.value.length === 0) {
+    ElMessage.warning(t('common.noFileSelected'));
+    return;
+  }
+
+  skillWebdavLoading.value = true;
+  try {
+    const { url, username, password } = buildSkillWebdavConfig();
+    const client = createClient(url, { username, password });
+    const remoteRoot = getSkillWebdavRemoteRoot();
+    await ensureSkillWebdavDirectory(client, remoteRoot);
+
+    let success = 0;
+    let failed = 0;
+    for (const skillId of skillsToSync.value) {
+      try {
+        const packageBuffer = await window.api.exportSkillPackageBuffer(skillPath.value, skillId, { hideEnv: false });
+        await client.putFileContents(`${remoteRoot}/${skillId}.skill`, packageBuffer, { overwrite: true });
+        success += 1;
+      } catch (error) {
+        console.warn('[Skills] upload skill failed:', skillId, error);
+        failed += 1;
+      }
+    }
+
+    if (failed > 0) {
+      ElMessage.warning(`Skill 同步完成：成功 ${success} 个，失败 ${failed} 个`);
+    } else {
+      ElMessage.success(`已同步 ${success} 个 Skill 到云端`);
+      showWebdavSyncDialog.value = false;
+    }
+  } catch (error) {
+    ElMessage.error(`Skill 同步失败: ${error.message}`);
+  } finally {
+    skillWebdavLoading.value = false;
+  }
+}
+
+async function fetchCloudSkills() {
+  skillWebdavLoading.value = true;
+  try {
+    const { url, username, password } = buildSkillWebdavConfig();
+    const client = createClient(url, { username, password });
+    const remoteRoot = getSkillWebdavRemoteRoot();
+
+    if (!(await client.exists(remoteRoot))) {
+      cloudSkills.value = [];
+      cloudSkillSelection.value = [];
+      return;
+    }
+
+    const response = await client.getDirectoryContents(remoteRoot, { details: true });
+    const contents = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+    cloudSkills.value = contents
+      .filter(item => item.type === 'file' && String(item.basename || '').toLowerCase().endsWith('.skill'))
+      .map(item => ({
+        id: String(item.basename || '').replace(/\.skill$/i, ''),
+        name: String(item.basename || '').replace(/\.skill$/i, ''),
+        basename: item.basename,
+        size: item.size || 0,
+        updatedAt: item.lastmod || item.updatedAt || ''
+      }))
+      .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    cloudSkillSelection.value = [];
+  } catch (error) {
+    cloudSkills.value = [];
+    ElMessage.error(`获取云端 Skill 失败: ${error.message}`);
+  } finally {
+    skillWebdavLoading.value = false;
+  }
+}
+
+async function openWebdavManagerDialog() {
+  if (!skillPath.value) {
+    ElMessage.warning(t('skills.pathNotSet'));
+    return;
+  }
+  if (!currentConfig.value?.webdav?.url) {
+    ElMessage.warning('请先在设置中配置 WebDAV');
+    return;
+  }
+  showWebdavManagerDialog.value = true;
+  await fetchCloudSkills();
+}
+
+async function pullCloudSkill(skill) {
+  if (!skillPath.value) {
+    ElMessage.warning(t('skills.pathNotSet'));
+    return;
+  }
+  skillWebdavLoading.value = true;
+  try {
+    const { url, username, password } = buildSkillWebdavConfig();
+    const client = createClient(url, { username, password });
+    const remoteRoot = getSkillWebdavRemoteRoot();
+    const content = await client.getFileContents(`${remoteRoot}/${skill.id}.skill`, { format: 'binary' });
+    await window.api.importSkillPackageBuffer(skillPath.value, skill.id, content);
+    ElMessage.success('已拉取到本地');
+    await refreshSkills();
+  } catch (error) {
+    ElMessage.error(`拉取 Skill 失败: ${error.message}`);
+  } finally {
+    skillWebdavLoading.value = false;
+  }
+}
+
+async function pullSelectedCloudSkills() {
+  const selectedRows = cloudSkills.value.filter(item => cloudSkillSelection.value.includes(item.id));
+  if (!selectedRows.length) {
+    ElMessage.warning(t('common.noFileSelected'));
+    return;
+  }
+
+  skillWebdavLoading.value = true;
+  try {
+    let success = 0;
+    let failed = 0;
+    const { url, username, password } = buildSkillWebdavConfig();
+    const client = createClient(url, { username, password });
+    const remoteRoot = getSkillWebdavRemoteRoot();
+
+    for (const skill of selectedRows) {
+      try {
+        const content = await client.getFileContents(`${remoteRoot}/${skill.id}.skill`, { format: 'binary' });
+        await window.api.importSkillPackageBuffer(skillPath.value, skill.id, content);
+        success += 1;
+      } catch (error) {
+        console.warn('[Skills] pull skill failed:', skill.id, error);
+        failed += 1;
+      }
+    }
+    await refreshSkills();
+    if (failed > 0) {
+      ElMessage.warning(`拉取完成：成功 ${success} 个，失败 ${failed} 个`);
+    } else {
+      ElMessage.success(`拉取完成：成功 ${success} 个`);
+    }
+  } catch (error) {
+    ElMessage.error(`批量拉取 Skill 失败: ${error.message}`);
+  } finally {
+    skillWebdavLoading.value = false;
+  }
+}
+
+async function deleteSelectedCloudSkills() {
+  if (!cloudSkillSelection.value.length) {
+    ElMessage.warning(t('common.noFileSelected'));
+    return;
+  }
+
+  await ElMessageBox.confirm(`确定删除选中的 ${cloudSkillSelection.value.length} 个云端 Skill 吗？`, t('common.warningTitle'), { type: 'warning' });
+  skillWebdavLoading.value = true;
+  try {
+    const { url, username, password } = buildSkillWebdavConfig();
+    const client = createClient(url, { username, password });
+    const remoteRoot = getSkillWebdavRemoteRoot();
+    for (const skillId of cloudSkillSelection.value) {
+      await client.deleteFile(`${remoteRoot}/${skillId}.skill`);
+    }
+    ElMessage.success(t('common.deleteSuccess'));
+    await fetchCloudSkills();
+  } catch (error) {
+    ElMessage.error(`删除云端 Skill 失败: ${error.message}`);
+  } finally {
+    skillWebdavLoading.value = false;
+  }
+}
+
 </script>
 
 <template>
@@ -741,6 +972,12 @@ async function handleExportSkills() {
       </el-button>
       <el-button class="action-btn" @click="openExportDialog" :icon="Download" :disabled="!skillPath">
         {{ t('skills.export.button') }}
+      </el-button>
+      <el-button class="action-btn" @click="openWebdavSyncDialog" :icon="UploadFilled" :disabled="!skillPath">
+        同步到 WebDAV
+      </el-button>
+      <el-button class="action-btn" @click="openWebdavManagerDialog" :icon="FolderOpened" :disabled="!skillPath">
+        云端管理
       </el-button>
       <el-button class="action-btn" @click="selectSkillPath" :icon="FolderOpened">
         {{ t('skills.setPathBtn') }}
@@ -918,6 +1155,45 @@ async function handleExportSkills() {
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showWebdavSyncDialog" title="同步 Skill 到 WebDAV" width="560px" :close-on-click-modal="false">
+      <el-checkbox-group v-model="skillsToSync" style="display:flex; flex-direction:column; gap:8px; max-height:320px; overflow:auto;">
+        <el-checkbox v-for="skill in localSkillsForSync" :key="skill.id" :value="skill.id">
+          {{ skill.name }} <span style="color:var(--text-secondary);">({{ skill.id }})</span>
+        </el-checkbox>
+      </el-checkbox-group>
+      <template #footer>
+        <el-button @click="showWebdavSyncDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="skillWebdavLoading" @click="syncSelectedSkillsToWebdav">同步</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showWebdavManagerDialog" title="云端 Skill 管理" width="760px" top="6vh" :close-on-click-modal="false">
+      <el-table :data="cloudSkills" v-loading="skillWebdavLoading" @selection-change="(rows) => cloudSkillSelection = rows.map(item => item.id)" max-height="360" border stripe>
+        <el-table-column type="selection" width="48" />
+        <el-table-column prop="name" label="名称" min-width="180" />
+        <el-table-column prop="id" label="ID" min-width="180" />
+        <el-table-column prop="updatedAt" label="更新时间" width="160">
+          <template #default="scope">{{ formatCloudTime(scope.row.updatedAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100">
+          <template #default="scope">
+            <el-button link type="primary" @click="pullCloudSkill(scope.row)">拉取</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <div class="export-dialog-footer">
+          <el-button :icon="Refresh" @click="fetchCloudSkills"></el-button>
+          <div class="export-dialog-footer-actions">
+            <el-button type="primary" plain @click="pullSelectedCloudSkills" :disabled="cloudSkillSelection.length === 0">拉取选中</el-button>
+            <el-button type="danger" plain @click="deleteSelectedCloudSkills" :disabled="cloudSkillSelection.length === 0">{{ t('common.deleteSelected') }}</el-button>
+            <el-button @click="showWebdavManagerDialog = false">{{ t('common.close') }}</el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 

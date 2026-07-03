@@ -109,6 +109,7 @@ const docLoading = ref(false);
 const currentDocContent = ref('');
 const activeDocIndex = ref('0');
 const docScrollbarRef = ref(null);
+const ABOUT_DOC_FILE = '__about__';
 
 // 文档列表配置，增加 i18nKey 用于动态标题，lastUpdated 动态获取
 const docList = ref([
@@ -118,7 +119,8 @@ const docList = ref([
   { i18nKey: 'doc.titles.mcp', file: 'mcp_doc.md', lastUpdated: null },
   { i18nKey: 'doc.titles.skill', file: 'skill_doc.md', lastUpdated: null },
   { i18nKey: 'doc.titles.provider', file: 'provider_doc.md', lastUpdated: null },
-  { i18nKey: 'doc.titles.setting', file: 'setting_doc.md', lastUpdated: null }
+  { i18nKey: 'doc.titles.setting', file: 'setting_doc.md', lastUpdated: null },
+  { i18nKey: 'doc.titles.about', file: ABOUT_DOC_FILE, lastUpdated: null, isBuiltin: true }
 ]);
 
 // 阅读状态管理
@@ -174,10 +176,33 @@ const fetchWithFallback = async (relativePath) => {
 };
 
 // 预取所有文档的元数据（更新时间）
+const getAboutDocHtml = () => {
+  return `
+    <section style="padding: 8px 4px; line-height: 1.75;">
+      <h1>关于 Anywhere</h1>
+      <p>插件端、桌面端与文档仓入口：</p>
+      <ul>
+        <li>Anywhere 插件 GitHub: <a href="https://github.com/Komorebi-yaodong/Anywhere" target="_blank" rel="noreferrer">GitHub</a></li>
+        <li>Anywhere 插件 Gitee: <a href="https://gitee.com/Komorebi-yaodong/Anywhere" target="_blank" rel="noreferrer">Gitee</a></li>
+        <li>Anywhere Desktop GitHub: <a href="https://github.com/Komorebi-yaodong/anywheredesktop" target="_blank" rel="noreferrer">GitHub</a></li>
+        <li>Anywhere Desktop Gitee: <a href="https://gitee.com/Komorebi-yaodong/anywheredesktop" target="_blank" rel="noreferrer">Gitee</a></li>
+        <li>文档 GitHub: <a href="https://github.com/Komorebi-yaodong/anywhere_doc" target="_blank" rel="noreferrer">GitHub</a></li>
+        <li>文档 Gitee: <a href="https://gitee.com/Komorebi-yaodong/anywhere_" target="_blank" rel="noreferrer">Gitee</a></li>
+      </ul>
+      <p>QQ群：1030363653</p>
+    </section>
+  `;
+};
+
+
 const fetchAllDocsMetadata = async () => {
   const dateRegex = /\*\*文档更新时间：(\d{4})年(\d{1,2})月(\d{1,2})日\*\*/;
 
   const promises = docList.value.map(async (doc) => {
+    if (doc.isBuiltin) {
+      doc.lastUpdated = null;
+      return;
+    }
     try {
       const { text } = await fetchWithFallback(`docs/${doc.file}`);
       
@@ -200,6 +225,17 @@ const fetchAllDocsMetadata = async () => {
 const fetchAndParseDoc = async (filename) => {
   // 标记当前文档为已读
   markDocAsRead(filename);
+
+  if (filename === ABOUT_DOC_FILE) {
+    docLoading.value = false;
+    currentDocContent.value = getAboutDocHtml();
+    nextTick(() => {
+      if (docScrollbarRef.value) {
+        docScrollbarRef.value.setScrollTop(0);
+      }
+    });
+    return;
+  }
 
   docLoading.value = true;
   try {

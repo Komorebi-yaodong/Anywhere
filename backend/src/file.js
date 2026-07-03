@@ -439,8 +439,9 @@ async function readSessionMetadata(filePath, fallbackBasename, cacheContext = nu
  * @param {string} dirPath - 目录路径
  * @returns {Promise<Array<object>>} 返回文件信息数组
  */
-async function listJsonFiles(dirPath) {
+async function listJsonFiles(dirPath, options = {}) {
     if (!dirPath) return [];
+    const includeSessionMetadataTitle = options?.includeSessionMetadataTitle !== false;
     const resolvedDirPath = path.resolve(String(dirPath).trim());
     const entries = await fs.readdir(resolvedDirPath, { withFileTypes: true });
     const jsonFiles = entries.filter(
@@ -459,6 +460,9 @@ async function listJsonFiles(dirPath) {
                     basename: entry.name,
                     stats
                 });
+                if (!includeSessionMetadataTitle) {
+                    return summary;
+                }
                 const sessionMetadata = await readSessionMetadata(filePath, entry.name, { stats });
 
                 if (sessionMetadata) {

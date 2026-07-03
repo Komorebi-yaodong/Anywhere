@@ -651,6 +651,54 @@ function extractSkillPackage(filePath) {
     });
 }
 
+function exportSkillPackageBuffer(skillRootPath, skillId, options = {}) {
+    const skillDir = path.join(skillRootPath, skillId);
+    if (!fs.existsSync(skillDir)) {
+        throw new Error(`Skill directory not found: ${skillDir}`);
+    }
+
+    const zip = new AdmZip();
+    addSkillDirectoryToZip(zip, skillDir, options);
+    return zip.toBuffer();
+}
+
+function importSkillPackageBuffer(skillRootPath, skillId, packageBuffer) {
+    const zipBuffer = Buffer.isBuffer(packageBuffer)
+        ? packageBuffer
+        : Array.isArray(packageBuffer)
+            ? Buffer.from(packageBuffer)
+            : Buffer.from(packageBuffer || []);
+
+    const zip = new AdmZip(zipBuffer);
+    const tempDir = path.join(os.tmpdir(), 'anywhere_skill_import_buffer', Date.now().toString());
+    if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    try {
+        zip.extractAllTo(tempDir, true);
+        const finalDir = findSkillEntryDir(tempDir);
+        if (!finalDir) {
+            throw new Error('Invalid skill package: SKILL.md not found');
+        }
+
+        if (!fs.existsSync(skillRootPath)) {
+            fs.mkdirSync(skillRootPath, { recursive: true });
+        }
+
+        const targetDir = path.join(skillRootPath, skillId);
+        if (fs.existsSync(targetDir)) {
+            fs.rmSync(targetDir, { recursive: true, force: true });
+        }
+        fs.cpSync(finalDir, targetDir, { recursive: true, force: true });
+        return { ok: true, targetDir };
+    } finally {
+        if (fs.existsSync(tempDir)) {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    }
+}
+
 module.exports = {
     listSkills,
     getSkillDetails,
@@ -659,5 +707,7 @@ module.exports = {
     saveSkill,
     deleteSkill,
     exportSkillToPackage,
+    exportSkillPackageBuffer,
     extractSkillPackage,
+    importSkillPackageBuffer,
 };

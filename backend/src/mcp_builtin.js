@@ -150,7 +150,8 @@ function resolveProviderConfigByModel(fullConfig = {}, modelValue = '') {
         apiType: provider?.apiType || 'chat_completions',
         baseUrl: provider?.url || '',
         apiKey: provider?.api_key || '',
-        headers: provider?.headers || {}
+        headers: provider?.headers || {},
+        retryCount: Number.isInteger(provider?.retryCount) ? provider.retryCount : 3
     };
 }
 
@@ -1521,6 +1522,7 @@ ${userContext || 'No additional context provided.'}
                 apiKey: apiKey,
                 model: requestModelName,
                 apiType: currentApiType,
+                retryCount: Number.isInteger(providerInfo.retryCount) ? providerInfo.retryCount : 3,
                 headers: providerHeaders,
                 messages: messages,
                 tools: availableTools.length > 0 ? availableTools : undefined,
@@ -1651,6 +1653,7 @@ ${userContext || 'No additional context provided.'}
             apiKey: apiKey,
             model: requestModelName,
             apiType: currentApiType,
+            retryCount: Number.isInteger(providerInfo.retryCount) ? providerInfo.retryCount : 3,
             headers: providerHeaders,
             messages: messages,
             tools: availableTools.length > 0 ? availableTools : undefined,
@@ -2668,20 +2671,25 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
 
             let ddgRegion = 'cn-zh';
             let acceptLang = 'zh-CN,zh;q=0.9,en;q=0.8';
+            let bingMarket = 'zh-CN';
 
             const langInput = (language || '').toLowerCase();
             if (langInput.includes('en') || langInput.includes('us')) {
                 ddgRegion = 'us-en';
                 acceptLang = 'en-US,en;q=0.9';
+                bingMarket = 'en-US';
             } else if (langInput.includes('jp') || langInput.includes('ja')) {
                 ddgRegion = 'jp-jp';
                 acceptLang = 'ja-JP,ja;q=0.9,en;q=0.8';
+                bingMarket = 'ja-JP';
             } else if (langInput.includes('ru')) {
                 ddgRegion = 'ru-ru';
                 acceptLang = 'ru-RU,ru;q=0.9,en;q=0.8';
+                bingMarket = 'ru-RU';
             } else if (langInput === 'all' || langInput === 'world') {
                 ddgRegion = 'wt-wt';
                 acceptLang = 'en-US,en;q=0.9';
+                bingMarket = 'en-WW';
             }
 
             const headers = {
@@ -2698,10 +2706,80 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
                 return str
                     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
                     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ")
-                    .replace(/<b>/g, "").replace(/<\/b>/g, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+                    .replace(/<b>/g, "").replace(/<\/b>/g, "")
+                    .replace(/<strong>/g, "").replace(/<\/strong>/g, "")
+                    .replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+            };
+
+            const parseDuckDuckGoResults = (html) => {
+                const parsed = [];
+                const titleLinkRegex = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+                const snippetRegex = /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div)>/g;
+                const titles = [...html.matchAll(titleLinkRegex)];
+                const snippets = [...html.matchAll(snippetRegex)];
+
+                for (let i = 0; i < titles.length && i < limit; i++) {
+                    let link = titles[i][1];
+                    const titleRaw = titles[i][2];
+                    const snippetRaw = snippets[i] ? snippets[i][1] : "";
+
+                    try {
+                        if (link.includes('uddg=')) {
+                            const urlObj = new URL(link, "https://html.duckduckgo.com");
+                            const uddg = urlObj.searchParams.get("uddg");
+                            if (uddg) link = decodeURIComponent(uddg);
+                        }
+                    } catch (e) { }
+
+                    parsed.push({
+                        title: decodeHtml(titleRaw),
+                        link: link,
+                        snippet: decodeHtml(snippetRaw)
+                    });
+                }
+
+                return parsed.filter(item => item.title && item.link);
+            };
+
+            const parseBingResults = (html) => {
+                const parsed = [];
+                const resultRegex = /<li[^>]*class="[^"]*b_algo[^"]*"[^>]*>([\s\S]*?)<\/li>/g;
+                const blocks = [...html.matchAll(resultRegex)];
+
+                const extractBingSnippet = (block) => {
+                    const candidates = [
+                        block.match(/<div[^>]*class="[^"]*b_caption[^"]*"[^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i),
+                        block.match(/<p[^>]*>([\s\S]*?)<\/p>/i),
+                        block.match(/<div[^>]*class="[^"]*(?:b_lineclamp\d*|b_snippet|b_caption)[^"]*"[^>]*>([\s\S]*?)<\/div>/i),
+                        block.match(/<span[^>]*class="[^"]*(?:b_lineclamp\d*|b_snippet)[^"]*"[^>]*>([\s\S]*?)<\/span>/i)
+                    ];
+                    for (const candidate of candidates) {
+                        const snippet = decodeHtml(candidate ? candidate[1] : "");
+                        if (snippet) return snippet;
+                    }
+
+                    const withoutTitle = block.replace(/<h2[\s\S]*?<\/h2>/i, ' ');
+                    const fallbackText = decodeHtml(withoutTitle);
+                    return fallbackText.length > 240 ? `${fallbackText.slice(0, 240).trim()}...` : fallbackText;
+                };
+
+                for (let i = 0; i < blocks.length && parsed.length < limit; i++) {
+                    const block = blocks[i][1] || "";
+                    const titleMatch = block.match(/<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+                    if (!titleMatch) continue;
+                    parsed.push({
+                        title: decodeHtml(titleMatch[2]),
+                        link: titleMatch[1],
+                        snippet: extractBingSnippet(block)
+                    });
+                }
+
+                return parsed.filter(item => item.title && item.link);
             };
 
             let results = [];
+            let searchRequestFailed = null;
+            let fallbackUsed = false;
 
             try {
                 const body = new URLSearchParams();
@@ -2716,40 +2794,54 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
                     signal: signal
                 });
 
-                const html = await response.text();
-
-                // 放宽类名匹配，并同时兼容 <a> 和 <div> 标签结尾
-                const titleLinkRegex = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
-                const snippetRegex = /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div)>/g;
-                
-                const titles = [...html.matchAll(titleLinkRegex)];
-                const snippets = [...html.matchAll(snippetRegex)];
-                
-                for (let i = 0; i < titles.length && i < limit; i++) {
-                    let link = titles[i][1];
-                    const titleRaw = titles[i][2];
-                    const snippetRaw = snippets[i] ? snippets[i][1] : "";
-                    
-                    try {
-                        if (link.includes('uddg=')) {
-                            const urlObj = new URL(link, "https://html.duckduckgo.com");
-                            const uddg = urlObj.searchParams.get("uddg");
-                            if (uddg) link = decodeURIComponent(uddg);
-                        }
-                    } catch (e) { }
-                    
-                    results.push({
-                        title: decodeHtml(titleRaw),
-                        link: link,
-                        snippet: decodeHtml(snippetRaw)
-                    });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} ${response.statusText}`);
                 }
+
+                const html = await response.text();
+                results = parseDuckDuckGoResults(html);
+                console.log('[web_search] DDG');
             } catch (e) {
+                searchRequestFailed = e;
                 console.warn("DDG fetch error:", e);
             }
 
+            if (results.length === 0 && searchRequestFailed) {
+                try {
+                    fallbackUsed = true;
+                    const bingHeaders = {
+                        "User-Agent": headers["User-Agent"],
+                        "Accept": headers["Accept"],
+                        "Accept-Language": acceptLang,
+                        "Referer": "https://www.bing.com/"
+                    };
+                    const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=${encodeURIComponent(bingMarket)}&mkt=${encodeURIComponent(bingMarket)}`;
+                    const response = await fetch(bingUrl, {
+                        method: 'GET',
+                        headers: bingHeaders,
+                        signal: signal
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+                    }
+
+                    const html = await response.text();
+                    results = parseBingResults(html);
+                    console.log('[web_search] Edge');
+                } catch (fallbackError) {
+                    console.warn("Bing fallback fetch error:", fallbackError);
+                    return JSON.stringify({
+                        message: "Web search request failed. Please check your network or proxy settings.",
+                        query: query,
+                        error: searchRequestFailed.message,
+                        fallbackError: fallbackError.message
+                    });
+                }
+            }
+
             if (results.length === 0) {
-                if (ddgRegion === 'cn-zh') return JSON.stringify({ message: "No results found in Chinese region. Try setting language='en' or 'all'.", query: query });
+                if (ddgRegion === 'cn-zh') return JSON.stringify({ message: fallbackUsed ? "No results found from Bing fallback." : "No results found in Chinese region. Try setting language='en' or 'all'.", query: query });
                 return JSON.stringify({ message: "No results found.", query: query });
             }
             return JSON.stringify(results, null, 2);

@@ -58,6 +58,135 @@ function mergeHeaders(...headerGroups) {
  * 随机获取列表中的一项（用于 API Key 负载均衡）
  * @param {string|Array} list
  */
+function splitProviderApiKeys(apiKeyInput = '') {
+    if (Array.isArray(apiKeyInput)) {
+        return apiKeyInput
+            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+            .filter(Boolean);
+    }
+
+    return String(apiKeyInput || '')
+        .split(/[,，]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function normalizeProviderRetryCount(value) {
+    const numericValue = typeof value === 'number'
+        ? value
+        : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
+    return Number.isInteger(numericValue)
+        ? Math.min(Math.max(numericValue, 0), 10)
+        : 3;
+}
+
+function normalizeBatchTestError(error, fallbackStatus = 0) {
+    const message = String(error?.message || error || 'request_failed');
+    const statusMatch = message.match(/\b(\d{3})\b/);
+    const status = statusMatch ? Number(statusMatch[1]) : fallbackStatus;
+    return {
+        ok: false,
+        status,
+        code: status ? String(status) : 'REQUEST_ERROR',
+        message
+    };
+}
+
+function extractBatchTestText(response = {}, apiType = 'chat_completions') {
+    if (apiType === 'responses' || apiType === 'codex') {
+        if (typeof response?.output_text === 'string' && response.output_text.trim()) {
+            return response.output_text.trim();
+        }
+
+        if (Array.isArray(response?.output)) {
+            return response.output
+                .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+                .map((content) => content?.type === 'output_text' ? String(content.text || '') : '')
+                .join('')
+                .trim();
+        }
+
+        return '';
+    }
+
+    return String(response?.choices?.[0]?.message?.content || '').trim();
+}
+
+async function batchTestProviderKeys(params = {}) {
+    const baseUrl = typeof params?.baseUrl === 'string' ? params.baseUrl.trim() : '';
+    const model = typeof params?.model === 'string' ? params.model.trim() : '';
+    const apiType = typeof params?.apiType === 'string' && params.apiType ? params.apiType : 'chat_completions';
+    const headers = normalizeProviderHeaders(params?.headers);
+    const retryCount = normalizeProviderRetryCount(params?.retryCount);
+    const rawKeys = splitProviderApiKeys(params?.apiKeys);
+
+    if (!baseUrl) throw new Error('provider_base_url_required');
+    if (!model) throw new Error('provider_model_required');
+    if (rawKeys.length === 0) return { ok: true, total: 0, results: [] };
+
+    const promptMessages = [
+        { role: 'system', content: 'You are a connectivity probe. Always reply with exactly: pong' },
+        { role: 'user', content: 'ping' }
+    ];
+
+    const results = new Array(rawKeys.length);
+    const concurrency = Math.min(32, rawKeys.length);
+    let currentIndex = 0;
+
+    const worker = async () => {
+        while (currentIndex < rawKeys.length) {
+            const index = currentIndex;
+            currentIndex += 1;
+            const key = rawKeys[index];
+            const maskedKey = key.length <= 8 ? key : `${key.slice(0, 6)}...${key.slice(-3)}`;
+
+            try {
+                const response = await createChatCompletion({
+                    baseUrl,
+                    apiKey: key,
+                    model,
+                    apiType,
+                    headers,
+                    retryCount,
+                    messages: promptMessages,
+                    stream: false,
+                    max_tokens: 32,
+                    temperature: 0
+                });
+
+                const text = extractBatchTestText(response, apiType);
+                const isEmpty = !text || !text.trim();
+                results[index] = {
+                    key,
+                    maskedKey,
+                    index,
+                    ok: !isEmpty,
+                    status: 200,
+                    code: isEmpty ? 'EMPTY' : '200',
+                    message: isEmpty ? 'empty_response' : 'ok',
+                    responseText: text
+                };
+            } catch (error) {
+                results[index] = {
+                    key,
+                    maskedKey,
+                    index,
+                    ...normalizeBatchTestError(error)
+                };
+            }
+        }
+    };
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+    return {
+        ok: true,
+        total: results.length,
+        results
+    };
+}
+
+
 function getRandomItem(list) {
     if (!list) return "";
     if (Array.isArray(list)) {
@@ -242,8 +371,11 @@ async function createChatCompletion(params) {
         signal,
         apiType = 'chat_completions',
         headers: providerHeaders,
+        retryCount: providerRetryCount,
         ...openAiParams
     } = params;
+
+    const normalizedRetryCount = normalizeProviderRetryCount(providerRetryCount);
 
     // Claude 原生协议：经 Anthropic SDK 适配为 OpenAI Chat Completions 形态
     if (apiType === 'claude') {
@@ -253,6 +385,7 @@ async function createChatCompletion(params) {
             signal,
             stream: params.stream ?? true,
             headers: mergeHeaders(DEFAULT_CHAT_HEADERS, normalizeProviderHeaders(providerHeaders)),
+            retryCount: normalizedRetryCount,
             ...openAiParams
         });
     }
@@ -261,7 +394,7 @@ async function createChatCompletion(params) {
         baseURL: baseUrl,
         apiKey: getRandomItem(apiKey), // 自动处理多 Key
         dangerouslyAllowBrowser: true, // 允许在 Electron 渲染进程(如 preload)中使用
-        maxRetries: 3,
+        maxRetries: normalizedRetryCount,
         defaultHeaders: mergeHeaders(DEFAULT_CHAT_HEADERS, normalizeProviderHeaders(providerHeaders))
     });
 
@@ -354,5 +487,6 @@ async function createChatCompletion(params) {
 
 module.exports = {
     createChatCompletion,
-    getRandomItem
+    getRandomItem,
+    batchTestProviderKeys
 };
