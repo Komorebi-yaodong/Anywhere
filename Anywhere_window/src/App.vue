@@ -1,15 +1,15 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick, watch, h, computed, defineAsyncComponent } from 'vue';
-import { ElContainer, ElMain, ElDialog, ElImageViewer, ElMessage, ElMessageBox, ElInput, ElButton, ElCheckbox, ElButtonGroup, ElTag, ElTooltip, ElIcon, ElAvatar, ElSwitch, ElSelect, ElOption } from 'element-plus';
-import { createClient } from "webdav/web";
-import { DocumentCopy, QuestionFilled, Download, Search, Tools, CaretRight, Collection, Warning, Cpu, ArrowUp, ArrowDown, Refresh } from '@element-plus/icons-vue';
+  import { ArrowDown, ArrowUp, CaretRight, Collection, Cpu, DocumentCopy, Download, QuestionFilled, Refresh, Search, Tools, Warning } from '@element-plus/icons-vue';
+  import { ElAvatar, ElButton, ElCheckbox, ElContainer, ElDialog, ElIcon, ElImageViewer, ElInput, ElMain, ElMessage, ElMessageBox, ElOption, ElSelect, ElSwitch, ElTag, ElTooltip } from 'element-plus';
+  import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { createClient } from "webdav/web";
 
-import TitleBar from './components/TitleBar.vue';
-import ChatHeader from './components/ChatHeader.vue';
-const ChatMessage = defineAsyncComponent(() => import('./components/ChatMessage.vue'));
+  import ChatHeader from './components/ChatHeader.vue';
 import ChatInput from './components/ChatInput.vue';
 import ModelSelectionDialog from './components/ModelSelectionDialog.vue';
 import TaskPanel from './components/TaskPanel.vue';
+  import TitleBar from './components/TitleBar.vue';
+  const ChatMessage = defineAsyncComponent(() => import('./components/ChatMessage.vue'));
 
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
@@ -157,12 +157,12 @@ const getLastMessageElement = () => {
 const updateModelListAndMap = (config) => {
   const newModelList = [];
   const newModelMap = {};
-  
+
   const folders = config.providerFolders || {};
   const order = config.providerOrder || [];
-  
+
   // 1. 文件夹按字母序排序
-  const sortedFolderIds = Object.keys(folders).sort((a, b) => 
+  const sortedFolderIds = Object.keys(folders).sort((a, b) =>
     (folders[a].name || '').localeCompare(folders[b].name || '')
   );
 
@@ -723,6 +723,22 @@ const expandedMcpServers = ref(new Set());
 
 const lastAppliedMcpConfigFingerprint = ref('');
 
+  const stableComparableValue = (value) => {
+    if (Array.isArray(value)) return value.map(stableComparableValue);
+    if (value && typeof value === 'object') {
+      return Object.keys(value).sort().reduce((acc, key) => {
+        if (key === 'clientSecret') {
+          acc[key] = value[key] ? '__present__' : '';
+          return acc;
+        }
+        const item = stableComparableValue(value[key]);
+        if (item !== undefined) acc[key] = item;
+        return acc;
+      }, {});
+    }
+    return value;
+  };
+
 const buildComparableMcpServerConfig = (server = {}) => ({
   type: server?.type || '',
   command: server?.command || '',
@@ -734,6 +750,7 @@ const buildComparableMcpServerConfig = (server = {}) => ({
   headers: server?.headers && typeof server.headers === 'object'
     ? Object.entries(server.headers).sort(([a], [b]) => String(a).localeCompare(String(b)))
     : [],
+  auth: stableComparableValue(server?.auth || null),
   isPersistent: Boolean(server?.isPersistent),
   timeoutSeconds: Number(server?.timeoutSeconds) || 120
 });
@@ -779,7 +796,8 @@ const refreshSelectedMcpServers = async () => {
       baseUrl: serverConf.baseUrl,
       env: serverConf.env,
       headers: serverConf.headers,
-      args: serverConf.args
+      args: serverConf.args,
+      auth: serverConf.auth,
     };
 
     const res = await window.api.testMcpConnection(configToTest);
@@ -2356,7 +2374,7 @@ onMounted(async () => {
           const fileProcessingPromises = data.payload.map((fileInfo) => processFilePath(fileInfo.path));
           await Promise.all(fileProcessingPromises);
           isFileDirectSend = true;
-        } catch (error) { 
+        } catch (error) {
           console.error(error);
           showDismissibleMessage.error("处理文件失败: " + error.message);
           return; // 处理失败则终止发送
@@ -3793,27 +3811,27 @@ const saveSessionAsHtml = async () => {
 
     const cssStyles = `
       <style>
-        :root { 
-            --bg-color: #f7f7f7; 
-            --text-color: #333; 
-            --card-bg: #fff; 
-            --user-bg: #e1f5fe; 
-            --ai-bg: #fff; 
-            --border-color: #eee; 
-            --accent-color: #1F2937; 
+        :root {
+            --bg-color: #f7f7f7;
+            --text-color: #333;
+            --card-bg: #fff;
+            --user-bg: #e1f5fe;
+            --ai-bg: #fff;
+            --border-color: #eee;
+            --accent-color: #1F2937;
             --timeline-line: #e0e0e0;
             --timeline-dot-default: #bdbdbd;
             --timeline-dot-active: #1F2937;
         }
         @media (prefers-color-scheme: dark) {
-          :root { 
-              --bg-color: #1a1a1a; 
-              --text-color: #e0e0e0; 
-              --card-bg: #2a2a2a; 
-              --user-bg: #0d47a1; 
-              --ai-bg: #3a3a3a; 
-              --border-color: #444; 
-              --accent-color: #64b5f6; 
+          :root {
+              --bg-color: #1a1a1a;
+              --text-color: #e0e0e0;
+              --card-bg: #2a2a2a;
+              --user-bg: #0d47a1;
+              --ai-bg: #3a3a3a;
+              --border-color: #444;
+              --accent-color: #64b5f6;
               --timeline-line: #444;
               --timeline-dot-default: #666;
               --timeline-dot-active: #64b5f6;
@@ -3835,7 +3853,7 @@ const saveSessionAsHtml = async () => {
             z-index: 100;
             max-height: 80vh;
             overflow-y: auto;
-            scrollbar-width: none; 
+            scrollbar-width: none;
             padding: 10px;
         }
         .timeline-toc::-webkit-scrollbar { display: none; }
@@ -3847,7 +3865,7 @@ const saveSessionAsHtml = async () => {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 12px; 
+            gap: 12px;
         }
         .timeline-list::before {
             content: '';
@@ -3875,7 +3893,7 @@ const saveSessionAsHtml = async () => {
         .timeline-dot.user-dot {
             background-color: var(--timeline-dot-active);
             border-color: var(--timeline-dot-active);
-            width: 12px; 
+            width: 12px;
             height: 12px;
         }
         .timeline-dot.ai-dot {
@@ -4660,7 +4678,7 @@ const loadSession = async (jsonData) => {
     if (chat_show.value.length > visibleHistoryCount) {
       console.warn(`[Auto-Heal] 检测到 UI 节点冗余，自动清理了 ${chat_show.value.length - visibleHistoryCount} 条异常显示节点。`);
       chat_show.value.splice(visibleHistoryCount);
-    } 
+    }
     // 如果 UI 气泡少于真实历史记录 (通常是因为旧版本 Bug 导致的历史污染)，反向截断真实的 history
     else if (chat_show.value.length < visibleHistoryCount) {
       let visibleCount = 0;
@@ -4943,6 +4961,7 @@ async function applyMcpTools(show_none = true, reason = 'unknown') {
         headers: serverConf.headers,
         timeoutSeconds: serverConf.timeoutSeconds,
         isPersistent: serverConf.isPersistent,
+        auth: serverConf.auth,
       };
     }
   }

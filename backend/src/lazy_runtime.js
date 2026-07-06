@@ -8,6 +8,7 @@ const {
   invokeMcpTool,
   closeMcpClient,
   connectAndFetchTools,
+  getMcpAuthStatus,
 } = require('./mcp.js');
 const {
   listSkills,
@@ -27,6 +28,7 @@ module.exports = {
   invokeMcpTool,
   closeMcpClient,
   connectAndFetchTools,
+  getMcpAuthStatus,
   listSkills,
   getSkillDetails,
   generateSkillToolDefinition,
