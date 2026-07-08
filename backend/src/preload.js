@@ -47,18 +47,17 @@ const {
   killAllBackgroundShells,
 } = require('./mcp_builtin.js');
 
-const {
-  initializeMcpClient,
-  invokeMcpTool,
-  closeMcpClient,
-  connectAndFetchTools,
-  connectAndInvokeTool,
-  ensureMcpAuthenticated,
-  getMcpAuthStatus,
-} = require('./mcp.js');
+function getMcpModule() {
+  return require('./mcp.js');
+}
 
-const oauthStore = require('./mcp_oauth_store.js');
-const oauthProvider = require('./mcp_oauth_provider.js');
+function getOauthStore() {
+  return require('./mcp_oauth_store.js');
+}
+
+function getOauthProvider() {
+  return require('./mcp_oauth_provider.js');
+}
 
 const {
   listSkills,
@@ -134,6 +133,7 @@ window.api = {
   copyImage: utools.copyImage,
   getMcpToolCache,
   initializeMcpClient: async (activeServerConfigs) => {
+    const { initializeMcpClient } = getMcpModule();
     try {
       const cache = await getMcpToolCache();
       return await initializeMcpClient(activeServerConfigs, cache, saveMcpToolCache);
@@ -144,6 +144,7 @@ window.api = {
   },
   testMcpConnection: async (serverConfig) => {
     try {
+      const { connectAndFetchTools } = getMcpModule();
       // 1. 获取新工具列表
       const rawTools = await connectAndFetchTools(serverConfig.id, {
         transport: serverConfig.type,
@@ -188,6 +189,7 @@ window.api = {
   saveMcpToolCache,
   testInvokeMcpTool: async (serverConfig, toolName, args) => {
     try {
+      const { connectAndInvokeTool } = getMcpModule();
       const result = await connectAndInvokeTool(serverConfig.id, {
         transport: serverConfig.type,
         command: serverConfig.command,
@@ -204,11 +206,18 @@ window.api = {
       return { success: false, error: String(error.message || error) };
     }
   },
-  invokeMcpTool,
-  closeMcpClient,
+  invokeMcpTool: async (...args) => {
+    const { invokeMcpTool } = getMcpModule();
+    return await invokeMcpTool(...args);
+  },
+  closeMcpClient: async (...args) => {
+    const { closeMcpClient } = getMcpModule();
+    return await closeMcpClient(...args);
+  },
   // --- MCP OAuth IPC ---
   mcpOAuth_getStatus: async ({ serverId, serverConfig } = {}) => {
     try {
+      const { getMcpAuthStatus } = getMcpModule();
       return { success: true, status: await getMcpAuthStatus(serverId, serverConfig) };
     } catch (e) {
       return { success: false, error: String(e.message || e) };
@@ -216,6 +225,7 @@ window.api = {
   },
   mcpOAuth_startAuthFlow: async ({ serverConfig } = {}) => {
     try {
+      const { ensureMcpAuthenticated, getMcpAuthStatus } = getMcpModule();
       const ok = await ensureMcpAuthenticated(serverConfig.id, serverConfig);
       const status = await getMcpAuthStatus(serverConfig.id, serverConfig);
       return { success: true, authenticated: ok, status };
@@ -226,6 +236,8 @@ window.api = {
   },
   mcpOAuth_refresh: async ({ serverId, serverConfig } = {}) => {
     try {
+      const oauthProvider = getOauthProvider();
+      const { getMcpAuthStatus } = getMcpModule();
       await oauthProvider.refreshOAuthTokens(serverId, serverConfig || {});
       const status = await getMcpAuthStatus(serverId, serverConfig || {});
       return { success: true, refreshed: true, status };
@@ -235,6 +247,7 @@ window.api = {
   },
   mcpOAuth_logout: async ({ serverId } = {}) => {
     try {
+      const oauthStore = getOauthStore();
       await oauthStore.clearTokens(serverId);
       await oauthStore.clearCodeVerifier(serverId);
       return { success: true };
@@ -244,6 +257,7 @@ window.api = {
   },
   mcpOAuth_saveManualClient: async ({ serverId, clientId, clientSecret } = {}) => {
     try {
+      const oauthStore = getOauthStore();
       await oauthStore.saveClientInfo(serverId, { client_id: clientId, client_secret: clientSecret });
       return { success: true };
     } catch (e) {
@@ -780,8 +794,13 @@ ipcRenderer.on('window-event', (e, { senderId, event }) => {
 });
 
 // --- 定时任务轮询调度器 ---
+let taskSchedulerTimer = null;
 let lastCheckMinute = Math.floor(Date.now() / 60000);
-setInterval(async () => {
+
+function startTaskScheduler() {
+  if (taskSchedulerTimer) return;
+  lastCheckMinute = Math.floor(Date.now() / 60000);
+  taskSchedulerTimer = setInterval(async () => {
   try {
     const currentMinute = Math.floor(Date.now() / 60000);
     if (currentMinute <= lastCheckMinute) return;
@@ -917,7 +936,15 @@ setInterval(async () => {
   } catch (e) {
     console.error("Task Scheduler Error:", e);
   }
-}, 1000); // 每秒轮询一次，保证精准执行
+  }, 1000); // 每秒轮询一次，保证精准执行
+  console.info('[Task Scheduler] started');
+}
+
+try {
+  startTaskScheduler();
+} catch (e) {
+  console.error('[Task Scheduler] failed to start:', e);
+}
 
 ipcRenderer.on('background-shell-request', async (e, { requestId, action, payload }) => {
   try {
