@@ -1,13 +1,3 @@
-const TASK_SCHEDULER_DEBUG = true;
-
-function logTaskSchedulerDebug(...args) {
-  if (!TASK_SCHEDULER_DEBUG) return;
-  console.log('[Task Scheduler][debug]', new Date().toISOString(), ...args);
-}
-
-logTaskSchedulerDebug('preload loaded: entering module');
-
-
 const { createChatCompletion, getRandomItem, batchTestProviderKeys } = require('./chat.js');
 
 const {
@@ -99,9 +89,6 @@ const {
   normalizeChatMetadataIndex,
   normalizeChatMetadataEntry,
 } = require('./chat_metadata.js');
-
-logTaskSchedulerDebug('preload dependencies loaded: data/file/skill modules ready');
-
 
 
 window.api = {
@@ -408,76 +395,43 @@ window.api = {
     return await addTaskHistory(taskId, logEntry);
   },
   runTaskNow: async (taskId) => {
-    logTaskSchedulerDebug('runTaskNow invoked', { taskId });
-    try {
-      const { getConfig, openWindow, resolveDefaultAssistantModel } = require('./data.js');
-      const configResult = await getConfig();
-      const tasks = configResult.config.tasks || {};
-      const task = tasks[taskId];
-      if (!task) {
-        logTaskSchedulerDebug('runTaskNow task not found', { taskId, availableTaskIds: Object.keys(tasks) });
-        return false;
-      }
+    const { getConfig, openWindow, resolveDefaultAssistantModel } = require('./data.js');
+    const configResult = await getConfig();
+    const tasks = configResult.config.tasks || {};
+    const task = tasks[taskId];
+    if (!task) return false;
 
-      const taskLabel = task.name || task.title || '<no-title>';
-      logTaskSchedulerDebug('runTaskNow task loaded', {
-        taskId,
-        taskLabel,
-        enabled: task.enabled,
-        triggerType: task.triggerType,
-        promptKey: task.promptKey,
-      });
+    const windowConfig = JSON.parse(JSON.stringify(configResult.config));
 
-      const windowConfig = JSON.parse(JSON.stringify(configResult.config));
-
-      // 处理默认助手的临时配置构造
-      if (task.promptKey === '__DEFAULT__') {
-        if (!windowConfig.prompts) windowConfig.prompts = {};
-        const modelRoute = ['superior', 'general', 'fast'].includes(task?.modelRoute) ? task.modelRoute : 'general';
-        windowConfig.prompts['__DEFAULT__'] = {
-          type: "general",
-          prompt: "",
-          showMode: "window",
-          model: resolveDefaultAssistantModel(windowConfig, modelRoute),
-          stream: true,
-          isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
-          autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
-          window_width: 580,
-          window_height: 740,
-          icon: ""
-        };
-        logTaskSchedulerDebug('runTaskNow default assistant temp prompt prepared', {
-          taskId,
-          taskLabel,
-          modelRoute,
-          resolvedModel: windowConfig.prompts['__DEFAULT__'].model,
-        });
-      }
-
-      const msg = {
-        os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
-        code: task.promptKey,
-        type: "task",
-        payload: task.description,
-        taskConfig: { id: taskId, ...task },
-        tempPromptConfig: task.promptKey === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
+    // 处理默认助手的临时配置构造
+    if (task.promptKey === '__DEFAULT__') {
+      if (!windowConfig.prompts) windowConfig.prompts = {};
+      const modelRoute = ['superior', 'general', 'fast'].includes(task?.modelRoute) ? task.modelRoute : 'general';
+      windowConfig.prompts['__DEFAULT__'] = {
+        type: "general",
+        prompt: "",
+        showMode: "window",
+        model: resolveDefaultAssistantModel(windowConfig, modelRoute),
+        stream: true,
+        isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
+        autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
+        window_width: 580,
+        window_height: 740,
+        icon: ""
       };
-
-      logTaskSchedulerDebug('runTaskNow calling openWindow', {
-        taskId,
-        taskLabel,
-        code: msg.code,
-        hasPayload: Boolean(msg.payload),
-        hasTempPromptConfig: Boolean(msg.tempPromptConfig),
-      });
-      await openWindow(windowConfig, msg);
-      logTaskSchedulerDebug('runTaskNow openWindow resolved', { taskId, taskLabel });
-      return true;
-    } catch (e) {
-      console.error('[Task Scheduler][runTaskNow] failed:', e);
-      logTaskSchedulerDebug('runTaskNow failed', { taskId, message: e?.message, stack: e?.stack });
-      throw e;
     }
+
+    const msg = {
+      os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+      code: task.promptKey,
+      type: "task",
+      payload: task.description,
+      taskConfig: { id: taskId, ...task },
+      tempPromptConfig: task.promptKey === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
+    };
+
+    await openWindow(windowConfig, msg);
+    return true;
   },
   exportMemoryData,
   importMemoryData,
@@ -739,16 +693,6 @@ const commandHandlers = {
 // --- Main Plugin Entry ---
 utools.onPluginEnter(async (action) => {
   const { code } = action;
-  logTaskSchedulerDebug('utools plugin enter', {
-    code,
-    type: action?.type,
-    payloadType: typeof action?.payload,
-    documentHidden: typeof document !== 'undefined' ? document.hidden : undefined,
-    visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
-    focused: typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-  });
-
-
 
   // 启动时顺便清理一下因强制退出等意外残留的僵尸指令
   const features = utools.getFeatures();
@@ -782,14 +726,6 @@ utools.onPluginEnter(async (action) => {
 });
 
 utools.onPluginOut((isKill) => {
-  logTaskSchedulerDebug('utools plugin out', {
-    isKill,
-    documentHidden: typeof document !== 'undefined' ? document.hidden : undefined,
-    visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
-    focused: typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-  });
-
-
   if (isKill) {
     try {
       killAllBackgroundShells();
@@ -798,48 +734,6 @@ utools.onPluginOut((isKill) => {
     }
   }
 });
-
-function registerTaskSchedulerLifecycleDebugLogs() {
-  try {
-    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-      window.addEventListener('focus', () => {
-        logTaskSchedulerDebug('window focus', {
-          documentHidden: typeof document !== 'undefined' ? document.hidden : undefined,
-          visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
-          focused: typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-        });
-      });
-      window.addEventListener('blur', () => {
-        logTaskSchedulerDebug('window blur', {
-          documentHidden: typeof document !== 'undefined' ? document.hidden : undefined,
-          visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
-          focused: typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-        });
-      });
-    }
-
-    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-      document.addEventListener('visibilitychange', () => {
-        logTaskSchedulerDebug('document visibilitychange', {
-          documentHidden: document.hidden,
-          visibilityState: document.visibilityState,
-          focused: typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-        });
-      });
-    }
-
-    logTaskSchedulerDebug('lifecycle debug listeners registered', {
-      documentHidden: typeof document !== 'undefined' ? document.hidden : undefined,
-      visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
-      focused: typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-    });
-  } catch (e) {
-    console.error('[Task Scheduler][debug] failed to register lifecycle logs:', e);
-  }
-}
-
-registerTaskSchedulerLifecycleDebugLogs();
-
 
 const { ipcRenderer } = require('electron');
 const { windowMap } = require('./data.js');
@@ -899,341 +793,156 @@ ipcRenderer.on('window-event', (e, { senderId, event }) => {
   }
 });
 
-function installTaskSchedulerLifecycleDebugLogs() {
-  try {
-    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-      window.addEventListener('focus', () => logTaskSchedulerDebug('window focus', {
-        documentHidden: typeof document !== 'undefined' ? document.hidden : undefined,
-        visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
-        focused: typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-      }));
-      window.addEventListener('blur', () => logTaskSchedulerDebug('window blur', {
-        documentHidden: typeof document !== 'undefined' ? document.hidden : undefined,
-        visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
-        focused: typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-      }));
-      window.addEventListener('pagehide', () => logTaskSchedulerDebug('window pagehide', { localTime: new Date().toString() }));
-      window.addEventListener('pageshow', () => logTaskSchedulerDebug('window pageshow', { localTime: new Date().toString() }));
-    }
-
-    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-      document.addEventListener('visibilitychange', () => logTaskSchedulerDebug('document visibilitychange', {
-        documentHidden: document.hidden,
-        visibilityState: document.visibilityState,
-        focused: typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-        localTime: new Date().toString(),
-      }));
-    }
-
-    logTaskSchedulerDebug('lifecycle debug listeners installed', {
-      documentHidden: typeof document !== 'undefined' ? document.hidden : undefined,
-      visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,
-      focused: typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : undefined,
-    });
-  } catch (e) {
-    console.error('[Task Scheduler][debug] failed to install lifecycle listeners:', e);
-  }
-}
-
-installTaskSchedulerLifecycleDebugLogs();
-
-
 // --- 定时任务轮询调度器 ---
 let taskSchedulerTimer = null;
 let lastCheckMinute = Math.floor(Date.now() / 60000);
-let taskSchedulerFirstHeartbeatLogged = false;
-let taskSchedulerSameMinuteSkipLogCount = 0;
-
-function getTaskSchedulerTimeParts(nowDate = new Date()) {
-  return {
-    currentH: nowDate.getHours(),
-    currentM: nowDate.getMinutes(),
-    currentDay: nowDate.getDay(),
-    currentMonthDay: nowDate.getDate(),
-    currentYMD: `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}-${String(nowDate.getDate()).padStart(2, '0')}`,
-    currentHHMM: `${String(nowDate.getHours()).padStart(2, '0')}:${String(nowDate.getMinutes()).padStart(2, '0')}`,
-  };
-}
 
 function startTaskScheduler() {
-  if (taskSchedulerTimer) {
-    logTaskSchedulerDebug('start skipped: scheduler already exists');
-    return;
-  }
-
+  if (taskSchedulerTimer) return;
   lastCheckMinute = Math.floor(Date.now() / 60000);
-  logTaskSchedulerDebug('starting scheduler', { lastCheckMinute, startedAt: new Date().toString() });
-
   taskSchedulerTimer = setInterval(async () => {
-    if (!taskSchedulerFirstHeartbeatLogged) {
-      taskSchedulerFirstHeartbeatLogged = true;
-      logTaskSchedulerDebug('first heartbeat received', { at: new Date().toString(), lastCheckMinute });
-    }
+  try {
+    const currentMinute = Math.floor(Date.now() / 60000);
+    if (currentMinute <= lastCheckMinute) return;
+    lastCheckMinute = currentMinute;
 
-    try {
-      const currentMinute = Math.floor(Date.now() / 60000);
-      if (currentMinute <= lastCheckMinute) {
-        if (taskSchedulerSameMinuteSkipLogCount < 5) {
-          taskSchedulerSameMinuteSkipLogCount += 1;
-          logTaskSchedulerDebug('same-minute heartbeat skipped', {
-            currentMinute,
-            lastCheckMinute,
-            skipLogCount: taskSchedulerSameMinuteSkipLogCount,
-            localTime: new Date().toString(),
-          });
-        }
-        return;
-      }
-      taskSchedulerSameMinuteSkipLogCount = 0;
+    const configResult = await getConfig();
+    const tasks = configResult.config.tasks || {};
+    const now = Date.now();
+    let needsUpdate = false;
 
-      const previousCheckMinute = lastCheckMinute;
-      lastCheckMinute = currentMinute;
+    for (const taskId in tasks) {
+      const task = tasks[taskId];
+      if (!task.enabled) continue;
 
-      const nowDate = new Date();
-      const { currentH, currentM, currentDay, currentMonthDay, currentYMD, currentHHMM } = getTaskSchedulerTimeParts(nowDate);
-      logTaskSchedulerDebug('minute tick', {
-        previousCheckMinute,
-        currentMinute,
-        minuteGap: currentMinute - previousCheckMinute,
-        currentHHMM,
-        localTime: nowDate.toString(),
-      });
+      let shouldTrigger = false;
+      const lastRun = task.lastRunTime || 0;
 
-      logTaskSchedulerDebug('reading config');
-      const configResult = await getConfig();
-      const tasks = configResult.config.tasks || {};
-      const taskIds = Object.keys(tasks);
-      const enabledTaskIds = taskIds.filter(taskId => tasks[taskId]?.enabled);
-      logTaskSchedulerDebug('config loaded', {
-        totalTasks: taskIds.length,
-        enabledTasks: enabledTaskIds.length,
-        enabledTaskIds,
-      });
+      // 获取当前的具体时分
+      const currentH = new Date().getHours();
+      const currentM = new Date().getMinutes();
+      // 防抖：确保同一分钟内不会因为重复判断而触发两次
+      const safeCooldown = (now - lastRun) > 60000;
 
-      const now = Date.now();
-      let needsUpdate = false;
+      if (task.triggerType === 'interval') {
+        if (task.intervalStartTime) {
+          const [hours, minutes] = task.intervalStartTime.split(':').map(Number);
+          const currentTotalMins = currentH * 60 + currentM;
+          const startTotalMins = hours * 60 + minutes;
+          const intervalMins = Math.max(task.intervalMinutes || 1, 1);
 
-      for (const taskId in tasks) {
-        const task = tasks[taskId];
-        const taskLabel = task.name || task.title || '<no-title>';
-        if (!task.enabled) {
-          logTaskSchedulerDebug('task skipped: disabled', { taskId, taskLabel, triggerType: task.triggerType });
-          continue;
-        }
-
-        let shouldTrigger = false;
-        let decisionReason = 'no matching branch';
-        const lastRun = task.lastRunTime || 0;
-
-        // 防抖：确保同一分钟内不会因为重复判断而触发两次
-        const safeCooldown = (now - lastRun) > 60000;
-        const taskDebugBase = {
-          taskId,
-          taskLabel,
-          triggerType: task.triggerType,
-          promptKey: task.promptKey,
-          currentHHMM,
-          currentYMD,
-          currentDay,
-          currentMonthDay,
-          lastRunTime: task.lastRunTime || null,
-          lastRunLocal: lastRun ? new Date(lastRun).toString() : null,
-          safeCooldown,
-          dailyTime: task.dailyTime,
-          weeklyTime: task.weeklyTime,
-          weeklyDays: task.weeklyDays,
-          monthlyTime: task.monthlyTime,
-          monthlyDays: task.monthlyDays,
-          singleDate: task.singleDate,
-          singleTime: task.singleTime,
-          intervalMinutes: task.intervalMinutes,
-          intervalStartTime: task.intervalStartTime,
-          intervalTimeRanges: task.intervalTimeRanges,
-        };
-
-        if (task.triggerType === 'interval') {
-          if (task.intervalStartTime) {
-            const [hours, minutes] = task.intervalStartTime.split(':').map(Number);
-            const currentTotalMins = currentH * 60 + currentM;
-            const startTotalMins = hours * 60 + minutes;
-            const intervalMins = Math.max(task.intervalMinutes || 1, 1);
-
-            if (currentTotalMins >= startTotalMins) {
-              const diffMins = currentTotalMins - startTotalMins;
-              if (diffMins % intervalMins === 0 && safeCooldown) {
-                shouldTrigger = true;
-                decisionReason = 'interval aligned and cooldown passed';
-              } else {
-                decisionReason = `interval aligned check failed: diffMins=${diffMins}, intervalMins=${intervalMins}, safeCooldown=${safeCooldown}`;
-              }
-            } else {
-              decisionReason = `interval not reached start time: currentTotalMins=${currentTotalMins}, startTotalMins=${startTotalMins}`;
-            }
-          } else {
-            // 纯间隔触发（无特定时间点），由于没有对齐的时钟点，仅依据与上一次触发的时间差来定
-            const intervalMs = Math.max(task.intervalMinutes || 1, 1) * 60000;
-            if (now - lastRun >= intervalMs) {
+          if (currentTotalMins >= startTotalMins) {
+            const diffMins = currentTotalMins - startTotalMins;
+            if (diffMins % intervalMins === 0 && safeCooldown) {
               shouldTrigger = true;
-              decisionReason = 'pure interval elapsed';
-            } else {
-              decisionReason = `pure interval not elapsed: elapsedMs=${now - lastRun}, intervalMs=${intervalMs}`;
             }
           }
-        } else if (task.triggerType === 'daily' && task.dailyTime) {
-          const [hours, minutes] = task.dailyTime.split(':').map(Number);
+        } else {
+          // 纯间隔触发（无特定时间点），由于没有对齐的时钟点，仅依据与上一次触发的时间差来定
+          const intervalMs = Math.max(task.intervalMinutes || 1, 1) * 60000;
+          if (now - lastRun >= intervalMs) {
+            shouldTrigger = true;
+          }
+        }
+      } else if (task.triggerType === 'daily' && task.dailyTime) {
+        const [hours, minutes] = task.dailyTime.split(':').map(Number);
+        if (currentH === hours && currentM === minutes && safeCooldown) {
+          shouldTrigger = true;
+        }
+      } else if (task.triggerType === 'weekly' && task.weeklyTime && task.weeklyDays) {
+        const [hours, minutes] = task.weeklyTime.split(':').map(Number);
+        const currentDay = new Date().getDay();
+        if (task.weeklyDays.includes(currentDay)) {
           if (currentH === hours && currentM === minutes && safeCooldown) {
             shouldTrigger = true;
-            decisionReason = 'daily time matched and cooldown passed';
-          } else {
-            decisionReason = `daily not matched: target=${task.dailyTime}, current=${currentHHMM}, safeCooldown=${safeCooldown}`;
           }
-        } else if (task.triggerType === 'weekly' && task.weeklyTime && task.weeklyDays) {
-          const [hours, minutes] = task.weeklyTime.split(':').map(Number);
-          if (task.weeklyDays.includes(currentDay)) {
-            if (currentH === hours && currentM === minutes && safeCooldown) {
-              shouldTrigger = true;
-              decisionReason = 'weekly day/time matched and cooldown passed';
-            } else {
-              decisionReason = `weekly day matched but time/cooldown failed: target=${task.weeklyTime}, current=${currentHHMM}, safeCooldown=${safeCooldown}`;
-            }
-          } else {
-            decisionReason = `weekly day not matched: currentDay=${currentDay}, weeklyDays=${JSON.stringify(task.weeklyDays)}`;
-          }
-        } else if (task.triggerType === 'monthly' && task.monthlyTime) {
-          const [hours, minutes] = task.monthlyTime.split(':').map(Number);
-          const validDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
+        }
+      } else if (task.triggerType === 'monthly' && task.monthlyTime) {
+        const [hours, minutes] = task.monthlyTime.split(':').map(Number);
+        const currentMonthDay = new Date().getDate();
+        const validDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
 
-          if (validDays.includes(currentMonthDay)) {
-            if (currentH === hours && currentM === minutes && safeCooldown) {
-              shouldTrigger = true;
-              decisionReason = 'monthly day/time matched and cooldown passed';
-            } else {
-              decisionReason = `monthly day matched but time/cooldown failed: target=${task.monthlyTime}, current=${currentHHMM}, safeCooldown=${safeCooldown}`;
-            }
-          } else {
-            decisionReason = `monthly day not matched: currentMonthDay=${currentMonthDay}, monthlyDays=${JSON.stringify(validDays)}`;
-          }
-        } else if (task.triggerType === 'single' && task.singleDate && task.singleTime) {
-          const [hours, minutes] = task.singleTime.split(':').map(Number);
-
-          if (currentYMD === task.singleDate && currentH === hours && currentM === minutes && safeCooldown) {
+        if (validDays.includes(currentMonthDay)) {
+          if (currentH === hours && currentM === minutes && safeCooldown) {
             shouldTrigger = true;
-            task.enabled = false;
-            decisionReason = 'single date/time matched and cooldown passed; task disabled after trigger';
-          } else {
-            decisionReason = `single not matched: target=${task.singleDate} ${task.singleTime}, current=${currentYMD} ${currentHHMM}, safeCooldown=${safeCooldown}`;
           }
         }
+      } else if (task.triggerType === 'single' && task.singleDate && task.singleTime) {
+        const nowD = new Date();
+        const currentYMD = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
+        const [hours, minutes] = task.singleTime.split(':').map(Number);
 
-        if (shouldTrigger && task.triggerType === 'interval' && task.intervalTimeRanges && task.intervalTimeRanges.length > 0) {
-          const isWithinRange = task.intervalTimeRanges.some(range => {
-            if (Array.isArray(range) && range.length === 2) {
-              return currentHHMM >= range[0] && currentHHMM <= range[1];
-            }
-            return false;
-          });
-
-          logTaskSchedulerDebug('interval range check', {
-            taskId,
-            taskLabel,
-            currentHHMM,
-            intervalTimeRanges: task.intervalTimeRanges,
-            isWithinRange,
-          });
-
-          // 如果当前时间不在任何一个设定的时间段内，否决触发
-          if (!isWithinRange) {
-            shouldTrigger = false;
-            decisionReason = 'interval denied by time ranges';
-          }
+        if (currentYMD === task.singleDate && currentH === hours && currentM === minutes && safeCooldown) {
+          shouldTrigger = true;
+          task.enabled = false;
         }
+      }
 
-        logTaskSchedulerDebug('task evaluated', {
-          ...taskDebugBase,
-          shouldTrigger,
-          decisionReason,
+      if (shouldTrigger && task.triggerType === 'interval' && task.intervalTimeRanges && task.intervalTimeRanges.length > 0) {
+        const nowHhMm = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`;
+        const isWithinRange = task.intervalTimeRanges.some(range => {
+          if (Array.isArray(range) && range.length === 2) {
+            return nowHhMm >= range[0] && nowHhMm <= range[1];
+          }
+          return false;
         });
 
-        if (shouldTrigger) {
-          task.lastRunTime = now;
-          needsUpdate = true;
-          logTaskSchedulerDebug('task trigger accepted: lastRunTime set before openWindow', {
-            taskId,
-            taskLabel,
-            lastRunTime: task.lastRunTime,
-            lastRunLocal: new Date(task.lastRunTime).toString(),
-          });
-
-          const windowConfig = JSON.parse(JSON.stringify(configResult.config));
-
-          if (task.promptKey === '__DEFAULT__') {
-            if (!windowConfig.prompts) windowConfig.prompts = {};
-            const modelRoute = ['superior', 'general', 'fast'].includes(task?.modelRoute) ? task.modelRoute : 'general';
-            windowConfig.prompts['__DEFAULT__'] = {
-              type: "general",
-              prompt: "",
-              showMode: "window",
-              model: resolveDefaultAssistantModel(windowConfig, modelRoute),
-              stream: true,
-              isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
-              autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
-              window_width: 580,
-              window_height: 740,
-              icon: ""
-            };
-            logTaskSchedulerDebug('default assistant temp prompt prepared', {
-              taskId,
-              taskLabel,
-              modelRoute,
-              resolvedModel: windowConfig.prompts['__DEFAULT__'].model,
-            });
-          }
-
-          // 触发独立窗口
-          const msg = {
-            os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
-            code: task.promptKey,
-            type: "task",
-            payload: task.description,
-            taskConfig: { id: taskId, ...task },
-            tempPromptConfig: task.promptKey === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
-          };
-          logTaskSchedulerDebug('calling openWindow', {
-            taskId,
-            taskLabel,
-            code: msg.code,
-            type: msg.type,
-            hasPayload: Boolean(msg.payload),
-            hasTempPromptConfig: Boolean(msg.tempPromptConfig),
-          });
-          // 传入安全的 windowConfig
-          await openWindow(windowConfig, msg);
-          logTaskSchedulerDebug('openWindow resolved', { taskId, taskLabel });
+        // 如果当前时间不在任何一个设定的时间段内，否决触发
+        if (!isWithinRange) {
+          shouldTrigger = false;
         }
       }
 
-      if (needsUpdate) {
-        logTaskSchedulerDebug('persisting task updates');
-        await updateConfigWithoutFeatures(configResult);
-        logTaskSchedulerDebug('task updates persisted');
-      } else {
-        logTaskSchedulerDebug('minute tick completed without updates');
+      if (shouldTrigger) {
+        task.lastRunTime = now;
+        needsUpdate = true;
+
+        const windowConfig = JSON.parse(JSON.stringify(configResult.config));
+
+        if (task.promptKey === '__DEFAULT__') {
+      if (!windowConfig.prompts) windowConfig.prompts = {};
+      const modelRoute = ['superior', 'general', 'fast'].includes(task?.modelRoute) ? task.modelRoute : 'general';
+      windowConfig.prompts['__DEFAULT__'] = {
+        type: "general",
+        prompt: "",
+        showMode: "window",
+        model: resolveDefaultAssistantModel(windowConfig, modelRoute),
+            stream: true,
+            isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
+            autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
+            window_width: 580,
+            window_height: 740,
+            icon: ""
+          };
+        }
+
+        // 触发独立窗口
+        const msg = {
+          os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+          code: task.promptKey,
+          type: "task",
+          payload: task.description,
+          taskConfig: { id: taskId, ...task },
+          tempPromptConfig: task.promptKey === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
+        };
+        // 传入安全的 windowConfig
+        await openWindow(windowConfig, msg);
       }
-    } catch (e) {
-      console.error("Task Scheduler Error:", e);
-      logTaskSchedulerDebug('minute tick failed', { message: e?.message, stack: e?.stack });
     }
+
+    if (needsUpdate) {
+      await updateConfigWithoutFeatures(configResult);
+    }
+  } catch (e) {
+    console.error("Task Scheduler Error:", e);
+  }
   }, 1000); // 每秒轮询一次，保证精准执行
-  console.info('[Task Scheduler] started');
-  logTaskSchedulerDebug('started', { intervalMs: 1000, lastCheckMinute });
 }
 
 try {
-  logTaskSchedulerDebug('startTaskScheduler invoked');
   startTaskScheduler();
 } catch (e) {
   console.error('[Task Scheduler] failed to start:', e);
-  logTaskSchedulerDebug('failed to start', { message: e?.message, stack: e?.stack });
 }
 
 ipcRenderer.on('background-shell-request', async (e, { requestId, action, payload }) => {
