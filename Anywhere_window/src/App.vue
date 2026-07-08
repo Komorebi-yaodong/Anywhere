@@ -2476,7 +2476,7 @@ onMounted(async () => {
 const AUTO_NAMING_TIMEOUT_MS = 30000;
 const AUTO_NAMING_MAX_TEXT_CHARS = 1000;
 const AUTO_NAMING_MAX_IMAGES = 3;
-const AUTO_NAMING_MAX_TITLE_TOKENS = 40;
+const AUTO_NAMING_MAX_TITLE_TOKENS = 16;
 const buildAutoNamingSystemPrompt = () => {
   const locale = currentConfig.value?.language === 'en'
     ? 'English'
@@ -2567,16 +2567,20 @@ const buildConversationTimestampedBasename = (namePrefix = '', { force = false, 
     : `${getAutoSavePrefixTag(force)}${safeNamePrefix}-${timestampSuffix}`;
 };
 
-const getAutoSavePrefixTag = (force = false) => {
-  if (basic_msg.value?.type === "summon") return "召唤-";
+const getAutoSavePrefixTag = (options = {}) => {
+  const normalizedOptions = typeof options === 'boolean'
+    ? { force: options }
+    : (options && typeof options === 'object' ? options : {});
+  const { force = false, includeSummonPrefix = true } = normalizedOptions;
+  if (includeSummonPrefix && basic_msg.value?.type === "summon") return "召唤-";
   if (force) return "关闭留档-";
   return "";
 };
 
-const buildConversationTitleOnly = (namePrefix, force = false) => {
+const buildConversationTitleOnly = (namePrefix, force = false, options = {}) => {
   const safeNamePrefix = sanitizeConversationTitlePart(namePrefix, 36);
   if (!safeNamePrefix) return '';
-  return `${getAutoSavePrefixTag(force)}${safeNamePrefix}`;
+  return `${getAutoSavePrefixTag({ force, ...options })}${safeNamePrefix}`;
 };
 
 const resolveUniqueConversationFileName = async (baseTitle = '', dirPath = '') => {
@@ -2902,7 +2906,7 @@ const generateSuggestedConversationBasename = async ({
   if (targetFirstUserMsg && allowFastModel && isConfiguredFastModelAvailable(currentConfig.value?.defaultFastModel)) {
     const aiNamePrefix = await generateConversationNamePrefixWithFastModel(targetFirstUserMsg, signal);
     if (aiNamePrefix) {
-      generatedBaseTitle = buildConversationTitleOnly(aiNamePrefix, force);
+      generatedBaseTitle = buildConversationTitleOnly(aiNamePrefix, force, { includeSummonPrefix: false });
     }
   }
 
