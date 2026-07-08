@@ -731,32 +731,38 @@ async function openTaskChat(logFile) {
                                             </el-col>
                                             <el-col :span="24" style="margin-top: 5px;">
                                                 <el-form-item :label="t('tasks.backgroundOptionsLabel')">
-                                                    <div class="toggle-group">
-                                                        <el-checkbox v-model="selectedTask.autoSave"
-                                                            @change="(val) => saveTaskSetting('autoSave', val)">
-                                                            {{ t('tasks.autoSaveLabel') }}
-                                                            <el-tooltip :content="t('tasks.autoSaveTooltip')"
-                                                                placement="top">
-                                                                <el-icon
-                                                                    style="margin-left: 4px; vertical-align: middle;">
-                                                                    <InfoFilled />
-                                                                </el-icon>
-                                                            </el-tooltip>
-                                                        </el-checkbox>
-                                                        <el-checkbox v-model="selectedTask.autoClose"
-                                                            @change="(val) => saveTaskSetting('autoClose', val)"
-                                                            :label="t('tasks.autoCloseLabel')" />
-
-                                                        <el-select v-if="selectedTask.autoSave"
-                                                            :model-value="selectedTask.autoSaveProjectId || ''"
-                                                            @change="(val) => saveTaskSetting('autoSaveProjectId', val || '')"
-                                                            clearable
-                                                            :placeholder="t('tasks.autoSaveProjectPlaceholder', '未分组')"
-                                                            style="min-width: 220px; margin-left: 12px;">
-                                                            <el-option :label="t('tasks.autoSaveProjectUngrouped', '未分组')" value="" />
-                                                            <el-option v-for="project in localProjectOptions" :key="project.value"
-                                                                :label="project.label" :value="project.value" />
-                                                        </el-select>
+                                                    <div class="toggle-group task-toggle-group">
+                                                        <div class="task-toggle-row">
+                                                            <el-checkbox v-model="selectedTask.autoSave"
+                                                                @change="(val) => saveTaskSetting('autoSave', val)">
+                                                                {{ t('tasks.autoSaveLabel') }}
+                                                                <el-tooltip :content="t('tasks.autoSaveTooltip')"
+                                                                    placement="top">
+                                                                    <el-icon
+                                                                        style="margin-left: 4px; vertical-align: middle;">
+                                                                        <InfoFilled />
+                                                                    </el-icon>
+                                                                </el-tooltip>
+                                                            </el-checkbox>
+                                                        </div>
+                                                        <div v-if="selectedTask.autoSave" class="task-project-row">
+                                                            <span class="task-project-label">{{ t('tasks.autoSaveProjectLabel', '保存到') }}</span>
+                                                            <el-select
+                                                                :model-value="selectedTask.autoSaveProjectId || ''"
+                                                                @change="(val) => saveTaskSetting('autoSaveProjectId', val || '')"
+                                                                clearable
+                                                                :placeholder="t('tasks.autoSaveProjectPlaceholder', '未分组')"
+                                                                class="task-project-select">
+                                                                <el-option :label="t('tasks.autoSaveProjectUngrouped', '未分组')" value="" />
+                                                                <el-option v-for="project in localProjectOptions" :key="project.value"
+                                                                    :label="project.label" :value="project.value" />
+                                                            </el-select>
+                                                        </div>
+                                                        <div class="task-toggle-row">
+                                                            <el-checkbox v-model="selectedTask.autoClose"
+                                                                @change="(val) => saveTaskSetting('autoClose', val)"
+                                                                :label="t('tasks.autoCloseLabel')" />
+                                                        </div>
                                                     </div>
                                                 </el-form-item>
                                             </el-col>
@@ -1135,6 +1141,36 @@ async function openTaskChat(logFile) {
     gap: 4px;
     margin-top: 4px;
 }
+
+.task-toggle-group {
+    gap: 10px;
+}
+
+.task-toggle-row {
+    display: flex;
+    align-items: center;
+    min-height: 32px;
+}
+
+.task-project-row {
+    display: grid;
+    grid-template-columns: auto minmax(180px, 280px);
+    align-items: center;
+    gap: 12px;
+    margin-left: 24px;
+}
+
+.task-project-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.task-project-select {
+    width: 100%;
+}
+
 
 .task-textarea :deep(.el-textarea__inner) {
     background-color: var(--bg-primary);

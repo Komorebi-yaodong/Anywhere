@@ -1210,17 +1210,18 @@ async function refreshPromptsConfig() {
                     <el-switch v-model="editingPrompt.autoSaveChat" />
                   </div>
 
-                  <div v-if="editingPrompt.showMode === 'window' && editingPrompt.autoSaveChat" class="param-item param-item-column">
-                    <div class="param-item-column-label-row">
-                      <span class="param-label">{{ t('prompts.autoSaveProjectLabel', '保存到项目') }}</span>
-                      <el-tooltip :content="t('prompts.tooltips.autoSaveProjectTooltip', '选择后，自动保存的对话会归档到该项目；留空则保持未分组。')" placement="top"><el-icon
-                          class="tip-icon">
+                  <div v-if="editingPrompt.showMode === 'window' && editingPrompt.autoSaveChat" class="param-item auto-save-project-row">
+                    <div class="auto-save-project-label-row">
+                      <span class="param-label">{{ t('prompts.autoSaveProjectLabel', '保存到') }}</span>
+                      <el-tooltip :content="t('prompts.tooltips.autoSaveProjectTooltip', '选择后，自动保存的对话会归档到该项目；留空则保持未分组。')" placement="top">
+                        <el-icon class="tip-icon">
                           <QuestionFilled />
-                        </el-icon></el-tooltip>
+                        </el-icon>
+                      </el-tooltip>
                     </div>
                     <el-select v-model="editingPrompt.autoSaveProjectId" clearable
                       :placeholder="t('prompts.autoSaveProjectPlaceholder', '未分组')"
-                      style="width: 100%; margin-top: 8px;">
+                      class="auto-save-project-select">
                       <el-option :label="t('prompts.autoSaveProjectUngrouped', '未分组')" value="" />
                       <el-option v-for="project in localProjectOptions" :key="project.value" :label="project.label"
                         :value="project.value" />
@@ -2059,6 +2060,27 @@ html.dark .canvas-wrapper {
 
 .spacer {
   flex-grow: 1;
+}
+
+
+.auto-save-project-row {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.auto-save-project-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.auto-save-project-select {
+  width: 100%;
+  min-width: 0;
 }
 
 .param-item.voice-param .el-select {
