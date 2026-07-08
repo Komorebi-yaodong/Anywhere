@@ -968,7 +968,17 @@ async function triggerConnectionTest(server) {
                     </template>
 
                     <el-divider content-position="left">{{ t('mcp.auth.sectionTitle') }}</el-divider>
-                    <el-form-item :label="t('mcp.auth.type')">
+                    <el-form-item>
+                        <template #label>
+                            <span class="auth-label-with-tip">
+                                <span>{{ t('mcp.auth.type') }}</span>
+                                <el-tooltip :content="t('mcp.auth.dcrHint')" placement="top" popper-class="mcp-tooltip-width">
+                                    <el-icon class="auth-tip-icon">
+                                        <QuestionFilled />
+                                    </el-icon>
+                                </el-tooltip>
+                            </span>
+                        </template>
                         <el-radio-group v-model="editingServer.auth.type" @change="refreshOAuthStatus">
                             <el-radio value="none">{{ t('mcp.auth.typeNone') }}</el-radio>
                             <el-radio value="bearer">{{ t('mcp.auth.typeBearer') }}</el-radio>
@@ -980,9 +990,6 @@ async function triggerConnectionTest(server) {
                             :placeholder="t('mcp.auth.bearerTokenPlaceholder')" />
                     </el-form-item>
                     <template v-if="editingServer.auth.type === 'oauth'">
-                        <el-form-item>
-                            <el-alert :title="t('mcp.auth.dcrHint')" type="info" :closable="false" show-icon />
-                        </el-form-item>
                         <el-form-item :label="t('mcp.auth.envMapping')" v-if="editingServer.type === 'stdio'">
                             <el-input v-model="editingServer.auth.oauth.envMappingInput"
                                 :placeholder="t('mcp.auth.envMappingPlaceholder')" />
@@ -1026,17 +1033,18 @@ async function triggerConnectionTest(server) {
                             <el-form-item :label="t('mcp.tags')"><el-input v-model="editingServer.tags"
                                     :placeholder="t('mcp.tagsPlaceholder')" /></el-form-item>
                             <template v-if="editingServer.auth.type === 'oauth'">
-                                <el-divider
-                                    content-position="left">{{ t('mcp.auth.oauthAdvancedSection') }}</el-divider>
-                                <el-form-item :label="t('mcp.auth.scopes')">
-                                    <el-input v-model="editingServer.auth.oauth.scopesInput"
-                                        :placeholder="t('mcp.auth.scopesPlaceholder')" />
-                                </el-form-item>
-                                <el-divider content-position="left">{{ t('mcp.auth.manualClientSection') }}</el-divider>
-                                <el-form-item :label="t('mcp.auth.useDcr')">
-                                    <el-switch v-model="editingServer.auth.oauth.useDcr" />
-                                </el-form-item>
-                                <template v-if="!editingServer.auth.oauth.useDcr">
+                                <div class="oauth-advanced-panel">
+                                    <div class="oauth-panel-title">{{ t('mcp.auth.oauthAdvancedSection') }}</div>
+                                    <el-form-item :label="t('mcp.auth.scopes')">
+                                        <el-input v-model="editingServer.auth.oauth.scopesInput"
+                                            :placeholder="t('mcp.auth.scopesPlaceholder')" />
+                                    </el-form-item>
+                                    <el-form-item :label="t('mcp.auth.useDcr')">
+                                        <el-switch v-model="editingServer.auth.oauth.useDcr" />
+                                    </el-form-item>
+                                </div>
+                                <div class="oauth-advanced-panel" v-if="!editingServer.auth.oauth.useDcr">
+                                    <div class="oauth-panel-title">{{ t('mcp.auth.manualClientSection') }}</div>
                                     <el-form-item :label="t('mcp.auth.clientId')">
                                         <el-input v-model="editingServer.auth.oauth.clientId"
                                             :placeholder="t('mcp.auth.clientIdPlaceholder')" />
@@ -1045,12 +1053,12 @@ async function triggerConnectionTest(server) {
                                         <el-input v-model="editingServer.auth.oauth.clientSecret" show-password
                                             :placeholder="t('mcp.auth.clientSecretPlaceholder')" />
                                     </el-form-item>
-                                    <el-form-item>
+                                    <div class="oauth-panel-actions">
                                         <el-button size="small" @click="saveManualClient" :disabled="oauthBusy">
                                             {{ t('mcp.auth.saveClient') }}
                                         </el-button>
-                                    </el-form-item>
-                                </template>
+                                    </div>
+                                </div>
                             </template>
                         </el-collapse-item>
                     </el-collapse>
@@ -1256,8 +1264,9 @@ async function triggerConnectionTest(server) {
 
 <style>
 .mcp-tooltip-width {
-    max-width: 60vw;
-    line-height: 1.4;
+    max-width: min(320px, 72vw);
+    line-height: 1.45;
+    font-size: 12px;
 }
 
 /* 针对结果框内部的原生滚动条美化 */
@@ -1272,9 +1281,62 @@ async function triggerConnectionTest(server) {
 .oauth-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
 }
 
+.auth-label-with-tip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    line-height: 1;
+}
+
+.auth-tip-icon {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    cursor: help;
+    transition: color 0.18s ease;
+}
+
+.auth-tip-icon:hover {
+    color: var(--text-accent);
+}
+
+.oauth-advanced-panel {
+    margin: 8px 0;
+    padding: 10px 12px 6px;
+    border: 1px solid rgba(228, 228, 231, 0.78);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.52);
+}
+
+html.dark .oauth-advanced-panel {
+    background: rgba(39, 39, 42, 0.38);
+    border-color: rgba(63, 63, 70, 0.72);
+}
+
+.oauth-panel-title {
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--text-secondary);
+}
+
+.oauth-advanced-panel :deep(.el-form-item) {
+    margin-bottom: 10px;
+}
+
+.oauth-advanced-panel :deep(.el-form-item:last-child) {
+    margin-bottom: 4px;
+}
+
+.oauth-panel-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -2px;
+}
 /* ================= 全局布局 ================= */
 .page-container {
     display: flex;
