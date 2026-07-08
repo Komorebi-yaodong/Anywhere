@@ -3020,6 +3020,9 @@ const autoSaveSession = async (force = false) => {
     return false;
   }
 
+  const promptConfig = currentConfig.value?.prompts?.[CODE.value] || {};
+  const autoSaveProjectId = typeof promptConfig.autoSaveProjectId === 'string' ? promptConfig.autoSaveProjectId : '';
+
   // 2. 获取当前快捷助手的配置
   const shouldAutoSave = shouldPersistCurrentSessionAutomatically();
 
@@ -3036,6 +3039,20 @@ const autoSaveSession = async (force = false) => {
   // 6. 执行写入操作
   try {
     await persistSessionToLocalJsonFile(defaultConversationName.value);
+
+    try {
+      const localProjects = normalizeWindowProjects(await window.api.readLocalProjects(currentConfig.value.webdav.localChatPath));
+      const projectName = localProjects.projects.find((p) => p.id === autoSaveProjectId)?.name || '';
+      await reassignLocalProject({
+        projectId: autoSaveProjectId,
+        projectName,
+        addFilename: `${defaultConversationName.value}.json`,
+        removeFilenames: []
+      });
+    } catch (projectError) {
+      console.warn('[projects] auto-save local project assignment failed:', projectError);
+    }
+
     lastAutoSaveAt = Date.now();
     return true;
   } catch (error) {
@@ -6143,6 +6160,20 @@ const askAI = async (forceSend = false) => {
 
           await window.api.writeLocalFile(filePath, jsonString);
           savedFileName = `${defaultConversationName.value}.json`;
+
+          try {
+            const localProjects = normalizeWindowProjects(await window.api.readLocalProjects(currentConfig.value.webdav.localChatPath));
+            const taskProjectId = typeof currentTaskConfig.value.autoSaveProjectId === 'string' ? currentTaskConfig.value.autoSaveProjectId : '';
+            const projectName = localProjects.projects.find((p) => p.id === taskProjectId)?.name || '';
+            await reassignLocalProject({
+              projectId: taskProjectId,
+              projectName,
+              addFilename: savedFileName,
+              removeFilenames: []
+            });
+          } catch (projectError) {
+            console.warn('[projects] task auto-save local project assignment failed:', projectError);
+          }
         }
         // 将历史记录写入主配置
         await window.api.addTaskHistory(currentTaskConfig.value.id, {

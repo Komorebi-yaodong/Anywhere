@@ -31,12 +31,12 @@ const isSelectedTaskPromptUnavailable = computed(() => {
 const availableModels = computed(() => {
     const models = [];
     if (!currentConfig.value || !currentConfig.value.providers) return models;
-    
+
     const folders = currentConfig.value.providerFolders || {};
     const order = currentConfig.value.providerOrder || [];
-    
+
     // 1. 文件夹按字母序排序
-    const sortedFolderIds = Object.keys(folders).sort((a, b) => 
+    const sortedFolderIds = Object.keys(folders).sort((a, b) =>
         (folders[a].name || '').localeCompare(folders[b].name || '')
     );
 
@@ -80,10 +80,34 @@ const availableMcpServers = computed(() => {
 // 获取所有技能
 const availableSkills = ref([]);
 
+const localProjectOptions = ref([]);
+
+const refreshLocalProjectOptions = async () => {
+    const localChatPath = currentConfig.value?.webdav?.localChatPath || '';
+    if (!localChatPath) {
+        localProjectOptions.value = [];
+        return;
+    }
+
+    try {
+        const result = await window.api.readLocalProjects(localChatPath);
+        const projects = Array.isArray(result?.projects) ? result.projects : [];
+        localProjectOptions.value = projects
+            .filter(project => project && typeof project === 'object' && String(project.id || '').trim())
+            .map(project => ({ label: project.name || project.id, value: project.id }))
+            .sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true, sensitivity: 'base' }));
+    } catch (error) {
+        console.warn('[tasks] failed to load local projects:', error);
+        localProjectOptions.value = [];
+    }
+};
+
 onMounted(async () => {
     if (!currentConfig.value.tasks) currentConfig.value.tasks = {};
     const taskIds = Object.keys(currentConfig.value.tasks);
     if (taskIds.length > 0) activeTaskId.value = taskIds[0];
+
+    await refreshLocalProjectOptions();
 
     if (currentConfig.value.skillPath) {
         try {
@@ -210,6 +234,7 @@ function handleAddTask() {
             extraMcp: builtinIds,
             extraSkills: [],
             autoSave: true,
+            autoSaveProjectId: '',
             autoClose: true,
             enabled: false,
             history: []
@@ -648,7 +673,7 @@ async function openTaskChat(logFile) {
                                                 type="warning" :closable="false" show-icon
                                                 style="margin-top: 10px;" />
                                         </el-form-item>
-                                        
+
                                         <el-form-item v-if="selectedTask.promptKey === '__DEFAULT__'"
                                             :label="t('tasks.defaultAssistantRouteLabel')">
                                             <el-select v-model="selectedTask.modelRoute"
@@ -721,6 +746,17 @@ async function openTaskChat(logFile) {
                                                         <el-checkbox v-model="selectedTask.autoClose"
                                                             @change="(val) => saveTaskSetting('autoClose', val)"
                                                             :label="t('tasks.autoCloseLabel')" />
+
+                                                        <el-select v-if="selectedTask.autoSave"
+                                                            :model-value="selectedTask.autoSaveProjectId || ''"
+                                                            @change="(val) => saveTaskSetting('autoSaveProjectId', val || '')"
+                                                            clearable
+                                                            :placeholder="t('tasks.autoSaveProjectPlaceholder', '未分组')"
+                                                            style="min-width: 220px; margin-left: 12px;">
+                                                            <el-option :label="t('tasks.autoSaveProjectUngrouped', '未分组')" value="" />
+                                                            <el-option v-for="project in localProjectOptions" :key="project.value"
+                                                                :label="project.label" :value="project.value" />
+                                                        </el-select>
                                                     </div>
                                                 </el-form-item>
                                             </el-col>

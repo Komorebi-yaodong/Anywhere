@@ -12,6 +12,28 @@ const searchQueries = reactive({});
 const tabsContainerRef = ref(null);
 const availableSkills = ref([]);
 
+const localProjectOptions = ref([]);
+
+const refreshLocalProjectOptions = async () => {
+  const localChatPath = currentConfig.value?.webdav?.localChatPath || '';
+  if (!localChatPath) {
+    localProjectOptions.value = [];
+    return;
+  }
+
+  try {
+    const result = await window.api.readLocalProjects(localChatPath);
+    const projects = Array.isArray(result?.projects) ? result.projects : [];
+    localProjectOptions.value = projects
+      .filter(project => project && typeof project === 'object' && String(project.id || '').trim())
+      .map(project => ({ label: project.name || project.id, value: project.id }))
+      .sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true, sensitivity: 'base' }));
+  } catch (error) {
+    console.warn('[prompts] failed to load local projects:', error);
+    localProjectOptions.value = [];
+  }
+};
+
 const fetchAvailableSkills = async () => {
   // 确保 config 已加载且有 skillPath
   if (currentConfig.value && currentConfig.value.skillPath) {
@@ -33,6 +55,7 @@ const fetchAvailableSkills = async () => {
 // 在组件挂载时获取一次
 onMounted(() => {
   fetchAvailableSkills();
+  refreshLocalProjectOptions();
 });
 
 const openPromptWindow = (promptKey) => {
@@ -90,7 +113,7 @@ function getFilteredPrompts(prompts, query) {
   return prompts.filter(item => {
     let modelName = '';
     let providerName = '';
-    
+
     if (item.model) {
       const parts = item.model.split('|');
       if (parts.length >= 2) {
@@ -142,6 +165,7 @@ const editingPrompt = reactive({
   backgroundOpacity: 0.6,
   backgroundBlur: 0,
   autoSaveChat: false,
+  autoSaveProjectId: '',
 });
 
 const showIconEditDialog = ref(false);
@@ -327,12 +351,12 @@ async function saveDefaultAssistantRouteModel(settingKey, value) {
 const availableModels = computed(() => {
   const models = [];
   if (!currentConfig.value || !currentConfig.value.providers) return models;
-  
+
   const folders = currentConfig.value.providerFolders || {};
   const order = currentConfig.value.providerOrder || [];
-  
+
   // 1. 文件夹按字母序排序
-  const sortedFolderIds = Object.keys(folders).sort((a, b) => 
+  const sortedFolderIds = Object.keys(folders).sort((a, b) =>
     (folders[a].name || '').localeCompare(folders[b].name || '')
   );
 
@@ -526,6 +550,7 @@ function areAllPromptsInTagEnabled(tagName) {
 
 function prepareAddPrompt() {
   fetchAvailableSkills(); // [新增] 打开前刷新 Skill 列表
+  refreshLocalProjectOptions();
   isNewPrompt.value = true;
   Object.assign(editingPrompt, {
     originalKey: null, key: "", type: "general", prompt: "", showMode: "window", model: "",
@@ -542,12 +567,14 @@ function prepareAddPrompt() {
     backgroundOpacity: 0.6,
     backgroundBlur: 0,
     autoSaveChat: currentConfig.value.autoSaveChat_global ?? false,
+    autoSaveProjectId: '',
   });
   showPromptEditDialog.value = true;
 }
 
 async function prepareEditPrompt(promptKey, currentTagName = null) {
   fetchAvailableSkills(); // [新增] 打开前刷新 Skill 列表
+  await refreshLocalProjectOptions();
   isNewPrompt.value = false;
 
   try {
@@ -589,6 +616,7 @@ async function prepareEditPrompt(promptKey, currentTagName = null) {
     backgroundOpacity: p.backgroundOpacity ?? 0.6,
     backgroundBlur: p.backgroundBlur ?? 0,
     autoSaveChat: p.autoSaveChat ?? false,
+    autoSaveProjectId: p.autoSaveProjectId ?? '',
   });
   showPromptEditDialog.value = true;
 }
@@ -625,6 +653,7 @@ function savePrompt() {
       backgroundOpacity: editingPrompt.backgroundOpacity,
       backgroundBlur: editingPrompt.backgroundBlur,
       autoSaveChat: !!editingPrompt.autoSaveChat,
+      autoSaveProjectId: editingPrompt.autoSaveChat ? (editingPrompt.autoSaveProjectId || '') : '',
     };
 
     // 1. 更新或创建 prompts 对象中的条目
@@ -1181,6 +1210,23 @@ async function refreshPromptsConfig() {
                     <el-switch v-model="editingPrompt.autoSaveChat" />
                   </div>
 
+                  <div v-if="editingPrompt.showMode === 'window' && editingPrompt.autoSaveChat" class="param-item param-item-column">
+                    <div class="param-item-column-label-row">
+                      <span class="param-label">{{ t('prompts.autoSaveProjectLabel', '保存到项目') }}</span>
+                      <el-tooltip :content="t('prompts.tooltips.autoSaveProjectTooltip', '选择后，自动保存的对话会归档到该项目；留空则保持未分组。')" placement="top"><el-icon
+                          class="tip-icon">
+                          <QuestionFilled />
+                        </el-icon></el-tooltip>
+                    </div>
+                    <el-select v-model="editingPrompt.autoSaveProjectId" clearable
+                      :placeholder="t('prompts.autoSaveProjectPlaceholder', '未分组')"
+                      style="width: 100%; margin-top: 8px;">
+                      <el-option :label="t('prompts.autoSaveProjectUngrouped', '未分组')" value="" />
+                      <el-option v-for="project in localProjectOptions" :key="project.value" :label="project.label"
+                        :value="project.value" />
+                    </el-select>
+                  </div>
+
                   <div class="param-item voice-param">
                     <span class="param-label">{{ t('prompts.voiceLabel') }}</span>
                     <el-tooltip :content="t('prompts.voiceTooltip')" placement="top"><el-icon class="tip-icon">
@@ -1342,7 +1388,7 @@ async function refreshPromptsConfig() {
       </template>
     </el-dialog>
 
-    
+
 
     <el-dialog v-model="showDefaultAssistantRouteDialog" :title="t('prompts.defaultAssistantRoutesDialogTitle')" width="520px"
       :close-on-click-modal="false">
