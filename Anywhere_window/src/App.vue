@@ -231,6 +231,52 @@ const autoCloseOnBlur = ref(false);
 const modelList = ref([]);
 const modelMap = ref({});
 const model = ref("");
+
+const currentModelLogo = ref('');
+let modelLogoResolveToken = 0;
+
+const getCurrentModelNameForLogo = (modelValue = model.value) => {
+  const parts = String(modelValue || '').split('|');
+  return (parts[1] || parts[0] || '').trim();
+};
+
+const resolveCurrentModelLogo = async (modelValue = model.value) => {
+  const modelName = getCurrentModelNameForLogo(modelValue);
+  const requestToken = ++modelLogoResolveToken;
+
+  if (!modelName) {
+    currentModelLogo.value = '';
+    return;
+  }
+
+  try {
+    const response = await fetch(`https://llm-model.141277.xyz/v1/resolve?model=${encodeURIComponent(modelName)}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const logo = typeof payload?.resolved?.logo === 'string' ? payload.resolved.logo.trim() : '';
+    const shouldUseLogo = /^https?:\/\//i.test(logo);
+
+    if (requestToken === modelLogoResolveToken) {
+      currentModelLogo.value = shouldUseLogo ? logo : '';
+    }
+  } catch (error) {
+    if (requestToken === modelLogoResolveToken) {
+      currentModelLogo.value = '';
+    }
+  }
+};
+
+const handleModelLogoError = () => {
+  currentModelLogo.value = '';
+};
+
+watch(model, (nextModel) => {
+  resolveCurrentModelLogo(nextModel);
+}, { immediate: false });
+
 const isAlwaysOnTop = ref(true);
 const currentOS = ref('win');
 const currentTaskConfig = ref(null);
@@ -6644,9 +6690,10 @@ const scrollToMessageByIndex = (index) => {
         :os="currentOS" @save-window-size="handleSaveWindowSize" @save-session="handleSaveSession"
         @toggle-pin="handleTogglePin" @toggle-always-on-top="handleToggleAlwaysOnTop" @minimize="handleMinimize"
         @maximize="handleMaximize" @close="handleCloseWindow" />
-      <ChatHeader :modelMap="modelMap" :model="model" :is-mcp-loading="isMcpLoading" :systemPrompt="currentSystemPrompt"
+      <ChatHeader :modelMap="modelMap" :model="model" :model-logo="currentModelLogo" :is-mcp-loading="isMcpLoading" :systemPrompt="currentSystemPrompt"
         :has-task-tool="hasTaskMcpTool" :task-panel-visible="taskPanelVisible" :task-status="taskOverallStatus"
         @open-model-dialog="handleOpenModelDialog" @show-system-prompt="handleShowSystemPrompt"
+        @model-logo-error="handleModelLogoError"
         @toggle-task-panel="taskPanelVisible = !taskPanelVisible" />
 
       <TaskPanel :tasks="taskList" :visible="taskPanelVisible" @close="taskPanelVisible = false" />
