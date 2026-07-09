@@ -804,7 +804,7 @@ async function saveSetting(keyPath, value) {
 /**
  * 更新完整的配置，将其拆分并分别存储
  */
-function updateConfigWithoutFeatures(newConfig) {
+async function updateConfigWithoutFeatures(newConfig) {
   const plainConfig = JSON.parse(JSON.stringify(newConfig.config));
 
   if (plainConfig.mcpServers) {
@@ -825,57 +825,32 @@ function updateConfigWithoutFeatures(newConfig) {
 
 
   const { baseConfigPart, promptsPart, providersPart, mcpServersPart, tasksPart, localConfigPart } = splitConfigForStorage(plainConfig);
-
-  // 1. 更新基础配置 (config)
-  let configDoc = utools.db.get("config");
-  utools.db.put({
-    _id: "config",
-    data: baseConfigPart,
-    _rev: configDoc ? configDoc._rev : undefined,
-  });
-
-  // 2. 更新快捷助手配置 (prompts)
-  let promptsDoc = utools.db.get("prompts");
-  utools.db.put({
-    _id: "prompts",
-    data: promptsPart,
-    _rev: promptsDoc ? promptsDoc._rev : undefined,
-  });
-
-  // 3. 更新服务商配置 (providers)
-  let providersDoc = utools.db.get("providers");
-  utools.db.put({
-    _id: "providers",
-    data: providersPart,
-    _rev: providersDoc ? providersDoc._rev : undefined,
-  });
-
-  // 4. 更新MCP服务器配置 (mcpServers)
-  let mcpServersDoc = utools.db.get("mcpServers");
-  utools.db.put({
-    _id: "mcpServers",
-    data: mcpServersPart,
-    _rev: mcpServersDoc ? mcpServersDoc._rev : undefined,
-  });
-
-  // 5. 将 tasks 存入独立文档
-  let tasksDoc = utools.db.get("tasks");
-  utools.db.put({
-    _id: "tasks",
-    data: tasksPart,
-    _rev: tasksDoc ? tasksDoc._rev : undefined,
-  });
-
-  // 6. 更新本地特定配置
   const localId = getLocalConfigId();
-  let localDoc = utools.db.get(localId);
-  utools.db.put({
-    _id: localId,
-    data: localConfigPart,
-    _rev: localDoc ? localDoc._rev : undefined
-  });
 
-  // 7. 广播配置更新
+  const readRev = async (docId) => {
+    const doc = await utools.db.promises.get(docId);
+    return doc ? doc._rev : undefined;
+  };
+
+  const putChecked = async (docId, data) => {
+    const result = await utools.db.promises.put({
+      _id: docId,
+      data,
+      _rev: await readRev(docId),
+    });
+    if (!result || result.ok === false) {
+      throw new Error(`Failed to update config document: ${docId}`);
+    }
+    return result;
+  };
+
+  await putChecked("config", baseConfigPart);
+  await putChecked("prompts", promptsPart);
+  await putChecked("providers", providersPart);
+  await putChecked("mcpServers", mcpServersPart);
+  await putChecked("tasks", tasksPart);
+  await putChecked(localId, localConfigPart);
+
   const fullConfigForFrontend = JSON.parse(JSON.stringify(newConfig.config));
   for (const windowInstance of windowMap.values()) {
     if (!windowInstance.isDestroyed()) {
@@ -888,6 +863,7 @@ function updateConfigWithoutFeatures(newConfig) {
   }
 
   cleanUpBackgroundCache(newConfig);
+  return { success: true, config: fullConfigForFrontend };
 }
 
 function updateConfig(newConfig) {

@@ -155,17 +155,26 @@ const selectedTask = computed(() => {
     return null;
 });
 
-async function atomicSave(updateFunction) {
-    try {
-        const latestConfigData = await window.api.getConfig();
-        const latestConfig = latestConfigData.config;
-        if (!latestConfig.tasks) latestConfig.tasks = {};
-        updateFunction(latestConfig);
-        await window.api.updateConfigWithoutFeatures({ config: latestConfig });
-        currentConfig.value = latestConfig;
-    } catch (error) {
-        ElMessage.error(t('common.saveFailed'));
-    }
+let taskSaveQueue = Promise.resolve();
+
+function atomicSave(updateFunction) {
+    taskSaveQueue = taskSaveQueue
+        .catch(() => {})
+        .then(async () => {
+            try {
+                const latestConfigData = await window.api.getConfig();
+                const latestConfig = latestConfigData.config;
+                if (!latestConfig.tasks) latestConfig.tasks = {};
+                updateFunction(latestConfig);
+                await window.api.updateConfigWithoutFeatures({ config: latestConfig });
+                currentConfig.value = latestConfig;
+                return latestConfig;
+            } catch (error) {
+                ElMessage.error(t('common.saveFailed'));
+                throw error;
+            }
+        });
+    return taskSaveQueue;
 }
 
 // 手动刷新配置
@@ -346,24 +355,27 @@ async function clearTaskHistory() {
 }
 
 async function saveTaskSetting(key, value) {
-    if (!activeTaskId.value) return;
+    const taskId = activeTaskId.value;
+    if (!taskId) return;
     if (key === 'name' && /[\\/:*?"<>|]/.test(value)) {
         ElMessage.warning(t('tasks.nameInvalidFileSystem'));
         return;
     }
 
-    if (currentConfig.value.tasks[activeTaskId.value]) {
-        currentConfig.value.tasks[activeTaskId.value][key] = value;
-        if (key === 'enabled' && value === true) {
-            currentConfig.value.tasks[activeTaskId.value].lastRunTime = Date.now();
+    const enabledAt = key === 'enabled' && value === true ? Date.now() : 0;
+
+    if (currentConfig.value.tasks[taskId]) {
+        currentConfig.value.tasks[taskId][key] = value;
+        if (enabledAt) {
+            currentConfig.value.tasks[taskId].lastRunTime = enabledAt;
         }
     }
 
-    atomicSave(config => {
-        config.tasks[activeTaskId.value][key] = value;
-        // 同步保存到数据库
-        if (key === 'enabled' && value === true) {
-            config.tasks[activeTaskId.value].lastRunTime = Date.now();
+    await atomicSave(config => {
+        if (!config.tasks[taskId]) return;
+        config.tasks[taskId][key] = value;
+        if (enabledAt) {
+            config.tasks[taskId].lastRunTime = enabledAt;
         }
     });
 }

@@ -794,139 +794,190 @@ ipcRenderer.on('window-event', (e, { senderId, event }) => {
 });
 
 // --- 定时任务轮询调度器 ---
+const TASK_SCHEDULER_CHECK_INTERVAL_MS = 1000;
+const TASK_SCHEDULER_SLOT_TTL_MS = 48 * 60 * 60 * 1000;
 let taskSchedulerTimer = null;
-let lastCheckMinute = Math.floor(Date.now() / 60000);
+let isTaskSchedulerChecking = false;
+const processedTaskRunSlots = new Map();
 
-function startTaskScheduler() {
-  if (taskSchedulerTimer) return;
-  lastCheckMinute = Math.floor(Date.now() / 60000);
-  taskSchedulerTimer = setInterval(async () => {
+function formatTaskSchedulerHhMm(date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatTaskSchedulerYmd(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function parseTaskSchedulerTime(value) {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return { hours, minutes };
+}
+
+function buildTaskSchedulerRunSlotKey(taskId, task, nowDate) {
+  return `${taskId}:${task.triggerType}:${formatTaskSchedulerYmd(nowDate)}:${formatTaskSchedulerHhMm(nowDate)}`;
+}
+
+function isTaskSchedulerTimestampInCurrentSlot(timestamp, nowDate) {
+  const numericTimestamp = Number(timestamp || 0);
+  if (!Number.isFinite(numericTimestamp) || numericTimestamp <= 0) return false;
+  const date = new Date(numericTimestamp);
+  return formatTaskSchedulerYmd(date) === formatTaskSchedulerYmd(nowDate) && formatTaskSchedulerHhMm(date) === formatTaskSchedulerHhMm(nowDate);
+}
+
+function isTaskSchedulerWithinIntervalRanges(task, nowDate) {
+  if (!Array.isArray(task?.intervalTimeRanges) || task.intervalTimeRanges.length === 0) {
+    return true;
+  }
+
+  const nowHhMm = formatTaskSchedulerHhMm(nowDate);
+  return task.intervalTimeRanges.some(range => {
+    if (Array.isArray(range) && range.length === 2) {
+      return nowHhMm >= range[0] && nowHhMm <= range[1];
+    }
+    return false;
+  });
+}
+
+function pruneTaskSchedulerRunSlots(now = Date.now()) {
+  for (const [slotKey, timestamp] of processedTaskRunSlots.entries()) {
+    if (now - timestamp > TASK_SCHEDULER_SLOT_TTL_MS) {
+      processedTaskRunSlots.delete(slotKey);
+    }
+  }
+}
+
+function getDueTaskRunSlotKey(taskId, task, now, nowDate) {
+  if (!task || typeof task !== 'object' || !task.enabled) return null;
+
+  const currentH = nowDate.getHours();
+  const currentM = nowDate.getMinutes();
+  const slotKey = buildTaskSchedulerRunSlotKey(taskId, task, nowDate);
+
+  if (processedTaskRunSlots.has(slotKey) || task.lastRunSlotKey === slotKey) return null;
+  if (isTaskSchedulerTimestampInCurrentSlot(task.lastRunTime, nowDate)) return null;
+
+  if (task.triggerType === 'interval') {
+    let shouldTrigger = false;
+
+    if (task.intervalStartTime) {
+      const parsedStart = parseTaskSchedulerTime(task.intervalStartTime);
+      if (!parsedStart) return null;
+
+      const currentTotalMins = currentH * 60 + currentM;
+      const startTotalMins = parsedStart.hours * 60 + parsedStart.minutes;
+      const intervalMins = Math.max(Number(task.intervalMinutes || 1), 1);
+
+      if (currentTotalMins >= startTotalMins) {
+        const diffMins = currentTotalMins - startTotalMins;
+        shouldTrigger = diffMins % intervalMins === 0;
+      }
+    } else {
+      const lastRun = Number(task.lastRunTime || 0);
+      const intervalMs = Math.max(Number(task.intervalMinutes || 1), 1) * 60000;
+      shouldTrigger = now - lastRun >= intervalMs;
+    }
+
+    return shouldTrigger && isTaskSchedulerWithinIntervalRanges(task, nowDate) ? slotKey : null;
+  }
+
+  if (task.triggerType === 'daily' && task.dailyTime) {
+    const parsed = parseTaskSchedulerTime(task.dailyTime);
+    return parsed && currentH === parsed.hours && currentM === parsed.minutes ? slotKey : null;
+  }
+
+  if (task.triggerType === 'weekly' && task.weeklyTime && Array.isArray(task.weeklyDays)) {
+    const parsed = parseTaskSchedulerTime(task.weeklyTime);
+    const currentDay = nowDate.getDay();
+    return parsed && task.weeklyDays.includes(currentDay) && currentH === parsed.hours && currentM === parsed.minutes ? slotKey : null;
+  }
+
+  if (task.triggerType === 'monthly' && task.monthlyTime) {
+    const parsed = parseTaskSchedulerTime(task.monthlyTime);
+    const currentMonthDay = nowDate.getDate();
+    const validDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
+    return parsed && validDays.includes(currentMonthDay) && currentH === parsed.hours && currentM === parsed.minutes ? slotKey : null;
+  }
+
+  if (task.triggerType === 'single' && task.singleDate && task.singleTime) {
+    const parsed = parseTaskSchedulerTime(task.singleTime);
+    const currentYMD = formatTaskSchedulerYmd(nowDate);
+    return parsed && currentYMD === task.singleDate && currentH === parsed.hours && currentM === parsed.minutes ? slotKey : null;
+  }
+
+  return null;
+}
+
+async function runScheduledTask(taskId, task, configResult) {
+  const windowConfig = JSON.parse(JSON.stringify(configResult.config));
+
+  if (task.promptKey === '__DEFAULT__') {
+    if (!windowConfig.prompts) windowConfig.prompts = {};
+    const modelRoute = ['superior', 'general', 'fast'].includes(task?.modelRoute) ? task.modelRoute : 'general';
+    windowConfig.prompts['__DEFAULT__'] = {
+      type: "general",
+      prompt: "",
+      showMode: "window",
+      model: resolveDefaultAssistantModel(windowConfig, modelRoute),
+      stream: true,
+      isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
+      autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
+      window_width: 580,
+      window_height: 740,
+      icon: ""
+    };
+  }
+
+  const msg = {
+    os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
+    code: task.promptKey,
+    type: "task",
+    payload: task.description,
+    taskConfig: { id: taskId, ...task },
+    tempPromptConfig: task.promptKey === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
+  };
+
+  return await openWindow(windowConfig, msg);
+}
+
+async function checkScheduledTasks() {
+  if (isTaskSchedulerChecking) return;
+  isTaskSchedulerChecking = true;
+
   try {
-    const currentMinute = Math.floor(Date.now() / 60000);
-    if (currentMinute <= lastCheckMinute) return;
-    lastCheckMinute = currentMinute;
-
     const configResult = await getConfig();
-    const tasks = configResult.config.tasks || {};
-    const now = Date.now();
+    const tasks = configResult?.config?.tasks || {};
     let needsUpdate = false;
 
     for (const taskId in tasks) {
       const task = tasks[taskId];
-      if (!task.enabled) continue;
+      const now = Date.now();
+      const nowDate = new Date(now);
+      const slotKey = getDueTaskRunSlotKey(taskId, task, now, nowDate);
+      if (!slotKey) continue;
 
-      let shouldTrigger = false;
-      const lastRun = task.lastRunTime || 0;
-
-      // 获取当前的具体时分
-      const currentH = new Date().getHours();
-      const currentM = new Date().getMinutes();
-      // 防抖：确保同一分钟内不会因为重复判断而触发两次
-      const safeCooldown = (now - lastRun) > 60000;
-
-      if (task.triggerType === 'interval') {
-        if (task.intervalStartTime) {
-          const [hours, minutes] = task.intervalStartTime.split(':').map(Number);
-          const currentTotalMins = currentH * 60 + currentM;
-          const startTotalMins = hours * 60 + minutes;
-          const intervalMins = Math.max(task.intervalMinutes || 1, 1);
-
-          if (currentTotalMins >= startTotalMins) {
-            const diffMins = currentTotalMins - startTotalMins;
-            if (diffMins % intervalMins === 0 && safeCooldown) {
-              shouldTrigger = true;
-            }
-          }
-        } else {
-          // 纯间隔触发（无特定时间点），由于没有对齐的时钟点，仅依据与上一次触发的时间差来定
-          const intervalMs = Math.max(task.intervalMinutes || 1, 1) * 60000;
-          if (now - lastRun >= intervalMs) {
-            shouldTrigger = true;
-          }
+      try {
+        const senderId = await runScheduledTask(taskId, task, configResult);
+        if (!senderId) {
+          console.warn(`[Task Scheduler] task ${taskId} due but window did not open`);
+          continue;
         }
-      } else if (task.triggerType === 'daily' && task.dailyTime) {
-        const [hours, minutes] = task.dailyTime.split(':').map(Number);
-        if (currentH === hours && currentM === minutes && safeCooldown) {
-          shouldTrigger = true;
-        }
-      } else if (task.triggerType === 'weekly' && task.weeklyTime && task.weeklyDays) {
-        const [hours, minutes] = task.weeklyTime.split(':').map(Number);
-        const currentDay = new Date().getDay();
-        if (task.weeklyDays.includes(currentDay)) {
-          if (currentH === hours && currentM === minutes && safeCooldown) {
-            shouldTrigger = true;
-          }
-        }
-      } else if (task.triggerType === 'monthly' && task.monthlyTime) {
-        const [hours, minutes] = task.monthlyTime.split(':').map(Number);
-        const currentMonthDay = new Date().getDate();
-        const validDays = Array.isArray(task.monthlyDays) ? task.monthlyDays : [];
 
-        if (validDays.includes(currentMonthDay)) {
-          if (currentH === hours && currentM === minutes && safeCooldown) {
-            shouldTrigger = true;
-          }
-        }
-      } else if (task.triggerType === 'single' && task.singleDate && task.singleTime) {
-        const nowD = new Date();
-        const currentYMD = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
-        const [hours, minutes] = task.singleTime.split(':').map(Number);
-
-        if (currentYMD === task.singleDate && currentH === hours && currentM === minutes && safeCooldown) {
-          shouldTrigger = true;
+        const completedAt = Date.now();
+        task.lastRunTime = completedAt;
+        task.lastRunSlotKey = slotKey;
+        if (task.triggerType === 'single') {
           task.enabled = false;
         }
-      }
-
-      if (shouldTrigger && task.triggerType === 'interval' && task.intervalTimeRanges && task.intervalTimeRanges.length > 0) {
-        const nowHhMm = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`;
-        const isWithinRange = task.intervalTimeRanges.some(range => {
-          if (Array.isArray(range) && range.length === 2) {
-            return nowHhMm >= range[0] && nowHhMm <= range[1];
-          }
-          return false;
-        });
-
-        // 如果当前时间不在任何一个设定的时间段内，否决触发
-        if (!isWithinRange) {
-          shouldTrigger = false;
-        }
-      }
-
-      if (shouldTrigger) {
-        task.lastRunTime = now;
+        processedTaskRunSlots.set(slotKey, completedAt);
         needsUpdate = true;
-
-        const windowConfig = JSON.parse(JSON.stringify(configResult.config));
-
-        if (task.promptKey === '__DEFAULT__') {
-      if (!windowConfig.prompts) windowConfig.prompts = {};
-      const modelRoute = ['superior', 'general', 'fast'].includes(task?.modelRoute) ? task.modelRoute : 'general';
-      windowConfig.prompts['__DEFAULT__'] = {
-        type: "general",
-        prompt: "",
-        showMode: "window",
-        model: resolveDefaultAssistantModel(windowConfig, modelRoute),
-            stream: true,
-            isAlwaysOnTop: windowConfig.isAlwaysOnTop_global ?? true,
-            autoCloseOnBlur: windowConfig.autoCloseOnBlur_global ?? true,
-            window_width: 580,
-            window_height: 740,
-            icon: ""
-          };
-        }
-
-        // 触发独立窗口
-        const msg = {
-          os: utools.isMacOS() ? "macos" : utools.isWindows() ? "win" : "linux",
-          code: task.promptKey,
-          type: "task",
-          payload: task.description,
-          taskConfig: { id: taskId, ...task },
-          tempPromptConfig: task.promptKey === '__DEFAULT__' ? windowConfig.prompts['__DEFAULT__'] : null
-        };
-        // 传入安全的 windowConfig
-        await openWindow(windowConfig, msg);
+      } catch (error) {
+        console.error(`[Task Scheduler] failed to run task ${taskId}:`, error);
       }
     }
 
@@ -935,8 +986,18 @@ function startTaskScheduler() {
     }
   } catch (e) {
     console.error("Task Scheduler Error:", e);
+  } finally {
+    pruneTaskSchedulerRunSlots();
+    isTaskSchedulerChecking = false;
   }
-  }, 1000); // 每秒轮询一次，保证精准执行
+}
+
+function startTaskScheduler() {
+  if (taskSchedulerTimer) return;
+  taskSchedulerTimer = setInterval(() => {
+    void checkScheduledTasks();
+  }, TASK_SCHEDULER_CHECK_INTERVAL_MS);
+  void checkScheduledTasks();
 }
 
 try {
