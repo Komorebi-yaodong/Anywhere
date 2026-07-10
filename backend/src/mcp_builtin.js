@@ -3277,7 +3277,7 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
                 enabled: enabled,
                 intervalMinutes: 60, intervalStartTime: '00:00', intervalTimeRanges: [],
                 dailyTime: '12:00', weeklyDays: [1, 2, 3, 4, 5], weeklyTime: '12:00', monthlyDays: [1], monthlyTime: '12:00',
-                extraMcp: [], extraSkills: [], autoSave: true, autoClose: true, history: [],
+                extraMcp: [], extraSkills: [], autoSave: true, autoClose: false, history: [],
                 lastRunTime: enabled ? Date.now() : 0,
                 singleDate: single_date || new Date().toISOString().split('T')[0],
                 singleTime: '12:00',

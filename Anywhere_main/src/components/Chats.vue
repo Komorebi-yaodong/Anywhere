@@ -48,19 +48,33 @@ const dragGhostLabel = ref('');
 // --- 项目（目录）分组状态 ---
 const COLLAPSED_PROJECTS_STORAGE_KEY = 'chats-collapsed-projects';
 
-function loadCollapsedProjectIds() {
+function loadCollapsedProjectState() {
     try {
         const raw = localStorage.getItem(COLLAPSED_PROJECTS_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+        if (raw === null) return { ids: [], hasUserPreference: false };
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            // 旧版本数组格式代表用户已明确调整过展开状态，必须保持兼容。
+            return { ids: parsed.filter((id) => typeof id === 'string'), hasUserPreference: true };
+        }
+        if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.ids)) {
+            return { ids: [], hasUserPreference: false };
+        }
+        return {
+            ids: parsed.ids.filter((id) => typeof id === 'string'),
+            hasUserPreference: parsed.hasUserPreference === true
+        };
     } catch {
-        return [];
+        return { ids: [], hasUserPreference: false };
     }
 }
 
-function persistCollapsedProjectIds(ids) {
+function persistCollapsedProjectIds(ids, hasUserPreference = false) {
     try {
-        localStorage.setItem(COLLAPSED_PROJECTS_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+        localStorage.setItem(COLLAPSED_PROJECTS_STORAGE_KEY, JSON.stringify({
+            ids: Array.from(ids),
+            hasUserPreference
+        }));
     } catch {
         // ignore localStorage persistence failure
     }
@@ -68,7 +82,21 @@ function persistCollapsedProjectIds(ids) {
 
 const localProjects = ref({ version: 1, projects: [] });
 const cloudProjects = ref({ version: 1, projects: [] });
-const collapsedProjectIds = ref(new Set(loadCollapsedProjectIds()));
+const initialCollapsedProjectState = loadCollapsedProjectState();
+const collapsedProjectIds = ref(new Set(initialCollapsedProjectState.ids));
+const hasUserCollapsedProjectPreference = ref(initialCollapsedProjectState.hasUserPreference);
+
+function initializeDefaultCollapsedProjects(projectsData) {
+    if (hasUserCollapsedProjectPreference.value) return;
+    const projectIds = (Array.isArray(projectsData?.projects) ? projectsData.projects : [])
+        .map((project) => String(project?.id || '').trim())
+        .filter(Boolean);
+    if (projectIds.length === 0) return;
+
+    const collapsedIds = new Set([...collapsedProjectIds.value, ...projectIds]);
+    collapsedProjectIds.value = collapsedIds;
+    persistCollapsedProjectIds(collapsedIds);
+}
 const projectDeleteDialog = ref({ visible: false, id: '', name: '', busy: false });
 const PROJECT_UNGROUPED_DROP_ID = '__ungrouped__';
 
@@ -1180,6 +1208,7 @@ async function fetchLocalProjects() {
     try {
         const result = await window.api.readLocalProjects(localChatPath.value);
         localProjects.value = normalizeProjectsResult(result);
+        initializeDefaultCollapsedProjects(localProjects.value);
     } catch (error) {
         console.warn('[chats] 读取本地项目失败:', error);
         localProjects.value = { version: 1, projects: [] };
@@ -1192,6 +1221,7 @@ async function fetchCloudProjects() {
         return;
     }
     cloudProjects.value = await readCloudProjectsViaWebdav();
+    initializeDefaultCollapsedProjects(cloudProjects.value);
 }
 
 async function persistLocalProjects() {
@@ -1214,7 +1244,8 @@ const toggleProjectCollapse = (projectId) => {
         next.add(id);
     }
     collapsedProjectIds.value = next;
-    persistCollapsedProjectIds(next);
+    hasUserCollapsedProjectPreference.value = true;
+    persistCollapsedProjectIds(next, true);
 };
 
 // --- 项目 CRUD ---

@@ -244,7 +244,7 @@ function handleAddTask() {
             extraSkills: [],
             autoSave: true,
             autoSaveProjectId: '',
-            autoClose: true,
+            autoClose: false,
             enabled: false,
             history: []
         };
