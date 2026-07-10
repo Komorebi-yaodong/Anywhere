@@ -3088,13 +3088,17 @@ const autoSaveSession = async (force = false) => {
 
     try {
       const localProjects = normalizeWindowProjects(await window.api.readLocalProjects(currentConfig.value.webdav.localChatPath));
-      const projectName = localProjects.projects.find((p) => p.id === autoSaveProjectId)?.name || '';
-      await reassignLocalProject({
-        projectId: autoSaveProjectId,
-        projectName,
-        addFilename: `${defaultConversationName.value}.json`,
-        removeFilenames: []
-      });
+      const filename = `${defaultConversationName.value}.json`;
+      const existingProjectId = findProjectIdByFilename(localProjects, filename);
+      if (!existingProjectId && autoSaveProjectId) {
+        const projectName = localProjects.projects.find((p) => p.id === autoSaveProjectId)?.name || '';
+        await reassignLocalProject({
+          projectId: autoSaveProjectId,
+          projectName,
+          addFilename: filename,
+          removeFilenames: []
+        });
+      }
     } catch (projectError) {
       console.warn('[projects] auto-save local project assignment failed:', projectError);
     }
