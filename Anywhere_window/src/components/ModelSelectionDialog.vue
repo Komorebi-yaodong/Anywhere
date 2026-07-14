@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { ElDialog, ElButton, ElInput, ElScrollbar, ElIcon } from 'element-plus';
 import { Search, Check, ArrowRight, ArrowDown } from '@element-plus/icons-vue';
 
@@ -17,11 +17,49 @@ const emit = defineEmits(['update:modelValue', 'select', 'save-model', 'update:p
 
 const searchQuery = ref('');
 const searchInputRef = ref(null);
+const dialogContentRef = ref(null);
 
-const handleOpened = () => {
+const ensureCurrentModelProviderExpanded = () => {
+    const current = props.currentModel;
+    if (!current) return false;
+
+    for (const group of groupedModels.value) {
+        if (!group.models.some((model) => model.value === current)) continue;
+        if (!isProviderExpanded(group.name)) {
+            const nextStates = {
+                ...localProviderCollapseStates.value,
+                [group.name]: true
+            };
+            localProviderCollapseStates.value = nextStates;
+            emit('update:providerCollapseStates', nextStates);
+        }
+        return true;
+    }
+    return false;
+};
+
+const scrollToCurrentModel = () => {
+    const root = dialogContentRef.value;
+    if (!root) return;
+    const activeItem = root.querySelector('.model-item.is-active');
+    if (!activeItem) return;
+    activeItem.scrollIntoView({ block: 'center', behavior: 'auto' });
+};
+
+const handleOpened = async () => {
     if (searchInputRef.value) {
         searchInputRef.value.focus();
     }
+
+    const hasCurrentModel = ensureCurrentModelProviderExpanded();
+    if (!hasCurrentModel) return;
+
+    await nextTick();
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            scrollToCurrentModel();
+        });
+    });
 };
 
 // 计算分组后的模型列表
@@ -155,7 +193,7 @@ const getProviderStyle = (providerName) => {
             <div style="display: none;"></div>
         </template>
 
-        <div class="dialog-content-wrapper">
+        <div ref="dialogContentRef" class="dialog-content-wrapper">
             <!-- 搜索栏 -->
             <div class="model-search-container">
                 <el-input 
