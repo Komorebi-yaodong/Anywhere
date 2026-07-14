@@ -1,3 +1,106 @@
+// Polyfill Timer.unref/ref for runtimes (e.g. uTools/Electron preload) where
+// setTimeout may return a number or a handle without Node's Timeout.unref().
+// @modelcontextprotocol/sdk StdioClientTransport.close() does:
+//   new Promise(resolve => setTimeout(resolve, 2000).unref())
+// Without this shim, closing user-configured stdio MCP clients fails with:
+//   "setTimeout(...).unref is not a function"
+// which surfaces as "工具执行或参数解析错误" after an otherwise successful tool call.
+(function ensureTimerUnrefPolyfill() {
+  const g = typeof globalThis !== 'undefined' ? globalThis : global;
+  if (!g || typeof g.setTimeout !== 'function') return;
+
+  let probe;
+  try {
+    probe = g.setTimeout(() => {}, 0);
+    if (typeof g.clearTimeout === 'function') g.clearTimeout(probe);
+  } catch (_) {
+    return;
+  }
+
+  if (probe && typeof probe.unref === 'function') return;
+
+  if (probe && (typeof probe === 'object' || typeof probe === 'function')) {
+    try {
+      const proto = Object.getPrototypeOf(probe);
+      if (proto && typeof proto.unref !== 'function') {
+        Object.defineProperty(proto, 'unref', {
+          value: function unref() { return this; },
+          configurable: true,
+          writable: true,
+        });
+      }
+      if (proto && typeof proto.ref !== 'function') {
+        Object.defineProperty(proto, 'ref', {
+          value: function ref() { return this; },
+          configurable: true,
+          writable: true,
+        });
+      }
+      if (typeof probe.unref === 'function') return;
+    } catch (_) {
+      // fall through to wrapper path
+    }
+  }
+
+  const originalSetTimeout = g.setTimeout;
+  if (originalSetTimeout.__anywhereUnrefPatched) return;
+
+  function attachUnref(handle) {
+    if (handle == null) return handle;
+    if (typeof handle === 'object' || typeof handle === 'function') {
+      if (typeof handle.unref !== 'function') {
+        try { handle.unref = function unref() { return handle; }; } catch (_) { /* ignore */ }
+      }
+      if (typeof handle.ref !== 'function') {
+        try { handle.ref = function ref() { return handle; }; } catch (_) { /* ignore */ }
+      }
+      return handle;
+    }
+
+    // Primitive timer id (browser-like). Provide a chainable wrapper that still
+    // round-trips through clearTimeout via the patched clearer below.
+    return {
+      __anywhereTimerId: handle,
+      unref() { return this; },
+      ref() { return this; },
+      valueOf() { return handle; },
+      [Symbol.toPrimitive]() { return handle; },
+    };
+  }
+
+  function setTimeoutPatched(...args) {
+    return attachUnref(originalSetTimeout.apply(this, args));
+  }
+  setTimeoutPatched.__anywhereUnrefPatched = true;
+  g.setTimeout = setTimeoutPatched;
+
+  if (typeof g.setInterval === 'function' && !g.setInterval.__anywhereUnrefPatched) {
+    const originalSetInterval = g.setInterval;
+    function setIntervalPatched(...args) {
+      return attachUnref(originalSetInterval.apply(this, args));
+    }
+    setIntervalPatched.__anywhereUnrefPatched = true;
+    g.setInterval = setIntervalPatched;
+  }
+
+  function patchClearer(name) {
+    const original = g[name];
+    if (typeof original !== 'function' || original.__anywhereUnrefPatched) return;
+    function clearerPatched(handle) {
+      const id = handle && typeof handle === 'object' && Object.prototype.hasOwnProperty.call(handle, '__anywhereTimerId')
+        ? handle.__anywhereTimerId
+        : handle;
+      return original.call(this, id);
+    }
+    clearerPatched.__anywhereUnrefPatched = true;
+    g[name] = clearerPatched;
+  }
+
+  patchClearer('clearTimeout');
+  patchClearer('clearInterval');
+})();
+
+
 const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
 const { getBuiltinTools, invokeBuiltinTool } = require('./mcp_builtin.js');
 const oauthStore = require('./mcp_oauth_store.js');
