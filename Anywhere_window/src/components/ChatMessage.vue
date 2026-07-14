@@ -17,36 +17,7 @@ const loadHtml2Canvas = () => {
   return html2canvasPromise;
 };
 
-const escapeHtml = (value = '') => String(value)
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
-
 const CODE_BLOCK_COPY_SVG = `<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>`;
-
-/** 流式输出时将 fenced code 转成纯文本 pre，避免 Shiki 反复高亮整段代码块 */
-const convertFencedCodeBlocksToPlainHtml = (text = '') => {
-  if (!text) return '';
-
-  const fenceRe = /(^|\n)([ \t]*)(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)(?:\n[ \t]*\3[ \t]*(?=\n|$)|$)/g;
-  let result = '';
-  let lastIndex = 0;
-  let match;
-
-  while ((match = fenceRe.exec(text)) !== null) {
-    const [full, prefix, indent, fence, infoLine = '', body = ''] = match;
-    result += text.slice(lastIndex, match.index) + prefix;
-    const lang = String(infoLine || '').trim().split(/\s+/)[0] || '';
-    const langClass = lang ? ` language-${escapeHtml(lang)}` : '';
-    result += `${indent}<pre class="code-block-plain hljs"><code class="code-block-plain-code${langClass}">${escapeHtml(body.replace(/\n$/, ''))}</code></pre>`;
-    lastIndex = match.index + full.length;
-  }
-
-  result += text.slice(lastIndex);
-  return result;
-};
 
 const props = defineProps({
   message: Object,
@@ -512,12 +483,6 @@ const renderedMarkdownContent = computed(() => {
   const content = props.message.role ? props.message.content : props.message;
   const role = props.message.role ? props.message.role : 'user';
   let formattedContent = formatMessageContent(content, role);
-
-  // 流式输出最后一条消息时，将代码围栏降级为纯文本 pre，跳过 Shiki 全量高亮
-  if (isStreamingThisMessage.value) {
-    formattedContent = convertFencedCodeBlocksToPlainHtml(formattedContent);
-  }
-
   formattedContent = preprocessKatex(formattedContent);
 
   const protectedMap = new Map();
@@ -546,8 +511,6 @@ const renderedMarkdownContent = computed(() => {
   let processedContent = formattedContent.replace(/(^|[^\\])(`+)([\s\S]*?)\2/g, (match, prefix, delimiter, inner) => {
     return prefix + addPlaceholder(delimiter + inner + delimiter);
   });
-  // 流式 plain code 已是 HTML，也需保护
-  processedContent = processedContent.replace(/<pre class="code-block-plain[\s\S]*?<\/pre>/g, (match) => addPlaceholder(match));
   processedContent = processedContent.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match) => addPlaceholder(match));
   processedContent = processedContent.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)(\$)/g, (match) => addPlaceholder(match));
   processedContent = processedContent.replace(/(^|[^\\])\*\*([^\n]+?)\*\*/g, '$1<strong>$2</strong>');
@@ -573,7 +536,7 @@ const renderedMarkdownContent = computed(() => {
 
 const injectCopyButtonsForRoot = (root) => {
   if (!root) return;
-  const codeBlocks = root.querySelectorAll('pre.hljs, pre.shiki, pre.code-block-plain');
+  const codeBlocks = root.querySelectorAll('pre.hljs, pre.shiki');
   codeBlocks.forEach((pre) => {
     if (pre.closest('.code-block-wrapper')) return;
     if (pre.querySelector('.code-block-copy-button')) return;
@@ -1297,22 +1260,6 @@ html.dark .chat-message .ai-bubble {
 
   html:not(.dark) & :deep(pre.shiki) {
     background-color: #f6f8fa !important;
-  }
-
-  :deep(pre.code-block-plain) {
-    margin: 0.75em 0;
-    padding: 12px 14px;
-    overflow-x: auto;
-    border-radius: 8px;
-    background-color: rgba(175, 184, 193, 0.18);
-    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-    font-size: 0.92em;
-    line-height: 1.5;
-    white-space: pre;
-  }
-
-  html.dark & :deep(pre.code-block-plain) {
-    background-color: rgba(255, 255, 255, 0.06);
   }
 
   :deep(.code-block-wrapper) {
