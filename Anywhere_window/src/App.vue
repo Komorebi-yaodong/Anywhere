@@ -1348,31 +1348,6 @@ watch(() => chat_show.value.length, () => {
 
 const isCollapsed = (index) => collapsedMessages.value.has(index);
 
-const addCopyButtonsToCodeBlocks = async () => {
-  await nextTick();
-  document.querySelectorAll('.markdown-body pre.hljs').forEach(pre => {
-    if (pre.querySelector('.code-block-copy-button')) return;
-    const codeElement = pre.querySelector('code'); if (!codeElement) return;
-    const wrapper = document.createElement('div'); wrapper.className = 'code-block-wrapper'; pre.parentNode.insertBefore(wrapper, pre); wrapper.appendChild(pre);
-    const codeText = codeElement.textContent || ''; const lines = codeText.trimEnd().split('\n'); const lineCount = lines.length;
-    const copyButtonSVG = `<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>`;
-    const createButton = (positionClass) => {
-      const button = document.createElement('button'); button.className = `code-block-copy-button ${positionClass}`; button.innerHTML = copyButtonSVG; button.title = 'Copy code';
-      button.addEventListener('click', async (event) => {
-        event.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(codeText.trimEnd());
-          showDismissibleMessage.success('Code copied to clipboard!');
-        }
-        catch (err) { console.error('Failed to copy code:', err); showDismissibleMessage.error('Failed to copy code.'); }
-      });
-      wrapper.appendChild(button);
-    };
-    createButton('code-block-copy-button-bottom');
-    if (lineCount > 3) createButton('code-block-copy-button-top');
-  });
-};
-
 const handleMainClick = async (event) => {
   const target = event.target;
   // 1. 处理图片点击
@@ -2016,7 +1991,7 @@ watch(zoomLevel, (newZoom) => {
   if (window.api && typeof window.api.setZoomFactor === 'function') window.api.setZoomFactor(newZoom);
 });
 watch(chat_show, async () => {
-  await addCopyButtonsToCodeBlocks();
+  // 代码块复制按钮已下沉到 ChatMessage 本地注入，避免每次 deep watch 全页扫描 pre.hljs
   await updateStickyResizeObserver();
 }, { deep: true, flush: 'post' });
 watch(() => currentConfig.value?.isDarkMode, (isDark) => {
@@ -2430,7 +2405,6 @@ onMounted(async () => {
       else await askAI(true);
     }
 
-    await addCopyButtonsToCodeBlocks();
     setTimeout(() => {
       chatInputRef.value?.focus({ cursor: 'end' });
     }, 100);
@@ -5825,6 +5799,13 @@ const askAI = async (forceSend = false) => {
           if (currentTotalLength > 1500) throttleDelay = 160;
           if (currentTotalLength > 4000) throttleDelay = 250;
           if (currentTotalLength > 8000) throttleDelay = 400;
+
+          // 未闭合代码围栏时加大节流，降低流式代码块重渲染频率
+          const fenceTicks = (aggregatedContent.match(/```/g) || []).length
+            + (aggregatedContent.match(/~~~/g) || []).length;
+          if (fenceTicks % 2 === 1) {
+            throttleDelay = Math.max(throttleDelay, 360);
+          }
 
           if (isTurnAborted()) {
             break;
