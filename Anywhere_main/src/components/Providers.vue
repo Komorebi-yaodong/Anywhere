@@ -150,25 +150,32 @@ const canMoveDown = computed(() => {
   return groupIds.indexOf(provider_key.value) < groupIds.length - 1;
 });
 
-// 原子化保存函数
+// 原子化保存：串行化，避免快速连删/连改时 getConfig 与写回交错导致丢更新
+let atomicSaveQueue = Promise.resolve();
 async function atomicSave(updateFunction) {
-  try {
-    const latestConfigData = await window.api.getConfig();
-    if (!latestConfigData || !latestConfigData.config) {
-      throw new Error("Failed to get latest config from DB.");
+  const run = async () => {
+    try {
+      const latestConfigData = await window.api.getConfig();
+      if (!latestConfigData || !latestConfigData.config) {
+        throw new Error("Failed to get latest config from DB.");
+      }
+      const latestConfig = latestConfigData.config;
+
+      updateFunction(latestConfig);
+
+      await window.api.updateConfigWithoutFeatures({ config: latestConfig });
+
+      currentConfig.value = latestConfig;
+
+    } catch (error) {
+      console.error("Atomic save failed:", error);
+      ElMessage.error(t('providers.alerts.configSaveFailed'));
     }
-    const latestConfig = latestConfigData.config;
+  };
 
-    updateFunction(latestConfig);
-
-    await window.api.updateConfigWithoutFeatures({ config: latestConfig });
-
-    currentConfig.value = latestConfig;
-
-  } catch (error) {
-    console.error("Atomic save failed:", error);
-    ElMessage.error(t('providers.alerts.configSaveFailed'));
-  }
+  const next = atomicSaveQueue.then(run, run);
+  atomicSaveQueue = next.catch(() => {});
+  return next;
 }
 
 // 添加文件夹
@@ -360,7 +367,7 @@ function delete_model(model) {
 
   atomicSave(config => {
     const provider = config.providers[keyToUpdate];
-    if (provider) {
+    if (provider && Array.isArray(provider.modelList)) {
       provider.modelList = provider.modelList.filter(m => m !== model);
     }
   });
@@ -890,9 +897,9 @@ async function deleteSelectedBatchTestKeys() {
                 </el-form-item>
                 <div class="models-list-wrapper">
                   <draggable v-if="selectedProvider.modelList && selectedProvider.modelList.length > 0"
-                    v-model="selectedProvider.modelList" item-key="model"
+                    v-model="selectedProvider.modelList" :item-key="(m) => m"
                     class="models-list-container draggable-models-list" @end="saveModelOrder"
-                    ghost-class="sortable-ghost">
+                    ghost-class="sortable-ghost" filter=".el-tag__close" :prevent-on-filter="true">
                     <template #item="{ element: model }">
                       <el-tag :key="model" closable @close="delete_model(model)" class="model-tag" type="info"
                         effect="light">
