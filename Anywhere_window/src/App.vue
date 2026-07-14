@@ -154,6 +154,59 @@ const getLastMessageElement = () => {
 };
 
 
+const normalizeModelDialogProviderCollapseStates = (input, providerNames = []) => {
+  const nextStates = {};
+  const source = input && typeof input === 'object' ? input : {};
+  const providerSet = new Set(providerNames.filter(Boolean));
+
+  providerSet.forEach((providerName) => {
+    nextStates[providerName] = typeof source[providerName] === 'boolean' ? source[providerName] : true;
+  });
+
+  return nextStates;
+};
+
+const syncModelDialogProviderCollapseStates = (config) => {
+  const providerNames = (modelList.value || [])
+    .map(item => item?.providerName || String(item?.label || '').split('|')[0])
+    .filter(Boolean)
+    .filter((value, index, array) => array.indexOf(value) === index);
+
+  const savedStates = config?.ui?.windowModelDialogProviderCollapseStates;
+  const normalizedStates = normalizeModelDialogProviderCollapseStates(savedStates, providerNames);
+  const prevSerialized = JSON.stringify(modelDialogProviderCollapseStates.value || {});
+  const nextSerialized = JSON.stringify(normalizedStates);
+
+  if (prevSerialized !== nextSerialized) {
+    modelDialogProviderCollapseStates.value = normalizedStates;
+  }
+
+  return normalizedStates;
+};
+
+const handleProviderCollapseStatesChange = async (nextStates) => {
+  const normalizedStates = normalizeModelDialogProviderCollapseStates(
+    nextStates,
+    (modelList.value || []).map(item => item?.providerName || String(item?.label || '').split('|')[0])
+  );
+  const prevSerialized = JSON.stringify(modelDialogProviderCollapseStates.value || {});
+  const nextSerialized = JSON.stringify(normalizedStates);
+
+  if (prevSerialized === nextSerialized) {
+    return;
+  }
+
+  modelDialogProviderCollapseStates.value = normalizedStates;
+  currentConfig.value.ui = currentConfig.value.ui || {};
+  currentConfig.value.ui.windowModelDialogProviderCollapseStates = normalizedStates;
+
+  try {
+    await window.api.saveSetting('ui.windowModelDialogProviderCollapseStates', normalizedStates);
+  } catch (error) {
+    console.warn('保存模型弹窗折叠状态失败', error);
+  }
+};
+
 const updateModelListAndMap = (config) => {
   const newModelList = [];
   const newModelMap = {};
@@ -204,6 +257,7 @@ const updateModelListAndMap = (config) => {
 
   modelList.value = newModelList;
   modelMap.value = newModelMap;
+  syncModelDialogProviderCollapseStates(config);
 };
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -277,6 +331,7 @@ watch(model, (nextModel) => {
   resolveCurrentModelLogo(nextModel);
 }, { immediate: false });
 
+const modelDialogProviderCollapseStates = ref({});
 const isAlwaysOnTop = ref(true);
 const currentOS = ref('win');
 const currentTaskConfig = ref(null);
