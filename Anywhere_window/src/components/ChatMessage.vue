@@ -378,6 +378,31 @@ const mermaidConfig = computed(() => ({
   theme: props.isDarkMode ? 'dark' : 'neutral',
 }));
 
+const normalizeWindowsLocalMarkdownImagePaths = (markdown) => {
+  const protectedMap = new Map();
+  let placeholderIndex = 0;
+  const addPlaceholder = (segment) => {
+    const placeholder = `\uE000LOCAL_IMAGE_PROTECTED_${placeholderIndex++}\uE001`;
+    protectedMap.set(placeholder, segment);
+    return placeholder;
+  };
+
+  // 仅处理普通 Markdown 图片路径，避免改写代码围栏和行内代码中的示例文本。
+  let protectedText = String(markdown || '')
+    .replace(/(^|\n)([ \t]*)(`{3,}|~{3,})([^\n]*)\n[\s\S]*?(?:\n[ \t]*\3[ \t]*(?=\n|$)|$)/g, (match) => addPlaceholder(match));
+  protectedText = protectedText.replace(/(`+)([^`\n]*?)\1/g, (match) => addPlaceholder(match));
+
+  protectedText = protectedText.replace(/(!\[[^\]\r\n]*\]\()([A-Za-z]:[\\/][^)\r\n]*)(\))/g, (match, prefix, rawPath, suffix) => {
+    return `${prefix}${String(rawPath || '').replace(/\\/g, '/')}${suffix}`;
+  });
+
+  protectedMap.forEach((segment, placeholder) => {
+    protectedText = protectedText.replaceAll(placeholder, segment);
+  });
+  return protectedText;
+};
+
+
 const formatMessageContent = (content, role) => {
   if (!content) return "";
   if (!Array.isArray(content)) {
@@ -482,7 +507,7 @@ const handleEditKeyDown = (event) => {
 const renderedMarkdownContent = computed(() => {
   const content = props.message.role ? props.message.content : props.message;
   const role = props.message.role ? props.message.role : 'user';
-  let formattedContent = formatMessageContent(content, role);
+  let formattedContent = normalizeWindowsLocalMarkdownImagePaths(formatMessageContent(content, role));
   formattedContent = preprocessKatex(formattedContent);
 
   const protectedMap = new Map();

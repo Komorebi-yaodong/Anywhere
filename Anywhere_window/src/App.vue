@@ -2300,7 +2300,8 @@ onMounted(async () => {
 
         // 标记需要直接发送
         shouldDirectSend = true;
-      } if (data.type === "summon") {
+      } else if (data.type === "summon") {
+        defaultConversationName.value = buildConversationTimestampedBasename('召唤', { force: false, includeCode: true, includeSummonPrefix: false }) || `召唤-${CODE.value}-${buildConversationTimestampSuffix()}`;
         shouldDirectSend = true;
         isFileDirectSend = true;
         if (data.summonData) {
@@ -2632,14 +2633,14 @@ const buildConversationTimestampSuffix = (date = new Date()) => {
   return `${year}${month}${day}-${hours}${minutes}${seconds}-${milliseconds}`;
 };
 
-const buildConversationTimestampedBasename = (namePrefix = '', { force = false, date = new Date(), includeCode = true } = {}) => {
+const buildConversationTimestampedBasename = (namePrefix = '', { force = false, date = new Date(), includeCode = true, includeSummonPrefix = true } = {}) => {
   const safeNamePrefix = sanitizeConversationTitlePart(namePrefix, 36);
   if (!safeNamePrefix) return '';
   const safeCodeName = sanitizeConversationTitlePart(CODE.value || 'AI', 36).replace(/[\\/:*?"<>|]/g, '_');
   const timestampSuffix = buildConversationTimestampSuffix(date);
   return includeCode && safeCodeName
-    ? `${getAutoSavePrefixTag(force)}${safeNamePrefix}-${safeCodeName}-${timestampSuffix}`
-    : `${getAutoSavePrefixTag(force)}${safeNamePrefix}-${timestampSuffix}`;
+    ? `${getAutoSavePrefixTag({ force, includeSummonPrefix })}${safeNamePrefix}-${safeCodeName}-${timestampSuffix}`
+    : `${getAutoSavePrefixTag({ force, includeSummonPrefix })}${safeNamePrefix}-${timestampSuffix}`;
 };
 
 const getAutoSavePrefixTag = (options = {}) => {
@@ -2714,7 +2715,7 @@ const isNamedLocalConversationAvailable = () => Boolean(
 );
 
 const shouldPersistCurrentSessionAutomatically = () => {
-  return isCurrentPromptAutoSaveEnabled() || isNamedLocalConversationAvailable();
+  return basic_msg.value?.type === 'summon' || isCurrentPromptAutoSaveEnabled() || isNamedLocalConversationAvailable();
 };
 
 const cancelAutoNamingRequest = () => {
