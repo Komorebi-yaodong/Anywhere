@@ -717,7 +717,7 @@ IMPORTANT:
     ],
     "builtin_search": [
         {
-            name: "web_search",
+            name: "builtin_web_search",
             description: "Search the internet for a given query. Returns snippets only. Constraint: After replying, 'Sources:' citation links must be included.",
             inputSchema: {
                 type: "object",
@@ -733,7 +733,7 @@ IMPORTANT:
             }
         },
         {
-            name: "web_fetch",
+            name: "builtin_web_fetch",
             description: "Retrieve and parse the FULL text content of a specific URL. Use this when the user provides a URL or after getting a URL from search results. Capable of parsing complex pages like documentation, papers, and code repositories.",
             inputSchema: {
                 type: "object",
@@ -855,7 +855,7 @@ IMPORTANT:
                 type: "object",
                 properties: {
                     name: { type: "string", description: "Task name: concise, clear, and unique." },
-                    instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
+                    instruction: { type: "string", description: "The specific, self-contained prompt sent to the AI when the schedule triggers. Since it executes autonomously without human interaction, the instruction MUST be highly detailed and actionable. Explicitly state the exact goal, what tools to invoke (e.g., 'Use builtin_web_search to find...', 'Use write_file to save...'), and the desired output format. Example: 'Search the web for today's AI news, summarize the top 3 items in a markdown list, and save the result as a local file to...'" },
                     agent_name: { type: "string", description: "Optional. Name of the Quick Prompt to use. Defaults to '__DEFAULT__'." },
                     schedule_type: {
                         type: "string", enum: ["interval", "daily", "weekly", "monthly", "single"],
@@ -2665,7 +2665,7 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
     },
 
     // Web Search Handler
-    web_search: async ({ query, count = 5, language = 'zh-CN' }, context, signal) => {
+    builtin_web_search: async ({ query, count = 5, language = 'zh-CN' }, context, signal) => {
         try {
             const limit = Math.min(Math.max(parseInt(count) || 5, 1), 10);
 
@@ -2848,7 +2848,7 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
     },
 
     // Web Fetch Handler
-    web_fetch: async ({ url, offset = 0, length = MAX_READ }, context, signal) => {
+    builtin_web_fetch: async ({ url, offset = 0, length = MAX_READ }, context, signal) => {
         try {
             if (!url || !url.startsWith('http')) {
                 return "Error: Invalid URL. Please provide a full URL starting with http:// or https://";
@@ -2883,7 +2883,7 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
                 try {
                     markdownBody = await convertHtmlWithMarkitdownJs(rawText, url);
                 } catch (markitdownError) {
-                    console.warn('[web_fetch] markitdown-js conversion failed, fallback to legacy converter:', markitdownError?.message || markitdownError);
+                    console.warn('[builtin_web_fetch] markitdown-js conversion failed, fallback to legacy converter:', markitdownError?.message || markitdownError);
                     markdownBody = convertHtmlToMarkdown(rawText, url);
                 }
                 if (!markdownBody || markdownBody.length < 50) {
@@ -2903,7 +2903,7 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
                 const nextOffset = startPos + contentChunk.length;
                 result += `\n\n--- [SYSTEM NOTE: CONTENT TRUNCATED] ---\n`;
                 result += `Total characters: ${totalChars}. Current chunk: ${startPos}-${nextOffset}.\n`;
-                result += `Remaining: ${remainingChars}. Call 'web_fetch' with offset=${nextOffset} to read more.\n`;
+                result += `Remaining: ${remainingChars}. Call 'builtin_web_fetch' with offset=${nextOffset} to read more.\n`;
             } else if (startPos > 0) {
                 result += `\n\n--- [SYSTEM NOTE: END OF PAGE REACHED] ---`;
             }
