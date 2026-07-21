@@ -14,6 +14,96 @@ import TaskPanel from './components/TaskPanel.vue';
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, formatToolResult, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
 
+const subAgentTasks = ref([]);
+let subAgentStatusPollTimer = null;
+
+const unwrapSubAgentToolText = (value) => {
+  let current = formatToolResult(value);
+  for (let index = 0; index < 2; index += 1) {
+    try {
+      const parsed = JSON.parse(current);
+      if (Array.isArray(parsed)) {
+        const text = parsed.find((item) => item?.type === 'text' && typeof item.text === 'string')?.text;
+        if (text) {
+          current = text;
+          continue;
+        }
+      }
+    } catch {
+      // The tool already returned plain text.
+    }
+    break;
+  }
+  return current;
+};
+
+const parseSubAgentStatus = (value) => {
+  try {
+    const parsed = JSON.parse(unwrapSubAgentToolText(value));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const upsertSubAgentTask = (snapshot) => {
+  if (!snapshot?.subagent_id) return;
+  const normalized = { ...snapshot };
+  const index = subAgentTasks.value.findIndex((item) => item.subagent_id === normalized.subagent_id);
+  if (index >= 0) subAgentTasks.value.splice(index, 1, { ...subAgentTasks.value[index], ...normalized });
+  else subAgentTasks.value.unshift(normalized);
+};
+
+const registerSubAgentFromToolContent = (toolContent) => {
+  const idMatch = String(toolContent || '').match(/subagent_id:\s*(subagent_[\w-]+)/i);
+  if (!idMatch) return;
+  upsertSubAgentTask({ subagent_id: idMatch[1], status: 'running', task: '后台 Sub-Agent' });
+  void refreshSubAgentStatuses();
+};
+
+
+const loadKnownSubAgentTasks = async () => {
+  if (!window.api?.invokeMcpTool) return;
+  try {
+    const response = await window.api.invokeMcpTool('get_subagent_status', {});
+    const payload = parseSubAgentStatus(response);
+    if (Array.isArray(payload?.subagents)) payload.subagents.forEach(upsertSubAgentTask);
+  } catch (error) {
+    console.warn('[Sub-Agent] Failed to load known tasks:', error);
+  }
+};
+
+const refreshSubAgentStatuses = async () => {
+  if (!window.api?.invokeMcpTool || subAgentTasks.value.length === 0) return;
+  await Promise.all(subAgentTasks.value.map(async (task) => {
+    try {
+      const response = await window.api.invokeMcpTool('get_subagent_status', { subagent_id: task.subagent_id });
+      const snapshot = parseSubAgentStatus(response);
+      if (snapshot?.subagent_id) upsertSubAgentTask(snapshot);
+    } catch (error) {
+      console.warn('[Sub-Agent] Failed to refresh status:', error);
+    }
+  }));
+};
+
+const startSubAgentStatusPolling = () => {
+  if (subAgentStatusPollTimer) return;
+  subAgentStatusPollTimer = window.setInterval(() => void refreshSubAgentStatuses(), 1500);
+};
+
+const stopSubAgentFromInput = async (subagentId) => {
+  if (!subagentId || !window.api?.invokeMcpTool) return;
+  try {
+    const response = await window.api.invokeMcpTool('stop_subagent', { subagent_id: subagentId });
+    const snapshot = parseSubAgentStatus(response);
+    if (snapshot?.subagent_id) upsertSubAgentTask(snapshot);
+    await refreshSubAgentStatuses();
+  } catch (error) {
+    showDismissibleMessage.error(`结束 Sub-Agent 失败：${error?.message || error}`);
+  }
+};
+
+
 let gptTokenizerEncodePromise = null;
 const loadGptTokenizerEncode = () => {
   if (!gptTokenizerEncodePromise) {
@@ -2010,6 +2100,12 @@ onMounted(async () => {
   if (isInit.value) return;
   isInit.value = true;
 
+  startSubAgentStatusPolling();
+
+  void loadKnownSubAgentTasks();
+
+
+
   await updateStickyResizeObserver();
 
   if (window.api && window.api.onAlwaysOnTopChanged) {
@@ -3224,6 +3320,12 @@ const scheduleLoadingAutoSave = (reason = 'loading-progress') => {
 
 
 onBeforeUnmount(async () => {  // 15s 轮询自动保存已移除；当前仅保留显式业务触发的保存链路。
+
+  if (subAgentStatusPollTimer) {
+    window.clearInterval(subAgentStatusPollTimer);
+    subAgentStatusPollTimer = null;
+  }
+
 
   window.removeEventListener('wheel', handleWheel);
   window.removeEventListener('focus', handleWindowFocus);
@@ -6119,6 +6221,11 @@ const askAI = async (forceSend = false) => {
                 }
               }
 
+
+              if (toolCall.function.name === 'sub_agent' || toolCall.function.name === 'Skill') {
+                registerSubAgentFromToolContent(toolContent);
+              }
+
               if (!isTurnAborted() && uiToolCall) uiToolCall.approvalStatus = 'finished';
 
             } catch (e) {
@@ -6825,11 +6932,11 @@ const scrollToMessageByIndex = (index) => {
           v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
           :is-mcp-active="isMcpActive" :all-mcp-servers="availableMcpServers" :active-mcp-ids="sessionMcpServerIds"
-          :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" :append-buffer="pendingAppendBuffer" @submit="handleSubmit" @cancel="handleCancel"
+          :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" :append-buffer="pendingAppendBuffer" :sub-agent-tasks="subAgentTasks" @submit="handleSubmit" @cancel="handleCancel"
           @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
           @send-audio="handleSendAudio" @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart"
           @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle"
-          @open-skill-dialog="toggleSkillDialog" @cancel-buffer="removeBufferedMessage" />
+          @open-skill-dialog="toggleSkillDialog" @cancel-buffer="removeBufferedMessage" @stop-subagent="stopSubAgentFromInput" />
       </div>
     </el-container>
   </main>

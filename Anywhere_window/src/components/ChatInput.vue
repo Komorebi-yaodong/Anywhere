@@ -1,6 +1,6 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
-import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElTooltip, ElScrollbar, ElIcon, ElImage } from 'element-plus';
+import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElMessageBox, ElTag, ElTooltip, ElScrollbar, ElIcon, ElImage, ElDialog } from 'element-plus';
 import { Close, Check, Document, Delete, Collection, Picture, ChatLineRound } from '@element-plus/icons-vue';
 
 // --- Props and Emits ---
@@ -19,11 +19,12 @@ const props = defineProps({
     activeMcpIds: { type: Array, default: () => [] },
     activeSkillIds: { type: Array, default: () => [] },
     allSkills: { type: Array, default: () => [] },
-    appendBuffer: { type: Array, default: () => [] }
+    appendBuffer: { type: Array, default: () => [] },
+    subAgentTasks: { type: Array, default: () => [] }
 });
 
 // 增加 toggle-mcp 事件
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog', 'cancel-buffer']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog', 'cancel-buffer', 'stop-subagent']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -32,6 +33,41 @@ const waveformCanvasContainer = ref(null);
 const isDragging = ref(false);
 const dragCounter = ref(0);
 const isRecording = ref(false);
+
+const subAgentDialogVisible = ref(false);
+const selectedSubAgentId = ref('');
+
+const selectedSubAgent = computed(() => props.subAgentTasks.find((item) => item?.subagent_id === selectedSubAgentId.value) || null);
+const subAgentStatusLabel = (status) => ({ running: '运行中', completed: '已完成', stopped: '已停止', failed: '出错' }[status] || '未知');
+const subAgentStatusType = (status) => ({ running: 'warning', completed: 'success', stopped: 'info', failed: 'danger' }[status] || 'info');
+const subAgentDisplayName = (task) => String(task?.task || '后台 Sub-Agent').replace(/\s+/g, ' ').trim() || '后台 Sub-Agent';
+const subAgentDetailOutput = computed(() => {
+    const task = selectedSubAgent.value;
+    if (!task) return '';
+    return task.final_result || task.error || task.latest_log || '等待 Sub-Agent 产生日志…';
+});
+
+const openSubAgentDialog = (task) => {
+    if (!task?.subagent_id) return;
+    selectedSubAgentId.value = task.subagent_id;
+    subAgentDialogVisible.value = true;
+};
+
+const requestStopSelectedSubAgent = async () => {
+    const task = selectedSubAgent.value;
+    if (!task || task.status !== 'running') return;
+    try {
+        await ElMessageBox.confirm(`确定结束 Sub-Agent「${subAgentDisplayName(task)}」吗？该操作只会停止此后台任务。`, '结束运行', {
+            confirmButtonText: '结束运行',
+            cancelButtonText: '取消',
+            type: 'warning'
+        });
+        emit('stop-subagent', task.subagent_id);
+    } catch {
+        // User cancelled the confirmation dialog.
+    }
+};
+
 
 // --- MCP Quick Select State ---
 const showMcpQuickSelect = ref(false);
@@ -587,6 +623,24 @@ defineExpose({ focus, senderRef });
             </el-col>
         </el-row>
 
+
+        <!-- 后台 Sub-Agent 标签（位于输入框上方） -->
+        <el-row v-if="subAgentTasks && subAgentTasks.length > 0 && !isRecording">
+            <el-col :span="24">
+                <div class="subagent-tag-container">
+                    <div class="subagent-tag-title">后台 Sub-Agent</div>
+                    <div class="subagent-tag-list">
+                        <el-tag v-for="task in subAgentTasks" :key="task.subagent_id" class="subagent-tag"
+                            :type="subAgentStatusType(task.status)" effect="plain" round
+                            @click="openSubAgentDialog(task)">
+                            <span class="subagent-tag-status">{{ subAgentStatusLabel(task.status) }}</span>
+                            <span class="subagent-tag-name" :title="subAgentDisplayName(task)">{{ subAgentDisplayName(task) }}</span>
+                        </el-tag>
+                    </div>
+                </div>
+            </el-col>
+        </el-row>
+
         <!-- 文件列表 -->
         <el-row v-if="fileList.length > 0 && !isRecording">
             <el-col :span="0" />
@@ -911,6 +965,25 @@ defineExpose({ focus, senderRef });
             <el-col :span="0" />
         </el-row>
     </el-footer>
+
+
+    <el-dialog v-model="subAgentDialogVisible" title="Sub-Agent 运行详情" width="min(760px, 92vw)" append-to-body>
+        <template v-if="selectedSubAgent">
+            <div class="subagent-detail-meta">
+                <el-tag :type="subAgentStatusType(selectedSubAgent.status)" effect="dark">{{ subAgentStatusLabel(selectedSubAgent.status) }}</el-tag>
+                <span class="subagent-detail-id">{{ selectedSubAgent.subagent_id }}</span>
+            </div>
+            <div class="subagent-detail-task">{{ subAgentDisplayName(selectedSubAgent) }}</div>
+            <el-scrollbar max-height="48vh" class="subagent-detail-output-scroll">
+                <pre class="subagent-detail-output">{{ subAgentDetailOutput }}</pre>
+            </el-scrollbar>
+        </template>
+        <template #footer>
+            <el-button @click="subAgentDialogVisible = false">关闭</el-button>
+            <el-button v-if="selectedSubAgent?.status === 'running'" type="danger" @click="requestStopSelectedSubAgent">结束运行</el-button>
+        </template>
+    </el-dialog>
+
 </template>
 
 <style scoped>
@@ -1741,4 +1814,89 @@ html.dark .append-buffer-container {
 .append-buffer-remove {
     flex-shrink: 0;
 }
+
+.subagent-tag-container {
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    border: 1px dashed var(--el-border-color);
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.45);
+    box-sizing: border-box;
+}
+
+html.dark .subagent-tag-container {
+    background-color: rgba(40, 40, 40, 0.4);
+}
+
+.subagent-tag-title {
+    margin-bottom: 6px;
+    color: var(--el-text-color-secondary);
+    font-size: 11px;
+}
+
+.subagent-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.subagent-tag {
+    max-width: min(100%, 340px);
+    cursor: pointer;
+}
+
+.subagent-tag-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.subagent-tag-status {
+    flex-shrink: 0;
+    margin-right: 4px;
+    font-weight: 600;
+}
+
+.subagent-detail-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.subagent-detail-id {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--el-text-color-secondary);
+    font-family: monospace;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.subagent-detail-task {
+    margin-bottom: 10px;
+    color: var(--el-text-color-primary);
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.subagent-detail-output-scroll {
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
+}
+
+.subagent-detail-output {
+    margin: 0;
+    padding: 12px;
+    color: var(--el-text-color-regular);
+    font-family: var(--el-font-family), monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 </style>

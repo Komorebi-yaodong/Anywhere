@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const MarkitdownModule = require('markitdown-js');
+const { randomUUID } = require('crypto');
+const { encode: encodeTokens, decode: decodeTokens } = require('gpt-tokenizer');
 const { exec, spawn } = require('child_process');
 const { handleFilePath, parseFileObject } = require('./file.js');
 
@@ -103,6 +105,187 @@ async function callParentShell(action, payload, signal = null) {
 }
 
 const MAX_READ = 128 * 1000; // 128k characters
+
+const subAgentTasks = new Map();
+const MAX_SUBAGENT_TASKS = 100;
+const MAX_SUBAGENT_LOG_CHARS = 1024 * 1024;
+const MAX_SUBAGENT_STATUS_TOKENS = 100000;
+
+function normalizeSubAgentText(value) {
+    if (typeof value === 'string') return value;
+    if (value === undefined || value === null) return '';
+    try {
+        return JSON.stringify(value, null, 2);
+    } catch {
+        return String(value);
+    }
+}
+
+function limitSubAgentLog(text = '') {
+    const normalized = normalizeSubAgentText(text);
+    if (normalized.length <= MAX_SUBAGENT_LOG_CHARS) return normalized;
+    return `[... Sub-Agent log truncated to ${MAX_SUBAGENT_LOG_CHARS} characters ...]\n${normalized.slice(-MAX_SUBAGENT_LOG_CHARS)}`;
+}
+
+function trimSubAgentTasks() {
+    if (subAgentTasks.size <= MAX_SUBAGENT_TASKS) return;
+    const removable = [...subAgentTasks.values()]
+        .filter((item) => item.status !== 'running')
+        .sort((a, b) => (a.finishedAt || a.createdAt) - (b.finishedAt || b.createdAt));
+    while (subAgentTasks.size > MAX_SUBAGENT_TASKS && removable.length > 0) {
+        subAgentTasks.delete(removable.shift().id);
+    }
+}
+
+function toSubAgentSnapshot(task, { includeOutput = true } = {}) {
+    if (!task) return null;
+    const snapshot = {
+        subagent_id: task.id,
+        status: task.status,
+        task: task.task,
+        model_route: task.modelRoute,
+        created_at: task.createdAt,
+        started_at: task.startedAt,
+        finished_at: task.finishedAt || null,
+        updated_at: task.updatedAt,
+        stop_requested_at: task.stopRequestedAt || null
+    };
+    if (includeOutput) {
+        snapshot.latest_log = task.latestLog || '';
+        if (task.result) snapshot.final_result = task.result;
+        if (task.error) snapshot.error = task.error;
+    }
+    return snapshot;
+}
+
+function truncateSubAgentStatusOutput(value, maxTokens = MAX_SUBAGENT_STATUS_TOKENS) {
+    const text = normalizeSubAgentText(value);
+    try {
+        const tokens = encodeTokens(text);
+        if (tokens.length <= maxTokens) return text;
+        const marker = `\n\n--- [SYSTEM NOTE: SUBAGENT STATUS OUTPUT TRUNCATED] ---\nOriginal token count: ${tokens.length}. Returned content is limited to ${maxTokens} tokens including this notice.\n\n`;
+        const contentBudget = Math.max(1, maxTokens - encodeTokens(marker).length);
+        const headTokens = Math.min(2048, Math.floor(contentBudget * 0.1));
+        const tailTokens = Math.max(1, contentBudget - headTokens);
+        return `${decodeTokens(tokens.slice(0, headTokens))}${marker}${decodeTokens(tokens.slice(-tailTokens))}`;
+    } catch {
+        const fallbackLimit = maxTokens * 4;
+        if (text.length <= fallbackLimit) return text;
+        return `${text.slice(0, 4096)}\n\n--- [SYSTEM NOTE: SUBAGENT STATUS OUTPUT TRUNCATED] ---\nTokenizer unavailable; output is conservatively limited.\n\n${text.slice(-Math.max(1, fallbackLimit - 4096))}`;
+    }
+}
+
+function formatSubAgentStatus(tasks) {
+    return truncateSubAgentStatusOutput(JSON.stringify(tasks, null, 2));
+}
+
+function createBackgroundSubAgent(args, globalContext) {
+    const id = `subagent_${randomUUID()}`;
+    const controller = new AbortController();
+    const task = {
+        id,
+        status: 'running',
+        task: typeof args?.task === 'string' ? args.task : '',
+        modelRoute: typeof args?.model_route === 'string' ? args.model_route : 'general',
+        createdAt: Date.now(),
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+        finishedAt: null,
+        stopRequestedAt: null,
+        latestLog: '',
+        result: '',
+        error: '',
+        controller
+    };
+    subAgentTasks.set(id, task);
+    trimSubAgentTasks();
+
+    const originalOnUpdate = globalContext?.onUpdate;
+    const taskContext = {
+        ...(globalContext || {}),
+        onUpdate: (payload) => {
+            task.latestLog = limitSubAgentLog(payload);
+            task.updatedAt = Date.now();
+            if (typeof originalOnUpdate === 'function') {
+                try {
+                    originalOnUpdate(task.latestLog, toSubAgentSnapshot(task));
+                } catch {
+                    // Ignore UI callback failures; background execution must continue.
+                }
+            }
+        }
+    };
+
+    void Promise.resolve()
+        .then(() => runSubAgent(args, taskContext, controller.signal))
+        .then((result) => {
+            task.result = normalizeSubAgentText(result);
+            if (controller.signal.aborted) {
+                task.status = 'stopped';
+            } else if (/^\[Sub-Agent Error\]/.test(task.result)) {
+                task.status = 'failed';
+                task.error = task.result;
+            } else {
+                task.status = 'completed';
+            }
+            if (task.status === 'stopped' && !task.latestLog.includes('[Stop]')) {
+                task.latestLog = limitSubAgentLog(`${task.latestLog}\n[Stop] Stopped by user.`.trim());
+            }
+        })
+        .catch((error) => {
+            const message = error?.message || String(error);
+            if (controller.signal.aborted || error?.name === 'AbortError') {
+                task.status = 'stopped';
+                task.error = message;
+                task.latestLog = limitSubAgentLog(`${task.latestLog}\n[Stop] ${message}`.trim());
+            } else {
+                task.status = 'failed';
+                task.error = message;
+                task.latestLog = limitSubAgentLog(`${task.latestLog}\n[Critical Error] ${message}`.trim());
+            }
+        })
+        .finally(() => {
+            task.finishedAt = Date.now();
+            task.updatedAt = task.finishedAt;
+            trimSubAgentTasks();
+            if (typeof originalOnUpdate === 'function') {
+                try {
+                    originalOnUpdate(task.latestLog, toSubAgentSnapshot(task));
+                } catch {
+                    // ignore callback failure
+                }
+            }
+        });
+
+    return toSubAgentSnapshot(task, { includeOutput: false });
+}
+
+function getSubAgentStatus(args = {}) {
+    const id = typeof args?.subagent_id === 'string' ? args.subagent_id.trim() : '';
+    if (id) {
+        const task = subAgentTasks.get(id);
+        if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
+        return formatSubAgentStatus(toSubAgentSnapshot(task));
+    }
+    return formatSubAgentStatus({
+        subagents: [...subAgentTasks.values()]
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .map((task) => toSubAgentSnapshot(task, { includeOutput: false }))
+    });
+}
+
+function stopSubAgent(args = {}) {
+    const id = typeof args?.subagent_id === 'string' ? args.subagent_id.trim() : '';
+    const task = subAgentTasks.get(id);
+    if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
+    if (task.status === 'running') {
+        task.stopRequestedAt = Date.now();
+        task.updatedAt = task.stopRequestedAt;
+        task.controller.abort();
+    }
+    return formatSubAgentStatus(toSubAgentSnapshot(task));
+}
+
 
 // 数据提取函数 (提取标题、作者、简介)
 function extractMetadata(html) {
@@ -749,7 +932,7 @@ IMPORTANT:
     "builtin_superagent": [
         {
             name: "sub_agent",
-            description: "【Synchronous Background Worker】Delegates a specific sub-task to a temporary background AI worker. It blocks and waits until the task is fully completed, then returns the final result. Best for step-by-step internal reasoning.",
+            description: "【Asynchronous Background Worker】Starts a temporary Sub-Agent in the background and returns a subagent_id immediately; it never blocks the main conversation. Continue working after launch. Call get_subagent_status with the returned ID when you need progress or the final result.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -761,6 +944,27 @@ IMPORTANT:
                     custom_steps: { type: "integer" }
                 },
                 required: ["task", "tools"]
+            }
+        },
+        {
+            name: "get_subagent_status",
+            description: "Get the lifecycle state and progress of one background Sub-Agent. With no subagent_id, lists known tasks. Returns running, completed, stopped, or failed; stopped and failed states include relevant output. Returned text is capped at 100K tokens.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    subagent_id: { type: "string", description: "Optional Sub-Agent ID returned by sub_agent. Omit to list known Sub-Agents." }
+                }
+            }
+        },
+        {
+            name: "stop_subagent",
+            description: "Stop one running background Sub-Agent by its subagent_id. This only stops that Sub-Agent and does not cancel the main conversation or other tasks.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    subagent_id: { type: "string", description: "The running Sub-Agent ID to stop." }
+                },
+                required: ["subagent_id"]
             }
         },
         {
@@ -2914,13 +3118,16 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
         }
     },
 
-    // Sub Agent Handler
-    sub_agent: async (args, globalContext, signal) => {
+    // Background Sub-Agent handlers
+    sub_agent: async (args, globalContext) => {
         if (!globalContext || !globalContext.apiKey) {
             return "Error: Sub-Agent requires global context(should be in a chat session).";
         }
-        return await runSubAgent(args, globalContext, signal);
+        const task = createBackgroundSubAgent(args, globalContext);
+        return `Sub-Agent started in background.\nsubagent_id: ${task.subagent_id}\nstatus: ${task.status}\nUse get_subagent_status with this ID to read progress or the final result.`;
     },
+    get_subagent_status: async (args = {}) => getSubAgentStatus(args),
+    stop_subagent: async (args = {}) => stopSubAgent(args),
 
     // --- Agent Collaboration Handlers ---
     list_agents: async (args, context, signal) => {
