@@ -20,11 +20,12 @@ const props = defineProps({
     activeSkillIds: { type: Array, default: () => [] },
     allSkills: { type: Array, default: () => [] },
     appendBuffer: { type: Array, default: () => [] },
-    subAgentTasks: { type: Array, default: () => [] }
+    subAgentTasks: { type: Array, default: () => [] },
+    subAgentDetails: { type: Object, default: () => ({}) }
 });
 
 // 增加 toggle-mcp 事件
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog', 'cancel-buffer', 'stop-subagent', 'acknowledge-subagent', 'rerun-subagent']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog', 'cancel-buffer', 'stop-subagent', 'acknowledge-subagent', 'rerun-subagent', 'open-subagent-detail', 'close-subagent-detail']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -37,20 +38,26 @@ const isRecording = ref(false);
 const subAgentDialogVisible = ref(false);
 const selectedSubAgentId = ref('');
 
-const selectedSubAgent = computed(() => props.subAgentTasks.find((item) => item?.subagent_id === selectedSubAgentId.value) || null);
+const selectedSubAgent = computed(() => {
+    const summary = props.subAgentTasks.find((item) => item?.subagent_id === selectedSubAgentId.value) || null;
+    const detail = props.subAgentDetails?.[selectedSubAgentId.value] || null;
+    return detail ? { ...summary, ...detail } : summary;
+});
 const subAgentStatusLabel = (status) => ({ running: '运行中', completed: '已完成', stopped: '已停止', failed: '出错' }[status] || '未知');
 const subAgentStatusType = (status) => ({ running: 'warning', completed: 'success', stopped: 'info', failed: 'danger' }[status] || 'info');
+const shortSubAgentId = (task) => String(task?.subagent_id || '').replace(/^subagent_/, '').slice(0, 4) || '----';
 const subAgentDisplayName = (task) => String(task?.task || '后台 Sub-Agent').replace(/\s+/g, ' ').trim() || '后台 Sub-Agent';
 const subAgentDetailOutput = computed(() => {
     const task = selectedSubAgent.value;
     if (!task) return '';
-    return task.final_result || task.error || task.latest_log || '等待 Sub-Agent 产生日志…';
+    return task.final_result || task.error || task.latest_log || '正在加载运行输出…';
 });
 
 const openSubAgentDialog = (task) => {
     if (!task?.subagent_id) return;
     selectedSubAgentId.value = task.subagent_id;
     subAgentDialogVisible.value = true;
+    emit('open-subagent-detail', task.subagent_id);
 };
 
 const requestStopSelectedSubAgent = async () => {
@@ -68,11 +75,16 @@ const requestStopSelectedSubAgent = async () => {
     }
 };
 
+const closeSubAgentDialog = () => {
+    subAgentDialogVisible.value = false;
+    emit('close-subagent-detail');
+};
+
 const acknowledgeSelectedSubAgent = () => {
     const task = selectedSubAgent.value;
     if (!task?.subagent_id) return;
     emit('acknowledge-subagent', task.subagent_id);
-    subAgentDialogVisible.value = false;
+    closeSubAgentDialog();
 };
 
 const rerunSelectedSubAgent = () => {
@@ -643,10 +655,11 @@ defineExpose({ focus, senderRef });
             <el-col :span="24">
                 <div class="subagent-tag-container">
                     <div class="subagent-tag-list">
+                        <span class="subagent-tag-prefix">SubAgent</span>
                         <el-tag v-for="task in subAgentTasks" :key="task.subagent_id" class="subagent-tag"
                             :type="subAgentStatusType(task.status)" effect="plain" round
                             :title="task.subagent_id" @click="openSubAgentDialog(task)">
-                            {{ task.subagent_id }}
+                            <code>{{ shortSubAgentId(task) }}</code>
                         </el-tag>
                     </div>
                 </div>
@@ -980,29 +993,29 @@ defineExpose({ focus, senderRef });
 
 
     <el-dialog v-model="subAgentDialogVisible" title="Sub-Agent 运行详情" width="min(760px, 92vw)"
-        class="subagent-detail-dialog" append-to-body destroy-on-close>
+        class="subagent-detail-dialog" append-to-body destroy-on-close @closed="closeSubAgentDialog">
         <template v-if="selectedSubAgent">
             <div class="subagent-detail-layout">
                 <div class="subagent-detail-meta">
                     <el-tag :type="subAgentStatusType(selectedSubAgent.status)" effect="dark">{{ subAgentStatusLabel(selectedSubAgent.status) }}</el-tag>
-                    <span class="subagent-detail-id" :title="selectedSubAgent.subagent_id">{{ selectedSubAgent.subagent_id }}</span>
+                    <span class="subagent-detail-id" :title="selectedSubAgent.subagent_id"><code>{{ shortSubAgentId(selectedSubAgent) }}</code></span>
                 </div>
                 <section class="subagent-detail-section">
                     <div class="subagent-detail-section-title">任务</div>
-                    <el-scrollbar max-height="min(14vh, 120px)" class="subagent-detail-task-scroll">
+                    <div class="subagent-detail-task-scroll">
                         <div class="subagent-detail-task">{{ subAgentDisplayName(selectedSubAgent) }}</div>
-                    </el-scrollbar>
+                    </div>
                 </section>
                 <section class="subagent-detail-section subagent-detail-result-section">
                     <div class="subagent-detail-section-title">运行输出</div>
-                    <el-scrollbar max-height="min(32vh, 300px)" class="subagent-detail-output-scroll">
+                    <div class="subagent-detail-output-scroll">
                         <pre class="subagent-detail-output">{{ subAgentDetailOutput }}</pre>
-                    </el-scrollbar>
+                    </div>
                 </section>
             </div>
         </template>
         <template #footer>
-            <el-button @click="subAgentDialogVisible = false">关闭</el-button>
+            <el-button @click="closeSubAgentDialog">关闭</el-button>
             <el-button v-if="selectedSubAgent?.status !== 'running'" @click="rerunSelectedSubAgent">重新运行</el-button>
             <el-button v-if="selectedSubAgent?.status !== 'running'" type="primary" plain @click="acknowledgeSelectedSubAgent">已阅</el-button>
             <el-button v-if="selectedSubAgent?.status === 'running'" type="danger" @click="requestStopSelectedSubAgent">结束运行</el-button>
@@ -1858,15 +1871,27 @@ html.dark .subagent-tag-container {
 .subagent-tag-list {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
+}
+
+.subagent-tag-prefix {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
 }
 
 .subagent-tag {
     max-width: 100%;
     cursor: pointer;
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 11px;
+    font-size: 12px;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.subagent-tag code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
 }
 
 .subagent-tag:hover {
@@ -1892,10 +1917,13 @@ html.dark .subagent-tag-container {
     min-width: 0;
     overflow: hidden;
     color: var(--el-text-color-secondary);
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 12px;
+    font-size: 13px;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.subagent-detail-id code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .subagent-detail-section {
@@ -1908,6 +1936,7 @@ html.dark .subagent-tag-container {
 
 .subagent-detail-result-section {
     flex: 1;
+    min-height: 0;
 }
 
 .subagent-detail-section-title {
@@ -1918,9 +1947,16 @@ html.dark .subagent-tag-container {
     font-weight: 600;
 }
 
-.subagent-detail-task-scroll,
+.subagent-detail-task-scroll {
+    height: 112px;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
 .subagent-detail-output-scroll {
-    background: transparent;
+    height: min(32vh, 280px);
+    overflow: auto;
+    overscroll-behavior: contain;
 }
 
 .subagent-detail-task {

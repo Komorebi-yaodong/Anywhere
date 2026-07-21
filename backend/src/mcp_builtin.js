@@ -179,29 +179,7 @@ function formatSubAgentStatus(tasks) {
     return truncateSubAgentStatusOutput(JSON.stringify(tasks, null, 2));
 }
 
-function createBackgroundSubAgent(args, globalContext) {
-    const id = `subagent_${randomUUID()}`;
-    const controller = new AbortController();
-    const task = {
-        id,
-        status: 'running',
-        task: typeof args?.task === 'string' ? args.task : '',
-        modelRoute: typeof args?.model_route === 'string' ? args.model_route : 'general',
-        createdAt: Date.now(),
-        startedAt: Date.now(),
-        updatedAt: Date.now(),
-        finishedAt: null,
-        stopRequestedAt: null,
-        latestLog: '',
-        result: '',
-        error: '',
-        launchArgs: JSON.parse(JSON.stringify(args || {})),
-        launchContext: { ...(globalContext || {}), onUpdate: undefined },
-        controller
-    };
-    subAgentTasks.set(id, task);
-    trimSubAgentTasks();
-
+function executeBackgroundSubAgent(task, args, globalContext) {
     const originalOnUpdate = globalContext?.onUpdate;
     const taskContext = {
         ...(globalContext || {}),
@@ -219,24 +197,21 @@ function createBackgroundSubAgent(args, globalContext) {
     };
 
     void Promise.resolve()
-        .then(() => runSubAgent(args, taskContext, controller.signal))
+        .then(() => runSubAgent(args, taskContext, task.controller.signal))
         .then((result) => {
             task.result = normalizeSubAgentText(result);
-            if (controller.signal.aborted) {
-                task.status = 'stopped';
-            } else if (/^\[Sub-Agent Error\]/.test(task.result)) {
+            if (task.controller.signal.aborted) task.status = 'stopped';
+            else if (/^\[Sub-Agent Error\]/.test(task.result)) {
                 task.status = 'failed';
                 task.error = task.result;
-            } else {
-                task.status = 'completed';
-            }
+            } else task.status = 'completed';
             if (task.status === 'stopped' && !task.latestLog.includes('[Stop]')) {
                 task.latestLog = limitSubAgentLog(`${task.latestLog}\n[Stop] Stopped by user.`.trim());
             }
         })
         .catch((error) => {
             const message = error?.message || String(error);
-            if (controller.signal.aborted || error?.name === 'AbortError') {
+            if (task.controller.signal.aborted || error?.name === 'AbortError') {
                 task.status = 'stopped';
                 task.error = message;
                 task.latestLog = limitSubAgentLog(`${task.latestLog}\n[Stop] ${message}`.trim());
@@ -258,16 +233,40 @@ function createBackgroundSubAgent(args, globalContext) {
                 }
             }
         });
+}
 
+function createBackgroundSubAgent(args, globalContext) {
+    const id = `subagent_${randomUUID()}`;
+    const task = {
+        id,
+        status: 'running',
+        task: typeof args?.task === 'string' ? args.task : '',
+        modelRoute: typeof args?.model_route === 'string' ? args.model_route : 'general',
+        createdAt: Date.now(),
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+        finishedAt: null,
+        stopRequestedAt: null,
+        latestLog: '',
+        result: '',
+        error: '',
+        launchArgs: JSON.parse(JSON.stringify(args || {})),
+        launchContext: { ...(globalContext || {}), onUpdate: undefined },
+        controller: new AbortController()
+    };
+    subAgentTasks.set(id, task);
+    trimSubAgentTasks();
+    executeBackgroundSubAgent(task, task.launchArgs, globalContext);
     return toSubAgentSnapshot(task, { includeOutput: false });
 }
 
 function getSubAgentStatus(args = {}) {
     const id = typeof args?.subagent_id === 'string' ? args.subagent_id.trim() : '';
+    const includeOutput = args?.include_output === true;
     if (id) {
         const task = subAgentTasks.get(id);
         if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
-        return formatSubAgentStatus(toSubAgentSnapshot(task));
+        return formatSubAgentStatus(toSubAgentSnapshot(task, { includeOutput }));
     }
     return formatSubAgentStatus({
         subagents: [...subAgentTasks.values()]
@@ -295,7 +294,31 @@ function rerunSubAgent(args = {}) {
     const task = subAgentTasks.get(id);
     if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
     if (task.status === 'running') return formatSubAgentStatus({ error: `Sub-Agent '${id}' is still running and cannot be restarted yet.` });
-    return createBackgroundSubAgent(task.launchArgs, task.launchContext).subagent_id;
+
+    const now = Date.now();
+    task.status = 'running';
+    task.startedAt = now;
+    task.updatedAt = now;
+    task.finishedAt = null;
+    task.stopRequestedAt = null;
+    task.latestLog = '';
+    task.result = '';
+    task.error = '';
+    task.controller = new AbortController();
+    executeBackgroundSubAgent(task, task.launchArgs, task.launchContext);
+    return task.id;
+}
+
+function killSubAgent(args = {}) {
+    const id = typeof args?.subagent_id === 'string' ? args.subagent_id.trim() : '';
+    const task = subAgentTasks.get(id);
+    if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
+    if (task.status === 'running') {
+        task.stopRequestedAt = Date.now();
+        task.updatedAt = task.stopRequestedAt;
+        task.controller.abort();
+    }
+    return formatSubAgentStatus(toSubAgentSnapshot(task, { includeOutput: false }));
 }
 
 
@@ -960,11 +983,12 @@ IMPORTANT:
         },
         {
             name: "get_subagent_status",
-            description: "Get the lifecycle state and progress of one background Sub-Agent. With no subagent_id, lists known tasks. Returns running, completed, stopped, or failed; stopped and failed states include relevant output. Returned text is capped at 100K tokens.",
+            description: "Get the lifecycle state of one background Sub-Agent. With no subagent_id, lists known tasks as summaries. Set include_output=true only when you need the full logs/result (capped at 100K tokens). Status values: running, completed, stopped, failed.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    subagent_id: { type: "string", description: "Optional Sub-Agent ID returned by sub_agent. Omit to list known Sub-Agents." }
+                    subagent_id: { type: "string", description: "Optional Sub-Agent ID returned by sub_agent. Omit to list known Sub-Agents." },
+                    include_output: { type: "boolean", description: "When true and subagent_id is provided, include full latest log/final result/error. Defaults to false for lightweight status checks." }
                 }
             }
         },
@@ -980,8 +1004,20 @@ IMPORTANT:
             }
         },
         {
+            name: "kill_subagent",
+            description: "Immediately abort one running background Sub-Agent to release its execution resources. Use this when the user asks to kill, cancel, or stop a Sub-Agent that may otherwise keep consuming resources. The task record remains queryable with get_subagent_status.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    subagent_id: { type: "string", description: "The running Sub-Agent ID to kill." }
+                },
+                required: ["subagent_id"]
+            }
+        },
+
+        {
             name: "rerun_subagent",
-            description: "Retry a completed, stopped, or failed Sub-Agent using its original task configuration. Returns a new subagent_id immediately. The original run record remains available through get_subagent_status.",
+            description: "Retry a completed, stopped, or failed Sub-Agent in place. Keeps the same subagent_id, clears previous logs/result for that ID, and restarts with the original task configuration.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -3154,6 +3190,8 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
     rerun_subagent: async (args = {}) => rerunSubAgent(args),
 
     stop_subagent: async (args = {}) => stopSubAgent(args),
+    kill_subagent: async (args = {}) => killSubAgent(args),
+
 
     // --- Agent Collaboration Handlers ---
     list_agents: async (args, context, signal) => {

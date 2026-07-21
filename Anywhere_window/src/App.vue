@@ -86,18 +86,77 @@ const refreshSubAgentStatuses = async () => {
   }));
 };
 
+const subAgentDetails = ref({});
+
+const loadSubAgentDetail = async (subagentId) => {
+  if (!subagentId || !window.api?.invokeMcpTool) return;
+  try {
+    const response = await window.api.invokeMcpTool('get_subagent_status', {
+      subagent_id: subagentId,
+      include_output: true
+    });
+    const snapshot = parseSubAgentStatus(response);
+    if (!snapshot?.subagent_id) return;
+    subAgentDetails.value = { ...subAgentDetails.value, [snapshot.subagent_id]: snapshot };
+    upsertSubAgentTask({
+      subagent_id: snapshot.subagent_id,
+      status: snapshot.status,
+      task: snapshot.task,
+      model_route: snapshot.model_route,
+      created_at: snapshot.created_at,
+      started_at: snapshot.started_at,
+      finished_at: snapshot.finished_at,
+      updated_at: snapshot.updated_at
+    });
+  } catch (error) {
+    console.warn('[Sub-Agent] Failed to load detail:', error);
+  }
+};
+
+
 const startSubAgentStatusPolling = () => {
   if (subAgentStatusPollTimer) return;
   subAgentStatusPollTimer = window.setInterval(() => void refreshSubAgentStatuses(), 1500);
 };
 
+const selectedSubAgentDetailId = ref('');
+let subAgentDetailPollTimer = null;
+
+const closeSubAgentDetailFromInput = () => {
+  selectedSubAgentDetailId.value = '';
+  if (subAgentDetailPollTimer) {
+    window.clearInterval(subAgentDetailPollTimer);
+    subAgentDetailPollTimer = null;
+  }
+};
+
+const openSubAgentDetailFromInput = async (subagentId) => {
+  selectedSubAgentDetailId.value = subagentId;
+  await loadSubAgentDetail(subagentId);
+  if (subAgentDetailPollTimer) return;
+  subAgentDetailPollTimer = window.setInterval(() => {
+    const task = subAgentTasks.value.find((item) => item.subagent_id === selectedSubAgentDetailId.value);
+    if (!selectedSubAgentDetailId.value) return;
+    if (!task || task.status !== 'running') {
+      if (subAgentDetailPollTimer) {
+        window.clearInterval(subAgentDetailPollTimer);
+        subAgentDetailPollTimer = null;
+      }
+      return;
+    }
+    void loadSubAgentDetail(task.subagent_id);
+  }, 2500);
+};
+
+
 const stopSubAgentFromInput = async (subagentId) => {
   if (!subagentId || !window.api?.invokeMcpTool) return;
   try {
-    const response = await window.api.invokeMcpTool('stop_subagent', { subagent_id: subagentId });
+    const response = await window.api.invokeMcpTool('kill_subagent', { subagent_id: subagentId });
     const snapshot = parseSubAgentStatus(response);
     if (snapshot?.subagent_id) upsertSubAgentTask(snapshot);
     await refreshSubAgentStatuses();
+    if (selectedSubAgentDetailId.value === subagentId) await loadSubAgentDetail(subagentId);
   } catch (error) {
     showDismissibleMessage.error(`结束 Sub-Agent 失败：${error?.message || error}`);
   }
@@ -106,16 +165,28 @@ const stopSubAgentFromInput = async (subagentId) => {
 const acknowledgeSubAgentFromInput = (subagentId) => {
   const index = subAgentTasks.value.findIndex((task) => task.subagent_id === subagentId);
   if (index >= 0) subAgentTasks.value.splice(index, 1);
+  if (subagentId && subAgentDetails.value[subagentId]) {
+    const next = { ...subAgentDetails.value };
+    delete next[subagentId];
+    subAgentDetails.value = next;
+  }
+  if (selectedSubAgentDetailId.value === subagentId) closeSubAgentDetailFromInput();
 };
 
 const rerunSubAgentFromInput = async (subagentId) => {
   if (!subagentId || !window.api?.invokeMcpTool) return;
   try {
     const response = await window.api.invokeMcpTool('rerun_subagent', { subagent_id: subagentId });
-    const nextId = String(formatToolResult(response) || '').match(/(subagent_[\w-]+)/i)?.[1];
-    if (!nextId) throw new Error('未收到新的 Sub-Agent ID');
-    upsertSubAgentTask({ subagent_id: nextId, status: 'running', task: '后台 Sub-Agent' });
+    const returnedId = String(formatToolResult(response) || '').match(/(subagent_[\w-]+)/i)?.[1];
+    if (returnedId !== subagentId) throw new Error('重新运行未保持当前 Sub-Agent ID');
+    if (subAgentDetails.value[subagentId]) {
+      const next = { ...subAgentDetails.value };
+      delete next[subagentId];
+      subAgentDetails.value = next;
+    }
+    upsertSubAgentTask({ subagent_id: subagentId, status: 'running', task: '后台 Sub-Agent' });
     void refreshSubAgentStatuses();
+    if (selectedSubAgentDetailId.value === subagentId) void openSubAgentDetailFromInput(subagentId);
   } catch (error) {
     showDismissibleMessage.error(`重新运行 Sub-Agent 失败：${error?.message || error}`);
   }
@@ -3339,6 +3410,9 @@ const scheduleLoadingAutoSave = (reason = 'loading-progress') => {
 
 
 onBeforeUnmount(async () => {  // 15s 轮询自动保存已移除；当前仅保留显式业务触发的保存链路。
+
+
+  closeSubAgentDetailFromInput();
 
   if (subAgentStatusPollTimer) {
     window.clearInterval(subAgentStatusPollTimer);
@@ -6920,7 +6994,9 @@ const scrollToMessageByIndex = (index) => {
           @send-audio="handleSendAudio" @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart"
           @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle"
           @open-skill-dialog="toggleSkillDialog" @cancel-buffer="removeBufferedMessage" @stop-subagent="stopSubAgentFromInput"
-          @acknowledge-subagent="acknowledgeSubAgentFromInput" @rerun-subagent="rerunSubAgentFromInput" />
+          :sub-agent-details="subAgentDetails"
+          @acknowledge-subagent="acknowledgeSubAgentFromInput" @rerun-subagent="rerunSubAgentFromInput"
+          @open-subagent-detail="openSubAgentDetailFromInput" @close-subagent-detail="closeSubAgentDetailFromInput" />
       </div>
     </el-container>
   </main>
