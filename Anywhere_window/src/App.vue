@@ -55,7 +55,7 @@ const upsertSubAgentTask = (snapshot) => {
 };
 
 const registerSubAgentFromToolContent = (toolContent) => {
-  const idMatch = String(toolContent || '').match(/subagent_id:\s*(subagent_[\w-]+)/i);
+  const idMatch = String(toolContent || '').match(/(subagent_[\w-]+)/i);
   if (!idMatch) return;
   upsertSubAgentTask({ subagent_id: idMatch[1], status: 'running', task: '后台 Sub-Agent' });
   void refreshSubAgentStatuses();
@@ -102,6 +102,25 @@ const stopSubAgentFromInput = async (subagentId) => {
     showDismissibleMessage.error(`结束 Sub-Agent 失败：${error?.message || error}`);
   }
 };
+
+const acknowledgeSubAgentFromInput = (subagentId) => {
+  const index = subAgentTasks.value.findIndex((task) => task.subagent_id === subagentId);
+  if (index >= 0) subAgentTasks.value.splice(index, 1);
+};
+
+const rerunSubAgentFromInput = async (subagentId) => {
+  if (!subagentId || !window.api?.invokeMcpTool) return;
+  try {
+    const response = await window.api.invokeMcpTool('rerun_subagent', { subagent_id: subagentId });
+    const nextId = String(formatToolResult(response) || '').match(/(subagent_[\w-]+)/i)?.[1];
+    if (!nextId) throw new Error('未收到新的 Sub-Agent ID');
+    upsertSubAgentTask({ subagent_id: nextId, status: 'running', task: '后台 Sub-Agent' });
+    void refreshSubAgentStatuses();
+  } catch (error) {
+    showDismissibleMessage.error(`重新运行 Sub-Agent 失败：${error?.message || error}`);
+  }
+};
+
 
 
 let gptTokenizerEncodePromise = null;
@@ -6131,19 +6150,12 @@ const askAI = async (forceSend = false) => {
                 const currentBaseUrl = base_url.value;
                 const currentModelName = model.value.split('|')[1] || model.value;
 
-                const onUpdateCallback = (logContent) => {
-                  if (!isTurnAborted() && uiToolCall) {
-                    uiToolCall.result = logContent + "\n\n[Skill (Sub-Agent) Running...]";
-                  }
-                };
-
                 executionContext = {
                   apiKey: currentApiKey,
                   baseUrl: currentBaseUrl,
                   model: currentModelName,
                   tools: activeTools.filter(t => t.function.name !== 'sub_agent'),
                   mcpSystemPrompt: mcpSystemPromptStr,
-                  onUpdate: onUpdateCallback,
                   apiType: apiType
                 };
 
@@ -6157,18 +6169,7 @@ const askAI = async (forceSend = false) => {
 
                 throwIfTurnAborted();
 
-                if (uiToolCall) {
-                  if (toolContent.includes("[Sub-Agent]")) {
-                    const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Skill (Sub-Agent) Running...]", "") : "";
-                    if (!currentLog.includes(toolContent)) {
-                      uiToolCall.result = `${currentLog}\n\n=== Skill Execution Result ===\n${toolContent}`;
-                    } else {
-                      uiToolCall.result = currentLog;
-                    }
-                  } else {
-                    uiToolCall.result = toolContent;
-                  }
-                }
+                if (uiToolCall) uiToolCall.result = toolContent;
 
               } else {
                 let executionContext = null;
@@ -6180,20 +6181,13 @@ const askAI = async (forceSend = false) => {
 
                   const toolsContext = activeTools.filter(t => t.function.name !== 'sub_agent');
 
-                  const onUpdateCallback = (logContent) => {
-                    if (!isTurnAborted() && uiToolCall) {
-                      uiToolCall.result = logContent + "\n\n[Sub-Agent 执行中...]";
-                    }
-                  };
-
                   executionContext = {
                     apiKey: currentApiKey,
                     baseUrl: currentBaseUrl,
                     model: currentModelName,
                     tools: toolsContext,
                     mcpSystemPrompt: mcpSystemPromptStr,
-                    onUpdate: onUpdateCallback,
-                    apiType: apiType
+                  apiType: apiType
                   };
                 }
 
@@ -6207,18 +6201,7 @@ const askAI = async (forceSend = false) => {
                 toolContent = formatToolResult(result);
                 throwIfTurnAborted();
 
-                if (uiToolCall) {
-                  if (toolCall.function.name === 'sub_agent') {
-                    const currentLog = uiToolCall.result ? uiToolCall.result.replace("\n\n[Sub-Agent 执行中...]", "") : "";
-                    if (!currentLog.includes(toolContent)) {
-                      uiToolCall.result = `${currentLog}\n\n=== 最终结果 ===\n${toolContent}`;
-                    } else {
-                      uiToolCall.result = currentLog;
-                    }
-                  } else {
-                    uiToolCall.result = toolContent;
-                  }
-                }
+                if (uiToolCall) uiToolCall.result = toolContent;
               }
 
 
@@ -6936,7 +6919,8 @@ const scrollToMessageByIndex = (index) => {
           @clear-history="handleClearHistory" @remove-file="handleRemoveFile" @upload="handleUpload"
           @send-audio="handleSendAudio" @open-mcp-dialog="handleOpenMcpDialog" @pick-file-start="handlePickFileStart"
           @toggle-mcp="handleQuickMcpToggle" @toggle-skill="handleQuickSkillToggle"
-          @open-skill-dialog="toggleSkillDialog" @cancel-buffer="removeBufferedMessage" @stop-subagent="stopSubAgentFromInput" />
+          @open-skill-dialog="toggleSkillDialog" @cancel-buffer="removeBufferedMessage" @stop-subagent="stopSubAgentFromInput"
+          @acknowledge-subagent="acknowledgeSubAgentFromInput" @rerun-subagent="rerunSubAgentFromInput" />
       </div>
     </el-container>
   </main>
