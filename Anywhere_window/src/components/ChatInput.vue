@@ -25,7 +25,7 @@ const props = defineProps({
 });
 
 // 增加 toggle-mcp 事件
-const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog', 'cancel-buffer', 'stop-subagent', 'acknowledge-subagent', 'rerun-subagent', 'open-subagent-detail', 'close-subagent-detail']);
+const emit = defineEmits(['submit', 'cancel', 'clear-history', 'remove-file', 'upload', 'send-audio', 'open-mcp-dialog', 'pick-file-start', 'toggle-mcp', 'toggle-skill', 'open-skill-dialog', 'cancel-buffer', 'stop-subagent', 'acknowledge-subagent', 'acknowledge-all-subagents', 'rerun-subagent', 'open-subagent-detail', 'close-subagent-detail']);
 
 // --- Refs and State ---
 const senderRef = ref(null);
@@ -85,6 +85,18 @@ const acknowledgeSelectedSubAgent = () => {
     if (!task?.subagent_id) return;
     emit('acknowledge-subagent', task.subagent_id);
     closeSubAgentDialog();
+};
+
+const finishedSubAgentCount = computed(() =>
+    (props.subAgentTasks || []).filter((task) => task?.status && task.status !== 'running').length
+);
+
+const acknowledgeAllFinishedSubAgents = () => {
+    if (finishedSubAgentCount.value <= 0) return;
+    emit('acknowledge-all-subagents');
+    if (selectedSubAgent.value && selectedSubAgent.value.status !== 'running') {
+        closeSubAgentDialog();
+    }
 };
 
 const rerunSelectedSubAgent = () => {
@@ -654,13 +666,27 @@ defineExpose({ focus, senderRef });
         <el-row v-if="subAgentTasks && subAgentTasks.length > 0 && !isRecording">
             <el-col :span="24">
                 <div class="subagent-tag-container">
-                    <div class="subagent-tag-list">
+                    <div class="subagent-tag-header">
                         <span class="subagent-tag-prefix">SubAgent</span>
-                        <el-tag v-for="task in subAgentTasks" :key="task.subagent_id" class="subagent-tag"
-                            :type="subAgentStatusType(task.status)" effect="plain" round
-                            :title="task.subagent_id" @click="openSubAgentDialog(task)">
-                            <code>{{ shortSubAgentId(task) }}</code>
-                        </el-tag>
+                        <el-button
+                            v-if="finishedSubAgentCount > 0"
+                            class="subagent-ack-all-btn"
+                            size="small"
+                            type="primary"
+                            plain
+                            @click="acknowledgeAllFinishedSubAgents"
+                        >
+                            一键已阅{{ finishedSubAgentCount > 1 ? ` (${finishedSubAgentCount})` : '' }}
+                        </el-button>
+                    </div>
+                    <div class="subagent-tag-scroll">
+                        <div class="subagent-tag-list">
+                            <el-tag v-for="task in subAgentTasks" :key="task.subagent_id" class="subagent-tag"
+                                :type="subAgentStatusType(task.status)" effect="plain" round
+                                :title="task.subagent_id" @click="openSubAgentDialog(task)">
+                                <code>{{ shortSubAgentId(task) }}</code>
+                            </el-tag>
+                        </div>
                     </div>
                 </div>
             </el-col>
@@ -1871,11 +1897,12 @@ html.dark .subagent-tag-container {
     background: rgba(42, 42, 42, 0.58);
 }
 
-.subagent-tag-list {
+.subagent-tag-header {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
 }
 
 .subagent-tag-prefix {
@@ -1885,8 +1912,51 @@ html.dark .subagent-tag-container {
     letter-spacing: 0.02em;
 }
 
+.subagent-ack-all-btn {
+    flex-shrink: 0;
+    height: 22px;
+    padding: 0 8px;
+    font-size: 12px;
+}
+
+.subagent-tag-scroll {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--el-text-color-disabled, #c0c4cc) transparent;
+}
+
+.subagent-tag-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.subagent-tag-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.subagent-tag-scroll::-webkit-scrollbar-thumb {
+    background: var(--el-text-color-disabled, #c0c4cc);
+    border-radius: 999px;
+}
+
+.subagent-tag-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--el-text-color-secondary, #909399);
+}
+
+.subagent-tag-list {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    width: max-content;
+    min-width: 100%;
+    padding-bottom: 2px;
+}
+
 .subagent-tag {
-    max-width: 100%;
+    flex: 0 0 auto;
     cursor: pointer;
     font-size: 12px;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
