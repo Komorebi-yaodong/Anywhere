@@ -12,7 +12,7 @@ import TaskPanel from './components/TaskPanel.vue';
   const ChatMessage = defineAsyncComponent(() => import('./components/ChatMessage.vue'));
 
 import TextSearchUI from './utils/TextSearchUI.js';
-import { formatTimestamp, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
+import { formatTimestamp, formatToolResult, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
 
 let gptTokenizerEncodePromise = null;
 const loadGptTokenizerEncode = () => {
@@ -6102,7 +6102,7 @@ const askAI = async (forceSend = false) => {
                   executionContext
                 );
 
-                toolContent = Array.isArray(result) ? result.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n\n') : String(result);
+                toolContent = formatToolResult(result);
                 throwIfTurnAborted();
 
                 if (uiToolCall) {
