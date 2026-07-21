@@ -137,6 +137,13 @@ function trimSubAgentTasks() {
     }
 }
 
+function resolveSubAgentOwnerId(context = null, args = {}) {
+    const fromContext = typeof context?.conversationOwnerId === 'string' ? context.conversationOwnerId.trim() : '';
+    if (fromContext) return fromContext;
+    const fromArgs = typeof args?.conversation_owner_id === 'string' ? args.conversation_owner_id.trim() : '';
+    return fromArgs || '';
+}
+
 function toSubAgentSnapshot(task, { includeOutput = true } = {}) {
     if (!task) return null;
     const snapshot = {
@@ -146,6 +153,7 @@ function toSubAgentSnapshot(task, { includeOutput = true } = {}) {
         model_route: task.modelRoute,
         model_name: task.modelName || '',
         provider_name: task.providerName || '',
+        conversation_owner_id: task.ownerId || '',
         created_at: task.createdAt,
         started_at: task.startedAt,
         finished_at: task.finishedAt || null,
@@ -263,6 +271,10 @@ function executeBackgroundSubAgent(task, args, globalContext) {
 async function createBackgroundSubAgent(args, globalContext) {
     const id = `subagent_${randomUUID()}`;
     const modelMeta = await resolveSubAgentModelMeta(args);
+    const ownerId = resolveSubAgentOwnerId(globalContext, args);
+    if (!ownerId) {
+        return { error: 'Sub-Agent requires a conversation owner id for session isolation.' };
+    }
     const task = {
         id,
         status: 'running',
@@ -270,6 +282,7 @@ async function createBackgroundSubAgent(args, globalContext) {
         modelRoute: modelMeta.modelRoute,
         modelName: modelMeta.modelName,
         providerName: modelMeta.providerName,
+        ownerId,
         createdAt: Date.now(),
         startedAt: Date.now(),
         updatedAt: Date.now(),
@@ -288,25 +301,41 @@ async function createBackgroundSubAgent(args, globalContext) {
     return toSubAgentSnapshot(task, { includeOutput: false });
 }
 
-function getSubAgentStatus(args = {}) {
+function getOwnedSubAgentTask(id, ownerId) {
+    const task = subAgentTasks.get(id);
+    if (!task) return { error: `Sub-Agent '${id}' was not found or has expired.` };
+    if (!ownerId || task.ownerId !== ownerId) {
+        return { error: `Sub-Agent '${id}' is not accessible from the current conversation.` };
+    }
+    return { task };
+}
+
+function getSubAgentStatus(args = {}, context = null) {
     const id = typeof args?.subagent_id === 'string' ? args.subagent_id.trim() : '';
     const includeOutput = args?.include_output === true;
+    const ownerId = resolveSubAgentOwnerId(context, args);
+    if (!ownerId) {
+        return formatSubAgentStatus({ error: 'conversation_owner_id is required to query Sub-Agent status.' });
+    }
     if (id) {
-        const task = subAgentTasks.get(id);
-        if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
-        return formatSubAgentStatus(toSubAgentSnapshot(task, { includeOutput }));
+        const owned = getOwnedSubAgentTask(id, ownerId);
+        if (owned.error) return formatSubAgentStatus({ error: owned.error });
+        return formatSubAgentStatus(toSubAgentSnapshot(owned.task, { includeOutput }));
     }
     return formatSubAgentStatus({
         subagents: [...subAgentTasks.values()]
+            .filter((task) => task.ownerId === ownerId)
             .sort((a, b) => b.createdAt - a.createdAt)
             .map((task) => toSubAgentSnapshot(task, { includeOutput: false }))
     });
 }
 
-function stopSubAgent(args = {}) {
+function stopSubAgent(args = {}, context = null) {
     const id = typeof args?.subagent_id === 'string' ? args.subagent_id.trim() : '';
-    const task = subAgentTasks.get(id);
-    if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
+    const ownerId = resolveSubAgentOwnerId(context, args);
+    const owned = getOwnedSubAgentTask(id, ownerId);
+    if (owned.error) return formatSubAgentStatus({ error: owned.error });
+    const task = owned.task;
     if (task.status === 'running') {
         task.stopRequestedAt = Date.now();
         task.updatedAt = task.stopRequestedAt;
@@ -315,12 +344,12 @@ function stopSubAgent(args = {}) {
     return formatSubAgentStatus(toSubAgentSnapshot(task));
 }
 
-
-
-async function rerunSubAgent(args = {}) {
+async function rerunSubAgent(args = {}, context = null) {
     const id = typeof args?.subagent_id === 'string' ? args.subagent_id.trim() : '';
-    const task = subAgentTasks.get(id);
-    if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
+    const ownerId = resolveSubAgentOwnerId(context, args);
+    const owned = getOwnedSubAgentTask(id, ownerId);
+    if (owned.error) return formatSubAgentStatus({ error: owned.error });
+    const task = owned.task;
     if (task.status === 'running') return formatSubAgentStatus({ error: `Sub-Agent '${id}' is still running and cannot be restarted yet.` });
 
     const modelMeta = await resolveSubAgentModelMeta(task.launchArgs || {});
@@ -341,10 +370,12 @@ async function rerunSubAgent(args = {}) {
     return task.id;
 }
 
-function killSubAgent(args = {}) {
+function killSubAgent(args = {}, context = null) {
     const id = typeof args?.subagent_id === 'string' ? args.subagent_id.trim() : '';
-    const task = subAgentTasks.get(id);
-    if (!task) return formatSubAgentStatus({ error: `Sub-Agent '${id}' was not found or has expired.` });
+    const ownerId = resolveSubAgentOwnerId(context, args);
+    const owned = getOwnedSubAgentTask(id, ownerId);
+    if (owned.error) return formatSubAgentStatus({ error: owned.error });
+    const task = owned.task;
     if (task.status === 'running') {
         task.stopRequestedAt = Date.now();
         task.updatedAt = task.stopRequestedAt;
@@ -3215,14 +3246,18 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
         if (!globalContext || !globalContext.apiKey) {
             return "Error: Sub-Agent requires global context(should be in a chat session).";
         }
+        if (!resolveSubAgentOwnerId(globalContext, args)) {
+            return "Error: Sub-Agent requires conversation_owner_id for session isolation.";
+        }
         const task = await createBackgroundSubAgent(args, globalContext);
+        if (task?.error) return `Error: ${task.error}`;
         return task.subagent_id;
     },
-    get_subagent_status: async (args = {}) => getSubAgentStatus(args),
-    rerun_subagent: async (args = {}) => rerunSubAgent(args),
+    get_subagent_status: async (args = {}, context = null) => getSubAgentStatus(args, context),
+    rerun_subagent: async (args = {}, context = null) => rerunSubAgent(args, context),
 
-    stop_subagent: async (args = {}) => stopSubAgent(args),
-    kill_subagent: async (args = {}) => killSubAgent(args),
+    stop_subagent: async (args = {}, context = null) => stopSubAgent(args, context),
+    kill_subagent: async (args = {}, context = null) => killSubAgent(args, context),
 
 
     // --- Agent Collaboration Handlers ---
