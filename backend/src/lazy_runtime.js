@@ -18,6 +18,7 @@ const {
   saveSkill,
   deleteSkill,
 } = require('./skill.js');
+const compactApi = require('./compact.js');
 
 module.exports = {
   createChatCompletion,
@@ -35,4 +36,5 @@ module.exports = {
   resolveSkillInvocation,
   saveSkill,
   deleteSkill,
+  ...compactApi,
 };

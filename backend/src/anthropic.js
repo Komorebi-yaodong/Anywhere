@@ -1,6 +1,7 @@
 const AnthropicModule = require('@anthropic-ai/sdk');
 // 兼容不同打包形态：默认导出 / 命名导出 / 直接构造函数
 const Anthropic = AnthropicModule?.Anthropic || AnthropicModule?.default || AnthropicModule;
+const { normalizeToolCallHistory } = require('./message_normalize.js');
 
 const DEFAULT_MAX_TOKENS = 8192;
 
@@ -165,7 +166,7 @@ function convertToolChoice(toolChoice) {
 }
 
 function buildAnthropicRequest(openAiParams) {
-    const { system, messages } = convertMessagesToAnthropic(openAiParams.messages);
+    const { system, messages } = convertMessagesToAnthropic(normalizeToolCallHistory(openAiParams.messages));
     const request = {
         model: openAiParams.model,
         max_tokens: openAiParams.max_tokens || openAiParams.max_completion_tokens || DEFAULT_MAX_TOKENS,

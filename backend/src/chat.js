@@ -1,5 +1,6 @@
 const { OpenAI } = require('openai');
 const { createAnthropicCompletion } = require('./anthropic.js');
+const { normalizeToolCallHistory } = require('./message_normalize.js');
 
 const DEFAULT_CHAT_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -210,15 +211,15 @@ function getRandomItem(list) {
 function adaptToolsForResponses(tools) {
     if (!tools || !Array.isArray(tools)) return undefined;
     return tools.map(t => {
-        if (t.type === 'function' && t.function) {
+        if (t?.type === 'function' && t.function) {
             return {
                 type: 'function',
-                name: t.function.name,
-                description: t.function.description,
-                parameters: t.function.parameters,
+                name: t.function?.name,
+                description: t.function?.description,
+                parameters: t.function?.parameters,
                 // Responses API 默认为 strict: true，但如果使用了 strict 则 schema 必须符合严格标准
                 // 这里为了兼容性，如果原配置有 strict 则传递，否则不传（让 API 决定或非严格）
-                strict: t.function.strict
+                strict: t.function?.strict
             };
         }
         return t;
@@ -257,7 +258,7 @@ function normalizeMessagesForChatCompletions(messages = [], reasoningEffort) {
 
 function convertMessagesToResponsesInput(messages) {
     const inputItems = [];
-    const normalizedMessages = normalizeMessagesForChatCompletions(messages, undefined);
+    const normalizedMessages = normalizeMessagesForChatCompletions(normalizeToolCallHistory(messages), undefined);
 
     for (const msg of normalizedMessages) {
         // 1. Role 映射 (Responses API 使用 developer 代替 system)
@@ -331,13 +332,18 @@ function convertMessagesToResponsesInput(messages) {
 
             // 4. 特殊处理 Assistant 的工具调用 (保持 type: function_call)
             // 在 Responses API 中，function_call 是独立的 item，跟在 message item 后面
+            // 兼容 UI 结构 { id, name, args } 与 API 结构 { id, function: { name, arguments } }
             if (role === 'assistant' && msg.tool_calls && Array.isArray(msg.tool_calls)) {
                 for (const tc of msg.tool_calls) {
+                    if (!tc || typeof tc !== 'object') continue;
+                    const name = tc.function?.name || tc.name || '';
+                    const args = tc.function?.arguments ?? tc.args ?? tc.arguments ?? '{}';
+                    if (!name && !tc.id) continue;
                     inputItems.push({
                         type: "function_call",
-                        call_id: tc.id,
-                        name: tc.function.name,
-                        arguments: tc.function.arguments
+                        call_id: tc.id || '',
+                        name,
+                        arguments: typeof args === 'string' ? args : JSON.stringify(args ?? {})
                     });
                 }
             }
@@ -423,7 +429,7 @@ async function createChatCompletion(params) {
                 if (typeof openAiParams.tool_choice === 'object' && openAiParams.tool_choice.function) {
                     responseParams.tool_choice = {
                         type: 'function',
-                        name: openAiParams.tool_choice.function.name
+                        name: openAiParams.tool_choice.function?.name
                     };
                 } else {
                     responseParams.tool_choice = openAiParams.tool_choice;
@@ -460,7 +466,10 @@ async function createChatCompletion(params) {
             return await client.responses.create(responseParams, responsesRequestOptions);
         } else {
             // 标准 Chat Completions API
-            const normalizedMessages = normalizeMessagesForChatCompletions(openAiParams.messages, openAiParams.reasoning_effort);
+            const normalizedMessages = normalizeMessagesForChatCompletions(
+                normalizeToolCallHistory(openAiParams.messages),
+                openAiParams.reasoning_effort
+            );
             const chatCompletionParams = {
                 ...openAiParams,
                 messages: normalizedMessages,

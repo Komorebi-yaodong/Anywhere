@@ -31,9 +31,27 @@ const props = defineProps({
   isAutoApprove: Boolean,
 });
 
-const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished', 'cancel-tool-call', 'confirm-tool', 'reject-tool', 'update-auto-approve', 'submit-choice']);
+const emit = defineEmits(['copy-text', 're-ask', 'delete-message', 'toggle-collapse', 'avatar-click', 'edit-message', 'edit-message-requested', 'edit-finished', 'cancel-tool-call', 'confirm-tool', 'reject-tool', 'update-auto-approve', 'submit-choice', 'restore-compact']);
 const editInputRef = ref(null);
 const isEditing = ref(false);
+
+// 压缩摘要默认折叠，避免长 handoff 占满视野
+const isCompactionExpanded = ref(false);
+
+watch(() => props.message?.expanded, (expanded) => {
+  if (props.message?.role === 'compaction') {
+    isCompactionExpanded.value = expanded === true;
+  }
+}, { immediate: true });
+
+const toggleCompactionExpanded = () => {
+  isCompactionExpanded.value = !isCompactionExpanded.value;
+  if (props.message && typeof props.message === 'object') {
+    props.message.expanded = isCompactionExpanded.value;
+  }
+};
+
+
 const editedContent = ref('');
 const messageWrapperRef = ref(null);
 const markdownRootRef = ref(null);
@@ -686,6 +704,62 @@ const truncateFilename = (filename, maxLength = 30) => {
 
 <template>
   <div class="chat-message" v-if="message.role !== 'system'">
+
+    <!-- 压缩消息：样式对齐普通 AI 消息，默认折叠摘要，可展开；不可编辑 -->
+    <div v-if="message.role === 'compaction'" class="message-wrapper ai-wrapper" ref="messageWrapperRef">
+      <div class="message-meta-header ai-meta-header">
+        <img
+          :src="aiAvatar"
+          alt="AI Avatar"
+          class="chat-avatar-top ai-avatar"
+          title="点击折叠/展开摘要"
+          @click="toggleCompactionExpanded"
+        >
+        <div class="meta-info-column">
+          <div class="meta-name-row">
+            <span class="ai-name">上下文压缩</span>
+          </div>
+          <span class="timestamp-row" v-if="message.timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+        </div>
+      </div>
+
+      <Bubble class="ai-bubble" placement="start" shape="corner" maxWidth="100%">
+        <template #content>
+          <div ref="markdownRootRef" class="markdown-wrapper" :class="{ 'collapsed': !isCompactionExpanded }" @click.capture="handleMarkdownLinkClick">
+            <div class="compaction-inline-badge" @click.stop="toggleCompactionExpanded">上下文已压缩</div>
+            <XMarkdown
+              :markdown="message.summary || (typeof message.content === 'string' ? message.content : '会话上下文已压缩为摘要。')"
+              :is-dark="isDarkMode"
+              :enable-latex="true"
+              :mermaid-config="mermaidConfig"
+              :default-theme-mode="isDarkMode ? 'dark' : 'light'"
+              :themes="{ light: 'one-light', dark: 'vesper' }"
+              :allow-html="true"
+            />
+          </div>
+        </template>
+        <template #footer>
+          <div class="message-footer compaction-footer">
+            <div class="compaction-footer-row">
+              <el-button size="small" circle @click="toggleCompactionExpanded">
+                <el-icon>
+                  <component :is="isCompactionExpanded ? CaretTop : CaretBottom" />
+                </el-icon>
+              </el-button>
+              <button
+                v-if="message.canRestore !== false"
+                type="button"
+                class="compaction-restore-btn"
+                @click="emit('restore-compact', message)"
+              >
+                <span class="compaction-restore-icon">↺</span>
+                <span>恢复压缩前</span>
+              </button>
+            </div>
+          </div>
+        </template>
+      </Bubble>
+    </div>
 
     <!-- 用户消息 -->
     <div v-if="message.role === 'user'" class="message-wrapper user-wrapper" ref="messageWrapperRef">
@@ -2072,5 +2146,93 @@ html.dark .tool-call-details .tool-detail-section pre::-webkit-scrollbar-thumb:h
       }
     }
   }
+}
+
+
+/* conversation compaction */
+.compaction-inline-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #c2185b;
+  background: rgba(233, 30, 99, 0.12);
+  border: 1px solid rgba(233, 30, 99, 0.28);
+  cursor: pointer;
+  user-select: none;
+}
+.compaction-inline-badge {
+  color: #ff80ab;
+  background: rgba(233, 30, 99, 0.18);
+  border-color: rgba(255, 128, 171, 0.35);
+}
+.compaction-footer {
+  width: 100%;
+  margin-top: 4px;
+}
+.compaction-footer-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.compaction-footer-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.compaction-restore-btn {
+  flex: 1 1 auto;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid rgba(250, 173, 20, 0.45);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 236, 179, 0.55) 0%, rgba(255, 214, 102, 0.28) 100%);
+  color: #8a6400;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  box-shadow: 0 4px 14px rgba(250, 173, 20, 0.16);
+}
+.compaction-restore-btn {
+  border-color: rgba(255, 214, 102, 0.4);
+  background: linear-gradient(180deg, rgba(250, 173, 20, 0.28) 0%, rgba(250, 173, 20, 0.12) 100%);
+  color: #ffd666;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.compaction-restore-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(250, 173, 20, 0.7);
+  box-shadow: 0 8px 20px rgba(250, 173, 20, 0.24);
+  background: linear-gradient(180deg, rgba(255, 241, 194, 0.75) 0%, rgba(255, 214, 102, 0.4) 100%);
+}
+.compaction-restore-btn:hover {
+  border-color: rgba(255, 214, 102, 0.65);
+  background: linear-gradient(180deg, rgba(250, 173, 20, 0.38) 0%, rgba(250, 173, 20, 0.18) 100%);
+}
+.compaction-restore-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+html.dark .compaction-inline-badge {
+  color: #ff80ab;
+  background: rgba(233, 30, 99, 0.18);
+  border-color: rgba(255, 128, 171, 0.35);
+}
+html.dark .compaction-restore-btn {
+  border-color: rgba(255, 214, 102, 0.4);
+  background: linear-gradient(180deg, rgba(250, 173, 20, 0.28) 0%, rgba(250, 173, 20, 0.12) 100%);
+  color: #ffd666;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 </style>
