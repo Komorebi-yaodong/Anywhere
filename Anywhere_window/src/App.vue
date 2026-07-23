@@ -9421,6 +9421,12 @@ html.dark .app-container {
     background: rgba(0, 0, 0, 0.96);
   }
 
+  &.compaction {
+    background: rgba(224, 168, 0, 0.2);
+    height: 3px;
+    box-shadow: 0 0 6px rgba(224, 168, 0, 0.2);
+  }
+
   &.active {
     width: 15px;
     height: 3px;

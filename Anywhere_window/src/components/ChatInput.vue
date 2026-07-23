@@ -1,7 +1,7 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
 import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElMessageBox, ElTag, ElTooltip, ElScrollbar, ElIcon, ElImage, ElDialog } from 'element-plus';
-import { Close, Check, Document, Delete, Collection, Picture, ChatLineRound, InfoFilled} from '@element-plus/icons-vue';
+import { Close, Check, Document, Delete, Collection, Picture, ChatLineRound, Fold, InfoFilled} from '@element-plus/icons-vue';
 
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
@@ -854,20 +854,8 @@ defineExpose({ focus, senderRef });
                                 <template #error>
                                     <el-icon :size="20" style="display: flex; justify-content: center; align-items: center; width: 100%; height: 100%;"><Picture /></el-icon>
                                 
-                            <el-tooltip :content="compacting ? '压缩进行中…' : '会话压缩'">
-                                <el-button size="default" circle
-                                    :class="{ 'is-active-special': compacting || canRestoreCompact }"
-                                    :disabled="isRecording"
-                                    @click="openCompactDialog">
-                                    <el-icon>
-                                        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true">
-                                            <path d="M4 6h16v2H4V6zm3 5h10v2H7v-2zm-3 5h16v2H4v-2z"></path>
-                                        </svg>
-                                    </el-icon>
-                                </el-button>
-                            </el-tooltip>
 
-</template>
+                                </template>
                             </el-image>
                             <!-- 非图片文件显示默认图标 -->
                             <el-icon v-else :size="20">
@@ -1116,6 +1104,15 @@ defineExpose({ focus, senderRef });
                                     @click="$emit('open-skill-dialog')">
                                     <el-icon :size="18">
                                         <Collection />
+                                    </el-icon>
+                                </el-button>
+                            </el-tooltip>
+                            <el-tooltip :content="compacting ? '压缩进行中…' : '会话压缩'">
+                                <el-button size="default" circle :disabled="isRecording"
+                                    :class="{ 'is-active-special': compacting || canRestoreCompact }"
+                                    @click="openCompactDialog">
+                                    <el-icon :size="18">
+                                        <Fold />
                                     </el-icon>
                                 </el-button>
                             </el-tooltip>
