@@ -93,14 +93,6 @@ function deepClone(value) {
   return JSON.parse(JSON.stringify(value ?? null))
 }
 
-function isAbortError(error) {
-  return Boolean(
-    error?.name === 'AbortError' ||
-    error?.code === 'ABORT_ERR' ||
-    /abort/i.test(String(error?.message || error || ''))
-  )
-}
-
 function throwIfAborted(signal) {
   if (signal?.aborted) {
     const error = new Error('compact_aborted')
@@ -732,7 +724,8 @@ async function requestSummaryOnce({
   messages,
   compactPrompt,
   signal,
-  apiType
+  apiType,
+  stream = true
 }) {
   const promptMessages = [
     ...getSystemMessages(messages).map((message) => deepClone(message)),
@@ -836,11 +829,32 @@ async function requestSummaryOnce({
     model: modelName,
     apiType: apiType || provider?.apiType || 'chat_completions',
     headers: provider?.headers || {},
-    retryCount: 0,
+    retryCount: Number.isInteger(provider?.retryCount) ? provider.retryCount : 3,
     messages: sanitizedMessages,
-    stream: false,
+    stream,
     signal
   })
+
+  if (response && typeof response[Symbol.asyncIterator] === 'function') {
+    let text = ''
+    for await (const part of response) {
+      throwIfAborted(signal)
+      const delta = part?.choices?.[0]?.delta
+      if (typeof delta?.content === 'string') {
+        text += delta.content
+      } else if (Array.isArray(delta?.content)) {
+        text += delta.content
+          .filter((item) => item?.type === 'text')
+          .map((item) => String(item.text || ''))
+          .join('')
+      } else if (typeof part?.delta === 'string') {
+        text += part.delta
+      } else if (typeof part?.output_text === 'string') {
+        text += part.output_text
+      }
+    }
+    return text.trim()
+  }
 
   return extractAssistantTextFromCompletion(response, apiType || provider?.apiType || 'chat_completions')
 }
@@ -855,6 +869,7 @@ async function runConversationCompaction({
   modelValue = '',
   provider = null,
   config: configPatch = null,
+  stream = true,
   signal = null,
   onProgress = null,
   progressBase = 0,
@@ -936,47 +951,28 @@ async function runConversationCompaction({
     localTokens
   })
 
-  let summaryText = ''
-  let lastError = null
-  const maxAttempts = 3
   const apiType = provider?.apiType || 'chat_completions'
+  report('generate_summary', {
+    percent: 42,
+    message: '正在生成摘要…',
+    model: primaryModelName
+  })
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    throwIfAborted(signal)
-    const retryCount = attempt - 1
-    report('generate_summary', {
-      percent: 30 + attempt * 12,
-      // 首次请求不是重试；只有前一次摘要请求失败后才显示重试次数。
-      message: retryCount > 0
-        ? `请求未完成，正在重试（第 ${retryCount}/${maxAttempts} 次）…`
-        : '正在生成摘要…',
-      attempt,
-      retryCount,
-      maxAttempts,
-      model: primaryModelName
-    })
-    try {
-      summaryText = await requestSummaryOnce({
-        provider,
-        modelName: primaryModelName,
-        messages: summarySource,
-        compactPrompt: modelConfig.compactPrompt,
-        signal,
-        apiType
-      })
-      if (summaryText.trim()) break
-      lastError = new Error('empty_summary')
-    } catch (error) {
-      lastError = error
-      if (isAbortError(error)) throw error
-    }
-  }
+  // Reuse the active conversation's transport mode and the provider SDK retry policy.
+  // The summary remains tool-free, but its network/retry path now matches normal chat.
+  const summaryText = await requestSummaryOnce({
+    provider,
+    modelName: primaryModelName,
+    messages: summarySource,
+    compactPrompt: modelConfig.compactPrompt,
+    signal,
+    apiType,
+    stream
+  })
 
   throwIfAborted(signal)
   if (!summaryText.trim()) {
-    const error = lastError || new Error('compact_failed')
-    error.message = error.message || 'compact_failed'
-    throw error
+    throw new Error('empty_summary')
   }
 
   report('rebuild_history', { percent: 90, message: '写回压缩检查点…' })
