@@ -1,7 +1,7 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
-import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElMessageBox, ElTag, ElTooltip, ElScrollbar, ElIcon, ElImage, ElDialog } from 'element-plus';
-import { Close, Check, Document, Delete, Collection, Picture, ChatLineRound, Fold, InfoFilled} from '@element-plus/icons-vue';
+import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElMessageBox, ElTag, ElTooltip, ElScrollbar, ElIcon, ElImage, ElDialog, ElSwitch, ElProgress, ElInputNumber } from 'element-plus';
+import { Close, Check, Document, Delete, Collection, Picture, ChatLineRound, Fold, RefreshRight, InfoFilled, ArrowDown, ArrowRight } from '@element-plus/icons-vue';
 
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
@@ -2638,9 +2638,11 @@ html.dark .compact-config-dialog :deep(.el-dialog) {
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 
+@media (max-width: 720px) {
     .compact-grid-2 {
         grid-template-columns: 1fr;
     }
+}
 
 .compact-config-dialog.el-dialog {
     margin-top: 6vh !important;
