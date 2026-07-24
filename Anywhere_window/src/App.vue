@@ -1977,6 +1977,11 @@ const onAvatarClick = async (role, event) => {
 };
 
 const handleSubmit = () => {
+  // 自动/手动压缩中：禁止发送与缓冲，避免用户误以为卡死
+  if (compacting.value) {
+    showDismissibleMessage.warning('压缩进行中，暂不可发送');
+    return;
+  }
   // 生成中（或正在准备发送）时，把消息暂存进缓冲区，本轮结束后自动发送
   if (loading.value || isPreparingSend.value) {
     enqueueInputToBuffer();
@@ -1984,7 +1989,14 @@ const handleSubmit = () => {
   }
   askAI(false);
 };
-const handleCancel = () => cancelAskAI();
+const handleCancel = () => {
+  // 发送按钮在 compacting 时也会进入 loading/取消态，优先取消压缩
+  if (compacting.value) {
+    handleCancelCompact();
+    return;
+  }
+  cancelAskAI();
+};
 const handleClearHistory = () => clearHistory();
 const handleRemoveFile = (index) => fileList.value.splice(index, 1);
 const handleUpload = async ({ fileList: newFiles }) => {
@@ -8206,7 +8218,7 @@ const scrollToMessageByIndex = (index) => {
             :compact-config="compactConfig"
             :can-restore-compact="canRestoreCompact"
  ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
-          v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading"
+          v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading || compacting"
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
           :is-mcp-active="isMcpActive" :all-mcp-servers="availableMcpServers" :active-mcp-ids="sessionMcpServerIds"
           :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" :append-buffer="pendingAppendBuffer" :sub-agent-tasks="subAgentTasks" @open-compact-dialog="handleOpenCompactDialog"
