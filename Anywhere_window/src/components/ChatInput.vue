@@ -152,14 +152,13 @@ const applyAdvancedToGlobal = () => {
 };
 
 const runCompactNow = () => {
-    // 用户主动压缩：保持弹窗打开以显示进度
+    // Parent saves this patch before starting compaction so the new context length is in effect.
     compactDialogVisible.value = true;
-    emit('save-compact-config', {
+    emit('run-compact', {
         ...localCompactConfig.value,
         contextLengthManual: true,
         contextLengthSource: 'manual'
     });
-    emit('run-compact');
 };
 
 const cancelCompact = () => {

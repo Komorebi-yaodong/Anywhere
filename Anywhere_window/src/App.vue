@@ -672,6 +672,12 @@ const chat_show = ref([]);
 const loading = ref(false);
 const compacting = ref(false);
 const compactProgress = ref({ percent: 0, message: '', stage: '' });
+
+// Invalidate stale async config loads whenever the active compact settings change.
+let compactConfigLoadVersion = 0;
+let compactConfigModelValue = '';
+
+
 const compactConfig = ref({
   autoCompactEnabled: true,
   triggerRatio: 0.9,
@@ -5893,22 +5899,24 @@ const loadCompactConfigForCurrentModel = async ({
   preferManual = true
 } = {}) => {
   if (!window.api?.getModelCompactConfig) return;
+  const loadVersion = ++compactConfigLoadVersion;
+  const requestedModel = model.value;
   try {
     // 打开弹窗：读取缓存；若无缓存才 resolve。不覆盖用户手动长度。
     // 重新检索：forceRefresh + preferManual=false，允许 API 覆盖。
     let resolveResult = null;
     if (window.api.resolveModelContext) {
       if (forceRefresh) {
-        resolveResult = await window.api.resolveModelContext(model.value, {
+        resolveResult = await window.api.resolveModelContext(requestedModel, {
           forceRefresh: true,
           preferManual
         });
       } else {
         // 非强制：优先缓存；resolve 内部也会尊重 manual
-        const cached = await window.api.getModelCompactConfig(model.value);
+        const cached = await window.api.getModelCompactConfig(requestedModel);
         const hasCachedLength = Number(cached?.config?.contextLength) > 0;
         if (!hasCachedLength) {
-          resolveResult = await window.api.resolveModelContext(model.value, {
+          resolveResult = await window.api.resolveModelContext(requestedModel, {
             forceRefresh: false,
             preferManual: true
           });
@@ -5916,7 +5924,17 @@ const loadCompactConfigForCurrentModel = async ({
       }
     }
 
-    const configResult = await window.api.getModelCompactConfig(model.value);
+    const configResult = await window.api.getModelCompactConfig(requestedModel);
+    // A newer load/save or model switch happened while this request was in flight.
+    if (loadVersion !== compactConfigLoadVersion || requestedModel !== model.value) return;
+    // A saved manual value is authoritative unless the user explicitly refreshes from API.
+    if (
+      !forceRefresh
+      && compactConfigModelValue === requestedModel
+      && (compactConfig.value.contextLengthManual === true
+        || compactConfig.value.contextLengthSource === 'manual')
+    ) return;
+
     const nextConfig = {
       ...(configResult?.config || {}),
       ...(resolveResult?.config || {})
@@ -5936,6 +5954,9 @@ const loadCompactConfigForCurrentModel = async ({
     }
 
     compactConfig.value = normalizeCompactConfigState(nextConfig);
+
+    compactConfigModelValue = requestedModel;
+
   } catch (error) {
     console.warn('[compact] load model config failed:', error);
   }
@@ -5947,6 +5968,8 @@ const handleOpenCompactDialog = async () => {
 };
 
 const handleSaveCompactConfig = async (patch = {}) => {
+  // A completed save must win over any older asynchronous config load.
+  const saveVersion = ++compactConfigLoadVersion;
   try {
     // Only update compact cache; never touch active chat request/abort controllers.
     const nextPatch = patch && typeof patch === 'object' ? { ...patch } : {};
@@ -5956,10 +5979,14 @@ const handleSaveCompactConfig = async (patch = {}) => {
     });
 
     // 保存时把当前 contextLength 记为手动覆盖，避免下次被 API 冲掉
-    if (Object.prototype.hasOwnProperty.call(nextPatch, 'contextLength') || true) {
-      nextConfig.contextLengthManual = true;
-      nextConfig.contextLengthSource = 'manual';
-    }
+    nextConfig.contextLengthManual = true;
+    nextConfig.contextLengthSource = 'manual';
+
+    // Make the new manual value effective immediately, before the async persistence call completes.
+    compactConfig.value = nextConfig;
+    compactConfigModelValue = model.value;
+
+
 
     if (window.api?.updateModelCompactConfig) {
       const result = await window.api.updateModelCompactConfig(model.value, {
@@ -5969,18 +5996,15 @@ const handleSaveCompactConfig = async (patch = {}) => {
         contextLengthManual: true
       });
       if (result?.config) {
+        // Ignore an older save response if a later save/load has superseded it.
+        if (saveVersion !== compactConfigLoadVersion) return false;
         compactConfig.value = normalizeCompactConfigState({
           ...nextConfig,
           ...result.config,
+          contextLength: nextConfig.contextLength,
           contextLengthManual: true,
-          contextLengthSource: result.config.contextLengthSource === 'api' && result.config.contextLengthManual
-            ? 'manual'
-            : (result.config.contextLengthSource || 'manual')
+          contextLengthSource: 'manual'
         });
-        // 确保读回后仍是 manual
-        if (compactConfig.value.contextLengthManual) {
-          compactConfig.value.contextLengthSource = 'manual';
-        }
       } else {
         compactConfig.value = nextConfig;
       }
@@ -5989,9 +6013,11 @@ const handleSaveCompactConfig = async (patch = {}) => {
     }
     // Use lightweight toast; avoid any side effects that might abort chat streams.
     showDismissibleMessage.success('压缩参数已保存');
+    return true;
   } catch (error) {
     console.error('[compact] save config failed:', error);
     showDismissibleMessage.error(`保存压缩参数失败: ${error?.message || error}`);
+    return false;
   }
 };
 
@@ -6090,6 +6116,13 @@ const handleApplyCompactAdvancedGlobal = async (patch = {}) => {
     }
     showDismissibleMessage.error(`应用到全局失败: ${msg}`);
   }
+};
+
+
+const handleRunCompactWithConfig = async (patch = {}) => {
+  const saved = await handleSaveCompactConfig(patch);
+  if (!saved) return false;
+  return runConversationCompact({ manual: true });
 };
 
 const handleCancelCompact = () => {
@@ -6306,20 +6339,109 @@ const projectUiToFullHistoryForLegacyMigration = (messages = []) => {
   return full;
 };
 
-const splitFullHistoryPrefixAndTail = (messages = fullHistory.value, keepTailCount = 1) => {
+const estimateCompactHistoryTokens = async (messages = []) => {
+  if (!window.api?.estimateCompactTokens) return 0;
+  const estimate = await window.api.estimateCompactTokens(messages);
+  return Math.max(0, Number(estimate?.tokens) || 0);
+};
+
+/**
+ * Select one bounded compaction prefix from the current AI-visible window.
+ * The threshold limits the summary input; keepRecentRounds then moves the cut
+ * backwards by complete user rounds so those rounds remain verbatim in the tail.
+ */
+const splitFullHistoryPrefixAndTail = async (
+  messages = fullHistory.value,
+  { maxPrefixTokens = 0, keepRecentRounds = 0 } = {}
+) => {
   const list = Array.isArray(messages) ? messages : [];
   let windowStart = 0;
   for (let index = list.length - 1; index >= 0; index -= 1) {
-    if (list[index]?.role === 'compaction') { windowStart = index; break; }
+    if (list[index]?.role === 'compaction') {
+      windowStart = index;
+      break;
+    }
   }
-  if (windowStart === 0) { const first = list.findIndex((message) => message?.role !== 'system'); windowStart = first >= 0 ? first : list.length; }
+  if (windowStart === 0) {
+    const first = list.findIndex((message) => message?.role !== 'system');
+    windowStart = first >= 0 ? first : list.length;
+  }
+
+  const systemMessages = list.filter((message) => message?.role === 'system');
   const windowMessages = list.slice(windowStart);
-  const visibleIndexes = [];
-  windowMessages.forEach((message, index) => { if (message?.role && message.role !== 'system' && message.role !== 'tool') visibleIndexes.push(index); });
-  if (visibleIndexes.length <= 1) return { insertIndex: list.length, prefix: [], tail: windowMessages };
-  const tailCount = Math.min(Math.max(1, Math.floor(Number(keepTailCount) || 1)), visibleIndexes.length - 1);
-  const cutIndex = visibleIndexes[visibleIndexes.length - tailCount];
-  return { insertIndex: windowStart + cutIndex, prefix: windowMessages.slice(0, cutIndex), tail: windowMessages.slice(cutIndex) };
+  const userStartIndexes = [];
+  windowMessages.forEach((message, index) => {
+    // Cut only before a user message, keeping the previous user/assistant/tool round intact.
+    if (message?.role === 'user' && index > 0) userStartIndexes.push(index);
+  });
+  if (userStartIndexes.length === 0 || !Number.isFinite(Number(maxPrefixTokens)) || maxPrefixTokens <= 0) {
+    return {
+      insertIndex: list.length,
+      prefix: [],
+      tail: windowMessages,
+      prefixTokens: 0,
+      tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...windowMessages]),
+      maxPrefixTokens: Math.max(0, Number(maxPrefixTokens) || 0),
+      tailStartUserOrdinal: 0
+    };
+  }
+
+  const budget = Math.floor(Number(maxPrefixTokens));
+  const estimatePrefixAt = async (cutIndex) => (
+    estimateCompactHistoryTokens([...systemMessages, ...windowMessages.slice(0, cutIndex)])
+  );
+
+  // Token totals are monotonic as complete message rounds are added, so binary-search the largest safe cut.
+  let low = 0;
+  let high = userStartIndexes.length - 1;
+  let bestCandidate = -1;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const candidate = userStartIndexes[middle];
+    const tokens = await estimatePrefixAt(candidate);
+    if (tokens <= budget) {
+      bestCandidate = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  if (bestCandidate < 0) {
+    return {
+      insertIndex: list.length,
+      prefix: [],
+      tail: windowMessages,
+      prefixTokens: 0,
+      tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...windowMessages]),
+      maxPrefixTokens: budget,
+      tailStartUserOrdinal: 0
+    };
+  }
+
+  const thresholdCutIndex = userStartIndexes[bestCandidate];
+  const requestedKeepRounds = Math.max(0, Math.floor(Number(keepRecentRounds) || 0));
+  // Move the threshold cut backwards by N complete user rounds to keep them verbatim.
+  const tailStartUserOrdinal = Math.max(0, bestCandidate - requestedKeepRounds);
+  let cutIndex = userStartIndexes[tailStartUserOrdinal] ?? thresholdCutIndex;
+
+  // Never summarize only an existing compaction marker: that would not reduce history.
+  const hasRealPrefixMessage = windowMessages
+    .slice(0, cutIndex)
+    .some((message) => message?.role && message.role !== 'system' && message.role !== 'compaction');
+  if (!hasRealPrefixMessage) cutIndex = thresholdCutIndex;
+
+  const prefix = windowMessages.slice(0, cutIndex);
+  const tail = windowMessages.slice(cutIndex);
+  return {
+    insertIndex: windowStart + cutIndex,
+    prefix,
+    tail,
+    prefixTokens: await estimateCompactHistoryTokens([...systemMessages, ...prefix]),
+    tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...tail]),
+    maxPrefixTokens: budget,
+    tailStartUserOrdinal: Math.max(0, userStartIndexes.indexOf(cutIndex))
+  };
 };
 
 
@@ -6474,29 +6596,45 @@ const markOutermostCanRestore = () => {
   });
 };
 
-const estimateActiveTokens = async (messagesForAi = history.value) => {
+const getCompactTokenSnapshot = async (messagesForAi = history.value) => {
   let localTokens = 0;
   if (window.api?.estimateCompactTokens) {
     const estimate = await window.api.estimateCompactTokens(messagesForAi);
-    localTokens = Number(estimate?.tokens) || 0;
+    localTokens = Math.max(0, Number(estimate?.tokens) || 0);
   }
-  const usageTotal = getLatestUsageTotalTokens();
-  if (Number.isFinite(usageTotal) && usageTotal > 0 && localTokens > 0) {
-    const diff = Math.abs(usageTotal - localTokens);
-    return diff > localTokens * 0.8 ? localTokens : usageTotal;
-  }
-  if (Number.isFinite(usageTotal) && usageTotal > 0) return usageTotal;
-  return localTokens;
+  const usageTotalTokens = Math.max(0, Number(getLatestUsageTotalTokens()) || 0);
+  return {
+    localTokens,
+    usageTotalTokens,
+    activeTokens: Math.max(localTokens, usageTotalTokens)
+  };
+};
+
+const estimateActiveTokens = async (messagesForAi = history.value) => {
+  const snapshot = await getCompactTokenSnapshot(messagesForAi);
+  return snapshot.activeTokens;
 };
 
 const shouldCompactNow = async (messagesForAi = history.value) => {
   if (!window.api?.shouldAutoCompact) return false;
-  const activeTokens = await estimateActiveTokens(messagesForAi);
+  const tokenSnapshot = await getCompactTokenSnapshot(messagesForAi);
+  const contextLength = Number(compactConfig.value.contextLength) || 0;
+  const triggerRatio = Number(compactConfig.value.triggerRatio) || 0;
+  const threshold = Math.floor(contextLength * triggerRatio);
   const decision = await window.api.shouldAutoCompact({
-    activeTokens,
-    contextLength: compactConfig.value.contextLength,
-    triggerRatio: compactConfig.value.triggerRatio,
+    activeTokens: tokenSnapshot.activeTokens,
+    contextLength,
+    triggerRatio,
     autoCompactEnabled: true
+  });
+  console.info('[compact] auto-check', {
+    contextLength,
+    triggerRatio,
+    threshold,
+    totalUsageTokens: tokenSnapshot.usageTotalTokens,
+    localTokens: tokenSnapshot.localTokens,
+    activeTokens: tokenSnapshot.activeTokens,
+    shouldCompact: Boolean(decision?.should)
   });
   return Boolean(decision?.should);
 };
@@ -6515,7 +6653,7 @@ const findAiWindowStartIndex = (list = []) => {
  * 在「AI 可见窗口」内切 prefix/tail。
  * UI 不删除 prefix，只在 prefix 后插入 summary。
  */
-const splitAiWindowPrefixAndTail = (messages = [], keepTailCount = 0) => {
+const splitAiWindowPrefixAndTail = (messages = [], tailStartUserOrdinal = 0) => {
   const list = Array.isArray(messages) ? messages : [];
   if (list.length === 0) {
     return { windowStart: 0, insertIndex: 0, prefix: [], tail: [] };
@@ -6523,39 +6661,24 @@ const splitAiWindowPrefixAndTail = (messages = [], keepTailCount = 0) => {
 
   const windowStart = findAiWindowStartIndex(list);
   const windowMsgs = list.slice(windowStart);
-  const nonSystemIndexes = [];
-  windowMsgs.forEach((msg, idx) => {
-    if (msg?.role !== 'system') nonSystemIndexes.push(idx);
+  const userStartIndexes = [];
+  windowMsgs.forEach((message, index) => {
+    if (message?.role === 'user' && index > 0) userStartIndexes.push(index);
   });
-  if (nonSystemIndexes.length <= 1) {
+  if (userStartIndexes.length === 0) {
     return { windowStart, insertIndex: list.length, prefix: [], tail: windowMsgs };
   }
 
-  let tailCount = Math.max(0, Math.floor(Number(keepTailCount) || 0));
-  if (tailCount === 0 && Number(compactConfig.value.keepRecentRounds) > 0) {
-    tailCount = Math.floor(Number(compactConfig.value.keepRecentRounds) * 2);
-  }
-  // 至少保留 1 条非 system 在 summary 后，便于续聊
-  tailCount = Math.max(1, tailCount);
-  tailCount = Math.min(tailCount, nonSystemIndexes.length - 1);
-
-  const cutNonSystemPos = nonSystemIndexes.length - tailCount;
-  let cutInWindow = nonSystemIndexes[cutNonSystemPos];
-
-  let prefix = windowMsgs.slice(0, cutInWindow);
-  let tail = windowMsgs.slice(cutInWindow);
-  const prefixHasCompressible = prefix.some((msg) => msg?.role && msg.role !== 'system');
-  if (!prefixHasCompressible && nonSystemIndexes.length > 1) {
-    cutInWindow = nonSystemIndexes[Math.max(0, nonSystemIndexes.length - 2)] + 1;
-    prefix = windowMsgs.slice(0, cutInWindow);
-    tail = windowMsgs.slice(cutInWindow);
-  }
-
+  const safeOrdinal = Math.min(
+    Math.max(0, Math.floor(Number(tailStartUserOrdinal) || 0)),
+    userStartIndexes.length - 1
+  );
+  const cutInWindow = userStartIndexes[safeOrdinal];
   return {
     windowStart,
-    insertIndex: windowStart + prefix.length,
-    prefix,
-    tail
+    insertIndex: windowStart + cutInWindow,
+    prefix: windowMsgs.slice(0, cutInWindow),
+    tail: windowMsgs.slice(cutInWindow)
   };
 };
 
@@ -6699,6 +6822,21 @@ const runConversationCompact = async ({
 
       steps += 1;
       const projected = projectFullHistoryToRequestHistory();
+
+      const tokenSnapshot = await getCompactTokenSnapshot(projected);
+      const contextLength = Number(compactConfig.value.contextLength) || 0;
+      const triggerRatio = Number(compactConfig.value.triggerRatio) || 0;
+      console.info('[compact] start', {
+        manual,
+        step: steps,
+        contextLength,
+        triggerRatio,
+        threshold: Math.floor(contextLength * triggerRatio),
+        totalUsageTokens: tokenSnapshot.usageTotalTokens,
+        localTokens: tokenSnapshot.localTokens,
+        activeTokens: tokenSnapshot.activeTokens
+      });
+
       // 手动首步强制压一次；工具轮/自动轮只按阈值判断
       const need = manual && steps === 1 && !allowDuringLoading
         ? true
@@ -6710,12 +6848,31 @@ const runConversationCompact = async ({
         break;
       }
 
-      const keepTail = Math.max(
-        1,
-        Math.floor(Number(compactConfig.value.keepRecentRounds || 0) * 2) || 3
+      const maxPrefixTokens = Math.floor(
+        Number(compactConfig.value.contextLength || 0)
+        * Number(compactConfig.value.triggerRatio || 0)
       );
-      const { insertIndex: fullInsertIndex, prefix } = splitFullHistoryPrefixAndTail(fullHistory.value, keepTail);
-      const uiSplit = splitAiWindowPrefixAndTail(chat_show.value, keepTail);
+      const fullSplit = await splitFullHistoryPrefixAndTail(fullHistory.value, {
+        maxPrefixTokens,
+        keepRecentRounds: compactConfig.value.keepRecentRounds
+      });
+      const {
+        insertIndex: fullInsertIndex,
+        prefix,
+        prefixTokens,
+        tailTokens,
+        tailStartUserOrdinal
+      } = fullSplit;
+      const uiSplit = splitAiWindowPrefixAndTail(chat_show.value, tailStartUserOrdinal);
+      console.info('[compact] prefix-selection', {
+        step: steps,
+        maxPrefixTokens,
+        prefixTokens,
+        tailTokens,
+        keepRecentRounds: Number(compactConfig.value.keepRecentRounds) || 0,
+        tailStartUserOrdinal,
+        prefixMessageCount: prefix.length
+      });
       if (!prefix.length) {
         if (manual && steps === 1 && !quiet) {
           showDismissibleMessage.info('可压缩前缀不足，已跳过');
@@ -6769,9 +6926,20 @@ const runConversationCompact = async ({
       didAny = true;
 
       if (result.modelConfig) {
+        const currentConfig = compactConfig.value;
+        const preserveManualContext = currentConfig.contextLengthManual === true
+          || currentConfig.contextLengthSource === 'manual';
         compactConfig.value = {
-          ...compactConfig.value,
-          ...result.modelConfig
+          ...currentConfig,
+          ...result.modelConfig,
+          ...(preserveManualContext
+            ? {
+                contextLength: currentConfig.contextLength,
+                contextLengthManual: true,
+                contextLengthSource: 'manual',
+                triggerRatio: currentConfig.triggerRatio
+              }
+            : {})
         };
       }
       // 继续循环：若仍超阈值则再压一层，直至阈值以下
@@ -8228,7 +8396,7 @@ const scrollToMessageByIndex = (index) => {
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
           :is-mcp-active="isMcpActive" :all-mcp-servers="availableMcpServers" :active-mcp-ids="sessionMcpServerIds"
           :active-skill-ids="sessionSkillIds" :all-skills="allSkillsList" :append-buffer="pendingAppendBuffer" :sub-agent-tasks="subAgentTasks" @open-compact-dialog="handleOpenCompactDialog"
-            @run-compact="() => runConversationCompact({ manual: true })"
+            @run-compact="handleRunCompactWithConfig"
             @cancel-compact="handleCancelCompact"
             @save-compact-config="handleSaveCompactConfig"
             @apply-compact-advanced-global="handleApplyCompactAdvancedGlobal"
