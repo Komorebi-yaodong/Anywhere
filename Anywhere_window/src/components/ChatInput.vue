@@ -1,6 +1,6 @@
 <script setup>
 import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue';
-import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElMessageBox, ElTag, ElTooltip, ElScrollbar, ElIcon, ElImage, ElDialog, ElSwitch, ElProgress, ElInputNumber } from 'element-plus';
+import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElMessageBox, ElTag, ElTooltip, ElScrollbar, ElIcon, ElImage, ElDialog, ElSwitch, ElInputNumber } from 'element-plus';
 import { Close, Check, Document, Delete, Collection, Picture, ChatLineRound, Fold, RefreshRight, InfoFilled, ArrowDown, ArrowRight } from '@element-plus/icons-vue';
 
 // --- Props and Emits ---
@@ -69,11 +69,6 @@ const localCompactConfig = ref({
     resolvedId: ''
 });
 
-const compactPercent = computed(() => {
-    const value = Number(props.compactProgress?.percent);
-    if (!Number.isFinite(value)) return 0;
-    return Math.min(100, Math.max(0, Math.round(value)));
-});
 const compactStatusText = computed(() => {
     if (!props.compacting) return '';
     return props.compactProgress?.message || '正在压缩…';
@@ -1215,13 +1210,21 @@ defineExpose({ focus, senderRef });
         </template>
 
         <div class="compact-dialog-scroll">
-            <!-- 压缩进行中：进度 + 取消；右下角可关闭弹窗继续查看历史（不中止压缩） -->
+            <!-- 压缩进行中：关闭仅切换为后台继续，取消才会中断压缩 -->
             <div v-if="compacting" class="compact-progress-block">
-                <div class="compact-progress-title">{{ compactStatusText }}</div>
-                <el-progress :percentage="compactPercent" :stroke-width="14" striped striped-flow status="success" />
+                <div class="compact-progress-heading">
+                    <div>
+                        <div class="compact-progress-title">{{ compactStatusText }}</div>
+                        <div class="compact-progress-hint">可关闭此窗口并在后台继续压缩</div>
+                    </div>
+                    <span class="compact-progress-state">处理中</span>
+                </div>
+                <div class="compact-progress-track" role="progressbar" aria-label="会话压缩进行中">
+                    <span class="compact-progress-flow"></span>
+                </div>
                 <div class="compact-progress-actions">
                     <el-button type="danger" plain round @click="cancelCompact">取消压缩</el-button>
-                    <el-button round @click="compactDialogVisible = false">关闭</el-button>
+                    <el-button round @click="compactDialogVisible = false">后台继续</el-button>
                 </div>
             </div>
             <div v-else class="compact-config-block">
@@ -2575,9 +2578,72 @@ html.dark .compact-dialog-scroll::-webkit-scrollbar-thumb {
     font-size: 14px;
 }
 
+.compact-progress-block {
+    gap: 16px;
+    padding: 4px 0 2px;
+}
+
+.compact-progress-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
 .compact-progress-title {
-    font-size: 14px;
     color: var(--el-text-color-primary);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.compact-progress-hint {
+    margin-top: 4px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.compact-progress-state {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    border: 1px solid rgba(64, 158, 255, 0.2);
+    border-radius: 999px;
+    background: rgba(64, 158, 255, 0.1);
+    color: var(--el-color-primary);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.compact-progress-track {
+    position: relative;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--el-fill-color);
+}
+
+.compact-progress-flow {
+    position: absolute;
+    inset: 0 auto 0 -42%;
+    width: 42%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent 0%, var(--el-color-primary-light-5) 20%, var(--el-color-primary) 50%, var(--el-color-primary-light-5) 80%, transparent 100%);
+    animation: compact-progress-flow 1.5s ease-in-out infinite;
+}
+
+@keyframes compact-progress-flow {
+    from { transform: translateX(0); }
+    to { transform: translateX(340%); }
+}
+
+html.dark .compact-progress-state {
+    border-color: rgba(121, 187, 255, 0.28);
+    background: rgba(64, 158, 255, 0.18);
+}
+
+html.dark .compact-progress-track {
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .compact-progress-actions,

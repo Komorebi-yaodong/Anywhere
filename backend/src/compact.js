@@ -943,10 +943,15 @@ async function runConversationCompaction({
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     throwIfAborted(signal)
+    const retryCount = attempt - 1
     report('generate_summary', {
       percent: 30 + attempt * 12,
-      message: `生成摘要中（第 ${attempt}/${maxAttempts} 次）…`,
+      // 首次请求不是重试；只有前一次摘要请求失败后才显示重试次数。
+      message: retryCount > 0
+        ? `请求未完成，正在重试（第 ${retryCount}/${maxAttempts} 次）…`
+        : '正在生成摘要…',
       attempt,
+      retryCount,
       maxAttempts,
       model: primaryModelName
     })
