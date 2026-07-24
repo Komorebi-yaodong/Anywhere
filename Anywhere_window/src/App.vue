@@ -6836,7 +6836,7 @@ const maybeAutoCompactAfterTurn = async () => {
 
 
 const askAI = async (forceSend = false) => {
-  if (loading.value || isPreparingSend.value) return;
+  if (loading.value || isPreparingSend.value || compacting.value) return;
   if (isMcpLoading.value) {
     showDismissibleMessage.info('正在加载工具，请稍后再试...');
     return;
@@ -6845,12 +6845,21 @@ const askAI = async (forceSend = false) => {
   // --- 1. 处理用户输入 ---
   if (!forceSend) {
     isPreparingSend.value = true;
+    let added = false;
     try {
-      const added = await appendCurrentInputToHistory();
-      if (!added) return;
+      added = await appendCurrentInputToHistory();
     } finally {
       isPreparingSend.value = false;
     }
+    if (!added) return;
+  }
+
+  // 用户消息写入后、进入 AI 请求前：若已超阈值，先压缩再开跑
+  // 覆盖 ask / reask / 强制发送等同一入口，避免直接超上下文请求。
+  try {
+    await maybeAutoCompactBeforeNextRequest({ reason: 'before-askAI' });
+  } catch (error) {
+    console.warn('[compact] before-askAI compact failed:', error);
   }
 
   // --- 2. 初始化 AI 回合 ---
@@ -7495,10 +7504,14 @@ const askAI = async (forceSend = false) => {
         appendFullHistory(...toolMessages);
         // 工具调用完成本质也会向 AI 续发请求，此处保存一次
         scheduleAutoSave({ reason: 'tool-calls-completed', immediate: true });
-        await maybeAutoCompactBeforeNextRequest({ reason: 'after-tools' });
         // 工具调用完成后，把缓冲区消息插入历史，使下一轮请求即可纳入
         throwIfTurnAborted();
         await drainBufferIntoHistory();
+        throwIfTurnAborted();
+
+        // 关键：tool 结果与缓冲消息写回后、进入下一轮 AI 请求前做上下文检测。
+        // 超限则先压缩，压缩完成后再 continue 循环发送。
+        await maybeAutoCompactBeforeNextRequest({ reason: 'after-tool-results' });
         throwIfTurnAborted();
       } else {
         if (isVoiceReply && responseMessage.audio) {
