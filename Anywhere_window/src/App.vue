@@ -6620,21 +6620,11 @@ const shouldCompactNow = async (messagesForAi = history.value) => {
   const tokenSnapshot = await getCompactTokenSnapshot(messagesForAi);
   const contextLength = Number(compactConfig.value.contextLength) || 0;
   const triggerRatio = Number(compactConfig.value.triggerRatio) || 0;
-  const threshold = Math.floor(contextLength * triggerRatio);
   const decision = await window.api.shouldAutoCompact({
     activeTokens: tokenSnapshot.activeTokens,
     contextLength,
     triggerRatio,
     autoCompactEnabled: true
-  });
-  console.info('[compact] auto-check', {
-    contextLength,
-    triggerRatio,
-    threshold,
-    totalUsageTokens: tokenSnapshot.usageTotalTokens,
-    localTokens: tokenSnapshot.localTokens,
-    activeTokens: tokenSnapshot.activeTokens,
-    shouldCompact: Boolean(decision?.should)
   });
   return Boolean(decision?.should);
 };
@@ -6823,20 +6813,6 @@ const runConversationCompact = async ({
       steps += 1;
       const projected = projectFullHistoryToRequestHistory();
 
-      const tokenSnapshot = await getCompactTokenSnapshot(projected);
-      const contextLength = Number(compactConfig.value.contextLength) || 0;
-      const triggerRatio = Number(compactConfig.value.triggerRatio) || 0;
-      console.info('[compact] start', {
-        manual,
-        step: steps,
-        contextLength,
-        triggerRatio,
-        threshold: Math.floor(contextLength * triggerRatio),
-        totalUsageTokens: tokenSnapshot.usageTotalTokens,
-        localTokens: tokenSnapshot.localTokens,
-        activeTokens: tokenSnapshot.activeTokens
-      });
-
       // 手动首步强制压一次；工具轮/自动轮只按阈值判断
       const need = manual && steps === 1 && !allowDuringLoading
         ? true
@@ -6859,20 +6835,9 @@ const runConversationCompact = async ({
       const {
         insertIndex: fullInsertIndex,
         prefix,
-        prefixTokens,
-        tailTokens,
         tailStartUserOrdinal
       } = fullSplit;
       const uiSplit = splitAiWindowPrefixAndTail(chat_show.value, tailStartUserOrdinal);
-      console.info('[compact] prefix-selection', {
-        step: steps,
-        maxPrefixTokens,
-        prefixTokens,
-        tailTokens,
-        keepRecentRounds: Number(compactConfig.value.keepRecentRounds) || 0,
-        tailStartUserOrdinal,
-        prefixMessageCount: prefix.length
-      });
       if (!prefix.length) {
         if (manual && steps === 1 && !quiet) {
           showDismissibleMessage.info('可压缩前缀不足，已跳过');
