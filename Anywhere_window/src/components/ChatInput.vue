@@ -35,7 +35,6 @@ const props = defineProps({
             contextLength: 262144,
             contextLengthSource: 'default',
             contextLengthManual: false,
-            userMessageTokenBudget: 20000,
             keepRecentRounds: 3,
             compactPrompt: '',
             resolvedId: ''
@@ -65,7 +64,6 @@ const localCompactConfig = ref({
     contextLength: 262144,
     contextLengthSource: 'default',
     contextLengthManual: false,
-    userMessageTokenBudget: 20000,
     keepRecentRounds: 3,
     compactPrompt: '',
     resolvedId: ''
@@ -90,7 +88,6 @@ watch(() => props.compactConfig, (next) => {
         contextLength: Number.isFinite(Number(next.contextLength)) ? Number(next.contextLength) : 262144,
         contextLengthSource: next.contextLengthSource || 'default',
         contextLengthManual: next.contextLengthManual === true || next.contextLengthSource === 'manual',
-        userMessageTokenBudget: Number.isFinite(Number(next.userMessageTokenBudget)) ? Number(next.userMessageTokenBudget) : 20000,
         keepRecentRounds: Number.isFinite(Number(next.keepRecentRounds)) ? Number(next.keepRecentRounds) : 3,
         compactPrompt: typeof next.compactPrompt === 'string' ? next.compactPrompt : '',
         resolvedId: typeof next.resolvedId === 'string' ? next.resolvedId : ''
@@ -149,7 +146,6 @@ const applyAdvancedToGlobal = () => {
     emit('apply-compact-advanced-global', {
         autoCompactEnabled: localCompactConfig.value.autoCompactEnabled,
         triggerRatio: localCompactConfig.value.triggerRatio,
-        userMessageTokenBudget: localCompactConfig.value.userMessageTokenBudget,
         keepRecentRounds: localCompactConfig.value.keepRecentRounds,
         compactPrompt: localCompactConfig.value.compactPrompt
     });
@@ -1267,19 +1263,6 @@ defineExpose({ focus, senderRef });
                     </button>
                     <div v-show="!advancedCollapsed" class="compact-advanced-body">
                         <div class="compact-grid-2">
-                            <div class="compact-field">
-                                <div class="compact-label-row">
-                                    <div class="compact-label">用户消息 token 预算</div>
-                                    <el-tooltip
-                                        placement="top"
-                                        :show-after="200"
-                                        content="压缩后保留到 AI 上下文中的最近用户消息总 token 上限。默认 20000。超出预算的更早用户消息不会进入压缩后的 AI history。"
-                                    >
-                                        <el-icon class="compact-info-icon"><InfoFilled /></el-icon>
-                                    </el-tooltip>
-                                </div>
-                                <el-input-number v-model="localCompactConfig.userMessageTokenBudget" :min="1000" :step="1000" />
-                            </div>
                             <div class="compact-field">
                                 <div class="compact-label-row">
                                     <div class="compact-label">额外保留最近 N 轮原文</div>

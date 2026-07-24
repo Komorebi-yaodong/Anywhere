@@ -5,7 +5,6 @@ const { createChatCompletion } = require('./chat.js')
 const COMPACT_CACHE_DOC_ID = 'conversation_compact_cache'
 const DEFAULT_CONTEXT_LENGTH = 256 * 1024
 const DEFAULT_TRIGGER_RATIO = 0.9
-const DEFAULT_USER_MESSAGE_TOKEN_BUDGET = 20_000
 const DEFAULT_KEEP_RECENT_ROUNDS = 3
 // Structured handoff prompt adapted from local compact skill + Codex-style continuation needs.
 const DEFAULT_COMPACT_PROMPT = [
@@ -207,7 +206,6 @@ function defaultModelCacheEntry(modelKey = '', patch = {}) {
     resolvedId: modelKey,
     autoCompactEnabled: true,
     triggerRatio: DEFAULT_TRIGGER_RATIO,
-    userMessageTokenBudget: DEFAULT_USER_MESSAGE_TOKEN_BUDGET,
     keepRecentRounds: DEFAULT_KEEP_RECENT_ROUNDS,
     compactPrompt: DEFAULT_COMPACT_PROMPT,
     summaryPrefix: DEFAULT_SUMMARY_PREFIX,
@@ -300,10 +298,9 @@ async function importCompactCacheModels(modelsInput = {}) {
     } else {
       next.triggerRatio = DEFAULT_TRIGGER_RATIO
     }
-    if (Number.isFinite(Number(next.userMessageTokenBudget))) {
-      next.userMessageTokenBudget = Math.max(1000, Math.floor(Number(next.userMessageTokenBudget)))
-    } else {
-      next.userMessageTokenBudget = DEFAULT_USER_MESSAGE_TOKEN_BUDGET
+    // Legacy field: user-message budget is no longer used; remove it from imported caches.
+    if (Object.prototype.hasOwnProperty.call(next, 'userMessageTokenBudget')) {
+      delete next.userMessageTokenBudget
     }
     if (Number.isFinite(Number(next.keepRecentRounds))) {
       next.keepRecentRounds = Math.max(0, Math.floor(Number(next.keepRecentRounds)))
@@ -353,6 +350,10 @@ async function getModelCompactConfig(modelInput = '') {
   }
 
   const config = deepClone({ ...defaultModelCacheEntry(modelKey), ...existing, modelKey })
+  // Do not expose retired user-message budget from legacy cache records.
+  if (Object.prototype.hasOwnProperty.call(config, 'userMessageTokenBudget')) {
+    delete config.userMessageTokenBudget
+  }
 
   // 旧默认 keepRecentRounds=0 → 迁移为新默认 3；用户显式保存过则保留
   if (
@@ -394,8 +395,9 @@ async function updateModelCompactConfig(modelInput = '', patch = {}) {
   } else {
     next.triggerRatio = DEFAULT_TRIGGER_RATIO
   }
-  if (Number.isFinite(Number(next.userMessageTokenBudget))) {
-    next.userMessageTokenBudget = Math.max(1000, Math.floor(Number(next.userMessageTokenBudget)))
+  // Legacy field: user-message budget is no longer used; remove it from persisted model config.
+  if (Object.prototype.hasOwnProperty.call(next, 'userMessageTokenBudget')) {
+    delete next.userMessageTokenBudget
   }
   if (Number.isFinite(Number(next.keepRecentRounds))) {
     next.keepRecentRounds = Math.max(0, Math.floor(Number(next.keepRecentRounds)))
@@ -469,10 +471,6 @@ async function applyAdvancedCompactConfigToAll(patch = {}) {
     const ratio = Number(source.triggerRatio)
     if (Number.isFinite(ratio)) shared.triggerRatio = Math.min(0.99, Math.max(0.1, ratio))
   }
-  if (Object.prototype.hasOwnProperty.call(source, 'userMessageTokenBudget')) {
-    const budget = Number(source.userMessageTokenBudget)
-    if (Number.isFinite(budget)) shared.userMessageTokenBudget = Math.max(1000, Math.floor(budget))
-  }
   if (Object.prototype.hasOwnProperty.call(source, 'keepRecentRounds')) {
     const rounds = Number(source.keepRecentRounds)
     if (Number.isFinite(rounds)) shared.keepRecentRounds = Math.max(0, Math.floor(rounds))
@@ -497,7 +495,7 @@ async function applyAdvancedCompactConfigToAll(patch = {}) {
     const previous = models[key] && typeof models[key] === 'object'
       ? models[key]
       : defaultModelCacheEntry(key)
-    models[key] = {
+    const next = {
       ...defaultModelCacheEntry(key),
       ...previous,
       ...shared,
@@ -509,6 +507,10 @@ async function applyAdvancedCompactConfigToAll(patch = {}) {
       resolvedId: previous.resolvedId || key,
       updatedAt: Date.now()
     }
+    if (Object.prototype.hasOwnProperty.call(next, 'userMessageTokenBudget')) {
+      delete next.userMessageTokenBudget
+    }
+    models[key] = next
     updated += 1
   }
 
@@ -677,103 +679,30 @@ async function resolveModelContextLength(modelInput = '', options = {}) {
   }
 }
 
-function isSummaryMessage(message, summaryPrefix = DEFAULT_SUMMARY_PREFIX) {
-  const text = extractTextFromContent(message?.content || '')
-  return message?.role === 'user' && text.startsWith(`${summaryPrefix}\n`)
-}
-
-function collectUserMessages(messages = [], summaryPrefix = DEFAULT_SUMMARY_PREFIX) {
-  return (Array.isArray(messages) ? messages : [])
-    .filter((message) => message?.role === 'user' && !isSummaryMessage(message, summaryPrefix))
-    .map((message) => ({
-      role: 'user',
-      content: message.content,
-      plain: extractTextFromContent(message.content)
-    }))
-}
-
-function selectUserMessagesByTokenBudget(userMessages = [], maxTokens = DEFAULT_USER_MESSAGE_TOKEN_BUDGET) {
-  const selected = []
-  let remaining = Math.max(0, Number(maxTokens) || 0)
-  if (remaining <= 0) return selected
-
-  for (let index = userMessages.length - 1; index >= 0; index -= 1) {
-    if (remaining <= 0) break
-    const message = userMessages[index]
-    const tokens = estimateTextTokens(message.plain)
-    if (tokens <= remaining) {
-      selected.push(message)
-      remaining -= tokens
-    } else {
-      // hard cut by chars for leftover budget
-      const approxChars = Math.max(16, remaining * 4)
-      const truncated = message.plain.slice(-approxChars)
-      selected.push({
-        ...message,
-        content: typeof message.content === 'string'
-          ? truncated
-          : [{ type: 'text', text: truncated }],
-        plain: truncated
-      })
-      break
-    }
-  }
-  selected.reverse()
-  return selected
-}
-
 function getSystemMessages(messages = []) {
   return (Array.isArray(messages) ? messages : []).filter((message) => message?.role === 'system')
 }
 
+/**
+ * Build the AI-side checkpoint for a compacted prefix.
+ * The renderer owns the cascade tail and projects it after the latest summary,
+ * so this function must never retain, select, or truncate source user messages.
+ */
 function buildCompactedHistory({
   messages = [],
   summaryText = '',
-  summaryPrefix = DEFAULT_SUMMARY_PREFIX,
-  userMessageTokenBudget = DEFAULT_USER_MESSAGE_TOKEN_BUDGET,
-  keepRecentRounds = 0
+  summaryPrefix = DEFAULT_SUMMARY_PREFIX
 } = {}) {
   const systemMessages = getSystemMessages(messages).map((message) => deepClone(message))
-  const userMessages = collectUserMessages(messages, summaryPrefix)
-  const selectedUsers = selectUserMessagesByTokenBudget(userMessages, userMessageTokenBudget)
-
-  const recentRounds = Math.max(0, Math.floor(Number(keepRecentRounds) || 0))
-  let recentTail = []
-  if (recentRounds > 0) {
-    const nonSystem = (Array.isArray(messages) ? messages : []).filter((message) => message?.role !== 'system')
-    // approximate: keep last N user+assistant pairs from the end
-    const pairs = []
-    let buffer = []
-    for (let i = nonSystem.length - 1; i >= 0 && pairs.length < recentRounds; i -= 1) {
-      buffer.unshift(nonSystem[i])
-      if (nonSystem[i]?.role === 'user') {
-        pairs.unshift(buffer)
-        buffer = []
-      }
-    }
-    recentTail = pairs.flat().map((message) => deepClone(message))
-  }
-
   const summaryBody = String(summaryText || '').trim() || '(no summary available)'
   const summaryMessage = {
     role: 'user',
     content: `${summaryPrefix}\n${summaryBody}`
   }
 
-  const history = [
-    ...systemMessages,
-    ...selectedUsers.map((message) => ({
-      role: 'user',
-      content: message.content
-    })),
-    summaryMessage,
-    ...recentTail
-  ]
-
   return {
-    history,
-    summaryMessage,
-    selectedUserCount: selectedUsers.length
+    history: [...systemMessages, summaryMessage],
+    summaryMessage
   }
 }
 
@@ -807,10 +736,10 @@ async function requestSummaryOnce({
 }) {
   const promptMessages = [
     ...getSystemMessages(messages).map((message) => deepClone(message)),
-    // keep a trimmed transcript for the summarizer
+    // The caller already provides the compactable prefix below the model threshold.
+    // Preserve the entire prefix so early requirements and decisions are summarized.
     ...messages
       .filter((message) => message?.role !== 'system')
-      .slice(-40)
       .map((message) => deepClone(message)),
     {
       role: 'user',
@@ -1053,8 +982,6 @@ async function runConversationCompaction({
     messages: summarySource,
     summaryText,
     summaryPrefix,
-    userMessageTokenBudget: modelConfig.userMessageTokenBudget,
-    keepRecentRounds: 0
   })
 
   report('completed', {
@@ -1068,7 +995,8 @@ async function runConversationCompaction({
     snapshotId,
     summary: summaryText,
     summaryPrefix,
-    // AI-side projection for this compacted prefix only (system + selected users + summary)
+    // AI-side checkpoint for this compacted prefix (system + summary only).
+    // The renderer appends the uncompressed cascade tail after the latest marker.
     history: built.history,
     // Frontend will splice this marker into the cascade UI tree.
     marker: {
@@ -1108,7 +1036,6 @@ function shouldAutoCompact({
 const COMPACT_DEFAULTS = {
   DEFAULT_CONTEXT_LENGTH,
   DEFAULT_TRIGGER_RATIO,
-  DEFAULT_USER_MESSAGE_TOKEN_BUDGET,
   DEFAULT_KEEP_RECENT_ROUNDS,
   DEFAULT_COMPACT_PROMPT,
   DEFAULT_SUMMARY_PREFIX
