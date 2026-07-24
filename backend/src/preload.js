@@ -435,6 +435,13 @@ window.api = {
   },
   exportMemoryData,
   importMemoryData,
+  // Compact cache is a separate DB doc; include in settings export/import.
+  getCompactCache: async () => {
+    return require('./compact.js').getCompactCacheSnapshot();
+  },
+  importCompactCache: async (models = {}) => {
+    return require('./compact.js').importCompactCacheModels(models);
+  },
 };
 
 const commandHandlers = {

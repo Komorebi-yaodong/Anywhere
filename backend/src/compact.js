@@ -260,6 +260,79 @@ async function getCompactCacheSnapshot() {
   }
 }
 
+/**
+ * Import compact model cache entries (for config export/import & WebDAV restore).
+ * Merges by modelKey; imported entries overwrite same-key local entries.
+ */
+async function importCompactCacheModels(modelsInput = {}) {
+  const incoming = modelsInput && typeof modelsInput === 'object' && !Array.isArray(modelsInput)
+    ? modelsInput
+    : {}
+  const keys = Object.keys(incoming)
+  if (keys.length === 0) {
+    return { ok: true, updated: 0, models: (await getCompactCacheSnapshot()).models }
+  }
+
+  const doc = await readCompactCacheDoc()
+  if (!doc.models || typeof doc.models !== 'object') doc.models = {}
+
+  let updated = 0
+  for (const rawKey of keys) {
+    const entry = incoming[rawKey]
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const modelKey = normalizeModelKey(entry.modelKey || rawKey)
+    if (!modelKey) continue
+    const previous = doc.models[modelKey] || defaultModelCacheEntry(modelKey)
+    const next = {
+      ...defaultModelCacheEntry(modelKey),
+      ...previous,
+      ...deepClone(entry),
+      modelKey,
+      updatedAt: Date.now()
+    }
+    if (Number.isFinite(Number(next.contextLength))) {
+      next.contextLength = Math.max(1024, Math.floor(Number(next.contextLength)))
+    } else {
+      next.contextLength = DEFAULT_CONTEXT_LENGTH
+    }
+    if (Number.isFinite(Number(next.triggerRatio))) {
+      next.triggerRatio = Math.min(0.99, Math.max(0.1, Number(next.triggerRatio)))
+    } else {
+      next.triggerRatio = DEFAULT_TRIGGER_RATIO
+    }
+    if (Number.isFinite(Number(next.userMessageTokenBudget))) {
+      next.userMessageTokenBudget = Math.max(1000, Math.floor(Number(next.userMessageTokenBudget)))
+    } else {
+      next.userMessageTokenBudget = DEFAULT_USER_MESSAGE_TOKEN_BUDGET
+    }
+    if (Number.isFinite(Number(next.keepRecentRounds))) {
+      next.keepRecentRounds = Math.max(0, Math.floor(Number(next.keepRecentRounds)))
+    } else {
+      next.keepRecentRounds = DEFAULT_KEEP_RECENT_ROUNDS
+    }
+    next.autoCompactEnabled = next.autoCompactEnabled !== false
+    next.contextLengthManual = next.contextLengthManual === true || next.contextLengthSource === 'manual'
+    next.compactPrompt = typeof next.compactPrompt === 'string' && next.compactPrompt.trim()
+      ? next.compactPrompt
+      : DEFAULT_COMPACT_PROMPT
+    next.summaryPrefix = typeof next.summaryPrefix === 'string' && next.summaryPrefix.trim()
+      ? next.summaryPrefix
+      : DEFAULT_SUMMARY_PREFIX
+    if (Object.prototype.hasOwnProperty.call(next, 'fallbackModel')) {
+      delete next.fallbackModel
+    }
+    doc.models[modelKey] = next
+    updated += 1
+  }
+
+  await writeCompactCacheDoc(doc)
+  return {
+    ok: true,
+    updated,
+    models: deepClone(doc.models || {})
+  }
+}
+
 async function getModelCompactConfig(modelInput = '') {
   const modelKey = normalizeModelKey(modelInput)
   if (!modelKey) {
@@ -1043,6 +1116,7 @@ const COMPACT_DEFAULTS = {
 
 module.exports = {
   getCompactCacheSnapshot,
+  importCompactCacheModels,
   getModelCompactConfig,
   updateModelCompactConfig,
   applyAdvancedCompactConfigToAll,

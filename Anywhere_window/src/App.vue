@@ -4436,12 +4436,16 @@ const saveSessionAsHtml = async () => {
           body { padding: 0; }
         }
       
-.timeline-node.is-compaction {
-  background: #d4a017 !important;
-  box-shadow: 0 0 0 2px rgba(212, 160, 23, 0.25);
+.timeline-node.is-compaction,
+.timeline-node.compaction {
+  background: linear-gradient(90deg, #f6c945 0%, #e0a800 100%) !important;
+  box-shadow: 0 0 6px rgba(224, 168, 0, 0.45) !important;
+  height: 3px !important;
 }
-html.dark .timeline-node.is-compaction {
-  background: #f0c14b !important;
+html.dark .timeline-node.is-compaction,
+html.dark .timeline-node.compaction {
+  background: linear-gradient(90deg, #ffd666 0%, #faad14 100%) !important;
+  box-shadow: 0 0 8px rgba(250, 173, 20, 0.5) !important;
 }
 </style>
     `;
@@ -9479,9 +9483,9 @@ html.dark .app-container {
   }
 
   &.compaction {
-    background: rgba(224, 168, 0, 0.2);
+    background: linear-gradient(90deg, #f6c945 0%, #e0a800 100%);
     height: 3px;
-    box-shadow: 0 0 6px rgba(224, 168, 0, 0.2);
+    box-shadow: 0 0 6px rgba(224, 168, 0, 0.45);
   }
 
   &.active {
@@ -9539,6 +9543,11 @@ html.dark {
 
   .timeline-node.assistant {
     background: rgba(255, 255, 255, 0.96);
+  }
+
+  .timeline-node.compaction {
+    background: linear-gradient(90deg, #ffd666 0%, #faad14 100%);
+    box-shadow: 0 0 8px rgba(250, 173, 20, 0.5);
   }
 
   .node-tooltip {

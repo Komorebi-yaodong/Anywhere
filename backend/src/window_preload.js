@@ -498,6 +498,9 @@ window.api = {
     getCompactCache: async () => {
         return getCompactModule().getCompactCacheSnapshot();
     },
+    importCompactCache: async (models = {}) => {
+        return getCompactModule().importCompactCacheModels(models);
+    },
     getModelCompactConfig: async (modelInput = '') => {
         return getCompactModule().getModelCompactConfig(modelInput);
     },

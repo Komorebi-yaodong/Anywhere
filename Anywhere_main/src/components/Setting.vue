@@ -187,6 +187,20 @@ async function exportConfig() {
       }
     }
 
+    if (window.api && window.api.getCompactCache) {
+      try {
+        const compactCache = await window.api.getCompactCache();
+        const models = compactCache?.models && typeof compactCache.models === 'object'
+          ? compactCache.models
+          : null;
+        if (models && Object.keys(models).length > 0) {
+          configToExport.compactCache = { models };
+        }
+      } catch (error) {
+        console.warn('[exportConfig] compact cache export skipped:', error);
+      }
+    }
+
     const jsonString = JSON.stringify(configToExport, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -234,6 +248,14 @@ function importConfig() {
           if (importedData.memories && window.api && window.api.importMemoryData) {
             await window.api.importMemoryData(importedData.memories);
             delete importedData.memories;
+          }
+
+          if (importedData.compactCache && window.api && window.api.importCompactCache) {
+            const compactModels = importedData.compactCache?.models && typeof importedData.compactCache.models === 'object'
+              ? importedData.compactCache.models
+              : (typeof importedData.compactCache === 'object' ? importedData.compactCache : {});
+            await window.api.importCompactCache(compactModels);
+            delete importedData.compactCache;
           }
 
           if (window.api && window.api.updateConfig) {
@@ -408,6 +430,20 @@ async function backupToWebdav() {
               }
             }
 
+            if (window.api && window.api.getCompactCache) {
+              try {
+                const compactCache = await window.api.getCompactCache();
+                const models = compactCache?.models && typeof compactCache.models === 'object'
+                  ? compactCache.models
+                  : null;
+                if (models && Object.keys(models).length > 0) {
+                  configToBackup.compactCache = { models };
+                }
+              } catch (error) {
+                console.warn('[backupToWebdav] compact cache export skipped:', error);
+              }
+            }
+
             const jsonString = JSON.stringify(configToBackup, null, 2);
             await client.putFileContents(remoteFilePath, jsonString, { overwrite: true });
 
@@ -526,6 +562,14 @@ async function restoreFromWebdav(file) {
     if (importedData.memories && window.api && window.api.importMemoryData) {
       await window.api.importMemoryData(importedData.memories);
       delete importedData.memories;
+    }
+
+    if (importedData.compactCache && window.api && window.api.importCompactCache) {
+      const compactModels = importedData.compactCache?.models && typeof importedData.compactCache.models === 'object'
+        ? importedData.compactCache.models
+        : (typeof importedData.compactCache === 'object' ? importedData.compactCache : {});
+      await window.api.importCompactCache(compactModels);
+      delete importedData.compactCache;
     }
 
     if (window.api && window.api.updateConfig) {
