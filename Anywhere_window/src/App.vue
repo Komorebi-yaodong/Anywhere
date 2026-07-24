@@ -6678,6 +6678,12 @@ const runConversationCompact = async ({
   compacting.value = true;
   compactProgress.value = { percent: 2, message: '准备级联压缩…', stage: 'prepare' };
   compactAbortController = new AbortController();
+  // 发送区仅 loading 时用户不易感知原因；气泡提示当前在做会话压缩
+  showDismissibleMessage({
+    message: manual ? '正在进行会话压缩，请稍候…' : '上下文将超限，正在自动压缩会话…',
+    type: 'info',
+    duration: 2500
+  });
 
   try {
     // 无层数上限：每步将超阈值前缀有损压成单条 summary，直到低于阈值、无前缀或用户取消
