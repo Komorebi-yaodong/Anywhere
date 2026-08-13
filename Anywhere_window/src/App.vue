@@ -6772,6 +6772,9 @@ const getOutermostCompactionIndexIn = (list = []) => {
   return -1;
 };
 
+// This computed intentionally depends only on list structure and message roles. Streaming updates
+// mutate the last message content, so Vue keeps this projection cached instead of re-scanning history.
+
 const renderedChatMessages = computed(() => {
   const messages = Array.isArray(chat_show.value) ? chat_show.value : [];
   const outermostIndex = compactConfig.value.hideCompactedMessages === false
@@ -7420,6 +7423,7 @@ const askAI = async (forceSend = false) => {
   const apiType = currentProviderConfig?.apiType || 'chat_completions';
 
   let currentAssistantChatShowIndex = -1;
+  let cancelPendingStreamingDisplay = null;
 
   try {
     // --- 3. 开始工具调用循环 ---
@@ -7569,6 +7573,7 @@ const askAI = async (forceSend = false) => {
         let aggregatedExtraContent = null;
         let aggregatedUsage = null;
         let lastUpdateTime = Date.now();
+        let streamingDisplayRafId = null;
 
         const responsesItemIdToIndexMap = new Map();
 
@@ -7586,6 +7591,20 @@ const askAI = async (forceSend = false) => {
           }
           lastUpdateTime = Date.now();
           syncStickyScrollAfterRender();
+        };
+
+        // Receive every chunk immediately, but merge expensive Vue/Markdown/layout work into one frame.
+        const cancelScheduledStreamingDisplay = () => {
+          if (streamingDisplayRafId !== null) cancelAnimationFrame(streamingDisplayRafId);
+          streamingDisplayRafId = null;
+        };
+        cancelPendingStreamingDisplay = cancelScheduledStreamingDisplay;
+        const scheduleStreamingDisplay = () => {
+          if (streamingDisplayRafId !== null) return;
+          streamingDisplayRafId = requestAnimationFrame(() => {
+            streamingDisplayRafId = null;
+            flushStreamingDisplay();
+          });
         };
 
 
@@ -7703,16 +7722,18 @@ const askAI = async (forceSend = false) => {
           }
 
           if (Date.now() - lastUpdateTime > throttleDelay) {
-            flushStreamingDisplay();
+            scheduleStreamingDisplay();
           }
         }
 
         if (isTurnAborted()) {
+          cancelScheduledStreamingDisplay();
           if (isCurrentAssistantTurn()) {
             flushStreamingDisplay(true);
           }
           throw createAbortError();
         }
+        cancelScheduledStreamingDisplay();
         flushStreamingDisplay(true);
 
         let finalContentForHistory = null;
@@ -8058,6 +8079,9 @@ const askAI = async (forceSend = false) => {
       }
     }
   } catch (error) {
+    // A queued frame must never overwrite the cancellation/error terminal state.
+    cancelPendingStreamingDisplay?.();
+    cancelPendingStreamingDisplay = null;
     const aborted = isAbortError(error);
     const staleTurn = !isCurrentAssistantTurn();
     if (staleTurn) {
@@ -8103,6 +8127,8 @@ const askAI = async (forceSend = false) => {
     scheduleAutoSave({ reason: aborted ? 'assistant-cancelled-error' : 'assistant-error', immediate: true });
 
   } finally {
+    cancelPendingStreamingDisplay?.();
+    cancelPendingStreamingDisplay = null;
     const stillOwnsTurn = activeAssistantTurnMeta === turnMeta;
     const stillOwnsSignal = signalController.value === requestAbortController;
     if (stillOwnsTurn || stillOwnsSignal) {
@@ -8529,11 +8555,18 @@ const handleGlobalKeyDown = (event) => {
   }
 };
 
-const navMessages = computed(() => {
-  return chat_show.value
-    .map((msg, index) => ({ ...msg, originalIndex: index })) // 保留原始索引用于跳转
-    .filter(msg => msg.role !== 'system');
-});
+// Reuse the visible-message projection so hidden compacted history also leaves the
+// navigation DOM. Keep original chat_show indexes for edit/delete/navigation compatibility.
+const navMessages = computed(() => renderedChatMessages.value
+  .filter(({ message }) => message?.role && message.role !== 'system')
+  .map(({ message, index }) => ({
+    id: message.id,
+    role: message.role,
+    message,
+    originalIndex: index,
+    navKind: message.role === 'compaction' ? 'compaction' : 'normal'
+  }))
+);
 
 
 
@@ -8653,7 +8686,7 @@ const scrollToMessageByIndex = (index) => {
           <div class="nav-timeline-area">
             <div class="timeline-track"></div>
             <div ref="navTimelineScrollerRef" class="timeline-scroller no-scrollbar">
-              <el-tooltip v-for="msg in navMessages" :key="msg.id" :content="getMessagePreviewText(msg)" placement="left"
+              <el-tooltip v-for="msg in navMessages" :key="msg.id" :content="getMessagePreviewText(msg.message)" placement="left"
                 :show-after="160" :enterable="false" effect="dark" popper-class="nav-message-tooltip">
                 <div class="timeline-node-wrapper" :data-original-index="msg.originalIndex"
                   @click="scrollToMessageByIndex(msg.originalIndex)">
