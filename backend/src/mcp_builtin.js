@@ -8,6 +8,7 @@ const { exec, spawn } = require('child_process');
 const { handleFilePath, parseFileObject } = require('./file.js');
 
 const { createChatCompletion } = require('./chat.js');
+const { setCurrentTaskDeviceEnabled } = require('./task_devices.js');
 
 const isWin = process.platform === 'win32';
 const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform === 'darwin' ? 'macOS' : 'Linux');
@@ -3620,6 +3621,7 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
                 singleDate: single_date || new Date().toISOString().split('T')[0],
                 singleTime: '12:00',
             };
+            setCurrentTaskDeviceEnabled(newTask, enabled === true);
 
             if (interval_time_ranges && Array.isArray(interval_time_ranges)) {
                 newTask.intervalTimeRanges = interval_time_ranges.map(r => r.split('-')).filter(r => r.length === 2);
@@ -3811,10 +3813,10 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
 
             if (!targetId) return `Error: Task "${task_name_or_id}" not found.`;
 
-            tasks[targetId].enabled = enable;
+            setCurrentTaskDeviceEnabled(tasks[targetId], enable === true);
 
             // Reset last run time if enabling, so it doesn't trigger immediately if missed
-            if (enable) {
+            if (tasks[targetId].enabled) {
                 tasks[targetId].lastRunTime = Date.now();
             }
 

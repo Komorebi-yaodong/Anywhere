@@ -2,6 +2,15 @@ const { webFrame, nativeImage } = require('electron');
 const crypto = require('crypto');
 
 const windowMap = new Map();
+
+const {
+  getCurrentTaskDevice,
+  reconcileTaskDeviceStates,
+  removeTaskAppliedDevice,
+  serializeTasksForSharedStorage,
+  setCurrentTaskDeviceEnabled,
+} = require('./task_devices.js');
+
 const feature_suffix = "anywhere助手^_^"
 
 function getLazyRuntime() {
@@ -263,7 +272,7 @@ function splitConfigForStorage(fullConfig) {
     promptsPart: prompts,
     providersPart: providers,
     mcpServersPart: mcpServers,
-    tasksPart: tasks || {},
+    tasksPart: serializeTasksForSharedStorage(tasks),
     localConfigPart: localConfigPart
   };
 }
@@ -370,6 +379,17 @@ async function getConfig() {
   fullConfigData.config.prompts = promptsDoc ? promptsDoc.data : defaultConfig.config.prompts;
   fullConfigData.config.providers = providersDoc ? providersDoc.data : defaultConfig.config.providers;
   fullConfigData.config.tasks = tasksDoc ? tasksDoc.data : (defaultConfig.config.tasks || {});
+
+  const taskDeviceReconcile = reconcileTaskDeviceStates(fullConfigData.config.tasks);
+  const sharedTasks = serializeTasksForSharedStorage(fullConfigData.config.tasks);
+  if (taskDeviceReconcile.changed || JSON.stringify(tasksDoc?.data || {}) !== JSON.stringify(sharedTasks)) {
+    const tasksDocForWrite = await utools.db.promises.get("tasks");
+    await utools.db.promises.put({
+      _id: "tasks",
+      data: sharedTasks,
+      _rev: tasksDocForWrite ? tasksDocForWrite._rev : undefined
+    });
+  }
 
   // 注入本地路径 (再次确保安全性)
   const currentLocalData = (localDoc && localDoc.data) ? localDoc.data : {};
@@ -852,6 +872,7 @@ async function updateConfigWithoutFeatures(newConfig) {
   await putChecked(localId, localConfigPart);
 
   const fullConfigForFrontend = JSON.parse(JSON.stringify(newConfig.config));
+  reconcileTaskDeviceStates(fullConfigForFrontend.tasks);
   for (const windowInstance of windowMap.values()) {
     if (!windowInstance.isDestroyed()) {
       windowInstance.webContents.send('config-updated', fullConfigForFrontend);
@@ -1871,6 +1892,38 @@ function broadcastEvent(channel, payload) {
   }
 }
 
+function getTaskDeviceIdentity() {
+  return getCurrentTaskDevice();
+}
+
+async function setTaskDeviceEnabled(taskId = '', enabled = false) {
+  const normalizedTaskId = typeof taskId === 'string' ? taskId.trim() : '';
+  if (!normalizedTaskId) throw new Error('task_id_required');
+
+  const configResult = await getConfig();
+  const config = configResult?.config || {};
+  const task = config?.tasks?.[normalizedTaskId];
+  if (!task || typeof task !== 'object') throw new Error('task_not_found');
+
+  setCurrentTaskDeviceEnabled(task, enabled === true);
+  if (task.enabled) task.lastRunTime = Date.now();
+  return await updateConfigWithoutFeatures({ config });
+}
+
+async function removeTaskAppliedDeviceForCurrentConfig(taskId = '', device = {}) {
+  const normalizedTaskId = typeof taskId === 'string' ? taskId.trim() : '';
+  if (!normalizedTaskId) throw new Error('task_id_required');
+
+  const configResult = await getConfig();
+  const config = configResult?.config || {};
+  const task = config?.tasks?.[normalizedTaskId];
+  if (!task || typeof task !== 'object') throw new Error('task_not_found');
+
+  removeTaskAppliedDevice(task, device);
+  return await updateConfigWithoutFeatures({ config });
+}
+
+
 async function addTaskHistory(taskId, logEntry) {
   let doc = await utools.db.promises.get("tasks");
   if (doc && doc.data && doc.data[taskId]) {
@@ -1922,6 +1975,9 @@ module.exports = {
   updateConfig,
   saveSetting,
   updateConfigWithoutFeatures,
+  getTaskDeviceIdentity,
+  setTaskDeviceEnabled,
+  removeTaskAppliedDeviceForCurrentConfig,
   savePromptWindowSettings,
   getUser,
   copyText,

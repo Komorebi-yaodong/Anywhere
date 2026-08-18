@@ -1,4 +1,5 @@
 const { createChatCompletion, getRandomItem, batchTestProviderKeys } = require('./chat.js');
+const { reconcileTaskDeviceState, setCurrentTaskDeviceEnabled } = require('./task_devices.js');
 
 const {
   getConfig,
@@ -21,6 +22,9 @@ const {
   exportMemoryData,
   importMemoryData,
   resolveDefaultAssistantModel,
+  getTaskDeviceIdentity,
+  setTaskDeviceEnabled,
+  removeTaskAppliedDeviceForCurrentConfig,
 } = require('./data.js');
 
 const {
@@ -93,6 +97,9 @@ const {
 
 window.api = {
   getConfig,
+  getTaskDeviceIdentity,
+  setTaskDeviceEnabled,
+  removeTaskAppliedDevice: removeTaskAppliedDeviceForCurrentConfig,
   updateConfig,
   saveSetting,
   updateConfigWithoutFeatures,
@@ -400,6 +407,7 @@ window.api = {
     const tasks = configResult.config.tasks || {};
     const task = tasks[taskId];
     if (!task) return false;
+    if (!reconcileTaskDeviceState(task).enabled) return false;
 
     const windowConfig = JSON.parse(JSON.stringify(configResult.config));
 
@@ -963,6 +971,9 @@ async function checkScheduledTasks() {
 
     for (const taskId in tasks) {
       const task = tasks[taskId];
+      const deviceState = reconcileTaskDeviceState(task);
+      if (!deviceState.enabled) continue;
+      needsUpdate = needsUpdate || deviceState.changed;
       const now = Date.now();
       const nowDate = new Date(now);
       const slotKey = getDueTaskRunSlotKey(taskId, task, now, nowDate);
@@ -979,7 +990,7 @@ async function checkScheduledTasks() {
         task.lastRunTime = completedAt;
         task.lastRunSlotKey = slotKey;
         if (task.triggerType === 'single') {
-          task.enabled = false;
+          setCurrentTaskDeviceEnabled(task, false);
         }
         processedTaskRunSlots.set(slotKey, completedAt);
         needsUpdate = true;
