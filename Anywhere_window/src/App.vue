@@ -3428,8 +3428,7 @@ const generateSuggestedConversationBasename = async ({
   return resolveUniqueConversationFileName(generatedBaseTitle, uniqueDirPath);
 };
 
-const renderFilenameAutoNamingButton = ({ canUseAutoNaming = false, isAutoNaming, onClick }) => {
-  if (!canUseAutoNaming) return null;
+const renderFilenameAutoNamingButton = ({ isAutoNaming, onClick }) => {
   return h(ElButton, {
     class: 'filename-auto-name-button',
     size: 'small',
@@ -3439,18 +3438,19 @@ const renderFilenameAutoNamingButton = ({ canUseAutoNaming = false, isAutoNaming
   }, () => isAutoNaming?.value ? '命名中...' : '自动命名');
 };
 
-const renderFilenamePromptTitleRow = ({ text = '请输入文件名。', canUseAutoNaming = false, isAutoNaming, onClick }) => h(
+const renderFilenamePromptTitleRow = ({ text = '请输入文件名。', isAutoNaming, onClick }) => h(
   'div',
   { class: 'filename-prompt-title-row' },
   [
     h('p', { class: 'filename-prompt-title-text' }, text),
-    renderFilenameAutoNamingButton({ canUseAutoNaming, isAutoNaming, onClick })
+    renderFilenameAutoNamingButton({ isAutoNaming, onClick })
   ].filter(Boolean)
 );
 
 const createManualAutoNamingHandler = ({ inputValue, isAutoNaming, uniqueDirPath = '', fallbackBasename = '' }) => async () => {
   if (isAutoNaming.value) return;
   isAutoNaming.value = true;
+  const hasFastModel = isConfiguredFastModelAvailable(currentConfig.value?.defaultFastModel);
   try {
     const generatedName = await generateSuggestedConversationBasename({
       uniqueDirPath,
@@ -3459,6 +3459,9 @@ const createManualAutoNamingHandler = ({ inputValue, isAutoNaming, uniqueDirPath
     const nextName = sanitizeConversationTitlePart(generatedName || fallbackBasename || CODE.value || 'AI', 80);
     if (nextName) {
       inputValue.value = nextName;
+      if (!hasFastModel) {
+        showDismissibleMessage.warning('未配置可用的默认快速模型，已使用本地规则生成名称');
+      }
     } else {
       showDismissibleMessage.warning('当前对话内容不足，无法自动命名');
     }
@@ -4004,7 +4007,6 @@ const saveSessionToCloud = async () => {
   const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
   const isAutoNaming = ref(false);
-  const canUseAutoNaming = isConfiguredFastModelAvailable(currentConfig.value?.defaultFastModel);
   const handleManualAutoNaming = createManualAutoNamingHandler({
     inputValue,
     isAutoNaming,
@@ -4019,7 +4021,6 @@ const saveSessionToCloud = async () => {
       message: () => h('div', null, [
         renderFilenamePromptTitleRow({
           text: '请输入要保存到云端的会话名称。',
-          canUseAutoNaming,
           isAutoNaming,
           onClick: handleManualAutoNaming
         }),
@@ -4166,11 +4167,22 @@ const saveSessionAsMarkdown = async () => {
   }
 
   const inputValue = ref(defaultBasename);
+  const isAutoNaming = ref(false);
+  const handleManualAutoNaming = createManualAutoNamingHandler({
+    inputValue,
+    uniqueDirPath: currentConfig.value?.webdav?.localChatPath || '',
+    isAutoNaming,
+    fallbackBasename: defaultBasename
+  });
   try {
     await ElMessageBox({
       title: '保存为 Markdown',
       message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入文件名。'),
+        renderFilenamePromptTitleRow({
+          text: '请输入文件名。',
+          isAutoNaming,
+          onClick: handleManualAutoNaming
+        }),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
@@ -4216,6 +4228,13 @@ const saveSessionAsHtml = async () => {
   const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
   const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
   const inputValue = ref(defaultBasename);
+  const isAutoNaming = ref(false);
+  const handleManualAutoNaming = createManualAutoNamingHandler({
+    inputValue,
+    uniqueDirPath: currentConfig.value?.webdav?.localChatPath || '',
+    isAutoNaming,
+    fallbackBasename: defaultBasename
+  });
 
   const defaultAiSvg = `<svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#FDA5A5" /><g stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="25" y="32" width="50" height="42" rx="8" /><line x1="40" y1="63" x2="60" y2="63" /><line x1="35" y1="32" x2="32" y2="22" /><line x1="65" y1="32" x2="68" y2="22" /></g><g fill="white" stroke="none"><circle cx="40" cy="48" r="3.5" /><circle cx="60" cy="48" r="3.5" /><circle cx="32" cy="20" r="3" /><circle cx="68" cy="20" r="3" /></g></svg>`;
 
@@ -4575,7 +4594,11 @@ html.dark .timeline-node.compaction {
     await ElMessageBox({
       title: '保存为 HTML',
       message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入文件名。'),
+        renderFilenamePromptTitleRow({
+          text: '请输入文件名。',
+          isAutoNaming,
+          onClick: handleManualAutoNaming
+        }),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
@@ -4633,7 +4656,6 @@ const saveSessionAsJson = async () => {
   const defaultBasename = defaultConversationName.value || buildConversationTimestampedBasename(CODE.value || 'AI', { force: false, includeCode: false });
   const inputValue = ref(defaultBasename);
   const isAutoNaming = ref(false);
-  const canUseAutoNaming = isConfiguredFastModelAvailable(currentConfig.value?.defaultFastModel);
   const handleManualAutoNaming = createManualAutoNamingHandler({
     inputValue,
     isAutoNaming,
@@ -4644,11 +4666,10 @@ const saveSessionAsJson = async () => {
   const selectedProjectId = ref(findProjectIdByFilename(projectsData, `${defaultBasename}.json`));
   try {
     await ElMessageBox({
-      title: '保存为 JSON',
+      title: '保存到本地',
       message: () => h('div', null, [
         renderFilenamePromptTitleRow({
           text: '请输入文件名。',
-          canUseAutoNaming,
           isAutoNaming,
           onClick: handleManualAutoNaming
         }),
@@ -4789,6 +4810,14 @@ const handleRenameSession = async () => {
   // 简单拼接路径，electron/node 环境下通常能正确处理
   const oldFilePath = `${localPath}/${oldFilename}`;
   const inputValue = ref(oldBaseName);
+  const isAutoNaming = ref(false);
+  const handleManualAutoNaming = createManualAutoNamingHandler({
+    inputValue,
+    uniqueDirPath: localPath,
+    isAutoNaming,
+    fallbackBasename: oldBaseName
+  });
+
   const projectsData = await loadProjectsForScope('local');
   const originalProjectId = findProjectIdByFilename(projectsData, oldFilename);
   const selectedProjectId = ref(originalProjectId);
@@ -4799,9 +4828,8 @@ const handleRenameSession = async () => {
       message: () => h('div', null, [
         renderFilenamePromptTitleRow({
           text: '请输入新的会话名称',
-          canUseAutoNaming: false,
-          isAutoNaming: null,
-          onClick: null
+          isAutoNaming,
+          onClick: handleManualAutoNaming
         }),
         h(ElInput, {
           modelValue: inputValue.value,
@@ -4944,12 +4972,23 @@ const saveSessionAsImage = async () => {
   const fileTimestamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
   const defaultBasename = defaultConversationName.value || `${CODE.value || 'AI'}-${fileTimestamp}`;
   const inputValue = ref(defaultBasename);
+  const isAutoNaming = ref(false);
+  const handleManualAutoNaming = createManualAutoNamingHandler({
+    inputValue,
+    uniqueDirPath: currentConfig.value?.webdav?.localChatPath || '',
+    isAutoNaming,
+    fallbackBasename: defaultBasename
+  });
 
   try {
     await ElMessageBox({
       title: '保存为图片',
       message: () => h('div', null, [
-        h('p', { style: 'margin-bottom: 15px; font-size: 14px; color: var(--el-text-color-regular);' }, '请输入文件名。'),
+        renderFilenamePromptTitleRow({
+          text: '请输入文件名。',
+          isAutoNaming,
+          onClick: handleManualAutoNaming
+        }),
         h(ElInput, {
           modelValue: inputValue.value,
           'onUpdate:modelValue': (val) => { inputValue.value = val; },
@@ -5158,51 +5197,59 @@ const saveSessionAsImage = async () => {
 const handleSaveAction = async () => {
   if (autoCloseOnBlur.value) handleTogglePin();
   const isCloudEnabled = currentConfig.value.webdav?.url && currentConfig.value.webdav?.data_path;
-  const saveOptions = [];
-
-  // 只有当已存在本地文件名（即已保存过）且配置了本地路径时，才显示重命名选项；请求中继续禁用重命名，避免路径竞态。
-  if (currentConfig.value.webdav?.localChatPath && defaultConversationName.value) {
-    saveOptions.push({
-      title: '重命名对话',
+  const saveOptions = [
+    {
+      title: '重新命名',
       description: loading.value
-        ? '当前 AI 仍在回复中，请等待本轮回复结束后再重命名，避免与自动保存路径产生竞态。'
-        : '修改当前对话名称，并同步修改本地文件（以及云端文件）。',
-      buttonType: 'warning',
+        ? '当前 AI 仍在回复中，请等待本轮回复结束后再重命名。'
+        : defaultConversationName.value
+          ? '修改当前会话名称和项目归属。'
+          : '请先保存到本地后再重命名。',
       action: handleRenameSession,
-      disabled: loading.value
-    });
-  }
+      disabled: loading.value || !defaultConversationName.value,
+      wide: true
+    },
+    {
+      title: '保存到云端',
+      description: isCloudEnabled ? '将当前会话同步到云端，支持跨设备访问。' : '请先在设置中配置 WebDAV。',
+      action: saveSessionToCloud,
+      disabled: !isCloudEnabled,
+      primary: true
+    },
+    {
+      title: '保存到本地',
+      description: '将当前会话保存到本地历史记录。',
+      action: saveSessionAsJson,
+      primary: true
+    },
+    { title: '保存为 Markdown', description: '导出为可读性更强的 .md 文件。', action: saveSessionAsMarkdown },
+    { title: '保存为 HTML', description: '导出带样式的网页文件。', action: saveSessionAsHtml },
+    { title: '保存为图片', description: '将完整聊天记录导出为长图。', action: saveSessionAsImage }
+  ];
 
-  if (isCloudEnabled) {
-    saveOptions.push({ title: '保存到云端', description: '同步到 WebDAV 服务器，支持跨设备访问。', buttonType: 'success', action: saveSessionToCloud });
-  }
-
-  saveOptions.push({ title: '保存为 JSON', description: '保存为可恢复的会話文件，便于下次继续。', buttonType: 'primary', action: saveSessionAsJson, isDefault: true });
-  saveOptions.push({ title: '保存为 Markdown', description: '导出为可读性更强的 .md 文件，适合分享。', buttonType: '', action: saveSessionAsMarkdown });
-  saveOptions.push({ title: '保存为 HTML', description: '导出为带样式的网页文件，保留格式和图片。', buttonType: '', action: saveSessionAsHtml });
-  saveOptions.push({ title: '保存为 图片', description: '将完整聊天记录保存为长图 (.png)。', buttonType: '', action: saveSessionAsImage });
-
-  const messageVNode = h('div', { class: 'save-options-list' }, saveOptions.map(opt => {
+  const messageVNode = h('div', { class: 'save-options-list' }, saveOptions.map((opt, index) => {
     const trigger = () => {
       if (opt.disabled) return;
       ElMessageBox.close();
-      opt.action();
+      void opt.action();
     };
-
     return h('div', {
-      class: ['save-option-item', opt.disabled ? 'is-disabled' : ''],
-      onClick: trigger
+      class: ['save-option-item', opt.wide ? 'is-wide' : '', opt.primary ? 'is-primary' : '', opt.disabled ? 'is-disabled' : ''],
+      role: 'button',
+      tabindex: opt.disabled ? -1 : 0,
+      'aria-disabled': String(Boolean(opt.disabled)),
+      onClick: trigger,
+      onKeydown: (event) => {
+        if (!opt.disabled && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          trigger();
+        }
+      }
     }, [
       h('div', { class: 'save-option-text' }, [
-        h('h4', null, opt.title), h('p', null, opt.description)
-      ]),
-      h(ElButton, {
-        type: opt.buttonType,
-        plain: true,
-        disabled: Boolean(opt.disabled),
-        class: opt.isDefault ? 'default-save-target' : '',
-        onClick: (e) => { e.stopPropagation(); trigger(); }
-      }, { default: () => '选择' })
+        h('h4', null, opt.title),
+        h('p', null, opt.description)
+      ])
     ]);
   }));
 
@@ -5212,15 +5259,12 @@ const handleSaveAction = async () => {
     showConfirmButton: false,
     showCancelButton: false,
     customClass: 'save-options-dialog no-header-msgbox',
-    width: '450px',
-    showClose: false
+    width: '410px',
+    showClose: true
   }).catch(() => { });
 
   setTimeout(() => {
-    const targetBtn = document.querySelector('.default-save-target');
-    if (targetBtn) {
-      targetBtn.focus();
-    }
+    document.querySelector('.save-option-item[tabindex="0"]')?.focus();
   }, 100);
 };
 
@@ -9104,56 +9148,57 @@ html.dark .el-dialog {
 }
 
 .save-options-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  padding: 10px 0 0 20px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 2px 0;
   margin: 0;
 }
 
 .save-option-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 15px 20px;
+  min-height: 94px;
+  padding: 18px 16px;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: var(--el-border-radius-base);
+  border-radius: 5px;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  outline: none;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.save-option-item:hover {
-  transform: scale(1.02);
+.save-option-item.is-wide {
+  grid-column: 1 / -1;
+  min-height: auto;
+}
+
+.save-option-item:hover,
+.save-option-item:focus-visible {
   border-color: var(--el-color-primary);
+  background-color: var(--el-fill-color-light);
   box-shadow: var(--el-box-shadow-light);
 }
 
 .save-option-item.is-disabled {
   cursor: not-allowed;
-  opacity: 0.68;
+  opacity: 0.65;
 }
 
 .save-option-item.is-disabled:hover {
-  transform: none;
   border-color: var(--el-border-color-lighter);
+  background-color: transparent;
   box-shadow: none;
-}
-
-.save-option-text {
-  flex-grow: 1;
-  margin-right: 20px;
 }
 
 .save-option-text h4 {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--el-text-color-primary);
 }
 
 .save-option-text p {
-  margin: 4px 0 0 0;
-  font-size: 12px;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.65;
   color: var(--el-text-color-secondary);
 }
 
@@ -9161,7 +9206,8 @@ html.dark .save-option-item {
   border-color: var(--el-border-color-dark);
 }
 
-html.dark .save-option-item:hover {
+html.dark .save-option-item:hover,
+html.dark .save-option-item:focus-visible {
   border-color: var(--el-color-primary);
   background-color: var(--el-fill-color-dark);
 }
@@ -9173,6 +9219,16 @@ html.dark .save-option-item.is-disabled:hover {
 
 html.dark .save-option-text p {
   color: var(--el-text-color-regular);
+}
+
+@media (max-width: 460px) {
+  .save-options-list {
+    grid-template-columns: 1fr;
+  }
+
+  .save-option-item.is-wide {
+    grid-column: auto;
+  }
 }
 
 /* System Prompt Dialog */
