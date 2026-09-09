@@ -685,7 +685,7 @@ const onCopy = () => {
   if (props.isLoading && props.isLastMessage) return;
   emit('copy-text', formatMessageText(props.message.content), props.index);
 };
-const onReAsk = () => emit('re-ask');
+const onReAsk = () => emit('re-ask', props.message?.id);
 const onDelete = () => emit('delete-message', props.index);
 const onToggleCollapse = (event) => emit('toggle-collapse', props.index, event);
 const onAvatarClick = (role, event) => emit('avatar-click', role, event);
