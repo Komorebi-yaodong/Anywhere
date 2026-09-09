@@ -843,6 +843,9 @@ const currentImageViewerIndex = ref(0);
 
 const toolCallControllers = ref(new Map());
 let activeAssistantTurnMeta = null;
+// Must be initialized before reask/buffer guards and MCP completion watchers reference it.
+const isMcpLoading = ref(false);
+let isFlushingAppendBuffer = false;
 let isReasking = false;
 const tempSessionMcpServerIds = ref([]);
 
@@ -1050,7 +1053,6 @@ const pendingChoices = ref(new Map());
 const taskList = ref([]);
 const taskPanelVisible = ref(false);
 const pendingAppendBuffer = ref([]);
-let isFlushingAppendBuffer = false;
 const BETTERWORK_FRONTEND_TOOLS = new Set(['ask_user_choice', 'task_write', 'task_read']);
 
 const resolvePendingChoices = (payload = null) => {
@@ -1174,7 +1176,6 @@ const isMcpDialogVisible = ref(false);
 const sessionMcpServerIds = ref([]);
 const openaiFormattedTools = ref([]);
 const mcpSearchQuery = ref('');
-const isMcpLoading = ref(false);
 const mcpFilter = ref('all');
 const isRefreshingMcp = ref(false);
 const mcpToolCache = ref({});
