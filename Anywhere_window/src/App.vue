@@ -1363,6 +1363,10 @@ const filteredMcpServers = computed(() => {
     servers = servers.filter(server => tempSessionMcpServerIds.value.includes(server.id));
   } else if (mcpFilter.value === 'unselected') {
     servers = servers.filter(server => !tempSessionMcpServerIds.value.includes(server.id));
+  } else if (mcpFilter.value === 'preset') {
+    const presetMcpServerIds = currentConfig.value?.prompts?.[CODE.value]?.defaultMcpServers;
+    const presetMcpServerIdSet = new Set(Array.isArray(presetMcpServerIds) ? presetMcpServerIds : []);
+    servers = servers.filter(server => presetMcpServerIdSet.has(server.id));
   }
   if (mcpSearchQuery.value) {
     const query = mcpSearchQuery.value.toLowerCase();
@@ -8878,6 +8882,8 @@ const scrollToMessageByIndex = (index) => {
             @click="mcpFilter = 'selected'">已选</span>
           <span class="filter-tag" :class="{ active: mcpFilter === 'unselected' }"
             @click="mcpFilter = 'unselected'">未选</span>
+          <span class="filter-tag" :class="{ active: mcpFilter === 'preset' }"
+            @click="mcpFilter = 'preset'">预设</span>
         </div>
         <div class="action-tags">
           <span class="action-tag" @click="refreshSelectedMcpServers" title="强制重新拉取选中服务的最新工具配置">
