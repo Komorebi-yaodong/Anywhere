@@ -107,6 +107,51 @@ async function callParentShell(action, payload, signal = null) {
 
 const MAX_READ = 128 * 1000; // 128k characters
 
+
+const MAX_VIEW_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_VIEW_IMAGE_PIXELS = 24 * 1024 * 1024;
+
+function inspectViewableImage(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 10) return null;
+    if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && buffer.length >= 24) {
+        return { mimeType: 'image/png', format: 'PNG', width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+    }
+    const gifHeader = buffer.subarray(0, 6).toString('ascii');
+    if ((gifHeader === 'GIF87a' || gifHeader === 'GIF89a') && buffer.length >= 10) {
+        return { mimeType: 'image/gif', format: 'GIF', width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+    }
+    if (buffer.subarray(0, 2).equals(Buffer.from([0xff, 0xd8]))) {
+        let offset = 2;
+        while (offset + 9 < buffer.length) {
+            if (buffer[offset] !== 0xff) { offset += 1; continue; }
+            const marker = buffer[offset + 1];
+            offset += 2;
+            if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+            if (offset + 2 > buffer.length) break;
+            const length = buffer.readUInt16BE(offset);
+            if (length < 7 || offset + length > buffer.length) break;
+            if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+                return { mimeType: 'image/jpeg', format: 'JPEG', height: buffer.readUInt16BE(offset + 3), width: buffer.readUInt16BE(offset + 5) };
+            }
+            offset += length;
+        }
+    }
+    if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+        const kind = buffer.subarray(12, 16).toString('ascii');
+        if (kind === 'VP8X' && buffer.length >= 30) {
+            return { mimeType: 'image/webp', format: 'WebP', width: 1 + buffer.readUIntLE(24, 3), height: 1 + buffer.readUIntLE(27, 3) };
+        }
+        if (kind === 'VP8 ' && buffer.length >= 30 && buffer[23] === 0x9d && buffer[24] === 0x01 && buffer[25] === 0x2a) {
+            return { mimeType: 'image/webp', format: 'WebP', width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff };
+        }
+        if (kind === 'VP8L' && buffer.length >= 25 && buffer[20] === 0x2f) {
+            const bits = buffer.readUInt32LE(21);
+            return { mimeType: 'image/webp', format: 'WebP', width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+        }
+    }
+    return null;
+}
+
 const subAgentTasks = new Map();
 const MAX_SUBAGENT_TASKS = 100;
 const MAX_SUBAGENT_LOG_CHARS = 1024 * 1024;
@@ -874,6 +919,19 @@ const BUILTIN_TOOLS = {
                 required: ["file_path"]
             }
         },
+        {
+            name: "view_image",
+            description: "View a local image file from the filesystem when visual inspection is needed. Use this for images already available on disk. Do not use read_file for images.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    file_path: { type: "string", description: "Absolute path to a local PNG, JPEG, WebP, or GIF image file." },
+                    detail: { type: "string", enum: ["high", "original"], description: "Optional image detail hint. Defaults to high." }
+                },
+                required: ["file_path"]
+            }
+        },
+
         {
             name: "write_file",
             description: "Create a new file or completely overwrite an existing file. CAUTION: This tool is ONLY for TEXT-BASED files (code, txt, md, json, etc.). DO NOT use this for binary or Office files (e.g., .docx, .xlsx, .pdf, .png) as it will corrupt them. BEST PRACTICE: Before overwriting an EXISTING file, call 'read_file' first to confirm its current content and avoid accidental data loss.",
@@ -1923,7 +1981,8 @@ ${userContext || 'No additional context provided.'}
 
                     const result = await invokeMcpTool(toolName, toolArgsObj, signal, null);
 
-                    if (typeof result === 'string') toolResult = result;
+                    if (result?.__anywhereToolResult === 'image') toolResult = result?.display?.text || 'Local image loaded for visual inspection.';
+                    else if (typeof result === 'string') toolResult = result;
                     else if (Array.isArray(result)) toolResult = result.map(i => i.text || JSON.stringify(i)).join('\n');
                     else toolResult = JSON.stringify(result);
 
@@ -2347,6 +2406,38 @@ ${contextBlock}
             return `Grep error: ${e.message}`;
         }
     },
+
+    // 3. View Image
+    view_image: async ({ file_path, detail } = {}, context, signal) => {
+        try {
+            if (!file_path || typeof file_path !== 'string') return 'Error: file_path is required.';
+            if (detail !== undefined && !['high', 'original'].includes(detail)) {
+                return "Error: view_image.detail only supports 'high' or 'original'.";
+            }
+            const safePath = resolvePath(file_path);
+            if (!isPathSafe(safePath)) return `[Security Block] Access to sensitive system file '${path.basename(safePath)}' is restricted.`;
+            const stats = await fs.promises.stat(safePath);
+            if (!stats.isFile()) return `Error: Image path is not a file: ${safePath}`;
+            if (stats.size > MAX_VIEW_IMAGE_BYTES) return `Error: Image is too large for visual inspection (>${MAX_VIEW_IMAGE_BYTES / 1024 / 1024}MB).`;
+            if (signal?.aborted) throw Object.assign(new Error('Operation aborted by user.'), { name: 'AbortError' });
+            const bytes = await fs.promises.readFile(safePath, { signal });
+            const image = inspectViewableImage(bytes);
+            if (!image || !image.width || !image.height) return 'Error: Unsupported or invalid image data. Supported formats: PNG, JPEG, WebP, GIF.';
+            if (image.width * image.height > MAX_VIEW_IMAGE_PIXELS) return `Error: Image dimensions exceed the ${MAX_VIEW_IMAGE_PIXELS / 1000000}MP visual inspection limit.`;
+            const displayText = `Local image loaded for visual inspection: ${path.basename(safePath)} (${image.format}, ${image.width}×${image.height}, ${(stats.size / 1024 / 1024).toFixed(2)} MB).`;
+            return {
+                __anywhereToolResult: 'image',
+                // Do not use dataUrl/base64 field names here: desktop IPC treats them as File-like
+                // values. The window rebuilds the data URL in the durable view_image chat message.
+                image: { encodedBytes: bytes.toString('base64'), mimeType: image.mimeType, detail: detail || 'high' },
+                display: { text: displayText, fileName: path.basename(safePath), format: image.format, width: image.width, height: image.height, bytes: stats.size }
+            };
+        } catch (error) {
+            if (error?.name === 'AbortError') throw error;
+            return `Error viewing image: ${error.message}`;
+        }
+    },
+
 
     // 3. Read File
     read_file: async ({ file_path, offset = 0, length = MAX_READ, start_line, end_line, show_line_numbers = true }, context, signal) => {
@@ -4154,6 +4245,9 @@ function getBuiltinTools(serverId) {
 async function invokeBuiltinTool(toolName, args, signal = null, context = null) {
     if (handlers[toolName]) {
         const result = await handlers[toolName](args, context, signal);
+        // Image payloads are intentionally left structured for the active chat turn. All other
+        // built-in tools keep the established MCP-compatible text-array return contract.
+        if (result?.__anywhereToolResult === 'image') return result;
         const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
 
         return JSON.stringify([{

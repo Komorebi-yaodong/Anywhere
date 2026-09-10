@@ -76,6 +76,8 @@ function safeParseJson(text) {
 }
 
 // OpenAI messages → { system, messages(Anthropic) }
+
+
 function convertMessagesToAnthropic(messages = []) {
     const systemParts = [];
     const result = [];
@@ -104,7 +106,7 @@ function convertMessagesToAnthropic(messages = []) {
         }
 
         if (role === 'tool') {
-            // OpenAI tool 结果 → Anthropic user 消息里的 tool_result block
+            // OpenAI tool result → Anthropic user message tool_result block.
             pushMessage('user', [{
                 type: 'tool_result',
                 tool_use_id: msg.tool_call_id,

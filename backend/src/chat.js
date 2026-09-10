@@ -243,6 +243,7 @@ function shouldIncludeAssistantReasoningContent(reasoningEffort) {
     return typeof reasoningEffort === 'string' && !['', 'default', 'none'].includes(reasoningEffort);
 }
 
+
 function normalizeMessagesForChatCompletions(messages = [], reasoningEffort) {
     if (!Array.isArray(messages)) return [];
 
@@ -309,9 +310,11 @@ function convertMessagesToResponsesInput(messages) {
                     else if (role !== 'assistant') {
                         if (item.type === 'image_url') {
                             const url = item.image_url?.url || item.image_url;
+                            const detail = item.image_url?.detail;
                             contentList.push({
                                 type: "input_image",
-                                image_url: url
+                                image_url: url,
+                                ...(typeof detail === 'string' ? { detail } : {})
                             });
                         } 
                         else if (item.type === 'file' || item.type === 'input_file') {
