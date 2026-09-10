@@ -108,6 +108,32 @@ async function callParentShell(action, payload, signal = null) {
 const MAX_READ = 128 * 1000; // 128k characters
 
 
+const MAX_SLEEP_DURATION_MS = 12 * 60 * 60 * 1000;
+
+function sleepForDuration(durationMs, signal = null) {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            const error = new Error('Sleep interrupted by active turn cancellation.');
+            error.name = 'AbortError';
+            reject(error);
+            return;
+        }
+        const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+        }, durationMs);
+        const onAbort = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            const error = new Error('Sleep interrupted by active turn cancellation.');
+            error.name = 'AbortError';
+            reject(error);
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+    });
+}
+
+
 const MAX_VIEW_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_VIEW_IMAGE_PIXELS = 24 * 1024 * 1024;
 
@@ -1025,6 +1051,18 @@ IMPORTANT:
                 required: ["command"]
             }
         },
+        {
+            name: "sleep",
+            description: "Pause execution for a specified duration. The sleep ends early if the active turn is cancelled. Returns the elapsed wall-clock time.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    duration_ms: { type: "integer", minimum: 1, maximum: 43200000, description: "How long to sleep in milliseconds. Must be between 1 and 43200000." }
+                },
+                required: ["duration_ms"]
+            }
+        },
+
         {
             name: "list_background_shells",
             description: "List all currently running background shell processes started by this agent's tool.",
@@ -2804,6 +2842,18 @@ ${contextBlock}
     },
 
     // Bash / PowerShell
+
+    // Sleep (Codex-compatible timer; intentionally does not spawn a shell process)
+    sleep: async ({ duration_ms } = {}, context, signal) => {
+        if (!Number.isInteger(duration_ms) || duration_ms < 1 || duration_ms > MAX_SLEEP_DURATION_MS) {
+            return `Error: duration_ms must be an integer between 1 and ${MAX_SLEEP_DURATION_MS}.`;
+        }
+        const startedAt = Date.now();
+        await sleepForDuration(duration_ms, signal);
+        const wallTimeSeconds = (Date.now() - startedAt) / 1000;
+        return `Wall time: ${wallTimeSeconds.toFixed(4)} seconds\nSleep completed.`;
+    },
+
     execute_bash_command: async ({ command, background = false, timeout = 15000 }, context, signal) => {
         const trimmedCmd = command.trim();
 
