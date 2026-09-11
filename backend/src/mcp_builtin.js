@@ -1844,12 +1844,21 @@ const runPythonScript = (code, interpreter, signal = null) => {
 };
 
 // 安全检查辅助函数
+// 仅将公开模板识别为安全：.env.example、.env.local.example、.env.production.local.example 等。
+// 真实环境文件（含 .env、.env.local、.envrc）及名为 .env 的目录仍必须受保护。
+const isEnvironmentExampleFile = (targetPath) => /^\.env(?:\.[^.]+)*\.example$/i.test(path.basename(String(targetPath)));
+const isSensitiveEnvironmentPath = (targetPath) => {
+    const segments = path.normalize(String(targetPath)).split(/[\\/]+/).filter(Boolean);
+    const baseName = segments.at(-1) || '';
+    const hasEnvironmentDirectory = segments.slice(0, -1).some(segment => segment.toLowerCase() === '.env');
+    return hasEnvironmentDirectory || (baseName.toLowerCase().startsWith('.env') && !isEnvironmentExampleFile(baseName));
+};
+
 const isPathSafe = (targetPath) => {
-    // 基础黑名单：SSH密钥、AWS凭证、环境变量文件、Git配置、系统Shadow文件
+    // 基础黑名单：SSH密钥、AWS凭证、真实环境变量文件、Git配置、系统Shadow文件
     const forbiddenPatterns = [
         /[\\/]\.ssh[\\/]/i,
         /[\\/]\.aws[\\/]/i,
-        /[\\/]\.env/i,
         /[\\/]\.gitconfig/i,
         /id_rsa/i,
         /authorized_keys/i,
@@ -1858,7 +1867,7 @@ const isPathSafe = (targetPath) => {
         /C:\\Windows\\System32\\config/i // Windows SAM hive
     ];
 
-    return !forbiddenPatterns.some(regex => regex.test(targetPath));
+    return !isSensitiveEnvironmentPath(targetPath) && !forbiddenPatterns.some(regex => regex.test(targetPath));
 };
 
 async function runSubAgent(args, globalContext, signal) {
