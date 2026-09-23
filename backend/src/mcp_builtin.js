@@ -136,6 +136,7 @@ function sleepForDuration(durationMs, signal = null) {
 
 const MAX_VIEW_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_VIEW_IMAGE_PIXELS = 24 * 1024 * 1024;
+const MAX_VIEW_PDF_BYTES = 50 * 1024 * 1024;
 
 function inspectViewableImage(buffer) {
     if (!Buffer.isBuffer(buffer) || buffer.length < 10) return null;
@@ -953,6 +954,17 @@ const BUILTIN_TOOLS = {
                 properties: {
                     file_path: { type: "string", description: "Absolute path to a local PNG, JPEG, WebP, or GIF image file." },
                     detail: { type: "string", enum: ["high", "original"], description: "Optional image detail hint. Defaults to high." }
+                },
+                required: ["file_path"]
+            }
+        },
+        {
+            name: "view_pdf",
+            description: "View a complete local PDF file as model-readable document context. Use this for PDFs already available on disk. Do not use read_file for PDF binary content.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    file_path: { type: "string", description: "Absolute path to a local PDF file." }
                 },
                 required: ["file_path"]
             }
@@ -2467,7 +2479,7 @@ ${contextBlock}
             if (!stats.isFile()) return `Error: Image path is not a file: ${safePath}`;
             if (stats.size > MAX_VIEW_IMAGE_BYTES) return `Error: Image is too large for visual inspection (>${MAX_VIEW_IMAGE_BYTES / 1024 / 1024}MB).`;
             if (signal?.aborted) throw Object.assign(new Error('Operation aborted by user.'), { name: 'AbortError' });
-            const bytes = await fs.promises.readFile(safePath, { signal });
+            const bytes = await fs.promises.readFile(safePath, signal ? { signal } : undefined);
             const image = inspectViewableImage(bytes);
             if (!image || !image.width || !image.height) return 'Error: Unsupported or invalid image data. Supported formats: PNG, JPEG, WebP, GIF.';
             if (image.width * image.height > MAX_VIEW_IMAGE_PIXELS) return `Error: Image dimensions exceed the ${MAX_VIEW_IMAGE_PIXELS / 1000000}MP visual inspection limit.`;
@@ -2484,6 +2496,32 @@ ${contextBlock}
             return `Error viewing image: ${error.message}`;
         }
     },
+
+
+    view_pdf: async ({ file_path } = {}, context, signal) => {
+        try {
+            if (!file_path || typeof file_path !== 'string') return 'Error: file_path is required.';
+            const safePath = resolvePath(file_path);
+            if (!isPathSafe(safePath)) return `[Security Block] Access to sensitive system file '${path.basename(safePath)}' is restricted.`;
+            if (path.extname(safePath).toLowerCase() !== '.pdf') return `Error: view_pdf only supports .pdf files: ${safePath}`;
+            const stats = await fs.promises.stat(safePath);
+            if (!stats.isFile()) return `Error: PDF path is not a file: ${safePath}`;
+            if (stats.size > MAX_VIEW_PDF_BYTES) return `Error: PDF is too large for document inspection (>${MAX_VIEW_PDF_BYTES / 1024 / 1024}MB).`;
+            if (signal?.aborted) throw Object.assign(new Error('Operation aborted by user.'), { name: 'AbortError' });
+            const bytes = await fs.promises.readFile(safePath, signal ? { signal } : undefined);
+            if (bytes.length < 5 || bytes.subarray(0, 5).toString('ascii') !== '%PDF-') return 'Error: Unsupported or invalid PDF data.';
+            const displayText = `Local PDF loaded as complete document context: ${path.basename(safePath)} (${(stats.size / 1024 / 1024).toFixed(2)} MB).`;
+            return {
+                __anywhereToolResult: 'pdf',
+                pdf: { encodedBytes: bytes.toString('base64'), mimeType: 'application/pdf', fileName: path.basename(safePath) },
+                display: { text: displayText, fileName: path.basename(safePath), bytes: stats.size }
+            };
+        } catch (error) {
+            if (error?.name === 'AbortError') throw error;
+            return `Error viewing PDF: ${error.message}`;
+        }
+    },
+
 
 
     // 3. Read File
@@ -4304,9 +4342,9 @@ function getBuiltinTools(serverId) {
 async function invokeBuiltinTool(toolName, args, signal = null, context = null) {
     if (handlers[toolName]) {
         const result = await handlers[toolName](args, context, signal);
-        // Image payloads are intentionally left structured for the active chat turn. All other
+        // Media payloads are intentionally left structured for the active chat turn. All other
         // built-in tools keep the established MCP-compatible text-array return contract.
-        if (result?.__anywhereToolResult === 'image') return result;
+        if (result?.__anywhereToolResult === 'image' || result?.__anywhereToolResult === 'pdf') return result;
         const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
 
         return JSON.stringify([{

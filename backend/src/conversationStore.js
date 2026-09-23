@@ -1241,7 +1241,14 @@ async function restoreConversationCompaction({
 }
 
 
-async function renameConversation({ dirPath, conversationId, title } = {}) {
+async function renameConversation({
+  dirPath,
+  conversationId,
+  title,
+  expectedRevision,
+  holderInstanceId = '',
+  leaseEpoch = null
+} = {}) {
   const nextTitle = normalizeText(title).trim()
   if (!nextTitle) throw new Error('conversation_title_required')
   const projects = await readLocalProjects(dirPath)
@@ -1251,10 +1258,25 @@ async function renameConversation({ dirPath, conversationId, title } = {}) {
   let revision = 0
   const updatedAt = nowIso()
   try {
-    const row = getConversationRow(db)
-    revision = Number(row.revision) + 1
-    db.prepare('UPDATE conversation SET title = ?, updated_at = ?, revision = ? WHERE conversation_id = ?')
-      .run(nextTitle, updatedAt, revision, conversationId)
+    withTransaction(db, () => {
+      const row = getConversationRow(db)
+      if (normalizeText(holderInstanceId).trim() && Number.isFinite(Number(leaseEpoch))) {
+        const lease = db.prepare("SELECT holder_instance_id, lease_epoch, expires_at FROM write_lease WHERE resource = 'conversation'").get()
+        const validLease = lease
+          && lease.holder_instance_id === holderInstanceId
+          && Number(lease.lease_epoch) === Number(leaseEpoch)
+          && new Date(lease.expires_at).getTime() > Date.now()
+        if (!validLease) throw new Error('conversation_write_lease_lost')
+      }
+      if (Number.isFinite(Number(expectedRevision)) && Number(expectedRevision) !== Number(row.revision)) {
+        const error = new Error('conversation_revision_conflict')
+        error.currentRevision = row.revision
+        throw error
+      }
+      revision = Number(row.revision) + 1
+      db.prepare('UPDATE conversation SET title = ?, updated_at = ?, revision = ? WHERE conversation_id = ?')
+        .run(nextTitle, updatedAt, revision, conversationId)
+    })
   } finally { db.close() }
   await writeLocalProjects(dirPath, updateConversation(projects, conversationId, { title: nextTitle, revision, updatedAt }))
   return { ok: true, conversationId, title: nextTitle, dbFile: descriptor.dbFile, revision, updatedAt }

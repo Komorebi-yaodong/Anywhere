@@ -41,6 +41,18 @@ const props = defineProps({
             resolvedId: ''
         })
     },
+    promptTokenBreakdown: {
+        type: Object,
+        default: () => ({
+            loading: false,
+            error: '',
+            systemTokens: 0,
+            conversationTokens: 0,
+            toolTokens: 0,
+            effectiveTokens: 0,
+            updatedAt: 0
+        })
+    },
     canRestoreCompact: { type: Boolean, default: false }
 });
 
@@ -99,6 +111,40 @@ const contextLengthSourceLabel = computed(() => {
     if (source === 'default') return '默认';
     return source;
 });
+
+
+const formatCompactTokenCount = (value = 0) => {
+    const numeric = Math.max(0, Number(value) || 0);
+    if (numeric >= 1000000) return `${(numeric / 1000000).toFixed(numeric >= 10000000 ? 1 : 2)}M`;
+    if (numeric >= 1000) return `${(numeric / 1000).toFixed(numeric >= 10000 ? 1 : 2)}K`;
+    return String(Math.round(numeric));
+};
+
+const promptUsage = computed(() => {
+    const contextLength = Math.max(1, Number(localCompactConfig.value.contextLength) || 1);
+    const thresholdRatio = Math.min(0.99, Math.max(0.1, Number(localCompactConfig.value.triggerRatio) || 0.9));
+    const systemTokens = Math.max(0, Number(props.promptTokenBreakdown?.systemTokens) || 0);
+    const conversationTokens = Math.max(0, Number(props.promptTokenBreakdown?.conversationTokens) || 0);
+    const toolTokens = Math.max(0, Number(props.promptTokenBreakdown?.toolTokens) || 0);
+    const effectiveTokens = systemTokens + conversationTokens + toolTokens;
+    const toPercent = (tokens) => Math.max(0, Math.min(100, (tokens / contextLength) * 100));
+    return {
+        contextLength,
+        thresholdTokens: Math.floor(contextLength * thresholdRatio),
+        thresholdPercent: thresholdRatio * 100,
+        systemTokens,
+        conversationTokens,
+        toolTokens,
+        effectiveTokens,
+        remainingTokens: Math.max(0, contextLength - effectiveTokens),
+        overTokens: Math.max(0, effectiveTokens - contextLength),
+        systemPercent: toPercent(systemTokens),
+        conversationPercent: toPercent(conversationTokens),
+        toolPercent: toPercent(toolTokens),
+        effectivePercent: toPercent(effectiveTokens)
+    };
+});
+
 
 // 自动压缩时不要强行打开配置弹窗；仅当用户已打开弹窗时，在弹窗内展示进度
 watch(() => props.compacting, (isCompacting, wasCompacting) => {
@@ -277,7 +323,7 @@ watch(() => props.voiceList, (newVal) => {
 
 // --- Computed Properties ---
 const reasoningTooltipContent = computed(() => {
-    const map = { default: '默认', none:'关闭', low: '低', medium: '中', high: '高', xhigh: '极深'};
+    const map = { default: '默认', none: '关闭', low: '快速', medium: '均衡', high: '深入', xhigh: '强化', max: '极致' };
     return `思考预算: ${map[tempReasoningEffort.value] || '默认'}`;
 });
 
@@ -915,7 +961,9 @@ defineExpose({ focus, senderRef });
                         <el-button @click="handleReasoningSelection('high')"
                             :type="tempReasoningEffort === 'high' ? 'primary' : 'default'" round>深入</el-button>
                         <el-button @click="handleReasoningSelection('xhigh')"
-                            :type="tempReasoningEffort === 'xhigh' ? 'primary' : 'default'" round>极深</el-button>
+                            :type="tempReasoningEffort === 'xhigh' ? 'primary' : 'default'" round>强化</el-button>
+                        <el-button @click="handleReasoningSelection('max')"
+                            :type="tempReasoningEffort === 'max' ? 'primary' : 'default'" round>极致</el-button>
                     </div>
                 </div>
             </el-col>
@@ -1231,6 +1279,36 @@ defineExpose({ focus, senderRef });
                 </div>
             </div>
             <div v-else class="compact-config-block">
+                <div class="compact-section-card compact-prompt-usage-card">
+                    <div class="compact-prompt-usage-heading">
+                        <div>
+                            <div class="compact-section-title">Prompt 上下文占用</div>
+                            <div class="compact-form-hint">100% = {{ formatCompactTokenCount(promptUsage.contextLength) }} tokens</div>
+                        </div>
+                        <div class="compact-prompt-usage-total" :class="{ 'is-over': promptUsage.overTokens > 0 }">
+                            <span v-if="promptTokenBreakdown.loading">计算中…</span>
+                            <span v-else>有效 {{ formatCompactTokenCount(promptUsage.effectiveTokens) }} / {{ formatCompactTokenCount(promptUsage.contextLength) }}</span>
+                        </div>
+                    </div>
+                    <div class="compact-prompt-track" :class="{ 'is-loading': promptTokenBreakdown.loading }">
+                        <span class="compact-prompt-segment is-system" :style="{ width: `${promptUsage.systemPercent}%` }"></span>
+                        <span class="compact-prompt-segment is-conversation" :style="{ width: `${promptUsage.conversationPercent}%` }"></span>
+                        <span class="compact-prompt-segment is-tool" :style="{ width: `${promptUsage.toolPercent}%` }"></span>
+                        <span class="compact-prompt-threshold" :style="{ left: `${promptUsage.thresholdPercent}%` }">
+                            <span class="compact-prompt-threshold-dot"></span>
+                            <span class="compact-prompt-threshold-label">阈值 {{ formatCompactTokenCount(promptUsage.thresholdTokens) }}</span>
+                        </span>
+                    </div>
+                    <div class="compact-prompt-legend">
+                        <span><i class="is-system"></i>System {{ formatCompactTokenCount(promptUsage.systemTokens) }}</span>
+                        <span><i class="is-conversation"></i>对话 {{ formatCompactTokenCount(promptUsage.conversationTokens) }}</span>
+                        <span><i class="is-tool"></i>工具 {{ formatCompactTokenCount(promptUsage.toolTokens) }}</span>
+                        <span class="is-remaining">剩余 {{ formatCompactTokenCount(promptUsage.remainingTokens) }}</span>
+                    </div>
+                    <div v-if="promptUsage.overTokens > 0" class="compact-prompt-warning">已超出上下文 {{ formatCompactTokenCount(promptUsage.overTokens) }} tokens</div>
+                    <div v-else-if="promptTokenBreakdown.error" class="compact-prompt-warning">统计失败：{{ promptTokenBreakdown.error }}</div>
+                </div>
+
                 <div class="compact-section-card">
                     <div class="compact-section-title">基础设置</div>
                     <div class="compact-grid-2">
@@ -2540,6 +2618,136 @@ html.dark .compact-dialog-scroll::-webkit-scrollbar-thumb {
     flex-direction: column;
     gap: 10px;
 }
+
+
+.compact-prompt-usage-card {
+    overflow: visible;
+}
+
+.compact-prompt-usage-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.compact-prompt-usage-total {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--el-text-color-primary);
+    white-space: nowrap;
+}
+
+.compact-prompt-usage-total.is-over,
+.compact-prompt-warning {
+    color: var(--el-color-danger);
+}
+
+.compact-prompt-track {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 14px;
+    margin-top: 28px;
+    overflow: visible;
+    border-radius: 999px;
+    background: var(--el-fill-color);
+    box-shadow: inset 0 0 0 1px var(--el-border-color-lighter);
+}
+
+.compact-prompt-track.is-loading {
+    opacity: 0.58;
+}
+
+.compact-prompt-segment {
+    display: block;
+    height: 100%;
+    min-width: 0;
+    transition: width 0.25s ease;
+}
+
+.compact-prompt-segment:first-child {
+    border-radius: 999px 0 0 999px;
+}
+
+.compact-prompt-segment.is-system,
+.compact-prompt-legend i.is-system {
+    background: #7c3aed;
+}
+
+.compact-prompt-segment.is-conversation,
+.compact-prompt-legend i.is-conversation {
+    background: #2563eb;
+}
+
+.compact-prompt-segment.is-tool,
+.compact-prompt-legend i.is-tool {
+    background: #f59e0b;
+}
+
+.compact-prompt-threshold {
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    width: 2px;
+    transform: translateX(-1px);
+    background: var(--el-color-danger);
+    z-index: 2;
+}
+
+.compact-prompt-threshold-dot {
+    position: absolute;
+    top: -3px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--el-color-danger);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--el-color-danger) 20%, transparent);
+}
+
+.compact-prompt-threshold-label {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    right: 0;
+    transform: translateX(6px);
+    font-size: 10px;
+    color: var(--el-color-danger);
+    white-space: nowrap;
+}
+
+.compact-prompt-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--el-text-color-secondary);
+}
+
+.compact-prompt-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.compact-prompt-legend i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.compact-prompt-legend .is-remaining {
+    margin-left: auto;
+}
+
+.compact-prompt-warning {
+    margin-top: 7px;
+    font-size: 11px;
+}
+
 
 .compact-section-title {
     font-size: 13px;

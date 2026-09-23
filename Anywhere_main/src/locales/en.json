@@ -416,10 +416,11 @@
     "reasoningEffort": {
       "default": "Default",
       "none": "Off",
-      "low": "Low",
-      "medium": "Medium",
-      "high": "High",
-      "xhigh": "xHigh"
+      "low": "Fast",
+      "medium": "Balanced",
+      "high": "Deep",
+      "xhigh": "Enhanced",
+      "max": "Maximum"
     },
     "defaultMcpServersLabel": "MCP",
     "defaultMcpServersPlaceholder": "Select default MCP services for this assistant",

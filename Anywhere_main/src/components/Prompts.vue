@@ -1136,6 +1136,7 @@ async function refreshPromptsConfig() {
                       <el-option :label="t('prompts.reasoningEffort.medium')" value="medium" />
                       <el-option :label="t('prompts.reasoningEffort.high')" value="high" />
                       <el-option :label="t('prompts.reasoningEffort.xhigh')" value="xhigh" />
+                      <el-option :label="t('prompts.reasoningEffort.max')" value="max" />
                     </el-select>
                   </div>
                 </div>

@@ -446,6 +446,8 @@ let autoSaveTimer = null;
 let scheduledAutoSaveRequest = null;
 let queuedAutoSaveRequest = null;
 let autoSaveExecutionPromise = null;
+let conversationMetadataMutationPromise = null;
+
 let sessionMutationVersion = 0;
 let lastPersistedSessionVersion = 0;
 let lastAutoSaveAt = 0;
@@ -711,6 +713,16 @@ const compactConfig = ref({
   resolvedId: ''
 });
 const compactArchives = ref([]);
+const promptTokenBreakdown = ref({
+  loading: false,
+  error: '',
+  systemTokens: 0,
+  conversationTokens: 0,
+  toolTokens: 0,
+  effectiveTokens: 0,
+  updatedAt: 0
+});
+
 const autoCompactSuppressedForTurn = ref(false);
 let compactAbortController = null;
 const prompt = ref("");
@@ -3807,6 +3819,10 @@ const clearScheduledAutoSave = () => {
 };
 
 const executeAutoSaveRequest = async (request = {}) => {
+  if (conversationMetadataMutationPromise) {
+    await conversationMetadataMutationPromise;
+  }
+
   if (!request || !request.force) {
     if (!shouldPersistCurrentSessionAutomatically()) {
       return false;
@@ -5121,14 +5137,30 @@ const handleRenameSession = async () => {
         instance.confirmButtonLoading = true;
         try {
           if (nextTitle !== oldTitle) {
-            const renamed = await window.api.renameConversation({ dirPath: localPath, conversationId: storage.conversationId, title: nextTitle });
-            defaultConversationName.value = renamed.title;
-            currentConversationStorage.value = {
-              ...storage,
-              title: renamed.title,
-              dbFile: storage.dbFile,
-              revision: Number(renamed.revision) || storage.revision
-            };
+            if (autoSaveExecutionPromise) await autoSaveExecutionPromise;
+            let releaseMetadataMutation;
+            conversationMetadataMutationPromise = new Promise((resolve) => { releaseMetadataMutation = resolve; });
+            try {
+              const liveStorage = currentConversationStorage.value || storage;
+              const renamed = await window.api.renameConversation({
+                dirPath: liveStorage.dirPath || localPath,
+                conversationId: liveStorage.conversationId,
+                title: nextTitle,
+                expectedRevision: liveStorage.revision,
+                holderInstanceId: conversationInstanceId,
+                leaseEpoch: conversationLease.value?.leaseEpoch
+              });
+              defaultConversationName.value = renamed.title;
+              currentConversationStorage.value = {
+                ...liveStorage,
+                title: renamed.title,
+                dbFile: liveStorage.dbFile,
+                revision: Number(renamed.revision) || liveStorage.revision
+              };
+            } finally {
+              releaseMetadataMutation?.();
+              conversationMetadataMutationPromise = null;
+            }
           }
           if (selectedProjectId.value !== originalProjectId) {
             const data = normalizeWindowProjects(await window.api.readLocalProjects(localPath));
@@ -5390,13 +5422,11 @@ const handleSaveAction = async () => {
   const saveOptions = [
     {
       title: '重新命名',
-      description: loading.value
-        ? '当前 AI 仍在回复中，请等待本轮回复结束后再重命名。'
-        : defaultConversationName.value
-          ? '修改当前会话名称和项目归属。'
-          : '请先保存到本地后再重命名。',
+      description: defaultConversationName.value
+        ? '修改当前会话名称和项目归属，请求进行中也可操作。'
+        : '请先保存到本地后再重命名。',
       action: handleRenameSession,
-      disabled: loading.value || !defaultConversationName.value,
+      disabled: !defaultConversationName.value,
       wide: true
     },
     {
@@ -6283,6 +6313,7 @@ const loadCompactConfigForCurrentModel = async ({
 const handleOpenCompactDialog = async () => {
   // 打开时读缓存；保留用户手动上下文长度，不强制 API 覆盖
   await loadCompactConfigForCurrentModel({ forceRefresh: false, preferManual: true });
+  await refreshPromptTokenBreakdown();
 };
 
 const handleSaveCompactConfig = async (patch = {}) => {
@@ -6343,6 +6374,7 @@ const handleRefreshCompactContext = async () => {
   try {
     // 用户明确点「重新检索」：允许 API 覆盖手动值
     await loadCompactConfigForCurrentModel({ forceRefresh: true, preferManual: false });
+    await refreshPromptTokenBreakdown();
     showDismissibleMessage.success('已重新检索模型上下文长度');
   } catch (error) {
     showDismissibleMessage.error(`检索失败: ${error?.message || error}`);
@@ -6570,7 +6602,7 @@ const toHistoryMessageFromUi = (message) => {
       role: 'user',
       content: message.content
     };
-    if (message.origin === 'view_image') next.origin = 'view_image';
+    if (message.origin === 'view_image' || message.origin === 'view_pdf') next.origin = message.origin;
     if (message.sourceToolCallId) next.sourceToolCallId = message.sourceToolCallId;
     return next;
   }
@@ -7227,8 +7259,10 @@ const markOutermostCanRestore = () => {
 };
 
 const compactToolSchemaTokenCache = new Map();
-const estimateCurrentDynamicRequestOverhead = async () => {
-  if (!window.api?.estimateCompactTokens) return 0;
+const estimateCurrentDynamicToolPrompt = async () => {
+  if (!window.api?.estimateCompactTokens) {
+    return { systemPromptTokens: 0, schemaTokens: 0, totalTokens: 0 };
+  }
   const overheadMessages = [];
   if (openaiFormattedTools.value.length > 0 || sessionSkillIds.value.length > 0) {
     overheadMessages.push({ role: 'system', content: generateMcpSystemPrompt() });
@@ -7242,22 +7276,63 @@ const estimateCurrentDynamicRequestOverhead = async () => {
       console.warn('[compact] skill tool token estimate skipped:', error);
     }
   }
-  let toolTokens = 0;
+  let schemaTokens = 0;
   if (activeTools.length > 0) {
     const schemaText = JSON.stringify(normalizeToolsForRequest(activeTools));
     if (compactToolSchemaTokenCache.has(schemaText)) {
-      toolTokens = compactToolSchemaTokenCache.get(schemaText);
+      schemaTokens = compactToolSchemaTokenCache.get(schemaText);
     } else {
       const estimate = await window.api.estimateCompactTokens([{ role: 'system', content: schemaText }]);
-      toolTokens = Math.max(0, Number(estimate?.tokens) || 0);
+      schemaTokens = Math.max(0, Number(estimate?.tokens) || 0);
       compactToolSchemaTokenCache.clear();
-      compactToolSchemaTokenCache.set(schemaText, toolTokens);
+      compactToolSchemaTokenCache.set(schemaText, schemaTokens);
     }
   }
   const promptEstimate = overheadMessages.length
     ? await window.api.estimateCompactTokens(overheadMessages)
     : { tokens: 0 };
-  return Math.max(0, Number(promptEstimate?.tokens) || 0) + toolTokens;
+  const systemPromptTokens = Math.max(0, Number(promptEstimate?.tokens) || 0);
+  return {
+    systemPromptTokens,
+    schemaTokens,
+    totalTokens: systemPromptTokens + schemaTokens
+  };
+};
+
+const estimateCurrentDynamicRequestOverhead = async () => (
+  (await estimateCurrentDynamicToolPrompt()).totalTokens
+);
+
+const refreshPromptTokenBreakdown = async () => {
+  promptTokenBreakdown.value = { ...promptTokenBreakdown.value, loading: true, error: '' };
+  try {
+    const requestMessages = await buildRequestHistoryForCurrentConversation();
+    const systemMessages = requestMessages.filter((message) => message?.role === 'system');
+    const conversationMessages = requestMessages.filter((message) => message?.role !== 'system');
+    const [systemEstimate, conversationEstimate, toolPrompt] = await Promise.all([
+      window.api.estimateCompactTokens(systemMessages),
+      window.api.estimateCompactTokens(conversationMessages),
+      estimateCurrentDynamicToolPrompt()
+    ]);
+    const systemTokens = Math.max(0, Number(systemEstimate?.tokens) || 0);
+    const conversationTokens = Math.max(0, Number(conversationEstimate?.tokens) || 0);
+    const toolTokens = Math.max(0, Number(toolPrompt?.totalTokens) || 0);
+    promptTokenBreakdown.value = {
+      loading: false,
+      error: '',
+      systemTokens,
+      conversationTokens,
+      toolTokens,
+      effectiveTokens: systemTokens + conversationTokens + toolTokens,
+      updatedAt: Date.now()
+    };
+  } catch (error) {
+    promptTokenBreakdown.value = {
+      ...promptTokenBreakdown.value,
+      loading: false,
+      error: error?.message || String(error)
+    };
+  }
 };
 
 
@@ -7740,8 +7815,27 @@ const getViewImagePayload = (result) => {
   };
 };
 
+const getViewPdfPayload = (result) => {
+  if (result?.__anywhereToolResult !== 'pdf') return null;
+  const encodedBytes = result?.pdf?.encodedBytes;
+  const fileName = typeof result?.pdf?.fileName === 'string' && result.pdf.fileName.trim()
+    ? result.pdf.fileName.trim()
+    : 'document.pdf';
+  if (result?.pdf?.mimeType !== 'application/pdf') return null;
+  if (typeof encodedBytes !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(encodedBytes)) return null;
+  return {
+    dataUrl: `data:application/pdf;base64,${encodedBytes}`,
+    fileName,
+    displayText: typeof result?.display?.text === 'string' ? result.display.text : 'Local PDF loaded as complete document context.'
+  };
+};
+
+
+const isToolMediaMessage = (message = {}) => (
+  message?.role === 'user' && (message?.origin === 'view_image' || message?.origin === 'view_pdf')
+);
 const isViewImageMessage = (message = {}) => message?.role === 'user' && message?.origin === 'view_image';
-const isUserAuthoredMessage = (message = {}) => message?.role === 'user' && !isViewImageMessage(message);
+const isUserAuthoredMessage = (message = {}) => message?.role === 'user' && !isToolMediaMessage(message);
 
 const createViewImageMessage = (toolCallId, payload) => ({
   id: messageIdCounter.value++,
@@ -7754,6 +7848,20 @@ const createViewImageMessage = (toolCallId, payload) => ({
     { type: 'image_url', image_url: { url: payload.dataUrl, detail: payload.detail } }
   ]
 });
+
+
+const createViewPdfMessage = (toolCallId, payload) => ({
+  id: messageIdCounter.value++,
+  role: 'user',
+  origin: 'view_pdf',
+  sourceToolCallId: toolCallId,
+  timestamp: new Date().toLocaleString('sv-SE'),
+  content: [
+    { type: 'text', text: 'The PDF returned by the view_pdf tool is attached below. Use the complete document as context to continue the task.' },
+    { type: 'file', file: { filename: payload.fileName, file_data: payload.dataUrl } }
+  ]
+});
+
 
 const MAX_TOOL_RESULT_CHARS = 48 * 1000;
 
@@ -8296,7 +8404,7 @@ const askAI = async (forceSend = false) => {
 
         // Tool-generated images are stored as visible, durable user media messages after
         // their matching text tool outputs. Keep an ID map because calls may execute in parallel.
-        const viewImageMessagesByToolCallId = new Map();
+        const toolMediaMessagesByToolCallId = new Map();
         // 工具调用执行逻辑
         const toolMessages = await Promise.all(
           responseMessage.tool_calls.map(async (toolCall) => {
@@ -8422,9 +8530,13 @@ const askAI = async (forceSend = false) => {
                 );
 
                 const imagePayload = getViewImagePayload(result);
+                const pdfPayload = getViewPdfPayload(result);
                 if (imagePayload) {
-                  viewImageMessagesByToolCallId.set(toolCall.id, createViewImageMessage(toolCall.id, imagePayload));
+                  toolMediaMessagesByToolCallId.set(toolCall.id, createViewImageMessage(toolCall.id, imagePayload));
                   toolContent = imagePayload.displayText;
+                } else if (pdfPayload) {
+                  toolMediaMessagesByToolCallId.set(toolCall.id, createViewPdfMessage(toolCall.id, pdfPayload));
+                  toolContent = pdfPayload.displayText;
                 } else {
                   toolContent = formatToolResult(result);
                 }
@@ -8473,14 +8585,14 @@ const askAI = async (forceSend = false) => {
             }
           });
         }
-        const viewImageMessages = responseMessage.tool_calls
-          .map((toolCall) => viewImageMessagesByToolCallId.get(toolCall.id))
+        const toolMediaMessages = responseMessage.tool_calls
+          .map((toolCall) => toolMediaMessagesByToolCallId.get(toolCall.id))
           .filter(Boolean);
-        // Preserve strict tool-call/result adjacency first; visible image messages follow as
+        // Preserve strict tool-call/result adjacency first; visible image/PDF messages follow as
         // ordinary user multimodal context and are therefore durable for reask and restore.
-        appendFullHistory(...safeToolMessages, ...viewImageMessages);
-        if (viewImageMessages.length > 0) {
-          chat_show.value.push(...viewImageMessages.map((message) => deepCloneSafe(message)));
+        appendFullHistory(...safeToolMessages, ...toolMediaMessages);
+        if (toolMediaMessages.length > 0) {
+          chat_show.value.push(...toolMediaMessages.map((message) => deepCloneSafe(message)));
         }
         // 工具调用完成本质也会向 AI 续发请求，此处保存一次
         scheduleAutoSave({ reason: 'tool-calls-completed', immediate: true });
@@ -8801,7 +8913,7 @@ const deleteMessage = (index) => {
         if (calledIds.size === 0 || calledIds.has(fullHistory.value[cursor]?.tool_call_id)) fullDeleteCount += 1;
         cursor += 1;
       }
-      while (isViewImageMessage(fullHistory.value[cursor]) && calledIds.has(fullHistory.value[cursor]?.sourceToolCallId)) {
+      while (isToolMediaMessage(fullHistory.value[cursor]) && calledIds.has(fullHistory.value[cursor]?.sourceToolCallId)) {
         fullDeleteCount += 1;
         cursor += 1;
       }
@@ -8812,7 +8924,7 @@ const deleteMessage = (index) => {
   if (messageToDelete?.role === 'assistant' && Array.isArray(messageToDelete.tool_calls)) {
     const calledIds = new Set(messageToDelete.tool_calls.map((call) => call?.id).filter(Boolean));
     let cursor = index + 1;
-    while (isViewImageMessage(chat_show.value[cursor]) && calledIds.has(chat_show.value[cursor]?.sourceToolCallId)) {
+    while (isToolMediaMessage(chat_show.value[cursor]) && calledIds.has(chat_show.value[cursor]?.sourceToolCallId)) {
       showDeleteCount += 1;
       cursor += 1;
     }
@@ -9230,6 +9342,7 @@ const scrollToMessageByIndex = (index) => {
             :compacting="compacting"
             :compact-progress="compactProgress"
             :compact-config="compactConfig"
+            :prompt-token-breakdown="promptTokenBreakdown"
             :can-restore-compact="canRestoreCompact"
  ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
           v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading || compacting"
