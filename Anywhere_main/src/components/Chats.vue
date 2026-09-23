@@ -157,9 +157,10 @@ const safeDateValue = (value) => {
 };
 
 const normalizeTitleValue = (file) => {
-    const basename = formatFilenameDisplay(file?.basename || '');
-    if (basename) return basename;
-    return typeof file?.title === 'string' && file.title.trim() ? file.title.trim() : '';
+    const title = typeof file?.title === 'string' ? file.title.trim() : '';
+    if (title) return title;
+    if (file?.format === 'sqlite') return '未命名会话';
+    return formatFilenameDisplay(file?.basename || '');
 };
 
 
@@ -328,6 +329,7 @@ const listCloudChatFilesWithMetadata = async () => {
 
     return {
         exists: true,
+        directoryFiles: rawList.filter((item) => item?.type === 'file'),
         files: jsonFiles.map((file) => normalizeCloudFileFromWebdav(file, remoteDir, metadata?.chats?.[file.basename]))
     };
 };
@@ -711,9 +713,23 @@ const activeProjectsData = computed(() =>
     activeView.value === 'local' ? localProjects.value : cloudProjects.value
 );
 
+const getConversationReference = (file) => {
+    if (file?.format === 'sqlite' && typeof file?.conversationId === 'string' && file.conversationId.trim()) {
+        return file.conversationId.trim();
+    }
+    return String(file?.basename || '').trim();
+};
+
 const fileByBasename = computed(() => {
     const fileList = activeView.value === 'local' ? localChatFiles.value : cloudChatFiles.value;
-    return new Map(fileList.map((f) => [f.basename, f]));
+    const map = new Map();
+    fileList.forEach((file) => {
+        if (file?.basename) map.set(file.basename, file);
+        const reference = getConversationReference(file);
+        if (reference) map.set(reference, file);
+        if (file?.legacyJson) map.set(String(file.legacyJson), file);
+    });
+    return map;
 });
 
 const getJsonBasenameCandidate = (value) => {
@@ -742,9 +758,11 @@ const assignedBasenames = computed(() => {
     const projects = Array.isArray(activeProjectsData.value?.projects) ? activeProjectsData.value.projects : [];
     const map = fileByBasename.value;
     projects.forEach((project) => {
-        (Array.isArray(project?.files) ? project.files : []).forEach((bn) => {
-            const basename = resolveProjectFileBasename(bn, map);
-            if (basename) set.add(basename);
+        const references = [...(project?.conversationIds || []), ...(project?.files || [])];
+        references.forEach((reference) => {
+            const file = map.get(resolveProjectFileBasename(reference, map));
+            const logicalReference = getConversationReference(file);
+            if (logicalReference) set.add(logicalReference);
         });
     });
     return set;
@@ -758,9 +776,16 @@ const projectGroups = computed(() => {
     );
     const map = fileByBasename.value;
     return projects.map((project) => {
-        const files = (Array.isArray(project?.files) ? project.files : [])
-            .map((bn) => map.get(resolveProjectFileBasename(bn, map)))
-            .filter(Boolean)
+        const references = [...(project?.conversationIds || []), ...(project?.files || [])];
+        const seen = new Set();
+        const files = references
+            .map((reference) => map.get(resolveProjectFileBasename(reference, map)))
+            .filter((file) => {
+                const logicalReference = getConversationReference(file);
+                if (!logicalReference || seen.has(logicalReference)) return false;
+                seen.add(logicalReference);
+                return true;
+            })
             .sort(compareFilesBySortMode);
         return {
             id: project.id,
@@ -775,7 +800,7 @@ const projectGroups = computed(() => {
 // 未分组文件（参与分页）
 const ungroupedFiles = computed(() => {
     const assigned = assignedBasenames.value;
-    return currentFiles.value.filter((f) => !assigned.has(f.basename));
+    return currentFiles.value.filter((file) => !assigned.has(getConversationReference(file)));
 });
 
 const paginatedUngrouped = computed(() => {
@@ -1083,12 +1108,12 @@ async function fetchLocalFiles(silent = false, options = {}) {
     localFilesInFlight = (async () => {
         if (!silent) isTableLoading.value = true;
         try {
-            const files = await window.api.listJsonFiles(requestPath, { includeSessionMetadataTitle });
+            const files = await window.api.listLocalConversations(requestPath);
             if (requestSeq !== localFilesRequestSeq || requestPath !== localChatPath.value) return;
             localChatFiles.value = (Array.isArray(files) ? files : []).map(file => normalizeSessionFile(file));
             lastLocalFilesLoadedAt = Date.now();
             await fetchLocalProjects();
-            if (!includeSessionMetadataTitle) {
+            if (!includeSessionMetadataTitle && localChatFiles.value.some((file) => file.format === 'json')) {
                 scheduleLocalTitleHydration(requestPath);
             }
         } catch (error) {
@@ -1107,6 +1132,31 @@ async function fetchLocalFiles(silent = false, options = {}) {
     return localFilesInFlight;
 }
 
+const buildCloudConversationFiles = (projectsData, directoryFiles = [], legacyFiles = []) => {
+    const remoteByName = new Map(directoryFiles.map((file) => [getSafeString(file?.basename || file?.filename || file?.name || ''), file]));
+    const mappedLegacy = new Set();
+    const databaseFiles = [];
+    Object.values(projectsData?.conversations || {}).forEach((descriptor) => {
+        const remoteFile = remoteByName.get(descriptor.dbFile);
+        if (!remoteFile) return;
+        if (descriptor.legacyJson) mappedLegacy.add(descriptor.legacyJson);
+        databaseFiles.push(normalizeSessionFile({
+            ...remoteFile,
+            format: 'sqlite',
+            basename: descriptor.dbFile,
+            filename: descriptor.dbFile,
+            conversationId: descriptor.conversationId,
+            legacyJson: descriptor.legacyJson,
+            title: descriptor.title,
+            revision: descriptor.revision,
+            createdAt: descriptor.createdAt || remoteFile.createdAt,
+            updatedAt: descriptor.updatedAt || remoteFile.updatedAt || remoteFile.lastmod
+        }));
+    });
+    return [...databaseFiles, ...legacyFiles.filter((file) => !mappedLegacy.has(file.basename))];
+};
+
+
 async function fetchCloudFiles(silent = false) {
     if (!isWebdavConfigValid.value) return;
     if (!silent) isTableLoading.value = true;
@@ -1117,8 +1167,9 @@ async function fetchCloudFiles(silent = false) {
             await fetchCloudProjects();
             return;
         }
-        cloudChatFiles.value = (Array.isArray(result.files) ? result.files : []).map(file => normalizeSessionFile(file));
+        const legacyFiles = (Array.isArray(result.files) ? result.files : []).map(file => normalizeSessionFile(file));
         await fetchCloudProjects();
+        cloudChatFiles.value = buildCloudConversationFiles(cloudProjects.value, result.directoryFiles || [], legacyFiles);
     } catch (error) {
         ElMessage.error(`${t('chats.alerts.fetchFailed')}: ${error.message}`);
         cloudChatFiles.value = [];
@@ -1158,14 +1209,18 @@ async function refreshData(silent = false, options = {}) {
 // --- 项目分组：数据装载 / 持久化 ---
 const normalizeProjectsResult = (result) => {
     const projects = Array.isArray(result?.projects) ? result.projects : [];
+    const conversations = result?.conversations && typeof result.conversations === 'object' && !Array.isArray(result.conversations)
+        ? result.conversations : {};
     return {
-        version: Number(result?.version) || 1,
+        version: Number(result?.version) || 2,
+        conversations,
         projects: projects
             .filter((p) => p && typeof p === 'object')
             .map((p) => ({
                 id: String(p.id || '').trim(),
                 name: String(p.name || '').trim() || String(p.id || '').trim(),
-                files: Array.isArray(p.files) ? p.files.map((f) => String(f || '').trim()).filter(Boolean) : []
+                files: Array.isArray(p.files) ? p.files.map((f) => String(f || '').trim()).filter(Boolean) : [],
+                conversationIds: Array.isArray(p.conversationIds) ? p.conversationIds.map((id) => String(id || '').trim()).filter(Boolean) : []
             }))
             .filter((p) => p.id)
     };
@@ -1250,11 +1305,10 @@ const toggleProjectCollapse = (projectId) => {
 
 // --- 项目 CRUD ---
 const setActiveProjectsData = (data) => {
-    if (activeView.value === 'local') {
-        localProjects.value = data;
-    } else {
-        cloudProjects.value = data;
-    }
+    const previous = activeView.value === 'local' ? localProjects.value : cloudProjects.value;
+    const next = normalizeProjectsResult({ ...previous, ...data, conversations: data?.conversations || previous?.conversations || {} });
+    if (activeView.value === 'local') localProjects.value = next;
+    else cloudProjects.value = next;
 };
 
 async function persistActiveProjects() {
@@ -1453,8 +1507,8 @@ const updateDragTarget = (x, y) => {
 const onTitleMouseDown = (file, event) => {
     if (event.button !== 0) return;
     dragPendingBasenames = (isFileSelected(file) && selectedFiles.value.length > 0)
-        ? selectedFiles.value.map((f) => f.basename)
-        : [file.basename];
+        ? selectedFiles.value.map(getConversationReference)
+        : [getConversationReference(file)];
     dragStartX = event.clientX;
     dragStartY = event.clientY;
     lastDragClientX = event.clientX;
@@ -1516,22 +1570,25 @@ const onProjectDragWheel = (event) => {
     updateDragTarget(lastDragClientX, lastDragClientY);
 };
 
-async function assignFilesToProject(basenames, projectId) {
-    if (!Array.isArray(basenames) || basenames.length === 0) return;
+async function assignFilesToProject(references, projectId) {
+    if (!Array.isArray(references) || references.length === 0) return;
     try {
-        const draggedSet = new Set(basenames.map((n) => getJsonBasenameCandidate(n)));
-        // 先从所有项目移除（兼容带/不带 .json），保证单一归属
-        let projects = (activeProjectsData.value.projects || []).map((p) => ({
-            ...p,
-            files: (Array.isArray(p.files) ? p.files : []).filter((f) => !draggedSet.has(getJsonBasenameCandidate(f)))
+        const conversationIds = references.filter((reference) => activeProjectsData.value?.conversations?.[reference]);
+        const legacyFiles = references.filter((reference) => !activeProjectsData.value?.conversations?.[reference]);
+        const draggedFiles = new Set(legacyFiles.map(getJsonBasenameCandidate));
+        const draggedConversations = new Set(conversationIds);
+        let projects = (activeProjectsData.value.projects || []).map((project) => ({
+            ...project,
+            files: (project.files || []).filter((file) => !draggedFiles.has(getJsonBasenameCandidate(file))),
+            conversationIds: (project.conversationIds || []).filter((id) => !draggedConversations.has(id))
         }));
         if (projectId) {
-            if (!projects.some((p) => p.id === projectId)) return;
-            projects = projects.map((p) =>
-                p.id === projectId ? { ...p, files: [...p.files, ...basenames] } : p
-            );
+            if (!projects.some((project) => project.id === projectId)) return;
+            projects = projects.map((project) => project.id === projectId
+                ? { ...project, files: [...project.files, ...legacyFiles], conversationIds: [...project.conversationIds, ...conversationIds] }
+                : project);
         }
-        setActiveProjectsData({ version: activeProjectsData.value.version || 1, projects });
+        setActiveProjectsData({ ...activeProjectsData.value, projects });
         await persistActiveProjects();
         selectedFiles.value = [];
         ElMessage.success(t('chats.projects.moveSuccess'));
@@ -1668,14 +1725,37 @@ const handleItemContextMenu = async (file, event) => {
 async function startChat(file) {
     ElMessage.info(t('chats.alerts.loadingChat'));
     try {
-        let jsonString;
         if (activeView.value === 'local') {
-            jsonString = await window.api.readLocalFile(file.path);
+            const opened = await window.api.openConversation({
+                dirPath: localChatPath.value,
+                reference: file?.conversationId || file?.basename,
+                activeOnly: true
+            });
+            if (!opened?.descriptor) throw new Error('conversation_open_failed');
+            await window.api.coderedirect('恢复聊天', JSON.stringify({
+                conversationId: opened.descriptor.conversationId,
+                conversationTitle: opened.descriptor.title,
+                format: 'sqlite'
+            }));
+            await fetchLocalFiles(true, { includeSessionMetadataTitle: true });
+        } else if (file?.format === 'sqlite' && file?.conversationId) {
+            const descriptor = cloudProjects.value?.conversations?.[file.conversationId];
+            if (!descriptor) throw new Error('conversation_descriptor_missing');
+            const { client, remoteDir } = getWebdavClientForChats();
+            const content = await client.getFileContents(`${remoteDir}/${descriptor.dbFile}`, { format: 'binary' });
+            const opened = await window.api.openCloudConversationSnapshot({ descriptor, content });
+            await window.api.coderedirect('恢复聊天', JSON.stringify({
+                conversationId: descriptor.conversationId,
+                conversationTitle: descriptor.title,
+                worktreeDir: opened.worktreeDir,
+                storageMode: 'cloud',
+                format: 'sqlite'
+            }));
         } else {
             const result = await readCloudChatFile(file.basename);
-            jsonString = typeof result.content === 'string' ? result.content : String(result.content || '');
+            const jsonString = typeof result.content === 'string' ? result.content : String(result.content || '');
+            await window.api.coderedirect('恢复聊天', JSON.stringify({ sessionData: jsonString, filename: file.basename }));
         }
-        await window.api.coderedirect('恢复聊天', JSON.stringify({ sessionData: jsonString, filename: file.basename }));
         ElMessage.success(t('chats.alerts.restoreInitiated'));
     } catch (error) { 
         ElMessage.error(`${t('chats.alerts.restoreFailed')}: ${error.message}`); 
@@ -1748,10 +1828,18 @@ async function renameFile(file) {
     try {
         const { value: userInput } = await ElMessageBox.prompt(t('chats.rename.promptMessage'), t('chats.rename.promptTitle'), { inputValue: defaultInputValue });
         let finalFilename = (userInput || "").trim();
-        if (!finalFilename.toLowerCase().endsWith('.json')) finalFilename += '.json';
-        if (finalFilename === file.basename || finalFilename === '.json') return;
+        if (!finalFilename) return;
 
-        if (activeView.value === 'local') {
+        if (activeView.value === 'local' && file?.format === 'sqlite' && file?.conversationId) {
+            if (finalFilename === defaultInputValue) return;
+            await window.api.renameConversation({
+                dirPath: localChatPath.value,
+                conversationId: file.conversationId,
+                title: finalFilename
+            });
+        } else if (activeView.value === 'local') {
+            if (!finalFilename.toLowerCase().endsWith('.json')) finalFilename += '.json';
+            if (finalFilename === file.basename || finalFilename === '.json') return;
             await window.api.renameLocalFile(file.path, `${localChatPath.value}/${finalFilename}`);
             if (isWebdavConfigValid.value && cloudChatFiles.value.some(f => f.basename === file.basename)) {
                 const confirm = await ElMessageBox.confirm(
@@ -1820,7 +1908,15 @@ async function deleteFiles(filesToDelete) {
         isTableLoading.value = true;
         for (const file of filesToDelete) {
             if (activeView.value === 'local') {
-                await window.api.deleteLocalFile(file.path);
+                if (file?.format === 'sqlite' && file?.conversationId) {
+                    await window.api.deleteConversation({
+                        dirPath: localChatPath.value,
+                        conversationId: file.conversationId,
+                        deleteLegacyJson: true
+                    });
+                } else {
+                    await window.api.deleteLocalFile(file.path);
+                }
                 if (syncDeletions && isWebdavConfigValid.value && cloudChatFiles.value.some(f => f.basename === file.basename)) {
                     await deleteCloudChatFileWithMetadata(file.basename);
                 }
@@ -1912,15 +2008,12 @@ async function intelligentUpload() {
             t('chats.alerts.syncConfirmUploadTitle'),
             { type: 'info' }
         );
-        const syncResult = await executeSync([
-            {
-                name: t('chats.alerts.syncConfirmUploadTitle'),
-                action: (signal) => uploadFilesToCloudInBatches(filesToUpload.map(file => file.basename), signal)
-            }
-        ], t('chats.alerts.syncConfirmUploadTitle'));
-        const uploadedBasenames = Array.isArray(syncResult?.completedFiles)
-            ? syncResult.completedFiles
-            : [];
+        const syncResult = await executeSync(filesToUpload.map((file) => ({
+            name: getConversationReference(file),
+            action: (signal) => forceSyncFile(getConversationReference(file), 'upload', signal, { syncProject: file.format !== 'sqlite' })
+        })), t('chats.alerts.syncConfirmUploadTitle'));
+        const uploadedBasenames = (Array.isArray(syncResult?.completedFiles) ? syncResult.completedFiles : [])
+            .filter((basename) => String(basename).toLowerCase().endsWith('.json'));
         await syncProjectsBulk(uploadedBasenames, 'upload');
     } catch (error) {
         if (error === 'cancel' || error === 'close') return;
@@ -1941,7 +2034,7 @@ async function intelligentDownload() {
         );
         const tasks = filesToDownload.map(file => ({ name: file.basename, action: (signal) => forceSyncFile(file.basename, 'download', signal, { syncProject: false }) }));
         await executeSync(tasks, t('chats.alerts.syncConfirmDownloadTitle'));
-        await syncProjectsBulk(filesToDownload.map(f => f.basename), 'download');
+        await syncProjectsBulk(filesToDownload.map((file) => file.basename).filter((basename) => String(basename).toLowerCase().endsWith('.json')), 'download');
     } catch (error) {
         if (error === 'cancel' || error === 'close') return;
         ElMessage.error(`${error.message}`);
@@ -1974,11 +2067,79 @@ async function executeSync(tasks, title) {
     }
 }
 
+const uploadDatabaseConversation = async (file) => {
+    const descriptorResult = await window.api.getConversationDescriptor({
+        dirPath: localChatPath.value,
+        reference: file.conversationId
+    });
+    const descriptor = descriptorResult?.descriptor;
+    if (!descriptor) throw new Error('conversation_descriptor_missing');
+    const snapshot = await window.api.readConversationSnapshot({
+        dirPath: localChatPath.value,
+        conversationId: descriptor.conversationId
+    });
+    const { client, remoteDir } = getWebdavClientForChats();
+    if (!(await client.exists(remoteDir))) await client.createDirectory(remoteDir, { recursive: true });
+    const bytes = snapshot.content?.encoding === 'base64'
+        ? Uint8Array.from(atob(snapshot.content.data), (char) => char.charCodeAt(0))
+        : snapshot.content;
+    await client.putFileContents(`${remoteDir}/${descriptor.dbFile}`, bytes, { overwrite: true });
+    const cloudData = await readCloudProjectsViaWebdav();
+    const localProject = (localProjects.value.projects || []).find((project) =>
+        (project.conversationIds || []).includes(descriptor.conversationId)
+        || (descriptor.legacyJson && (project.files || []).includes(descriptor.legacyJson))
+    );
+    let projects = cloudData.projects.map((project) => ({
+        ...project,
+        conversationIds: (project.conversationIds || []).filter((id) => id !== descriptor.conversationId)
+    }));
+    if (localProject) {
+        projects = projects.map((project) => project.id === localProject.id
+            ? { ...project, conversationIds: [...project.conversationIds, descriptor.conversationId] }
+            : project);
+    }
+    await writeCloudProjectsViaWebdav({
+        ...cloudData,
+        conversations: { ...cloudData.conversations, [descriptor.conversationId]: descriptor },
+        projects
+    });
+    return { completedFiles: [descriptor.dbFile] };
+};
+
+const downloadDatabaseConversation = async (file) => {
+    const descriptor = cloudProjects.value?.conversations?.[file.conversationId];
+    if (!descriptor) throw new Error('conversation_descriptor_missing');
+    const { client, remoteDir } = getWebdavClientForChats();
+    const content = await client.getFileContents(`${remoteDir}/${descriptor.dbFile}`, { format: 'binary' });
+    await window.api.importConversationSnapshot({ dirPath: localChatPath.value, descriptor, content });
+    const cloudProject = (cloudProjects.value.projects || []).find((project) => (project.conversationIds || []).includes(descriptor.conversationId));
+    if (cloudProject) {
+        const localData = normalizeProjectsResult(await window.api.readLocalProjects(localChatPath.value));
+        let projects = localData.projects.map((project) => ({
+            ...project,
+            conversationIds: (project.conversationIds || []).filter((id) => id !== descriptor.conversationId)
+        }));
+        projects = projects.map((project) => project.id === cloudProject.id
+            ? { ...project, conversationIds: [...project.conversationIds, descriptor.conversationId] }
+            : project);
+        await window.api.writeLocalProjects(localChatPath.value, { ...localData, projects });
+    }
+    return { completedFiles: [descriptor.dbFile] };
+};
+
+
 async function forceSyncFile(basename, direction, signal, options = {}) {
     const { syncProject = true } = options;
     singleFileSyncing.value[basename] = true;
     try {
         const normalizedBasename = getSafeString(basename);
+        const sourceList = direction === 'upload' ? localChatFiles.value : cloudChatFiles.value;
+        const logicalFile = sourceList.find((file) => file.basename === normalizedBasename || file.conversationId === normalizedBasename);
+        if (logicalFile?.format === 'sqlite' && logicalFile?.conversationId) {
+            return direction === 'upload'
+                ? await uploadDatabaseConversation(logicalFile)
+                : await downloadDatabaseConversation(logicalFile);
+        }
         const localPath = `${localChatPath.value}/${normalizedBasename}`;
 
         if (direction === 'upload') {

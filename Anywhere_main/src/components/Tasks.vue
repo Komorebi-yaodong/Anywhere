@@ -361,6 +361,16 @@ async function clearTaskHistory() {
         if (localPath) {
             // 遍历所有带有 json 文件的日志记录，并尝试从本地删除
             for (const log of selectedTask.value.history) {
+                if (log.conversationId) {
+                    try {
+                        const result = await window.api.deleteConversation({ dirPath: localPath, conversationId: log.conversationId, deleteLegacyJson: true });
+                        if (result?.removed) deleteCount++;
+                    } catch (err) {
+                        console.warn(`本地数据库会话删除跳过或失败: ${log.conversationId}`, err);
+                    }
+                    continue;
+                }
+
                 if (log.file && log.file.endsWith('.json')) {
                     // 使用原生 path.join 防呆，若不可用则使用正则过滤掉双斜杠
                     let filePath = "";
@@ -452,8 +462,8 @@ const formatTime = (ts) => {
     return new Date(ts).toLocaleString(locale.value === 'en' ? 'en-US' : 'zh-CN'); // 日期时间格式建议保留本地化
 }
 
-async function openTaskChat(logFile) {
-    if (!logFile || !logFile.endsWith('.json')) return;
+async function openTaskChat(logFile, conversationId = '') {
+    if (!conversationId && (!logFile || !logFile.endsWith('.json'))) return;
 
     const localPath = currentConfig.value.webdav?.localChatPath;
     if (!localPath) {
@@ -461,18 +471,22 @@ async function openTaskChat(logFile) {
         return;
     }
 
-    let filePath = "";
-    if (window.api && window.api.pathJoin) {
-        filePath = window.api.pathJoin(localPath, logFile);
-    } else {
-        filePath = `${localPath}/${logFile}`.replace(/\\/g, '/').replace(/\/{2,}/g, '/');
-    }
-
     try {
         ElMessage.info(t('chats.alerts.loadingChat') || '正在加载对话...');
-        const jsonString = await window.api.readLocalFile(filePath);
-        // 将 t('chats.alerts.restoreChat') || '恢复聊天' 修改为硬编码的 '恢复聊天'
-        await window.api.coderedirect('恢复聊天', JSON.stringify({ sessionData: jsonString, filename: logFile }));
+        if (conversationId) {
+            const opened = await window.api.openConversation({ dirPath: localPath, reference: conversationId, activeOnly: true });
+            await window.api.coderedirect('恢复聊天', JSON.stringify({
+                conversationId: opened.descriptor.conversationId,
+                conversationTitle: opened.descriptor.title,
+                format: 'sqlite'
+            }));
+        } else {
+            const filePath = window.api?.pathJoin
+                ? window.api.pathJoin(localPath, logFile)
+                : `${localPath}/${logFile}`.replace(/\\/g, '/').replace(/\/{2,}/g, '/');
+            const jsonString = await window.api.readLocalFile(filePath);
+            await window.api.coderedirect('恢复聊天', JSON.stringify({ sessionData: jsonString, filename: logFile }));
+        }
         ElMessage.success(t('chats.alerts.restoreInitiated') || '对话已开始');
     } catch (error) {
         ElMessage.error((t('chats.alerts.restoreFailed') || '无法打开对话') + `: ${error.message}`);
@@ -876,8 +890,8 @@ async function openTaskChat(logFile) {
                                                         log.status === 'success' ? t('tasks.statusSuccess') :
                                                             t('tasks.statusFail') }}</el-tag>
                                                 <span class="log-file" :title="log.file"
-                                                    :class="{ 'clickable': log.file && log.file.endsWith('.json') }"
-                                                    @click="openTaskChat(log.file)">
+                                                    :class="{ 'clickable': Boolean(log.conversationId) || (log.file && log.file.endsWith('.json')) }"
+                                                    @click="openTaskChat(log.file, log.conversationId)">
                                                     <el-icon style="margin-right: 4px; vertical-align: middle;">
                                                         <Document />
                                                     </el-icon>

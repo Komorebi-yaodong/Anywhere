@@ -95,6 +95,11 @@ function getProjectsModule() {
     return require(runtimePath);
 }
 
+function getConversationModule() {
+    const runtimePath = './' + 'conversation_runtime.js';
+    return require(runtimePath);
+}
+
 const channel = "window";
 let senderId = null; // [新增] 用于存储当前窗口的唯一ID
 
@@ -205,6 +210,57 @@ window.api = {
     renameLocalFile,
     listJsonFiles,
     writeLocalFile,
+    listLocalConversations: (...args) => getConversationModule().listLocalConversations(...args),
+    migrateJsonConversation: (input = {}) => getConversationModule().migrateJsonConversation(input),
+    createConversation: (input = {}) => getConversationModule().createConversation(input),
+    openConversation: (input = {}) => getConversationModule().openConversation(input),
+    loadConversationPage: (input = {}) => getConversationModule().loadConversationPage(input),
+    getConversationRequestMessages: (input = {}) => getConversationModule().getConversationRequestMessages(input),
+
+    saveConversationSnapshot: (input = {}) => getConversationModule().saveConversationSnapshot(input),
+    saveConversationState: (input = {}) => getConversationModule().saveConversationState(input),
+    appendConversationMessages: (input = {}) => getConversationModule().appendMessages(input),
+    updateConversationMessage: (input = {}) => getConversationModule().updateMessage(input),
+    truncateConversationMessages: (input = {}) => getConversationModule().truncateMessages(input),
+    deleteConversationMessages: (input = {}) => getConversationModule().deleteMessages(input),
+    replaceActiveConversationMessages: (input = {}) => getConversationModule().replaceActiveMessages(input),
+    restoreConversationCompaction: (input = {}) => getConversationModule().restoreConversationCompaction(input),
+    renameConversation: (input = {}) => getConversationModule().renameConversation(input),
+    deleteConversation: (input = {}) => getConversationModule().deleteConversation(input),
+    acquireConversationWriteLease: (input = {}) => getConversationModule().acquireWriteLease(input),
+    heartbeatConversationWriteLease: (input = {}) => getConversationModule().heartbeatWriteLease(input),
+    releaseConversationWriteLease: (input = {}) => getConversationModule().releaseWriteLease(input),
+    createConversationSnapshot: (input = {}) => getConversationModule().createConversationSnapshot(input),
+    createCloudConversationWorktree: async (input = {}) => {
+        const cacheId = String(input?.conversationId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+        const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', cacheId);
+        const created = await getConversationModule().createConversation({
+            dirPath: worktreeDir,
+            title: input?.title,
+            sessionData: input?.sessionData,
+            storageMode: 'cloud'
+        });
+        return { ...created, worktreeDir, storageMode: 'cloud' };
+    },
+
+    openCloudConversationSnapshot: async (input = {}) => {
+        const conversationId = String(input?.descriptor?.conversationId || '').trim();
+        if (!conversationId) throw new Error('conversation_descriptor_invalid');
+        const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', conversationId);
+        await getConversationModule().importConversationSnapshot({
+            dirPath: worktreeDir,
+            descriptor: { ...input.descriptor, storageMode: 'cloud' },
+            content: input.content
+        });
+        const opened = await getConversationModule().openConversation({ dirPath: worktreeDir, reference: conversationId, activeOnly: true });
+        return { ...opened, worktreeDir, storageMode: 'cloud' };
+    },
+
+    readConversationSnapshot: (input = {}) => getConversationModule().readConversationSnapshot(input),
+    importConversationSnapshot: (input = {}) => getConversationModule().importConversationSnapshot(input),
+
+    getConversationDescriptor: (input = {}) => getConversationModule().getConversationDescriptor(input),
+
     readLocalProjects: (...args) => getProjectsModule().readLocalProjects(...args),
     writeLocalProjects: (...args) => getProjectsModule().writeLocalProjects(...args),
     parseProjectsYaml: (...args) => getProjectsModule().parseProjectsYaml(...args),
