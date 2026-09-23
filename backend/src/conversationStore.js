@@ -1,8 +1,8 @@
 // Keep this schema/repository behavior aligned with Anywhere Desktop main/core/conversationStore.js.
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { DatabaseSync, backup: sqliteBackup } = require('node:sqlite');
+const fs = require('fs/promises');
+const path = require('path');
+const crypto = require('crypto');
+const { DatabaseSync, backup: sqliteBackup } = require('./sqliteSyncDriver.js');
 
 const {
   findConversation,
@@ -21,13 +21,23 @@ const WRITE_LEASE_TTL_MS = 20 * 1000
 const DEFAULT_BUSY_TIMEOUT_MS = 4000
 const ATTACHMENT_REF_KEY = '__anywhere_attachment_ref'
 
+
+function createUuid() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = crypto.randomBytes(16)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = bytes.toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 const nowIso = () => new Date().toISOString()
 const clone = (value) => JSON.parse(JSON.stringify(value ?? null))
 const normalizeText = (value, fallback = '') => typeof value === 'string' ? value : (value == null ? fallback : String(value))
 const normalizeBasename = (value = '') => path.basename(normalizeText(value).trim())
 
 function createConversationId() {
-  return crypto.randomUUID()
+  return createUuid()
 }
 
 function createDatabaseFilename(conversationId) {
@@ -218,7 +228,7 @@ function externalizeAttachments(db, value, ownerId, currentPath = '$', links = [
     if (!parsed) return value
     let row = db.prepare('SELECT attachment_id FROM attachments WHERE sha256 = ?').get(parsed.sha256)
     if (!row) {
-      const attachmentId = crypto.randomUUID()
+      const attachmentId = createUuid()
       db.prepare(`
         INSERT INTO attachments(attachment_id, sha256, mime_type, byte_size, data_url, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -268,7 +278,7 @@ function messageSignature(message = {}) {
 function prepareMigrationMessages(fullHistory = [], chatShow = []) {
   const messages = (Array.isArray(fullHistory) ? fullHistory : []).map((message) => ({
     ...clone(message),
-    storageId: normalizeText(message?.storageId).trim() || crypto.randomUUID()
+    storageId: normalizeText(message?.storageId).trim() || createUuid()
   }))
   const signatureQueues = new Map()
   messages.forEach((message) => {
@@ -282,7 +292,7 @@ function prepareMigrationMessages(fullHistory = [], chatShow = []) {
     const signature = messageSignature(next)
     const queue = signatureQueues.get(signature)
     next.storageId = normalizeText(next.storageId).trim() || (queue?.shift() || '')
-    next.uiStorageId = normalizeText(next.uiStorageId).trim() || crypto.randomUUID()
+    next.uiStorageId = normalizeText(next.uiStorageId).trim() || createUuid()
     return next
   })
   return { messages, uiMessages }
@@ -304,7 +314,7 @@ function splitSessionSnapshot(sessionData = {}) {
 }
 
 function insertMessage(db, message, ordinal) {
-  const storageId = normalizeText(message?.storageId).trim() || crypto.randomUUID()
+  const storageId = normalizeText(message?.storageId).trim() || createUuid()
   const payload = clone(message)
   delete payload.storageId
   delete payload.storageOrdinal
@@ -324,7 +334,7 @@ function insertMessage(db, message, ordinal) {
   for (const link of links) linkStmt.run(storageId, link.jsonPath, link.attachmentId)
 
   if (role === 'compaction') {
-    const summaryId = normalizeText(payload.snapshotId || payload.id).trim() || crypto.randomUUID()
+    const summaryId = normalizeText(payload.snapshotId || payload.id).trim() || createUuid()
     db.prepare(`
       INSERT OR REPLACE INTO compaction_summaries(
         summary_id, message_uuid, covered_start_ordinal, covered_end_ordinal,
@@ -346,7 +356,7 @@ function insertMessage(db, message, ordinal) {
 }
 
 function insertUiMessage(db, message, uiOrder) {
-  const uiStorageId = normalizeText(message?.uiStorageId).trim() || crypto.randomUUID()
+  const uiStorageId = normalizeText(message?.uiStorageId).trim() || createUuid()
   const payload = clone(message)
   delete payload.storageId
   delete payload.uiStorageId

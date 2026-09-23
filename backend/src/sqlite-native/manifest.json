@@ -1,0 +1,18 @@
+{
+  "package": "better-sqlite3",
+  "version": "7.6.2",
+  "runtime": "electron",
+  "electronVersion": "13.6.9",
+  "moduleAbi": 89,
+  "targets": {
+    "win32-x64": {
+      "sha256": "231010b23034d03bcedaefb2d2ff62eca6ff45481e545835e43581800d9406cf"
+    },
+    "darwin-x64": {
+      "sha256": "92e7cc2bb024a725fbf78f9174b11e49b00da6d42df27e68ccae8d175de77ae5"
+    },
+    "linux-x64": {
+      "sha256": "6dd4896fba06987a7931e522f0562e8df925cf71153f7a6d70851c609016d632"
+    }
+  }
+}

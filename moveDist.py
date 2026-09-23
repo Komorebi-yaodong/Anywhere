@@ -95,6 +95,8 @@ if __name__ == "__main__":
     deleteFile(latest_version_dir, 'preload.js')
     deleteFile(latest_version_dir, 'window_preload.js')
     deleteFile(latest_version_dir, 'fast_window_preload.js')
+    deleteFile(latest_version_dir, 'sqlite_worker.js')
+    deleteFiles(latest_version_dir, 'sqlite-native')
     print(f"正在更新 preload 相关文件...")
     smart_copy(os.path.join("backend", "public"), latest_version_dir)
     print("preload 相关文件更新完成\n")
