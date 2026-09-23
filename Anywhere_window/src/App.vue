@@ -614,6 +614,7 @@ if (isDarkInit) {
 
 const defaultConfig = window.api.defaultConfig;
 const UserAvart = ref("user.png");
+const userNickname = ref('User');
 const AIAvart = ref("ai.svg");
 const favicon = ref("favicon.png");
 const CODE = ref("");
@@ -2799,9 +2800,13 @@ onMounted(async () => {
 
     try {
       const userInfo = await window.api.getUser();
-      UserAvart.value = userInfo.avatar;
+      UserAvart.value = userInfo?.avatar || "user.png";
+      userNickname.value = typeof userInfo?.nickname === 'string' && userInfo.nickname.trim()
+        ? userInfo.nickname.trim()
+        : 'User';
     } catch (err) {
       UserAvart.value = "user.png";
+      userNickname.value = 'User';
     }
 
     if (data?.os) {
@@ -9264,7 +9269,7 @@ const scrollToMessageByIndex = (index) => {
             @update-auto-approve="handleToggleAutoApprove" @confirm-tool="handleToolApproval"
             @reject-tool="handleToolApproval" :ref="el => setMessageRef(el, message.id)" :message="message"
             :index="index" :is-last-message="index === chat_show.length - 1" :is-loading="loading"
-            :user-avatar="UserAvart" :ai-avatar="AIAvart" :is-collapsed="isCollapsed(index)"
+            :user-avatar="UserAvart" :user-nickname="userNickname" :ai-avatar="AIAvart" :is-collapsed="isCollapsed(index)"
             :is-dark-mode="currentConfig.isDarkMode" @delete-message="handleDeleteMessage" @copy-text="handleCopyText"
             @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
             @avatar-click="onAvatarClick" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"

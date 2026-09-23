@@ -25,6 +25,7 @@ const props = defineProps({
   isLastMessage: Boolean,
   isLoading: Boolean,
   userAvatar: String,
+  userNickname: String,
   aiAvatar: String,
   isCollapsed: Boolean,
   isDarkMode: Boolean,
@@ -764,7 +765,12 @@ const truncateFilename = (filename, maxLength = 30) => {
     <!-- 用户消息 -->
     <div v-if="message.role === 'user'" class="message-wrapper user-wrapper" ref="messageWrapperRef">
       <div class="message-meta-header user-meta-header">
-        <span class="timestamp" v-if="message.timestamp">{{ message.origin === 'view_image' ? '工具读取图片 · ' : '' }}{{ formatTimestamp(message.timestamp) }}</span>
+        <div class="meta-info-column user-meta-info-column">
+          <div class="meta-name-row user-meta-name-row">
+            <span class="user-name">{{ userNickname || 'User' }}</span>
+          </div>
+          <span class="timestamp-row" v-if="message.timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+        </div>
         <img :src="userAvatar" alt="User Avatar" @click="onAvatarClick('user', $event)"
           class="chat-avatar-top user-avatar">
       </div>

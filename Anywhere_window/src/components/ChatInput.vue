@@ -1250,13 +1250,7 @@ defineExpose({ focus, senderRef });
         :show-close="true" align-center>
         <template #header>
             <div class="compact-dialog-header">
-                <div class="compact-dialog-title-row">
-                    <div class="compact-dialog-title">会话压缩</div>
-                    <el-tooltip content="学习codex本地压缩功能" placement="top">
-                        <el-icon class="compact-info-icon"><InfoFilled /></el-icon>
-                    </el-tooltip>
-                </div>
-                <div class="compact-dialog-subtitle">级联检查点 · 摘要交接 · 可还原</div>
+                <div class="compact-dialog-title">会话压缩</div>
             </div>
         </template>
 
@@ -1281,10 +1275,7 @@ defineExpose({ focus, senderRef });
             <div v-else class="compact-config-block">
                 <div class="compact-section-card compact-prompt-usage-card">
                     <div class="compact-prompt-usage-heading">
-                        <div>
-                            <div class="compact-section-title">Prompt 上下文占用</div>
-                            <div class="compact-form-hint">100% = {{ formatCompactTokenCount(promptUsage.contextLength) }} tokens</div>
-                        </div>
+                        <div class="compact-section-title">Prompt 上下文占用</div>
                         <div class="compact-prompt-usage-total" :class="{ 'is-over': promptUsage.overTokens > 0 }">
                             <span v-if="promptTokenBreakdown.loading">计算中…</span>
                             <span v-else>有效 {{ formatCompactTokenCount(promptUsage.effectiveTokens) }} / {{ formatCompactTokenCount(promptUsage.contextLength) }}</span>
@@ -1300,10 +1291,10 @@ defineExpose({ focus, senderRef });
                         </span>
                     </div>
                     <div class="compact-prompt-legend">
-                        <span><i class="is-system"></i>System {{ formatCompactTokenCount(promptUsage.systemTokens) }}</span>
-                        <span><i class="is-conversation"></i>对话 {{ formatCompactTokenCount(promptUsage.conversationTokens) }}</span>
-                        <span><i class="is-tool"></i>工具 {{ formatCompactTokenCount(promptUsage.toolTokens) }}</span>
-                        <span class="is-remaining">剩余 {{ formatCompactTokenCount(promptUsage.remainingTokens) }}</span>
+                        <span><i class="is-system"></i>System {{ promptUsage.systemPercent.toFixed(1) }}%({{ formatCompactTokenCount(promptUsage.systemTokens) }})</span>
+                        <span><i class="is-conversation"></i>对话 {{ promptUsage.conversationPercent.toFixed(1) }}%({{ formatCompactTokenCount(promptUsage.conversationTokens) }})</span>
+                        <span><i class="is-tool"></i>工具 {{ promptUsage.toolPercent.toFixed(1) }}%({{ formatCompactTokenCount(promptUsage.toolTokens) }})</span>
+                        <span class="is-remaining">剩余 {{ Math.max(0, 100 - promptUsage.effectivePercent).toFixed(1) }}%({{ formatCompactTokenCount(promptUsage.remainingTokens) }})</span>
                     </div>
                     <div v-if="promptUsage.overTokens > 0" class="compact-prompt-warning">已超出上下文 {{ formatCompactTokenCount(promptUsage.overTokens) }} tokens</div>
                     <div v-else-if="promptTokenBreakdown.error" class="compact-prompt-warning">统计失败：{{ promptTokenBreakdown.error }}</div>
@@ -1338,12 +1329,15 @@ defineExpose({ focus, senderRef });
                 </div>
 
                 <div class="compact-section-card">
-                    <button type="button" class="compact-advanced-toggle" @click="advancedCollapsed = !advancedCollapsed">
-                        <el-icon>
-                            <component :is="advancedCollapsed ? ArrowRight : ArrowDown" />
-                        </el-icon>
-                        <span>高级参数</span>
-                    </button>
+                    <div class="compact-advanced-header">
+                        <button type="button" class="compact-advanced-toggle" @click="advancedCollapsed = !advancedCollapsed">
+                            <el-icon>
+                                <component :is="advancedCollapsed ? ArrowRight : ArrowDown" />
+                            </el-icon>
+                            <span>高级参数</span>
+                        </button>
+                        <el-button type="warning" plain round size="small" @click="applyAdvancedToGlobal">应用到全部模型</el-button>
+                    </div>
                     <div v-show="!advancedCollapsed" class="compact-advanced-body">
                         <div class="compact-grid-2">
                             <div class="compact-field compact-display-control">
@@ -1367,10 +1361,7 @@ defineExpose({ focus, senderRef });
                             <div class="compact-label">摘要 Prompt</div>
                             <el-input v-model="localCompactConfig.compactPrompt" type="textarea" :autosize="{ minRows: 4, maxRows: 8 }" />
                         </div>
-                        <div class="compact-advanced-actions">
-                            <el-button type="warning" plain round @click="applyAdvancedToGlobal">应用到全局</el-button>
-                            <div class="compact-form-hint">将高级参数同步到所有已缓存模型（不改各模型上下文长度）</div>
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -2588,12 +2579,11 @@ html.dark .compact-dialog-scroll::-webkit-scrollbar-thumb {
     gap: 10px;
 }
 
-.compact-advanced-actions {
+.compact-advanced-header {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    padding-top: 4px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
 }
 
 .compact-dialog-subtitle {
@@ -2740,7 +2730,7 @@ html.dark .compact-dialog-scroll::-webkit-scrollbar-thumb {
 }
 
 .compact-prompt-legend .is-remaining {
-    margin-left: auto;
+    color: var(--el-text-color-secondary);
 }
 
 .compact-prompt-warning {
