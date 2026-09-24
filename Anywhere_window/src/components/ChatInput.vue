@@ -11,6 +11,8 @@ const tempReasoningEffort = defineModel('tempReasoningEffort');
 
 const props = defineProps({
     loading: Boolean,
+
+    writeLocked: { type: Boolean, default: false },
     ctrlEnterToSend: Boolean,
     voiceList: { type: Array, default: () => [] },
     layout: { type: String, default: 'horizontal' },
@@ -86,7 +88,7 @@ const compactStatusText = computed(() => {
     if (!props.compacting) return '';
     return props.compactProgress?.message || '正在压缩…';
 });
-const interactionLocked = computed(() => Boolean(props.loading || props.compacting));
+const interactionLocked = computed(() => Boolean(props.loading || props.compacting || props.writeLocked));
 
 watch(() => props.compactConfig, (next) => {
     if (!next || typeof next !== 'object') return;
@@ -1062,12 +1064,12 @@ defineExpose({ focus, senderRef });
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
                             :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容，“ @”选择MCP，“ /”选择skill'"
                             :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleKeyDown"
-                            :disabled="isRecording" />
+                            :disabled="isRecording || interactionLocked" />
                     </div>
                     <div class="input-actions-bar">
                         <div class="action-buttons-left">
                             <el-tooltip content="清除聊天记录">
-                                <el-button size="default" @click="onClearHistory" circle :disabled="isRecording">
+                                <el-button size="default" @click="onClearHistory" circle :disabled="isRecording || interactionLocked">
                                     <el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1084,7 +1086,7 @@ defineExpose({ focus, senderRef });
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip content="添加附件">
-                                <el-button size="default" @click="triggerFileUpload" circle :disabled="isRecording">
+                                <el-button size="default" @click="triggerFileUpload" circle :disabled="isRecording || interactionLocked">
                                     <el-icon :size="17">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1101,7 +1103,7 @@ defineExpose({ focus, senderRef });
                             <el-tooltip :content="reasoningTooltipContent">
                                 <el-button ref="reasoningButtonRef"
                                     :class="{ 'is-active-special': tempReasoningEffort && tempReasoningEffort !== 'default' }"
-                                    size="default" circle :disabled="isRecording" @click="toggleReasoningSelector">
+                                    size="default" circle :disabled="isRecording || interactionLocked" @click="toggleReasoningSelector">
                                     <el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                                             viewBox="0 0 24 24" class="icon" style="margin-top: -2px;">
@@ -1114,7 +1116,7 @@ defineExpose({ focus, senderRef });
                             </el-tooltip>
 
                             <el-tooltip content="语音回复设置">
-                                <el-button ref="voiceButtonRef" size="default" circle :disabled="isRecording"
+                                <el-button ref="voiceButtonRef" size="default" circle :disabled="isRecording || interactionLocked"
                                     :class="{ 'is-active-special': selectedVoice }" @click="toggleVoiceSelector">
                                     <el-icon :size="18">
                                         <svg t="1765028999430" class="icon" viewBox="0 0 1024 1024" version="1.1"
@@ -1127,7 +1129,7 @@ defineExpose({ focus, senderRef });
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip content="MCP工具">
-                                <el-button size="default" circle :disabled="isRecording"
+                                <el-button size="default" circle :disabled="isRecording || interactionLocked"
                                     :class="{ 'is-active-special': isMcpActive }" @click="$emit('open-mcp-dialog')">
                                     <el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
@@ -1140,7 +1142,7 @@ defineExpose({ focus, senderRef });
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip content="Skill 技能库">
-                                <el-button size="default" circle :disabled="isRecording"
+                                <el-button size="default" circle :disabled="isRecording || interactionLocked"
                                     :class="{ 'is-active-special': activeSkillIds && activeSkillIds.length > 0 }"
                                     @click="$emit('open-skill-dialog')">
                                     <el-icon :size="18">
@@ -1149,7 +1151,7 @@ defineExpose({ focus, senderRef });
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip :content="compacting ? '压缩进行中…' : '会话压缩'">
-                                <el-button size="default" circle :disabled="isRecording"
+                                <el-button size="default" circle :disabled="isRecording || interactionLocked"
                                     :class="{ 'is-active-special': compacting || canRestoreCompact }"
                                     @click="openCompactDialog">
                                     <el-icon :size="18">
@@ -1183,7 +1185,7 @@ defineExpose({ focus, senderRef });
                                         </el-icon>
                                     </el-button>
                                 </el-tooltip>
-                                <el-button v-if="!loading" @click="onSubmit" circle :disabled="loading">
+                                <el-button v-if="!loading" @click="onSubmit" circle :disabled="interactionLocked">
                                     <el-icon :size="18">
                                         <svg t="1765029205363" class="icon" viewBox="0 0 1024 1024" version="1.1"
                                             xmlns="http://www.w3.org/2000/svg" p-id="63447" width="200" height="200">

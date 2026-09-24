@@ -210,6 +210,24 @@ function withTransaction(db, callback, mode = 'IMMEDIATE') {
   }
 }
 
+
+function getActiveWriteLease(db) {
+  const lease = db.prepare("SELECT holder_instance_id, holder_app, lease_epoch, expires_at FROM write_lease WHERE resource = 'conversation'").get()
+  if (!lease || new Date(lease.expires_at).getTime() <= Date.now()) return null
+  return lease
+}
+
+function assertConversationWriteLease(db, { holderInstanceId = '', leaseEpoch = null } = {}) {
+  const lease = getActiveWriteLease(db)
+  if (!lease) return null
+  const holder = normalizeText(holderInstanceId).trim()
+  const epoch = Number(leaseEpoch)
+  if (!holder || !Number.isFinite(epoch) || lease.holder_instance_id !== holder || Number(lease.lease_epoch) !== epoch) {
+    throw new Error('conversation_write_lease_lost')
+  }
+  return lease
+}
+
 function parseDataUrl(value) {
   if (typeof value !== 'string') return null
   const match = value.match(/^data:([^;,]+)(?:;[^,]*)?;base64,([A-Za-z0-9+/=\r\n]+)$/)
@@ -901,14 +919,7 @@ async function saveConversationSnapshot({ dirPath, conversationId, expectedRevis
     const prepared = prepareMigrationMessages(fullHistory, chatShow)
     const result = withTransaction(db, () => {
       const row = getConversationRow(db)
-      if (normalizeText(holderInstanceId).trim() && Number.isFinite(Number(leaseEpoch))) {
-        const lease = db.prepare("SELECT holder_instance_id, lease_epoch, expires_at FROM write_lease WHERE resource = 'conversation'").get()
-        const validLease = lease
-          && lease.holder_instance_id === holderInstanceId
-          && Number(lease.lease_epoch) === Number(leaseEpoch)
-          && new Date(lease.expires_at).getTime() > Date.now()
-        if (!validLease) throw new Error('conversation_write_lease_lost')
-      }
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       if (Number.isFinite(Number(expectedRevision)) && Number(expectedRevision) !== Number(row.revision)) {
         const error = new Error('conversation_revision_conflict')
         error.currentRevision = row.revision
@@ -993,7 +1004,7 @@ async function saveConversationSnapshot({ dirPath, conversationId, expectedRevis
 }
 
 
-async function saveConversationState({ dirPath, conversationId, expectedRevision, state = {}, uiMessages = [], title = '' } = {}) {
+async function saveConversationState({ dirPath, conversationId, expectedRevision, holderInstanceId = '', leaseEpoch = null, state = {}, uiMessages = [], title = '' } = {}) {
   const projects = await readLocalProjects(dirPath)
   const descriptor = findConversation(projects, conversationId)
   if (!descriptor) throw new Error('conversation_not_found')
@@ -1002,6 +1013,7 @@ async function saveConversationState({ dirPath, conversationId, expectedRevision
     initializeSchema(db)
     const result = withTransaction(db, () => {
       const row = getConversationRow(db)
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       if (Number.isFinite(Number(expectedRevision)) && Number(expectedRevision) !== Number(row.revision)) {
         const error = new Error('conversation_revision_conflict')
         error.currentRevision = row.revision
@@ -1027,7 +1039,7 @@ async function saveConversationState({ dirPath, conversationId, expectedRevision
   } finally { db.close() }
 }
 
-async function appendMessages({ dirPath, conversationId, messages = [] } = {}) {
+async function appendMessages({ dirPath, conversationId, holderInstanceId = '', leaseEpoch = null, messages = [] } = {}) {
   if (!Array.isArray(messages) || messages.length === 0) return { ok: true, messageIds: [] }
   const descriptor = findConversation(await readLocalProjects(dirPath), conversationId)
   if (!descriptor) throw new Error('conversation_not_found')
@@ -1035,6 +1047,7 @@ async function appendMessages({ dirPath, conversationId, messages = [] } = {}) {
   try {
     initializeSchema(db)
     return withTransaction(db, () => {
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       let ordinal = Number(db.prepare('SELECT COALESCE(MAX(ordinal), 0) AS value FROM messages').get()?.value) || 0
       const messageIds = messages.map((message) => insertMessage(db, message, ++ordinal))
       db.prepare('UPDATE conversation SET updated_at = ? WHERE conversation_id = ?').run(nowIso(), conversationId)
@@ -1043,13 +1056,14 @@ async function appendMessages({ dirPath, conversationId, messages = [] } = {}) {
   } finally { db.close() }
 }
 
-async function updateMessage({ dirPath, conversationId, storageId, message } = {}) {
+async function updateMessage({ dirPath, conversationId, holderInstanceId = '', leaseEpoch = null, storageId, message } = {}) {
   const descriptor = findConversation(await readLocalProjects(dirPath), conversationId)
   if (!descriptor) throw new Error('conversation_not_found')
   const db = openDatabase(resolveDatabasePath(dirPath, descriptor.dbFile))
   try {
     initializeSchema(db)
     return withTransaction(db, () => {
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       const existing = db.prepare('SELECT ordinal FROM messages WHERE message_uuid = ?').get(storageId)
       if (!existing) throw new Error('conversation_message_not_found')
       db.prepare('DELETE FROM messages WHERE message_uuid = ?').run(storageId)
@@ -1059,13 +1073,14 @@ async function updateMessage({ dirPath, conversationId, storageId, message } = {
   } finally { db.close() }
 }
 
-async function truncateMessages({ dirPath, conversationId, fromStorageId, inclusive = true } = {}) {
+async function truncateMessages({ dirPath, conversationId, holderInstanceId = '', leaseEpoch = null, fromStorageId, inclusive = true } = {}) {
   const descriptor = findConversation(await readLocalProjects(dirPath), conversationId)
   if (!descriptor) throw new Error('conversation_not_found')
   const db = openDatabase(resolveDatabasePath(dirPath, descriptor.dbFile))
   try {
     initializeSchema(db)
     return withTransaction(db, () => {
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       const row = db.prepare('SELECT ordinal FROM messages WHERE message_uuid = ?').get(fromStorageId)
       if (!row) throw new Error('conversation_message_not_found')
       const result = db.prepare(`DELETE FROM messages WHERE ordinal ${inclusive ? '>=' : '>'} ?`).run(row.ordinal)
@@ -1074,7 +1089,7 @@ async function truncateMessages({ dirPath, conversationId, fromStorageId, inclus
   } finally { db.close() }
 }
 
-async function deleteMessages({ dirPath, conversationId, storageIds = [] } = {}) {
+async function deleteMessages({ dirPath, conversationId, holderInstanceId = '', leaseEpoch = null, storageIds = [] } = {}) {
   const ids = Array.isArray(storageIds) ? storageIds.map((id) => normalizeText(id).trim()).filter(Boolean) : []
   if (!ids.length) return { ok: true, removed: 0 }
   const descriptor = findConversation(await readLocalProjects(dirPath), conversationId)
@@ -1083,6 +1098,7 @@ async function deleteMessages({ dirPath, conversationId, storageIds = [] } = {})
   try {
     initializeSchema(db)
     return withTransaction(db, () => {
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       const stmt = db.prepare('DELETE FROM messages WHERE message_uuid = ?')
       let removed = 0
       for (const id of ids) removed += Number(stmt.run(id).changes) || 0
@@ -1091,13 +1107,14 @@ async function deleteMessages({ dirPath, conversationId, storageIds = [] } = {})
   } finally { db.close() }
 }
 
-async function replaceActiveMessages({ dirPath, conversationId, messages = [] } = {}) {
+async function replaceActiveMessages({ dirPath, conversationId, holderInstanceId = '', leaseEpoch = null, messages = [] } = {}) {
   const descriptor = findConversation(await readLocalProjects(dirPath), conversationId)
   if (!descriptor) throw new Error('conversation_not_found')
   const db = openDatabase(resolveDatabasePath(dirPath, descriptor.dbFile))
   try {
     initializeSchema(db)
     return withTransaction(db, () => {
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       const activeStart = getActiveMessageStart(db)
       if (activeStart > 0) db.prepare('DELETE FROM messages WHERE ordinal >= ?').run(activeStart)
       else db.exec('DELETE FROM messages')
@@ -1128,14 +1145,7 @@ async function restoreConversationCompaction({
     initializeSchema(db)
     const result = withTransaction(db, () => {
       const row = getConversationRow(db)
-      if (normalizeText(holderInstanceId).trim() && Number.isFinite(Number(leaseEpoch))) {
-        const lease = db.prepare("SELECT holder_instance_id, lease_epoch, expires_at FROM write_lease WHERE resource = 'conversation'").get()
-        const validLease = lease
-          && lease.holder_instance_id === holderInstanceId
-          && Number(lease.lease_epoch) === Number(leaseEpoch)
-          && new Date(lease.expires_at).getTime() > Date.now()
-        if (!validLease) throw new Error('conversation_write_lease_lost')
-      }
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       if (Number.isFinite(Number(expectedRevision)) && Number(expectedRevision) !== Number(row.revision)) {
         const error = new Error('conversation_revision_conflict')
         error.currentRevision = row.revision
@@ -1270,14 +1280,7 @@ async function renameConversation({
   try {
     withTransaction(db, () => {
       const row = getConversationRow(db)
-      if (normalizeText(holderInstanceId).trim() && Number.isFinite(Number(leaseEpoch))) {
-        const lease = db.prepare("SELECT holder_instance_id, lease_epoch, expires_at FROM write_lease WHERE resource = 'conversation'").get()
-        const validLease = lease
-          && lease.holder_instance_id === holderInstanceId
-          && Number(lease.lease_epoch) === Number(leaseEpoch)
-          && new Date(lease.expires_at).getTime() > Date.now()
-        if (!validLease) throw new Error('conversation_write_lease_lost')
-      }
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
       if (Number.isFinite(Number(expectedRevision)) && Number(expectedRevision) !== Number(row.revision)) {
         const error = new Error('conversation_revision_conflict')
         error.currentRevision = row.revision
@@ -1292,11 +1295,19 @@ async function renameConversation({
   return { ok: true, conversationId, title: nextTitle, dbFile: descriptor.dbFile, revision, updatedAt }
 }
 
-async function deleteConversation({ dirPath, conversationId, deleteLegacyJson = false } = {}) {
+async function deleteConversation({ dirPath, conversationId, holderInstanceId = '', leaseEpoch = null, deleteLegacyJson = false } = {}) {
   const projects = await readLocalProjects(dirPath)
   const descriptor = findConversation(projects, conversationId)
   if (!descriptor) return { ok: true, removed: false }
-  await fs.rm(resolveDatabasePath(dirPath, descriptor.dbFile), { force: true })
+  const databasePath = resolveDatabasePath(dirPath, descriptor.dbFile)
+  const db = openDatabase(databasePath)
+  try {
+    initializeSchema(db)
+    assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
+  } finally {
+    db.close()
+  }
+  await fs.rm(databasePath, { force: true })
   if (deleteLegacyJson && descriptor.legacyJson) await fs.rm(path.join(path.resolve(dirPath), descriptor.legacyJson), { force: true })
   await writeLocalProjects(dirPath, removeConversationFromProjects(projects, conversationId))
   return { ok: true, removed: true }
@@ -1310,14 +1321,21 @@ async function acquireWriteLease({ dirPath, conversationId, holderInstanceId, ho
     initializeSchema(db)
     return withTransaction(db, () => {
       const resource = 'conversation'
+      const holder = normalizeText(holderInstanceId).trim()
+      if (!holder) throw new Error('conversation_write_lease_holder_required')
       const current = db.prepare('SELECT * FROM write_lease WHERE resource = ?').get(resource)
       const expired = !current || new Date(current.expires_at).getTime() <= Date.now()
-      if (!force && current && !expired && current.holder_instance_id !== holderInstanceId) {
+      if (!force && current && !expired && current.holder_instance_id !== holder) {
         return { ok: false, readonly: true, holderApp: current.holder_app, expiresAt: current.expires_at, leaseEpoch: current.lease_epoch }
       }
-      const epoch = Number(current?.lease_epoch || 0) + 1
       const heartbeatAt = nowIso()
       const expiresAt = new Date(Date.now() + WRITE_LEASE_TTL_MS).toISOString()
+      if (!force && current && !expired && current.holder_instance_id === holder) {
+        db.prepare("UPDATE write_lease SET holder_app = ?, heartbeat_at = ?, expires_at = ? WHERE resource = 'conversation' AND holder_instance_id = ? AND lease_epoch = ?")
+          .run(holderApp, heartbeatAt, expiresAt, holder, current.lease_epoch)
+        return { ok: true, readonly: false, leaseEpoch: current.lease_epoch, expiresAt }
+      }
+      const epoch = Number(current?.lease_epoch || 0) + 1
       db.prepare(`
         INSERT INTO write_lease(resource, holder_instance_id, holder_app, lease_epoch, heartbeat_at, expires_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -1327,7 +1345,7 @@ async function acquireWriteLease({ dirPath, conversationId, holderInstanceId, ho
           lease_epoch = excluded.lease_epoch,
           heartbeat_at = excluded.heartbeat_at,
           expires_at = excluded.expires_at
-      `).run(resource, holderInstanceId, holderApp, epoch, heartbeatAt, expiresAt)
+      `).run(resource, holder, holderApp, epoch, heartbeatAt, expiresAt)
       return { ok: true, readonly: false, leaseEpoch: epoch, expiresAt }
     })
   } finally { db.close() }
@@ -1390,7 +1408,7 @@ async function readConversationSnapshot({ dirPath, conversationId } = {}) {
   }
 }
 
-async function importConversationSnapshot({ dirPath, descriptor: rawDescriptor = {}, content } = {}) {
+async function importConversationSnapshot({ dirPath, descriptor: rawDescriptor = {}, holderInstanceId = '', leaseEpoch = null, content } = {}) {
   const normalizedDir = path.resolve(normalizeText(dirPath).trim())
   if (!normalizedDir) throw new Error('conversation_local_dir_required')
   const conversationId = normalizeText(rawDescriptor.conversationId).trim()
@@ -1410,6 +1428,15 @@ async function importConversationSnapshot({ dirPath, descriptor: rawDescriptor =
   await fs.mkdir(normalizedDir, { recursive: true })
   const finalPath = resolveDatabasePath(normalizedDir, dbFile)
   const downloadPath = `${finalPath}.download`
+  if (await fs.access(finalPath).then(() => true, () => false)) {
+    const activeDb = openDatabase(finalPath)
+    try {
+      initializeSchema(activeDb)
+      assertConversationWriteLease(activeDb, { holderInstanceId, leaseEpoch })
+    } finally {
+      activeDb.close()
+    }
+  }
   await fs.writeFile(downloadPath, bytes)
   try {
     const db = openDatabase(downloadPath, { readOnly: true })
