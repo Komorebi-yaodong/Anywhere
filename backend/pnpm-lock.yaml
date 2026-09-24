@@ -18,8 +18,8 @@ importers:
         specifier: ^0.5.16
         version: 0.5.16
       better-sqlite3:
-        specifier: 7.6.2
-        version: 7.6.2
+        specifier: 8.7.0
+        version: 8.7.0
       gpt-tokenizer:
         specifier: 3.4.0
         version: 3.4.0
@@ -433,8 +433,8 @@ packages:
     resolution: {integrity: sha512-EreW0Vi8TwovhYUHBXXRA5tthuU2ynGsZFlboyMJHCCUXYa2AjgwnE3ubBOJs2xJLcuXFJbi6c/8pH5+FVj8Og==}
     engines: {node: '>=14'}
 
-  better-sqlite3@7.6.2:
-    resolution: {integrity: sha512-S5zIU1Hink2AH4xPsN0W43T1/AJ5jrPh7Oy07ocuW/AKYYY02GWzz9NH0nbSMn/gw6fDZ5jZ1QsHt1BXAwJ6Lg==}
+  better-sqlite3@8.7.0:
+    resolution: {integrity: sha512-99jZU4le+f3G6aIl6PmmV0cxUIWqKieHxsiF7G34CVFiE+/UabpYqkU0NJIkY/96mQKikHeBjtR27vFfs5JpEw==}
 
   bindings@1.5.0:
     resolution: {integrity: sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==}
@@ -1808,7 +1808,7 @@ snapshots:
 
   batch-cluster@13.0.0: {}
 
-  better-sqlite3@7.6.2:
+  better-sqlite3@8.7.0:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3

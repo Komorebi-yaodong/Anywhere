@@ -11,6 +11,27 @@ const fsAccess = promisify(fs.access);
 const SQLITE_BUSY = 5;
 const SQLITE_LOCKED = 6;
 
+
+function loadNativeManifest() {
+  const manifestPath = path.join(__dirname, 'sqlite-native', 'manifest.json');
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch (error) {
+    throw new Error(`sqlite_native_manifest_invalid:${error?.message || error}`);
+  }
+}
+
+function assertNativeRuntime(manifest, target) {
+  const expectedAbi = String(manifest?.moduleAbi || '');
+  const actualAbi = String(process.versions?.modules || '');
+  if (!expectedAbi || expectedAbi !== actualAbi) {
+    throw new Error(`sqlite_native_abi_mismatch:expected=${expectedAbi || 'unknown'},actual=${actualAbi || 'unknown'}`);
+  }
+  if (!manifest?.targets?.[target]) {
+    throw new Error(`sqlite_native_binding_unsupported:${target}`);
+  }
+}
+
 function loadNodeSqlite() {
   try {
     const moduleId = 'node:' + 'sqlite';
@@ -27,6 +48,8 @@ const nodeSqlite = loadNodeSqlite();
 class CompatibleDatabaseSync {
   constructor(databasePath, { readOnly = false, timeout = 4000 } = {}) {
     const target = `${process.platform}-${process.arch}`;
+    const manifest = loadNativeManifest();
+    assertNativeRuntime(manifest, target);
     const nativeBinding = path.join(
       __dirname,
       'sqlite-native',
