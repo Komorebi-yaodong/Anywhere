@@ -2792,6 +2792,8 @@ onMounted(async () => {
           if (redirectPayload.conversationId) {
             data = {
               ...data,
+              type: 'conversation',
+              payload: '',
               conversationId: redirectPayload.conversationId,
               conversationTitle: redirectPayload.conversationTitle || '',
               worktreeDir: redirectPayload.worktreeDir || '',
@@ -2911,16 +2913,21 @@ onMounted(async () => {
 
     if (data) {
       basic_msg.value = { code: data.code, type: data.type, payload: data.payload };
-      if (data.conversationId) {
-        const conversationDirPath = data.worktreeDir || currentConfig.value?.webdav?.localChatPath || '';
+      const embeddedConversation = data.conversation?.descriptor && data.conversation?.sessionData
+        ? data.conversation
+        : null;
+      if (embeddedConversation || data.conversationId) {
+        const conversationDirPath = embeddedConversation?.worktreeDir || embeddedConversation?.dirPath || data.worktreeDir || currentConfig.value?.webdav?.localChatPath || '';
         conversationLeasePending.value = true;
         conversationReadOnly.value = false;
         conversationLease.value = null;
-        const opened = await window.api.openConversation({
-          dirPath: conversationDirPath,
-          reference: data.conversationId,
-          activeOnly: true
-        });
+        const opened = embeddedConversation
+          ? { descriptor: embeddedConversation.descriptor, sessionData: embeddedConversation.sessionData }
+          : await window.api.openConversation({
+              dirPath: conversationDirPath,
+              reference: data.conversationId,
+              activeOnly: true
+            });
         const descriptor = opened?.descriptor;
         if (!descriptor || !opened?.sessionData) throw new Error('conversation_open_failed');
         currentConversationStorage.value = {
@@ -2930,7 +2937,7 @@ onMounted(async () => {
           title: descriptor.title,
           revision: Number(descriptor.revision) || 0,
           dirPath: conversationDirPath,
-          storageMode: data.storageMode || descriptor.storageMode || 'local',
+          storageMode: embeddedConversation?.storageMode || data.storageMode || descriptor.storageMode || 'local',
           isPaged: opened.sessionData?.conversationStorage?.isPaged === true,
           loadedFromOrdinal: Number(opened.sessionData?.conversationStorage?.loadedFromOrdinal) || 0,
           loadedFromUiOrder: Number(opened.sessionData?.conversationStorage?.loadedFromUiOrder) || 0,
@@ -2940,7 +2947,6 @@ onMounted(async () => {
         defaultConversationName.value = descriptor.title || data.conversationTitle || '';
         isSessionRestored = true;
         await loadSession(opened.sessionData);
-        autoCloseOnBlur.value = false;
         await acquireCurrentConversationLease();
       } else if (data.conversationTitle) {
         defaultConversationName.value = data.conversationTitle;
@@ -4019,7 +4025,18 @@ const getSessionDataAsObject = (options = {}) => {
     if (message && typeof message === 'object' && !message.uiStorageId) message.uiStorageId = createStorageId();
   });
 
-  const currentPromptConfig = currentConfig.value.prompts[CODE.value] || {};
+  const currentPromptConfig = {
+    ...(currentConfig.value.prompts[CODE.value] || {}),
+    ...(sourcePromptConfig.value || {}),
+    window_height: window.outerHeight,
+    window_width: window.outerWidth,
+    zoom: zoomLevel.value,
+    position_x: window.screenX,
+    position_y: window.screenY,
+    isAlwaysOnTop: isAlwaysOnTop.value,
+    autoCloseOnBlur: autoCloseOnBlur.value
+  };
+  sourcePromptConfig.value = { ...currentPromptConfig };
   const explicitTitle = typeof options?.title === 'string' ? options.title.trim() : '';
   // Keep the request projection current, but do not rebuild the UI cache while serializing.
   rehydrateHistoryToolsIfNeeded();
@@ -5546,7 +5563,9 @@ const loadSession = async (jsonData) => {
     document.title = CODE.value;
     basic_msg.value = jsonData.basic_msg;
     isInit.value = jsonData.isInit;
-    autoCloseOnBlur.value = jsonData.autoCloseOnBlur;
+    if (typeof jsonData.autoCloseOnBlur === 'boolean') {
+      autoCloseOnBlur.value = jsonData.autoCloseOnBlur;
+    }
 
     const rawFullHistory = Array.isArray(jsonData.fullHistory) ? jsonData.fullHistory : [];
     const rawHistory = Array.isArray(jsonData.history) ? jsonData.history : [];
@@ -5610,8 +5629,22 @@ const loadSession = async (jsonData) => {
     if (currentConfig.value.isDarkMode) { document.documentElement.classList.add('dark'); }
     else { document.documentElement.classList.remove('dark'); }
 
-    const currentPromptConfigFromLoad = jsonData.currentPromptConfig || currentConfig.value.prompts[CODE.value];
-    if (currentPromptConfigFromLoad && currentPromptConfigFromLoad.icon) {
+    const currentPromptConfigFromLoad = jsonData.currentPromptConfig || currentConfig.value.prompts[CODE.value] || {};
+    sourcePromptConfig.value = { ...currentPromptConfigFromLoad };
+    if (typeof jsonData.autoCloseOnBlur !== 'boolean' && typeof currentPromptConfigFromLoad.autoCloseOnBlur === 'boolean') {
+      autoCloseOnBlur.value = currentPromptConfigFromLoad.autoCloseOnBlur;
+    }
+    isAlwaysOnTop.value = currentPromptConfigFromLoad.isAlwaysOnTop ?? isAlwaysOnTop.value;
+    if (window.api && typeof window.api.applyConversationWindowState === 'function') {
+      window.api.applyConversationWindowState({
+        window_width: currentPromptConfigFromLoad.window_width,
+        window_height: currentPromptConfigFromLoad.window_height,
+        position_x: currentPromptConfigFromLoad.position_x,
+        position_y: currentPromptConfigFromLoad.position_y,
+        isAlwaysOnTop: isAlwaysOnTop.value
+      });
+    }
+    if (currentPromptConfigFromLoad.icon) {
       AIAvart.value = currentPromptConfigFromLoad.icon;
       favicon.value = currentPromptConfigFromLoad.icon;
     } else {

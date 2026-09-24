@@ -13,6 +13,7 @@ const {
   copyText,
   openWindow,
   openFastInputWindow,
+  applyConversationWindowState,
   coderedirect,
   setZoomFactor,
   feature_suffix,
@@ -129,6 +130,36 @@ window.api = {
   writeLocalFile,
   setFileMtime,
   coderedirect,
+  openConversationWindow: async (input = {}) => {
+    const descriptor = input?.descriptor;
+    const sessionData = input?.sessionData;
+    const conversationId = String(descriptor?.conversationId || '').trim();
+    if (!conversationId || !sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
+      throw new Error('conversation_open_payload_invalid');
+    }
+
+    utools.hideMainWindow();
+    const configResult = await getConfig();
+    const config = configResult?.config || defaultConfig.config;
+    const code = String(sessionData.CODE || 'AI');
+    const result = await openWindow(config, {
+      os: utools.isMacOS() ? 'macos' : utools.isWindows() ? 'win' : 'linux',
+      code,
+      originalCode: code,
+      type: 'conversation',
+      payload: '',
+      conversation: {
+        descriptor,
+        sessionData,
+        dirPath: String(input?.dirPath || ''),
+        worktreeDir: String(input?.worktreeDir || ''),
+        storageMode: String(input?.storageMode || descriptor?.storageMode || 'local')
+      },
+      conversationTitle: String(descriptor?.title || '')
+    });
+    utools.outPlugin();
+    return result;
+  },
   listLocalConversations: (...args) => getConversationModule().listLocalConversations(...args),
   migrateJsonConversation: (input = {}) => getConversationModule().migrateJsonConversation(input),
   createConversation: (input = {}) => getConversationModule().createConversation(input),
@@ -824,7 +855,7 @@ ipcRenderer.on('forward-append-msg', (e, { senderId, type, payload }) => {
   }
 });
 
-ipcRenderer.on('window-event', (e, { senderId, event }) => {
+ipcRenderer.on('window-event', (e, { senderId, event, state }) => {
   const bw = windowMap.get(senderId);
   if (!bw) {
     console.warn(`[IPC Hub] Window with senderId ${senderId} not found.`);
@@ -838,6 +869,10 @@ ipcRenderer.on('window-event', (e, { senderId, event }) => {
         const newState = !currentState;
         bw.setAlwaysOnTop(newState);
         bw.webContents.send('always-on-top-changed', newState);
+        break;
+      }
+      case 'apply-conversation-window-state': {
+        applyConversationWindowState(senderId, state || {});
         break;
       }
       case 'close-window': {

@@ -1731,12 +1731,13 @@ async function startChat(file) {
                 reference: file?.conversationId || file?.basename,
                 activeOnly: true
             });
-            if (!opened?.descriptor) throw new Error('conversation_open_failed');
-            await window.api.coderedirect('恢复聊天', JSON.stringify({
-                conversationId: opened.descriptor.conversationId,
-                conversationTitle: opened.descriptor.title,
-                format: 'sqlite'
-            }));
+            if (!opened?.descriptor || !opened?.sessionData) throw new Error('conversation_open_failed');
+            await window.api.openConversationWindow({
+                descriptor: opened.descriptor,
+                sessionData: opened.sessionData,
+                dirPath: localChatPath.value,
+                storageMode: 'local'
+            });
             await fetchLocalFiles(true, { includeSessionMetadataTitle: true });
         } else if (file?.format === 'sqlite' && file?.conversationId) {
             const descriptor = cloudProjects.value?.conversations?.[file.conversationId];
@@ -1744,13 +1745,13 @@ async function startChat(file) {
             const { client, remoteDir } = getWebdavClientForChats();
             const content = await client.getFileContents(`${remoteDir}/${descriptor.dbFile}`, { format: 'binary' });
             const opened = await window.api.openCloudConversationSnapshot({ descriptor, content });
-            await window.api.coderedirect('恢复聊天', JSON.stringify({
-                conversationId: descriptor.conversationId,
-                conversationTitle: descriptor.title,
+            if (!opened?.descriptor || !opened?.sessionData) throw new Error('conversation_open_failed');
+            await window.api.openConversationWindow({
+                descriptor: opened.descriptor,
+                sessionData: opened.sessionData,
                 worktreeDir: opened.worktreeDir,
-                storageMode: 'cloud',
-                format: 'sqlite'
-            }));
+                storageMode: 'cloud'
+            });
         } else {
             const result = await readCloudChatFile(file.basename);
             const jsonString = typeof result.content === 'string' ? result.content : String(result.content || '');

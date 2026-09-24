@@ -366,6 +366,16 @@ window.api = {
     shellOpenPath: (fullPath) => {
         utools.shellOpenPath(fullPath);
     },
+    applyConversationWindowState: (state = {}) => {
+      if (!senderId) return false;
+      utools.sendToParent('window-event', {
+        senderId,
+        event: 'apply-conversation-window-state',
+        state
+      });
+      return true;
+    },
+
     // 向父进程(preload.js)发送切换置顶状态的请求
     toggleAlwaysOnTop: () => {
       if (senderId) {

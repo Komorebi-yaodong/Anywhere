@@ -977,8 +977,22 @@ function getUser() {
   return utools.getUser();
 }
 
+function resolveWindowPromptConfig(config, promptCode, msg = null) {
+  const configuredPrompt = config?.prompts?.[promptCode] || {};
+  const sessionPrompt = msg?.conversation?.sessionData?.currentPromptConfig;
+  if (!sessionPrompt || typeof sessionPrompt !== 'object' || Array.isArray(sessionPrompt)) {
+    return configuredPrompt;
+  }
+
+  return {
+    ...configuredPrompt,
+    ...sessionPrompt
+  };
+}
+
+
 function getPosition(config, promptCode, msg = null) {
-  const promptConfig = config.prompts[promptCode];
+  const promptConfig = resolveWindowPromptConfig(config, promptCode, msg);
   const OVERFLOW_ALLOWANCE = 10;
 
   // 强制转换为 Number，防止 undefined 或 null 导致 NaN
@@ -1018,9 +1032,12 @@ function getPosition(config, promptCode, msg = null) {
   }
   // --- 3. 普通唤起 -> 依据设置 (固定位置 或 跟随鼠标) ---
   else {
+    const hasSessionPosition = Boolean(msg?.conversation?.sessionData?.currentPromptConfig)
+      && Number.isFinite(Number(promptConfig?.position_x))
+      && Number.isFinite(Number(promptConfig?.position_y));
     const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
 
-    if (hasFixedPosition) {
+    if (hasSessionPosition || hasFixedPosition) {
       let set_position = { x: Number(promptConfig.position_x), y: Number(promptConfig.position_y) };
       currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
       windowX = Math.floor(set_position.x);
@@ -1179,8 +1196,8 @@ async function openWindow(config, msg) {
     y = newY;
   }
 
-  const promptConfig = config.prompts[promptCode];
-  const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? true;
+  const promptConfig = resolveWindowPromptConfig(config, promptCode, msg);
+  const isAlwaysOnTop = promptConfig?.isAlwaysOnTop ?? config?.isAlwaysOnTop_global ?? true;
   let channel = "window";
   const backgroundColor = config.isDarkMode ? `rgba(33, 33, 33, 1)` : 'rgba(255, 255, 253, 1)';
 
@@ -1301,6 +1318,44 @@ async function openWindow(config, msg) {
     });
   });
 }
+
+function applyConversationWindowState(senderId, state = {}) {
+  const win = windowMap.get(String(senderId || ''));
+  if (!win || win.isDestroyed()) {
+    return { ok: false, reason: 'window_not_found' };
+  }
+
+  const currentBounds = win.getBounds();
+  const rawX = Number(state.position_x);
+  const rawY = Number(state.position_y);
+  const requestedPoint = {
+    x: Number.isFinite(rawX) ? Math.round(rawX) : currentBounds.x,
+    y: Number.isFinite(rawY) ? Math.round(rawY) : currentBounds.y
+  };
+  const display = utools.getDisplayNearestPoint(requestedPoint) || utools.getPrimaryDisplay();
+  const area = display?.workArea || display?.bounds || currentBounds;
+  const rawWidth = Number(state.window_width);
+  const rawHeight = Number(state.window_height);
+  const width = Math.min(area.width, Math.max(1, Number.isFinite(rawWidth) && rawWidth > 0 ? Math.round(rawWidth) : currentBounds.width));
+  const height = Math.min(area.height, Math.max(1, Number.isFinite(rawHeight) && rawHeight > 0 ? Math.round(rawHeight) : currentBounds.height));
+  const x = Math.min(Math.max(requestedPoint.x, area.x), area.x + area.width - width);
+  const y = Math.min(Math.max(requestedPoint.y, area.y), area.y + area.height - height);
+
+  win.setBounds({ x, y, width, height });
+
+  const alwaysOnTop = typeof state.isAlwaysOnTop === 'boolean'
+    ? state.isAlwaysOnTop
+    : win.isAlwaysOnTop();
+  win.setAlwaysOnTop(alwaysOnTop);
+  win.webContents.send('always-on-top-changed', alwaysOnTop);
+
+  return {
+    ok: true,
+    bounds: { x, y, width, height },
+    isAlwaysOnTop: alwaysOnTop
+  };
+}
+
 
 async function coderedirect(label, payload) {
   utools.redirect(label, payload);
@@ -1982,6 +2037,7 @@ module.exports = {
   getUser,
   copyText,
   openWindow,
+  applyConversationWindowState,
   coderedirect,
   setZoomFactor,
   feature_suffix,
