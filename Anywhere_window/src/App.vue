@@ -5639,8 +5639,6 @@ const loadSession = async (jsonData) => {
       window.api.applyConversationWindowState({
         window_width: currentPromptConfigFromLoad.window_width,
         window_height: currentPromptConfigFromLoad.window_height,
-        position_x: currentPromptConfigFromLoad.position_x,
-        position_y: currentPromptConfigFromLoad.position_y,
         isAlwaysOnTop: isAlwaysOnTop.value
       });
     }

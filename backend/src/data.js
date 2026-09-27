@@ -977,8 +977,16 @@ function getUser() {
   return utools.getUser();
 }
 
+function resolveConfiguredPromptConfig(config, promptCode) {
+  return config?.prompts?.[promptCode]
+    || config?.prompts?.AI
+    || defaultConfig.config.prompts.AI
+    || {};
+}
+
+
 function resolveWindowPromptConfig(config, promptCode, msg = null) {
-  const configuredPrompt = config?.prompts?.[promptCode] || {};
+  const configuredPrompt = resolveConfiguredPromptConfig(config, promptCode);
   const sessionPrompt = msg?.conversation?.sessionData?.currentPromptConfig;
   if (!sessionPrompt || typeof sessionPrompt !== 'object' || Array.isArray(sessionPrompt)) {
     return configuredPrompt;
@@ -993,6 +1001,7 @@ function resolveWindowPromptConfig(config, promptCode, msg = null) {
 
 function getPosition(config, promptCode, msg = null) {
   const promptConfig = resolveWindowPromptConfig(config, promptCode, msg);
+  const configuredPrompt = resolveConfiguredPromptConfig(config, promptCode);
   const OVERFLOW_ALLOWANCE = 10;
 
   // 强制转换为 Number，防止 undefined 或 null 导致 NaN
@@ -1032,13 +1041,12 @@ function getPosition(config, promptCode, msg = null) {
   }
   // --- 3. 普通唤起 -> 依据设置 (固定位置 或 跟随鼠标) ---
   else {
-    const hasSessionPosition = Boolean(msg?.conversation?.sessionData?.currentPromptConfig)
-      && Number.isFinite(Number(promptConfig?.position_x))
-      && Number.isFinite(Number(promptConfig?.position_y));
-    const hasFixedPosition = config.fix_position && promptConfig && promptConfig.position_x != null && promptConfig.position_y != null;
+    const hasFixedPosition = config.fix_position
+      && configuredPrompt.position_x != null
+      && configuredPrompt.position_y != null;
 
-    if (hasSessionPosition || hasFixedPosition) {
-      let set_position = { x: Number(promptConfig.position_x), y: Number(promptConfig.position_y) };
+    if (hasFixedPosition) {
+      let set_position = { x: Number(configuredPrompt.position_x), y: Number(configuredPrompt.position_y) };
       currentDisplay = utools.getDisplayNearestPoint(set_position) || primaryDisplay;
       windowX = Math.floor(set_position.x);
       windowY = Math.floor(set_position.y);
@@ -1326,11 +1334,9 @@ function applyConversationWindowState(senderId, state = {}) {
   }
 
   const currentBounds = win.getBounds();
-  const rawX = Number(state.position_x);
-  const rawY = Number(state.position_y);
   const requestedPoint = {
-    x: Number.isFinite(rawX) ? Math.round(rawX) : currentBounds.x,
-    y: Number.isFinite(rawY) ? Math.round(rawY) : currentBounds.y
+    x: currentBounds.x,
+    y: currentBounds.y
   };
   const display = utools.getDisplayNearestPoint(requestedPoint) || utools.getPrimaryDisplay();
   const area = display?.workArea || display?.bounds || currentBounds;

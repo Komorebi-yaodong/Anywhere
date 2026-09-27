@@ -100,8 +100,8 @@ async function main() {
     currentPromptConfig: {
       window_width: 720,
       window_height: 610,
-      position_x: 140,
-      position_y: 90,
+      position_x: 700,
+      position_y: 650,
       isAlwaysOnTop: false,
       zoom: 1.25,
       autoCloseOnBlur: false,
@@ -126,8 +126,52 @@ async function main() {
   assert.equal(createdWindows[0].options.width, 720);
   assert.equal(createdWindows[0].options.height, 610);
   assert.equal(createdWindows[0].options.x, 140);
-  assert.equal(createdWindows[0].options.y, 90);
+  assert.equal(createdWindows[0].options.y, 100);
   assert.equal(createdWindows[0].options.alwaysOnTop, false);
+
+
+  const fixedConfig = {
+    ...config,
+    fix_position: true,
+    prompts: {
+      AI: {
+        ...config.prompts.AI,
+        position_x: 30,
+        position_y: 40,
+      },
+    },
+  };
+  await store.openWindow(fixedConfig, {
+    ...message,
+    conversation: {
+      ...message.conversation,
+      sessionData: {
+        ...sessionData,
+        currentPromptConfig: {
+          ...sessionData.currentPromptConfig,
+          position_x: 800,
+          position_y: 700,
+        },
+      },
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(createdWindows[1].options.x, 30);
+  assert.equal(createdWindows[1].options.y, 40);
+
+
+  const overlapSenderId = await store.openWindow(config, { ...message });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(createdWindows[2].options.x, 170);
+  assert.equal(createdWindows[2].options.y, 130);
+  const overlapApplied = store.applyConversationWindowState(overlapSenderId, {
+    window_width: 720,
+    window_height: 610,
+    position_x: 700,
+    position_y: 650,
+    isAlwaysOnTop: false,
+  });
+  assert.deepEqual(overlapApplied.bounds, { x: 170, y: 130, width: 720, height: 610 });
 
   const initMessage = sentMessages.find((entry) => entry.channel === 'window')?.payload;
   assert.ok(initMessage);
@@ -162,12 +206,15 @@ async function main() {
   assert.doesNotMatch(mainSource, /conversationId: opened\.descriptor\.conversationId,[\s\S]{0,240}?format: 'sqlite'/);
   assert.match(windowSource, /type: 'conversation',[\s\S]{0,80}?payload: ''/);
   assert.match(windowSource, /sourcePromptConfig\.value = \{ \.\.\.currentPromptConfigFromLoad \}/);
-  assert.match(windowSource, /applyConversationWindowState\(\{/);
+  assert.match(windowSource, /applyConversationWindowState\(\{[\s\S]{0,220}?window_width:[\s\S]{0,220}?isAlwaysOnTop:/);
+  assert.doesNotMatch(windowSource, /applyConversationWindowState\(\{[\s\S]{0,260}?position_[xy]:/);
 
   console.log(JSON.stringify({
     ok: true,
     senderId,
-    initialBounds: { x: 140, y: 90, width: 720, height: 610 },
+    cursorBounds: { x: 140, y: 100, width: 720, height: 610 },
+    fixedBounds: { x: 30, y: 40, width: 720, height: 610 },
+    overlapBounds: overlapApplied.bounds,
     clampedBounds: applied.bounds,
     alwaysOnTop: applied.isAlwaysOnTop,
   }));
