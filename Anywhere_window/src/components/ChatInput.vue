@@ -90,6 +90,9 @@ const compactStatusText = computed(() => {
 });
 const interactionLocked = computed(() => Boolean(props.loading || props.compacting || props.writeLocked));
 
+const configurationLocked = computed(() => Boolean(props.compacting || props.writeLocked));
+const draftInputLocked = computed(() => Boolean(isRecording.value || configurationLocked.value));
+
 watch(() => props.compactConfig, (next) => {
     if (!next || typeof next !== 'object') return;
     localCompactConfig.value = {
@@ -587,6 +590,7 @@ const handleVoiceSelection = (value) => {
 
 // --- File Handling ---
 const triggerFileUpload = () => {
+    if (draftInputLocked.value) return;
     emit('pick-file-start');
     nextTick(() => {
         fileInputRef.value?.click();
@@ -594,10 +598,47 @@ const triggerFileUpload = () => {
 };
 const handleFileChange = (event) => { const files = event.target.files; if (files.length) emit('upload', { file: files[0], fileList: Array.from(files) }); if (fileInputRef.value) fileInputRef.value.value = ''; };
 const preventDefaults = (e) => e.preventDefault();
-const handleDragEnter = (event) => { preventDefaults(event); dragCounter.value++; isDragging.value = true; };
-const handleDragLeave = (event) => { preventDefaults(event); dragCounter.value--; if (dragCounter.value <= 0) { isDragging.value = false; dragCounter.value = 0; } };
-const handleDrop = (event) => { preventDefaults(event); isDragging.value = false; dragCounter.value = 0; const files = event.dataTransfer.files; if (files && files.length > 0) { emit('upload', { file: files[0], fileList: Array.from(files) }); focus(); } };
-const handlePasteEvent = (event) => { const clipboardData = event.clipboardData || window.clipboardData; if (!clipboardData) return; const items = Array.from(clipboardData.items).filter(item => item.kind === 'file'); if (items.length > 0) { preventDefaults(event); const files = items.map(item => item.getAsFile()); emit('upload', { file: files[0], fileList: files }); focus(); } };
+const handleDragEnter = (event) => {
+    preventDefaults(event);
+    if (draftInputLocked.value) return;
+    dragCounter.value++;
+    isDragging.value = true;
+};
+const handleDragLeave = (event) => {
+    preventDefaults(event);
+    if (draftInputLocked.value) {
+        isDragging.value = false;
+        dragCounter.value = 0;
+        return;
+    }
+    dragCounter.value--;
+    if (dragCounter.value <= 0) {
+        isDragging.value = false;
+        dragCounter.value = 0;
+    }
+};
+const handleDrop = (event) => {
+    preventDefaults(event);
+    isDragging.value = false;
+    dragCounter.value = 0;
+    if (draftInputLocked.value) return;
+    const files = event.dataTransfer.files;
+    if (files && files.length > 0) {
+        emit('upload', { file: files[0], fileList: Array.from(files) });
+        focus();
+    }
+};
+const handlePasteEvent = (event) => {
+    const clipboardData = event.clipboardData || window.clipboardData;
+    if (!clipboardData) return;
+    const items = Array.from(clipboardData.items).filter(item => item.kind === 'file');
+    if (items.length === 0) return;
+    preventDefaults(event);
+    if (draftInputLocked.value) return;
+    const files = items.map(item => item.getAsFile()).filter(Boolean);
+    if (files.length > 0) emit('upload', { file: files[0], fileList: files });
+    focus();
+};
 
 const toggleAudioSourceSelector = () => {
     if (isRecording.value) return;
@@ -1062,9 +1103,9 @@ defineExpose({ focus, senderRef });
 
                     <div class="input-wrapper">
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
-                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : '输入、粘贴、拖拽以发送内容，“ @”选择MCP，“ /”选择skill'"
+                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : (loading ? '输入、粘贴或拖拽内容后，发送将加入缓冲区' : '输入、粘贴、拖拽以发送内容，“ @”选择MCP，“ /”选择skill')"
                             :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleKeyDown"
-                            :disabled="isRecording || interactionLocked" />
+                            :disabled="draftInputLocked" />
                     </div>
                     <div class="input-actions-bar">
                         <div class="action-buttons-left">
@@ -1086,7 +1127,7 @@ defineExpose({ focus, senderRef });
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip content="添加附件">
-                                <el-button size="default" @click="triggerFileUpload" circle :disabled="isRecording || interactionLocked">
+                                <el-button size="default" @click="triggerFileUpload" circle :disabled="draftInputLocked">
                                     <el-icon :size="17">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1103,7 +1144,7 @@ defineExpose({ focus, senderRef });
                             <el-tooltip :content="reasoningTooltipContent">
                                 <el-button ref="reasoningButtonRef"
                                     :class="{ 'is-active-special': tempReasoningEffort && tempReasoningEffort !== 'default' }"
-                                    size="default" circle :disabled="isRecording || interactionLocked" @click="toggleReasoningSelector">
+                                    size="default" circle :disabled="isRecording || configurationLocked" @click="toggleReasoningSelector">
                                     <el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                                             viewBox="0 0 24 24" class="icon" style="margin-top: -2px;">
@@ -1116,7 +1157,7 @@ defineExpose({ focus, senderRef });
                             </el-tooltip>
 
                             <el-tooltip content="语音回复设置">
-                                <el-button ref="voiceButtonRef" size="default" circle :disabled="isRecording || interactionLocked"
+                                <el-button ref="voiceButtonRef" size="default" circle :disabled="isRecording || configurationLocked"
                                     :class="{ 'is-active-special': selectedVoice }" @click="toggleVoiceSelector">
                                     <el-icon :size="18">
                                         <svg t="1765028999430" class="icon" viewBox="0 0 1024 1024" version="1.1"
@@ -1129,7 +1170,7 @@ defineExpose({ focus, senderRef });
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip content="MCP工具">
-                                <el-button size="default" circle :disabled="isRecording || interactionLocked"
+                                <el-button size="default" circle :disabled="isRecording || configurationLocked"
                                     :class="{ 'is-active-special': isMcpActive }" @click="$emit('open-mcp-dialog')">
                                     <el-icon :size="18">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
@@ -1142,7 +1183,7 @@ defineExpose({ focus, senderRef });
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip content="Skill 技能库">
-                                <el-button size="default" circle :disabled="isRecording || interactionLocked"
+                                <el-button size="default" circle :disabled="isRecording || configurationLocked"
                                     :class="{ 'is-active-special': activeSkillIds && activeSkillIds.length > 0 }"
                                     @click="$emit('open-skill-dialog')">
                                     <el-icon :size="18">
@@ -1151,7 +1192,7 @@ defineExpose({ focus, senderRef });
                                 </el-button>
                             </el-tooltip>
                             <el-tooltip :content="compacting ? '压缩进行中…' : '会话压缩'">
-                                <el-button size="default" circle :disabled="isRecording || interactionLocked"
+                                <el-button size="default" circle :disabled="isRecording || configurationLocked"
                                     :class="{ 'is-active-special': compacting || canRestoreCompact }"
                                     @click="openCompactDialog">
                                     <el-icon :size="18">
@@ -1185,7 +1226,8 @@ defineExpose({ focus, senderRef });
                                         </el-icon>
                                     </el-button>
                                 </el-tooltip>
-                                <el-button v-if="!loading" @click="onSubmit" circle :disabled="interactionLocked">
+                                <el-tooltip :content="loading ? '加入缓冲区' : '发送'">
+                                    <el-button @click="onSubmit" circle :disabled="draftInputLocked">
                                     <el-icon :size="18">
                                         <svg t="1765029205363" class="icon" viewBox="0 0 1024 1024" version="1.1"
                                             xmlns="http://www.w3.org/2000/svg" p-id="63447" width="200" height="200">
@@ -1194,13 +1236,16 @@ defineExpose({ focus, senderRef });
                                                 p-id="63448"></path>
                                         </svg>
                                     </el-icon>
-                                </el-button>
-                                <el-button v-else @click="onCancel" circle class="cancel-button-animated">
+                                    </el-button>
+                                </el-tooltip>
+                                <el-tooltip v-if="loading" content="取消请求">
+                                    <el-button @click="onCancel" circle class="cancel-button-animated">
                                     <el-icon class="static-icon">
                                         <Close />
                                     </el-icon>
-                                    <div class="cancel-spinner"></div>
-                                </el-button>
+                                        <div class="cancel-spinner"></div>
+                                    </el-button>
+                                </el-tooltip>
                             </template>
                         </div>
                     </div>
@@ -1372,12 +1417,12 @@ defineExpose({ focus, senderRef });
         <!-- 压缩中不渲染 footer，避免「取消压缩」旁边再出现无用的关闭 -->
         <template v-if="!compacting" #footer>
             <div class="compact-dialog-footer">
-                <el-button v-if="canRestoreCompact" round @click="restoreCompact">恢复最外层压缩</el-button>
+                <el-button v-if="canRestoreCompact" round :disabled="interactionLocked" @click="restoreCompact">恢复最外层压缩</el-button>
                 <div class="compact-dialog-footer-right">
                     <el-button round @click="compactDialogVisible = false">关闭</el-button>
                     <el-button round @click="resetCompactConfigToDefault">恢复默认</el-button>
                     <el-button round @click="saveCompactConfig">保存参数</el-button>
-                    <el-button type="primary" round @click="runCompactNow">立即压缩</el-button>
+                    <el-button type="primary" round :disabled="interactionLocked" @click="runCompactNow">立即压缩</el-button>
                 </div>
             </div>
         </template>

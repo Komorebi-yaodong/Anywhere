@@ -232,6 +232,40 @@ function updateConversation(input, conversationId, patch = {}) {
     return normalizeProjects({ ...data, conversations: { ...data.conversations, [current.conversationId]: next } });
 }
 
+
+function assignConversationProject(input, conversationId, projectId) {
+    const data = normalizeProjects(input);
+    const targetConversationId = normalizeText(conversationId).trim();
+    const descriptor = data.conversations[targetConversationId];
+    if (!descriptor) return data;
+
+    const legacyAliases = new Set([
+        descriptor.legacyJson,
+        descriptor.dbFile,
+        descriptor.title,
+        descriptor.title ? `${descriptor.title}.json` : ''
+    ].map((value) => normalizeText(value).trim()).filter(Boolean));
+    const currentProject = data.projects.find((project) => project.conversationIds.includes(targetConversationId))
+        || data.projects.find((project) => project.files.some((file) => legacyAliases.has(file)));
+    const targetProjectId = projectId === undefined
+        ? normalizeText(currentProject?.id).trim()
+        : normalizeText(projectId).trim();
+
+    let projects = data.projects.map((project) => ({
+        ...project,
+        files: project.files.filter((file) => !legacyAliases.has(file)),
+        conversationIds: project.conversationIds.filter((id) => id !== targetConversationId)
+    }));
+
+    if (targetProjectId) {
+        projects = projects.map((project) => project.id === targetProjectId
+            ? { ...project, conversationIds: [...project.conversationIds, targetConversationId] }
+            : project);
+    }
+
+    return normalizeProjects({ ...data, projects });
+}
+
 function removeConversation(input, conversationId) {
     const data = normalizeProjects(input);
     const target = normalizeText(conversationId).trim();
@@ -273,6 +307,7 @@ module.exports = {
     mergeProjectAssignment,
     registerConversation,
     updateConversation,
+    assignConversationProject,
     removeConversation,
     findConversation,
     findProjectByBasename

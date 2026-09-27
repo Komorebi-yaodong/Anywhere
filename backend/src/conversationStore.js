@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { DatabaseSync, backup: sqliteBackup } = require('./sqliteSyncDriver.js');
 
 const {
+  assignConversationProject,
   findConversation,
   findProjectByBasename,
   readLocalProjects,
@@ -1265,6 +1266,7 @@ async function renameConversation({
   dirPath,
   conversationId,
   title,
+  projectId,
   expectedRevision,
   holderInstanceId = '',
   leaseEpoch = null
@@ -1291,7 +1293,9 @@ async function renameConversation({
         .run(nextTitle, updatedAt, revision, conversationId)
     })
   } finally { db.close() }
-  await writeLocalProjects(dirPath, updateConversation(projects, conversationId, { title: nextTitle, revision, updatedAt }))
+  const assignedProjects = assignConversationProject(projects, conversationId, projectId)
+  const nextProjects = updateConversation(assignedProjects, conversationId, { title: nextTitle, revision, updatedAt })
+  await writeLocalProjects(dirPath, nextProjects)
   return { ok: true, conversationId, title: nextTitle, dbFile: descriptor.dbFile, revision, updatedAt }
 }
 
@@ -1448,6 +1452,18 @@ async function importConversationSnapshot({ dirPath, descriptor: rawDescriptor =
     } finally { db.close() }
     await fs.rm(finalPath, { force: true })
     await fs.rename(downloadPath, finalPath)
+
+    const importedDb = openDatabase(finalPath)
+    try {
+      const importedRow = getConversationRow(importedDb)
+      const importedTitle = normalizeText(rawDescriptor.title).trim() || importedRow.title
+      const importedUpdatedAt = normalizeText(rawDescriptor.updatedAt).trim() || importedRow.updated_at
+      const importedRevision = Math.max(Number(importedRow.revision) || 0, Number(rawDescriptor.revision) || 0)
+      importedDb.prepare('UPDATE conversation SET title = ?, updated_at = ?, revision = ? WHERE conversation_id = ?')
+        .run(importedTitle, importedUpdatedAt, importedRevision, conversationId)
+    } finally {
+      importedDb.close()
+    }
     const descriptor = {
       conversationId,
       dbFile,

@@ -102,6 +102,8 @@
     "rename": {
       "promptTitle": "Rename Chat",
       "promptMessage": "Please enter the new conversation name.",
+      "nameLabel": "Conversation name",
+      "projectLabel": "Project",
       "invalidFilename": "Invalid filename, must end with .json.",
       "syncTitle": "Sync Operation",
       "syncCloudConfirm": "A file with the same name exists in the cloud. Rename it synchronously?",

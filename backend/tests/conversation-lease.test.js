@@ -8,6 +8,7 @@ const runtimePath = process.env.ANYWHERE_CONVERSATION_RUNTIME
   ? path.resolve(process.env.ANYWHERE_CONVERSATION_RUNTIME)
   : path.resolve(__dirname, '..', 'src', 'conversation_runtime.js');
 const store = require(runtimePath);
+const { readLocalProjects, writeLocalProjects } = require('../src/projects.js');
 
 function session(content) {
   return {
@@ -111,6 +112,37 @@ async function main() {
       sessionData: session('writer-b'),
     });
     assert.equal(savedB.revision, 2);
+
+
+    const dirtyProjects = await readLocalProjects(root);
+    dirtyProjects.projects = [
+      {
+        id: 'old-project',
+        name: 'Old Project',
+        files: ['lease fixture', 'lease fixture.json', created.descriptor.dbFile],
+        conversationIds: [conversationId],
+      },
+      { id: 'new-project', name: 'New Project', files: [], conversationIds: [] },
+    ];
+    await writeLocalProjects(root, dirtyProjects);
+    const renamed = await store.renameConversation({
+      dirPath: root,
+      conversationId,
+      title: 'renamed fixture',
+      projectId: 'new-project',
+      expectedRevision: 2,
+      holderInstanceId: writerB,
+      leaseEpoch: takeoverB.leaseEpoch,
+    });
+    assert.equal(renamed.revision, 3);
+    const renamedProjects = await readLocalProjects(root);
+    const oldProject = renamedProjects.projects.find((project) => project.id === 'old-project');
+    const newProject = renamedProjects.projects.find((project) => project.id === 'new-project');
+    assert.deepEqual(oldProject.files, []);
+    assert.deepEqual(oldProject.conversationIds, []);
+    assert.deepEqual(newProject.files, []);
+    assert.deepEqual(newProject.conversationIds, [conversationId]);
+    assert.equal(renamedProjects.conversations[conversationId].title, 'renamed fixture');
     const opened = await store.openConversation({ dirPath: root, reference: conversationId, activeOnly: true });
     assert.equal(opened.sessionData.fullHistory.at(-1)?.content, 'writer-b');
 

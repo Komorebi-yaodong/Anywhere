@@ -84,20 +84,20 @@ const localProjects = ref({ version: 1, projects: [] });
 const cloudProjects = ref({ version: 1, projects: [] });
 const initialCollapsedProjectState = loadCollapsedProjectState();
 const collapsedProjectIds = ref(new Set(initialCollapsedProjectState.ids));
-const hasUserCollapsedProjectPreference = ref(initialCollapsedProjectState.hasUserPreference);
+const initializedLocalCollapsePaths = new Set();
 
-function initializeDefaultCollapsedProjects(projectsData) {
-    if (hasUserCollapsedProjectPreference.value) return;
+function initializeLocalProjectsCollapsed(projectsData) {
+    const currentPath = String(localChatPath.value || '').trim();
+    if (!currentPath || initializedLocalCollapsePaths.has(currentPath)) return;
     const projectIds = (Array.isArray(projectsData?.projects) ? projectsData.projects : [])
         .map((project) => String(project?.id || '').trim())
         .filter(Boolean);
-    if (projectIds.length === 0) return;
-
-    const collapsedIds = new Set([...collapsedProjectIds.value, ...projectIds]);
-    collapsedProjectIds.value = collapsedIds;
-    persistCollapsedProjectIds(collapsedIds);
+    collapsedProjectIds.value = new Set([...collapsedProjectIds.value, ...projectIds]);
+    initializedLocalCollapsePaths.add(currentPath);
 }
 const projectDeleteDialog = ref({ visible: false, id: '', name: '', busy: false });
+
+const renameDialog = ref({ visible: false, file: null, title: '', projectId: '', originalProjectId: '', busy: false });
 const PROJECT_UNGROUPED_DROP_ID = '__ungrouped__';
 
 watch(() => currentConfig.value?.webdav, (newWebdav) => {
@@ -1263,7 +1263,7 @@ async function fetchLocalProjects() {
     try {
         const result = await window.api.readLocalProjects(localChatPath.value);
         localProjects.value = normalizeProjectsResult(result);
-        initializeDefaultCollapsedProjects(localProjects.value);
+        initializeLocalProjectsCollapsed(localProjects.value);
     } catch (error) {
         console.warn('[chats] 读取本地项目失败:', error);
         localProjects.value = { version: 1, projects: [] };
@@ -1276,7 +1276,6 @@ async function fetchCloudProjects() {
         return;
     }
     cloudProjects.value = await readCloudProjectsViaWebdav();
-    initializeDefaultCollapsedProjects(cloudProjects.value);
 }
 
 async function persistLocalProjects() {
@@ -1299,7 +1298,6 @@ const toggleProjectCollapse = (projectId) => {
         next.add(id);
     }
     collapsedProjectIds.value = next;
-    hasUserCollapsedProjectPreference.value = true;
     persistCollapsedProjectIds(next, true);
 };
 
@@ -1318,6 +1316,50 @@ async function persistActiveProjects() {
         await persistCloudProjects();
     }
 }
+
+
+const findProjectIdInData = (data, file) => {
+    const normalized = normalizeProjectsResult(data);
+    const reference = getConversationReference(file);
+    const basename = String(file?.basename || '').trim();
+    const aliases = new Set([reference, basename, file?.legacyJson, file?.title, file?.title ? `${file.title}.json` : ''].map((value) => String(value || '').trim()).filter(Boolean));
+    return normalized.projects.find((project) =>
+        (project.conversationIds || []).some((id) => String(id || '').trim() === reference)
+    )?.id || normalized.projects.find((project) =>
+        (project.files || []).some((name) => aliases.has(String(name || '').trim()))
+    )?.id || '';
+};
+
+const findProjectIdForFile = (file) => findProjectIdInData(activeProjectsData.value, file);
+
+const updateFileProjectAssignment = (data, file, { oldBasename = '', newBasename = '', projectId = '' } = {}) => {
+    const normalized = normalizeProjectsResult(data);
+    const conversationId = file?.format === 'sqlite' ? String(file?.conversationId || '').trim() : '';
+    const aliases = new Set([
+        oldBasename,
+        newBasename,
+        file?.basename,
+        file?.legacyJson,
+        file?.title,
+        file?.title ? `${file.title}.json` : ''
+    ].map((value) => String(value || '').trim()).filter(Boolean));
+
+    let projects = normalized.projects.map((project) => ({
+        ...project,
+        files: (project.files || []).filter((name) => !aliases.has(String(name || '').trim())),
+        conversationIds: (project.conversationIds || []).filter((id) => id !== conversationId)
+    }));
+    if (projectId) {
+        projects = projects.map((project) => project.id === projectId
+            ? {
+                ...project,
+                files: conversationId ? project.files : [...project.files, newBasename],
+                conversationIds: conversationId ? [...project.conversationIds, conversationId] : project.conversationIds
+            }
+            : project);
+    }
+    return normalizeProjectsResult({ ...normalized, projects });
+};
 
 function generateProjectId(name) {
     const base = String(name || '').trim().toLowerCase()
@@ -1824,49 +1866,106 @@ async function exportLocalChat(file) {
 
 
 
-async function renameFile(file) {
-    const defaultInputValue = file.title || (file.basename.endsWith('.json') ? file.basename.slice(0, -5) : file.basename);
-    try {
-        const { value: userInput } = await ElMessageBox.prompt(t('chats.rename.promptMessage'), t('chats.rename.promptTitle'), { inputValue: defaultInputValue });
-        let finalFilename = (userInput || "").trim();
-        if (!finalFilename) return;
+function renameFile(file) {
+    const basename = String(file?.basename || '').trim();
+    if (!basename) {
+        ElMessage.error(t('chats.alerts.renameFailed'));
+        return;
+    }
+    const projectId = findProjectIdForFile(file);
+    renameDialog.value = {
+        visible: true,
+        file,
+        title: file.title || (basename.endsWith('.json') ? basename.slice(0, -5) : basename),
+        projectId,
+        originalProjectId: projectId,
+        busy: false
+    };
+}
 
-        if (activeView.value === 'local' && file?.format === 'sqlite' && file?.conversationId) {
-            if (finalFilename === defaultInputValue) return;
-            await window.api.renameConversation({
-                dirPath: localChatPath.value,
-                conversationId: file.conversationId,
-                title: finalFilename
-            });
-        } else if (activeView.value === 'local') {
-            if (!finalFilename.toLowerCase().endsWith('.json')) finalFilename += '.json';
-            if (finalFilename === file.basename || finalFilename === '.json') return;
-            await window.api.renameLocalFile(file.path, `${localChatPath.value}/${finalFilename}`);
-            if (isWebdavConfigValid.value && cloudChatFiles.value.some(f => f.basename === file.basename)) {
-                const confirm = await ElMessageBox.confirm(
-                    t('chats.rename.syncCloudConfirm'),
-                    t('chats.rename.syncTitle'),
-                    { type: 'info' }
-                ).catch(() => false);
-                if (confirm) {
-                    await moveCloudChatFileWithMetadata(file.basename, finalFilename);
+async function confirmRenameFile() {
+    const file = renameDialog.value.file;
+    const basename = String(file?.basename || '').trim();
+    const currentTitle = file?.title || (basename.endsWith('.json') ? basename.slice(0, -5) : basename);
+    const nextTitle = String(renameDialog.value.title || '').trim();
+    const projectId = String(renameDialog.value.projectId || '').trim();
+    const titleChanged = nextTitle !== currentTitle;
+    const projectChanged = projectId !== renameDialog.value.originalProjectId;
+    if (!file || !basename || !nextTitle || (!titleChanged && !projectChanged)) {
+        if (nextTitle) renameDialog.value.visible = false;
+        return;
+    }
+
+    renameDialog.value.busy = true;
+    try {
+        if (file?.format === 'sqlite' && file?.conversationId) {
+            if (activeView.value === 'local' && (titleChanged || projectChanged)) {
+                await window.api.renameConversation({
+                    dirPath: localChatPath.value,
+                    conversationId: file.conversationId,
+                    title: nextTitle,
+                    projectId
+                });
+                await fetchLocalProjects();
+            } else {
+                const sourceData = activeView.value === 'local' ? localProjects.value : cloudProjects.value;
+                const assigned = updateFileProjectAssignment(sourceData, file, { oldBasename: basename, newBasename: basename, projectId });
+                if (activeView.value === 'cloud') {
+                    assigned.conversations[file.conversationId] = {
+                        ...assigned.conversations[file.conversationId],
+                        title: nextTitle,
+                        updatedAt: new Date().toISOString()
+                    };
+                    cloudProjects.value = assigned;
+                    await persistCloudProjects();
+                } else {
+                    localProjects.value = assigned;
+                    await persistLocalProjects();
                 }
             }
-        } else { // cloud
-            await moveCloudChatFileWithMetadata(file.basename, finalFilename);
-            if (localChatFiles.value.some(f => f.basename === file.basename)) {
-                const confirm = await ElMessageBox.confirm(
-                    t('chats.rename.syncLocalConfirm'),
-                    t('chats.rename.syncTitle'),
-                    { type: 'info' }
-                ).catch(() => false);
-                if (confirm) await window.api.renameLocalFile(`${localChatPath.value}/${file.basename}`, `${localChatPath.value}/${finalFilename}`);
+        } else {
+            const nextBasename = nextTitle.toLowerCase().endsWith('.json') ? nextTitle : `${nextTitle}.json`;
+            const basenameChanged = nextBasename !== basename;
+            if (activeView.value === 'local' && basenameChanged) {
+                await window.api.renameLocalFile(file.path, `${localChatPath.value}/${nextBasename}`);
+            } else if (activeView.value === 'cloud' && basenameChanged) {
+                await moveCloudChatFileWithMetadata(basename, nextBasename);
+            }
+
+            const nextProjects = updateFileProjectAssignment(activeProjectsData.value, file, {
+                oldBasename: basename,
+                newBasename: nextBasename,
+                projectId
+            });
+            setActiveProjectsData(nextProjects);
+            await persistActiveProjects();
+
+            if (basenameChanged && activeView.value === 'local' && isWebdavConfigValid.value && cloudChatFiles.value.some((item) => item.basename === basename)) {
+                const confirm = await ElMessageBox.confirm(t('chats.rename.syncCloudConfirm'), t('chats.rename.syncTitle'), { type: 'info' }).catch(() => false);
+                if (confirm) {
+                    await moveCloudChatFileWithMetadata(basename, nextBasename);
+                    const cloudProjectId = findProjectIdInData(cloudProjects.value, file);
+                    cloudProjects.value = updateFileProjectAssignment(cloudProjects.value, file, { oldBasename: basename, newBasename: nextBasename, projectId: cloudProjectId });
+                    await persistCloudProjects();
+                }
+            } else if (basenameChanged && activeView.value === 'cloud' && localChatFiles.value.some((item) => item.basename === basename)) {
+                const confirm = await ElMessageBox.confirm(t('chats.rename.syncLocalConfirm'), t('chats.rename.syncTitle'), { type: 'info' }).catch(() => false);
+                if (confirm) {
+                    await window.api.renameLocalFile(`${localChatPath.value}/${basename}`, `${localChatPath.value}/${nextBasename}`);
+                    const localProjectId = findProjectIdInData(localProjects.value, file);
+                    localProjects.value = updateFileProjectAssignment(localProjects.value, file, { oldBasename: basename, newBasename: nextBasename, projectId: localProjectId });
+                    await persistLocalProjects();
+                }
             }
         }
+
+        renameDialog.value.visible = false;
         ElMessage.success(t('chats.alerts.renameSuccess'));
         await refreshData();
     } catch (error) {
-        if (error !== 'cancel' && error !== 'close') ElMessage.error(`${t('chats.alerts.renameFailed')}: ${error.message}`);
+        if (error !== 'cancel' && error !== 'close') ElMessage.error(`${t('chats.alerts.renameFailed')}: ${error?.message || error}`);
+    } finally {
+        renameDialog.value.busy = false;
     }
 }
 async function deleteFiles(filesToDelete) {
@@ -2492,6 +2591,29 @@ const toggleSelectAll = () => {
             </div>
         </div>
     </div>
+    <el-dialog v-model="renameDialog.visible" :title="t('chats.rename.promptTitle')" width="440px" append-to-body
+        align-center :close-on-click-modal="!renameDialog.busy" :close-on-press-escape="!renameDialog.busy">
+        <el-form label-position="top">
+            <el-form-item :label="t('chats.rename.nameLabel')">
+                <el-input v-model="renameDialog.title" :placeholder="t('chats.rename.promptMessage')"
+                    :disabled="renameDialog.busy" @keyup.enter="confirmRenameFile" />
+            </el-form-item>
+            <el-form-item :label="t('chats.rename.projectLabel')">
+                <el-select v-model="renameDialog.projectId" :disabled="renameDialog.busy" style="width: 100%">
+                    <el-option :label="t('chats.projects.ungrouped')" value="" />
+                    <el-option v-for="project in [...(activeProjectsData.projects || [])].sort((a, b) => a.name.localeCompare(b.name))"
+                        :key="project.id" :label="project.name" :value="project.id" />
+                </el-select>
+            </el-form-item>
+        </el-form>
+        <template #footer>
+            <el-button :disabled="renameDialog.busy" @click="renameDialog.visible = false">{{ t('common.cancel') }}</el-button>
+            <el-button type="primary" :loading="renameDialog.busy" :disabled="!renameDialog.title.trim()"
+                @click="confirmRenameFile">{{ t('common.confirm') }}</el-button>
+        </template>
+    </el-dialog>
+
+
     <el-dialog v-model="isSyncing" :title="t('chats.alerts.syncInProgress')" :close-on-click-modal="false"
         :show-close="false" :close-on-press-escape="false" width="400px" center>
         <div class="sync-progress-container">

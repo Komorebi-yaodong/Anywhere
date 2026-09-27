@@ -102,6 +102,8 @@
     "rename": {
       "promptTitle": "重命名对话",
       "promptMessage": "请输入新的会话名称",
+      "nameLabel": "会话名称",
+      "projectLabel": "所属项目",
       "invalidFilename": "文件名无效，必须以 .json 结尾",
       "syncTitle": "同步操作提示",
       "syncCloudConfirm": "云端也存在同名文件，是否同步重命名？",
