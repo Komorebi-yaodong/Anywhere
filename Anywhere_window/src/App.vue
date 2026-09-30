@@ -5916,6 +5916,12 @@ const requestApplyMcpTools = async (show_none = true, reason = 'unknown') => {
   }
 };
 
+const handleApplyMcpDialog = async () => {
+  sessionMcpServerIds.value = [...tempSessionMcpServerIds.value];
+  isMcpDialogVisible.value = false;
+  await requestApplyMcpTools(true, 'dialog-apply');
+};
+
 async function applyMcpTools(show_none = true, reason = 'unknown') {
   isMcpDialogVisible.value = false;
   isMcpLoading.value = true;
@@ -9670,8 +9676,7 @@ const scrollToMessageByIndex = (index) => {
             style="margin-left: 40px; margin-right: 0;" />
         </div>
         <div>
-          <el-button type="primary" class="bw-btn"
-            @click="sessionMcpServerIds = [...tempSessionMcpServerIds]; requestApplyMcpTools(true, 'dialog-apply');">应用</el-button>
+          <el-button type="primary" class="bw-btn" @click="handleApplyMcpDialog">应用</el-button>
         </div>
       </div>
     </template>

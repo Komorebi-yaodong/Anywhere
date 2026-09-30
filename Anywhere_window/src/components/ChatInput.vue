@@ -327,6 +327,16 @@ watch(() => props.voiceList, (newVal) => {
 }, { immediate: true });
 
 // --- Computed Properties ---
+const reasoningEffortOptions = [
+    { value: 'default', label: '默认', tooltip: 'auto' },
+    { value: 'none', label: '关闭', tooltip: 'off' },
+    { value: 'low', label: '快速', tooltip: 'low' },
+    { value: 'medium', label: '均衡', tooltip: 'medium' },
+    { value: 'high', label: '深入', tooltip: 'high' },
+    { value: 'xhigh', label: '强化', tooltip: 'xhigh' },
+    { value: 'max', label: '极致', tooltip: 'max' }
+];
+
 const reasoningTooltipContent = computed(() => {
     const map = { default: '默认', none: '关闭', low: '快速', medium: '均衡', high: '深入', xhigh: '强化', max: '极致' };
     return `思考预算: ${map[tempReasoningEffort.value] || '默认'}`;
@@ -993,20 +1003,13 @@ defineExpose({ focus, senderRef });
                     <div class="option-selector-content">
                         <el-text tag="b" class="selector-label">思考预算</el-text>
                         <el-divider direction="vertical" />
-                        <el-button @click="handleReasoningSelection('default')"
-                            :type="tempReasoningEffort === 'default' ? 'primary' : 'default'" round>默认</el-button>
-                        <el-button @click="handleReasoningSelection('none')"
-                            :type="tempReasoningEffort === 'none' ? 'primary' : 'default'" round>关闭</el-button>
-                        <el-button @click="handleReasoningSelection('low')"
-                            :type="tempReasoningEffort === 'low' ? 'primary' : 'default'" round>快速</el-button>
-                        <el-button @click="handleReasoningSelection('medium')"
-                            :type="tempReasoningEffort === 'medium' ? 'primary' : 'default'" round>均衡</el-button>
-                        <el-button @click="handleReasoningSelection('high')"
-                            :type="tempReasoningEffort === 'high' ? 'primary' : 'default'" round>深入</el-button>
-                        <el-button @click="handleReasoningSelection('xhigh')"
-                            :type="tempReasoningEffort === 'xhigh' ? 'primary' : 'default'" round>强化</el-button>
-                        <el-button @click="handleReasoningSelection('max')"
-                            :type="tempReasoningEffort === 'max' ? 'primary' : 'default'" round>极致</el-button>
+                        <el-tooltip v-for="option in reasoningEffortOptions" :key="option.value"
+                            :content="option.tooltip" placement="top" :show-after="250">
+                            <el-button @click="handleReasoningSelection(option.value)"
+                                :type="tempReasoningEffort === option.value ? 'primary' : 'default'" round>
+                                {{ option.label }}
+                            </el-button>
+                        </el-tooltip>
                     </div>
                 </div>
             </el-col>
