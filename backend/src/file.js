@@ -392,45 +392,62 @@ const collectSessionTimestamps = (sessionData) => {
     return timestamps.sort((a, b) => new Date(a) - new Date(b));
 };
 
+const SESSION_METADATA_PROBE_BYTES = 256 * 1024;
+
+const decodeJsonStringToken = (rawValue = '') => {
+    try {
+        return JSON.parse(`"${rawValue}"`);
+    } catch {
+        return '';
+    }
+};
+
 async function readSessionMetadata(filePath, fallbackBasename, cacheContext = null) {
     const cacheKey = buildLocalSessionCacheKey(filePath);
 
-    if (cacheContext && cacheContext.stats) {
+    if (cacheContext?.stats && cacheKey) {
         const cachedEntry = localSessionMetadataCache.get(cacheKey);
-        const mtimeMs = cacheContext.stats.mtimeMs;
-        const size = cacheContext.stats.size;
+        const { mtimeMs, size } = cacheContext.stats;
         if (cachedEntry && cachedEntry.mtimeMs === mtimeMs && cachedEntry.size === size) {
             return cloneSessionMetadataCacheEntry(cachedEntry.sessionMetadata);
         }
     }
 
+    let handle;
     try {
-        const rawContent = await fs.readFile(filePath, 'utf-8');
-        const sessionData = JSON.parse(rawContent);
-        if (!sessionData || sessionData.anywhere_history !== true) {
-            localSessionMetadataCache.delete(cacheKey);
+        const fileSize = Math.max(0, Number(cacheContext?.stats?.size) || SESSION_METADATA_PROBE_BYTES);
+        const readLength = Math.min(fileSize, SESSION_METADATA_PROBE_BYTES);
+        if (readLength <= 0) return null;
+
+        handle = await fs.open(filePath, 'r');
+        const buffer = Buffer.allocUnsafe(readLength);
+        const { bytesRead } = await handle.read(buffer, 0, readLength, 0);
+        const head = buffer.toString('utf8', 0, bytesRead);
+        if (!/["']anywhere_history["']\s*:\s*true\b/.test(head)) {
+            if (cacheKey) localSessionMetadataCache.delete(cacheKey);
             return null;
         }
 
-        const sessionMetadata = sessionData.sessionMetadata || {};
-
+        const metadataMatch = head.match(/"sessionMetadata"\s*:\s*\{[\s\S]*?"title"\s*:\s*"((?:\\.|[^"\\])*)"/);
+        const title = metadataMatch ? decodeJsonStringToken(metadataMatch[1]).trim() : '';
         const normalizedMetadata = {
-            title: typeof sessionMetadata.title === 'string' && sessionMetadata.title.trim()
-                ? sessionMetadata.title.trim()
-                : (fallbackBasename.endsWith('.json') ? fallbackBasename.slice(0, -5) : fallbackBasename),
+            title: title || (fallbackBasename.endsWith('.json') ? fallbackBasename.slice(0, -5) : fallbackBasename),
         };
 
-        if (cacheContext && cacheContext.stats) {
+        if (cacheContext?.stats && cacheKey) {
             localSessionMetadataCache.set(cacheKey, {
                 mtimeMs: cacheContext.stats.mtimeMs,
                 size: cacheContext.stats.size,
-                sessionMetadata: normalizedMetadata
+                sessionMetadata: normalizedMetadata,
             });
         }
 
         return cloneSessionMetadataCacheEntry(normalizedMetadata);
-    } catch (error) {
+    } catch {
+        if (cacheKey) localSessionMetadataCache.delete(cacheKey);
         return null;
+    } finally {
+        await handle?.close().catch(() => {});
     }
 }
 

@@ -1780,7 +1780,7 @@ async function startChat(file) {
                 dirPath: localChatPath.value,
                 storageMode: 'local'
             });
-            await fetchLocalFiles(true, { includeSessionMetadataTitle: true });
+            void fetchLocalFiles(true, { includeSessionMetadataTitle: true });
         } else if (file?.format === 'sqlite' && file?.conversationId) {
             const descriptor = cloudProjects.value?.conversations?.[file.conversationId];
             if (!descriptor) throw new Error('conversation_descriptor_missing');

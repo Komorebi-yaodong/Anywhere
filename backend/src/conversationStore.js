@@ -22,6 +22,26 @@ const WRITE_LEASE_TTL_MS = 20 * 1000
 const DEFAULT_BUSY_TIMEOUT_MS = 4000
 const ATTACHMENT_REF_KEY = '__anywhere_attachment_ref'
 
+const LEGACY_JSON_PROBE_BYTES = 64 * 1024
+
+async function isLegacyConversationJson(filePath, fileSize = 0) {
+  const readLength = Math.min(Math.max(0, Number(fileSize) || LEGACY_JSON_PROBE_BYTES), LEGACY_JSON_PROBE_BYTES)
+  if (readLength <= 0) return false
+
+  let handle
+  try {
+    handle = await fs.open(filePath, 'r')
+    const buffer = Buffer.allocUnsafe(readLength)
+    const { bytesRead } = await handle.read(buffer, 0, readLength, 0)
+    const head = buffer.toString('utf8', 0, bytesRead)
+    return /["']anywhere_history["']\s*:\s*true\b/.test(head)
+  } catch {
+    return false
+  } finally {
+    await handle?.close().catch(() => {})
+  }
+}
+
 
 function createUuid() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
@@ -36,6 +56,39 @@ const nowIso = () => new Date().toISOString()
 const clone = (value) => JSON.parse(JSON.stringify(value ?? null))
 const normalizeText = (value, fallback = '') => typeof value === 'string' ? value : (value == null ? fallback : String(value))
 const normalizeBasename = (value = '') => path.basename(normalizeText(value).trim())
+
+
+function normalizeTimestamp(value) {
+  if (value == null || value === '') return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
+}
+
+function collectSessionTimestamps(sessionData = {}) {
+  const timestamps = []
+  for (const messages of [sessionData.fullHistory, sessionData.history, sessionData.chat_show]) {
+    if (!Array.isArray(messages)) continue
+    for (const message of messages) {
+      for (const candidate of [message?.createdAt, message?.timestamp, message?.updatedAt, message?.completedTimestamp]) {
+        const normalized = normalizeTimestamp(candidate)
+        if (normalized) timestamps.push(normalized)
+      }
+    }
+  }
+  return timestamps.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+}
+
+function resolveConversationTimestamps(sessionData = {}, fileStats = null) {
+  const metadata = sessionData?.sessionMetadata && typeof sessionData.sessionMetadata === 'object'
+    ? sessionData.sessionMetadata
+    : {}
+  const messageTimestamps = collectSessionTimestamps(sessionData)
+  const fileCreatedAt = normalizeTimestamp(fileStats?.birthtime) || normalizeTimestamp(fileStats?.ctime) || normalizeTimestamp(fileStats?.mtime)
+  const fileUpdatedAt = normalizeTimestamp(fileStats?.mtime) || fileCreatedAt
+  const createdAt = normalizeTimestamp(metadata.createdAt) || messageTimestamps[0] || fileCreatedAt || nowIso()
+  const updatedAt = normalizeTimestamp(metadata.updatedAt) || messageTimestamps[messageTimestamps.length - 1] || fileUpdatedAt || createdAt
+  return { createdAt, updatedAt }
+}
 
 function createConversationId() {
   return createUuid()
@@ -498,8 +551,8 @@ function writeState(db, state) {
 function replaceSnapshotInDatabase(db, descriptor, sessionData) {
   const { state, fullHistory, chatShow } = splitSessionSnapshot(sessionData)
   const prepared = prepareMigrationMessages(fullHistory, chatShow)
-  const createdAt = normalizeText(sessionData?.sessionMetadata?.createdAt).trim() || nowIso()
-  const updatedAt = normalizeText(sessionData?.sessionMetadata?.updatedAt).trim() || createdAt
+  const createdAt = normalizeTimestamp(sessionData?.sessionMetadata?.createdAt) || normalizeTimestamp(descriptor.createdAt) || nowIso()
+  const updatedAt = normalizeTimestamp(sessionData?.sessionMetadata?.updatedAt) || normalizeTimestamp(descriptor.updatedAt) || createdAt
 
   withTransaction(db, () => {
     db.exec(`
@@ -664,9 +717,13 @@ async function migrateJsonConversation({ dirPath, jsonBasename, instanceId = '',
 
   let tempPath = ''
   try {
-    const raw = await fs.readFile(sourcePath, 'utf-8')
+    const [raw, sourceStats] = await Promise.all([
+      fs.readFile(sourcePath, 'utf-8'),
+      fs.stat(sourcePath).catch(() => null)
+    ])
     const sessionData = JSON.parse(raw)
     if (!sessionData || sessionData.anywhere_history !== true) throw new Error('legacy_conversation_invalid')
+    const { createdAt, updatedAt } = resolveConversationTimestamps(sessionData, sourceStats)
     const conversationId = createConversationId()
     const dbFile = createDatabaseFilename(conversationId)
     const title = normalizeText(sessionData?.sessionMetadata?.title).trim() || legacyJson.slice(0, -5)
@@ -678,8 +735,8 @@ async function migrateJsonConversation({ dirPath, jsonBasename, instanceId = '',
       storageMode: 'local',
       revision: 0,
       schemaVersion: SCHEMA_VERSION,
-      createdAt: normalizeText(sessionData?.sessionMetadata?.createdAt).trim() || nowIso(),
-      updatedAt: normalizeText(sessionData?.sessionMetadata?.updatedAt).trim() || nowIso()
+      createdAt,
+      updatedAt
     }
     const finalPath = resolveDatabasePath(normalizedDir, dbFile)
     tempPath = `${finalPath}.migrating`
@@ -720,8 +777,7 @@ async function createConversation({ dirPath, title, sessionData = {}, projectId 
     storageMode: normalizeText(storageMode, 'local').trim() || 'local',
     revision: 0,
     schemaVersion: SCHEMA_VERSION,
-    createdAt: nowIso(),
-    updatedAt: nowIso()
+    ...resolveConversationTimestamps(sessionData)
   }
   const databasePath = resolveDatabasePath(normalizedDir, dbFile)
   const tempPath = `${databasePath}.creating`
@@ -749,9 +805,8 @@ async function openConversation({ dirPath, reference, activeOnly = true, pageSiz
   }
   if (!descriptor) throw new Error('conversation_not_found')
   const databasePath = resolveDatabasePath(normalizedDir, descriptor.dbFile)
-  const db = openDatabase(databasePath)
+  const db = openDatabase(databasePath, { readOnly: true })
   try {
-    initializeSchema(db)
     const row = getConversationRow(db)
     const state = loadState(db)
     const activeStart = activeOnly ? getActiveMessageStart(db) : 0
@@ -763,11 +818,11 @@ async function openConversation({ dirPath, reference, activeOnly = true, pageSiz
     }
     return {
       ok: true,
-      descriptor: { ...descriptor, title: row.title, revision: row.revision, updatedAt: row.updated_at },
+      descriptor: { ...descriptor, title: row.title, revision: row.revision, createdAt: row.created_at, updatedAt: row.updated_at },
       sessionData: {
         anywhere_history: true,
         ...state,
-        sessionMetadata: { ...(state.sessionMetadata || {}), title: row.title },
+        sessionMetadata: { ...(state.sessionMetadata || {}), title: row.title, createdAt: row.created_at, updatedAt: row.updated_at },
         fullHistory,
         history: [],
         chat_show: chatShow,
@@ -798,11 +853,14 @@ async function listLocalConversations(dirPath) {
     throw error
   })
   const fileStats = new Map()
-  for (const entry of files) {
-    if (!entry.isFile()) continue
-    const stats = await fs.stat(path.join(normalizedDir, entry.name)).catch(() => null)
-    if (stats) fileStats.set(entry.name, stats)
-  }
+  await Promise.all(
+    files
+      .filter((entry) => entry.isFile())
+      .map(async (entry) => {
+        const stats = await fs.stat(path.join(normalizedDir, entry.name)).catch(() => null)
+        if (stats) fileStats.set(entry.name, stats)
+      })
+  )
 
   const conversations = []
   const mappedLegacy = new Set()
@@ -810,18 +868,7 @@ async function listLocalConversations(dirPath) {
     const stats = fileStats.get(descriptor.dbFile)
     if (!stats) continue
     if (descriptor.legacyJson) mappedLegacy.add(descriptor.legacyJson)
-    let title = descriptor.title
-    let revision = descriptor.revision
-    let updatedAt = descriptor.updatedAt
-    try {
-      const db = openDatabase(resolveDatabasePath(normalizedDir, descriptor.dbFile), { readOnly: true })
-      try {
-        const row = getConversationRow(db)
-        title = row.title || title
-        revision = row.revision
-        updatedAt = row.updated_at || updatedAt
-      } finally { db.close() }
-    } catch {}
+    const updatedAt = descriptor.updatedAt || stats.mtime?.toISOString?.() || ''
     conversations.push({
       type: 'file',
       format: 'sqlite',
@@ -829,37 +876,38 @@ async function listLocalConversations(dirPath) {
       filename: descriptor.dbFile,
       path: resolveDatabasePath(normalizedDir, descriptor.dbFile),
       conversationId: descriptor.conversationId,
-      title,
+      title: descriptor.title,
       legacyJson: descriptor.legacyJson,
-      revision,
+      revision: descriptor.revision,
       size: stats.size,
       createdAt: descriptor.createdAt || stats.birthtime?.toISOString?.() || '',
-      updatedAt: updatedAt || stats.mtime?.toISOString?.() || '',
-      lastmod: updatedAt || stats.mtime?.toISOString?.() || ''
+      updatedAt,
+      lastmod: updatedAt
     })
   }
 
-  for (const entry of files) {
-    if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.json') || mappedLegacy.has(entry.name)) continue
-    try {
-      const raw = await fs.readFile(path.join(normalizedDir, entry.name), 'utf-8')
-      const session = JSON.parse(raw)
-      if (session?.anywhere_history !== true) continue
-      const stats = fileStats.get(entry.name)
-      conversations.push({
-        type: 'file',
-        format: 'json',
-        basename: entry.name,
-        filename: entry.name,
-        path: path.join(normalizedDir, entry.name),
-        title: normalizeText(session?.sessionMetadata?.title).trim() || entry.name.slice(0, -5),
-        size: stats?.size || 0,
-        createdAt: normalizeText(session?.sessionMetadata?.createdAt).trim() || stats?.birthtime?.toISOString?.() || '',
-        updatedAt: normalizeText(session?.sessionMetadata?.updatedAt).trim() || stats?.mtime?.toISOString?.() || '',
-        lastmod: stats?.mtime?.toISOString?.() || ''
+  const legacyConversations = await Promise.all(
+    files
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json') && !mappedLegacy.has(entry.name))
+      .map(async (entry) => {
+        const stats = fileStats.get(entry.name)
+        const filePath = path.join(normalizedDir, entry.name)
+        if (!await isLegacyConversationJson(filePath, stats?.size)) return null
+        return {
+          type: 'file',
+          format: 'json',
+          basename: entry.name,
+          filename: entry.name,
+          path: filePath,
+          title: entry.name.slice(0, -5),
+          size: stats?.size || 0,
+          createdAt: stats?.birthtime?.toISOString?.() || '',
+          updatedAt: stats?.mtime?.toISOString?.() || '',
+          lastmod: stats?.mtime?.toISOString?.() || ''
+        }
       })
-    } catch {}
-  }
+  )
+  conversations.push(...legacyConversations.filter(Boolean))
 
   return conversations.sort((a, b) => new Date(b.updatedAt || b.lastmod || 0).getTime() - new Date(a.updatedAt || a.lastmod || 0).getTime())
 }
@@ -1238,7 +1286,7 @@ async function restoreConversationCompaction({
       sessionData: {
         anywhere_history: true,
         ...state,
-        sessionMetadata: { ...(state.sessionMetadata || {}), title: row.title },
+        sessionMetadata: { ...(state.sessionMetadata || {}), title: row.title, createdAt: row.created_at, updatedAt: row.updated_at },
         fullHistory,
         history: [],
         chat_show: chatShow,
@@ -1454,26 +1502,35 @@ async function importConversationSnapshot({ dirPath, descriptor: rawDescriptor =
     await fs.rename(downloadPath, finalPath)
 
     const importedDb = openDatabase(finalPath)
+    let importedMetadata
     try {
       const importedRow = getConversationRow(importedDb)
       const importedTitle = normalizeText(rawDescriptor.title).trim() || importedRow.title
-      const importedUpdatedAt = normalizeText(rawDescriptor.updatedAt).trim() || importedRow.updated_at
+      const importedUpdatedAt = normalizeTimestamp(rawDescriptor.updatedAt) || normalizeTimestamp(importedRow.updated_at) || nowIso()
+      const importedCreatedAt = normalizeTimestamp(rawDescriptor.createdAt) || normalizeTimestamp(importedRow.created_at) || importedUpdatedAt
       const importedRevision = Math.max(Number(importedRow.revision) || 0, Number(rawDescriptor.revision) || 0)
-      importedDb.prepare('UPDATE conversation SET title = ?, updated_at = ?, revision = ? WHERE conversation_id = ?')
-        .run(importedTitle, importedUpdatedAt, importedRevision, conversationId)
+      importedDb.prepare('UPDATE conversation SET title = ?, created_at = ?, updated_at = ?, revision = ? WHERE conversation_id = ?')
+        .run(importedTitle, importedCreatedAt, importedUpdatedAt, importedRevision, conversationId)
+      importedMetadata = {
+        ...importedRow,
+        title: importedTitle,
+        created_at: importedCreatedAt,
+        updated_at: importedUpdatedAt,
+        revision: importedRevision
+      }
     } finally {
       importedDb.close()
     }
     const descriptor = {
       conversationId,
       dbFile,
-      title: normalizeText(rawDescriptor.title).trim() || conversationId,
+      title: normalizeText(rawDescriptor.title).trim() || importedMetadata.title,
       legacyJson: normalizeBasename(rawDescriptor.legacyJson),
       storageMode: normalizeText(rawDescriptor.storageMode, 'local').trim() || 'local',
-      revision: Math.max(0, Number(rawDescriptor.revision) || 0),
+      revision: Math.max(0, Number(importedMetadata.revision) || 0),
       schemaVersion: Math.max(1, Number(rawDescriptor.schemaVersion) || SCHEMA_VERSION),
-      createdAt: normalizeText(rawDescriptor.createdAt).trim() || nowIso(),
-      updatedAt: normalizeText(rawDescriptor.updatedAt).trim() || nowIso()
+      createdAt: normalizeTimestamp(importedMetadata.created_at) || nowIso(),
+      updatedAt: normalizeTimestamp(importedMetadata.updated_at) || normalizeTimestamp(importedMetadata.created_at) || nowIso()
     }
     const projects = registerConversation(await readLocalProjects(normalizedDir), descriptor)
     await writeLocalProjects(normalizedDir, projects)
