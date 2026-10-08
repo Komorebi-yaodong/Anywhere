@@ -348,10 +348,16 @@ function messageSignature(message = {}) {
 }
 
 function prepareMigrationMessages(fullHistory = [], chatShow = []) {
-  const messages = (Array.isArray(fullHistory) ? fullHistory : []).map((message) => ({
-    ...clone(message),
-    storageId: normalizeText(message?.storageId).trim() || createUuid()
-  }))
+  const usedMessageIds = new Set()
+  const messages = (Array.isArray(fullHistory) ? fullHistory : []).map((message) => {
+    const next = clone(message)
+    const requestedStorageId = normalizeText(message?.storageId).trim()
+    next.storageId = requestedStorageId && !usedMessageIds.has(requestedStorageId)
+      ? requestedStorageId
+      : createUuid()
+    usedMessageIds.add(next.storageId)
+    return next
+  })
   const signatureQueues = new Map()
   messages.forEach((message) => {
     if (message.role === 'tool') return
@@ -359,12 +365,17 @@ function prepareMigrationMessages(fullHistory = [], chatShow = []) {
     if (!signatureQueues.has(signature)) signatureQueues.set(signature, [])
     signatureQueues.get(signature).push(message.storageId)
   })
+  const usedUiStorageIds = new Set()
   const uiMessages = (Array.isArray(chatShow) ? chatShow : []).map((message) => {
     const next = clone(message)
     const signature = messageSignature(next)
     const queue = signatureQueues.get(signature)
     next.storageId = normalizeText(next.storageId).trim() || (queue?.shift() || '')
-    next.uiStorageId = normalizeText(next.uiStorageId).trim() || createUuid()
+    const requestedUiStorageId = normalizeText(next.uiStorageId).trim()
+    next.uiStorageId = requestedUiStorageId && !usedUiStorageIds.has(requestedUiStorageId)
+      ? requestedUiStorageId
+      : createUuid()
+    usedUiStorageIds.add(next.uiStorageId)
     return next
   })
   return { messages, uiMessages }
@@ -536,6 +547,15 @@ function syncUiMessagesIncrementally(db, messages, lowerBound = 1) {
   return true
 }
 
+
+function replaceUiProjection(db, uiMessages, lowerBound) {
+  db.prepare("DELETE FROM ui_messages WHERE role_code = 'system' OR ui_order >= ?").run(lowerBound)
+  const systemUi = uiMessages.filter((message) => message?.role === 'system')
+  const activeUi = uiMessages.filter((message) => message?.role !== 'system')
+  // UI is a derived projection. Never reuse cross-client uiStorageOrder values while rebuilding.
+  systemUi.forEach((message, index) => insertUiMessage(db, message, index - systemUi.length))
+  activeUi.forEach((message, index) => insertUiMessage(db, message, lowerBound + index))
+}
 
 function writeState(db, state) {
   const stateStmt = db.prepare(`
@@ -1010,22 +1030,7 @@ async function saveConversationSnapshot({ dirPath, conversationId, expectedRevis
         : (activeUiStart > 0 ? activeUiStart : 1)
       const uiIncremental = syncUiMessagesIncrementally(db, prepared.uiMessages, loadedUiStart)
       if (!uiIncremental) {
-        if (isPaged || activeUiStart > 0) {
-          db.prepare("DELETE FROM ui_messages WHERE role_code = 'system' OR ui_order >= ?").run(loadedUiStart)
-          const systemUi = prepared.uiMessages.filter((message) => message?.role === 'system')
-          const activeUi = prepared.uiMessages.filter((message) => message?.role !== 'system')
-          systemUi.forEach((message, index) => insertUiMessage(db, message, index - systemUi.length))
-          let nextUiOrder = Number(db.prepare('SELECT COALESCE(MAX(ui_order), ?) AS value FROM ui_messages').get(loadedUiStart - 1)?.value) || (loadedUiStart - 1)
-          activeUi.forEach((message) => {
-            const preservedOrder = Number(message?.uiStorageOrder)
-            const uiOrder = Number.isFinite(preservedOrder) && preservedOrder >= loadedUiStart ? preservedOrder : ++nextUiOrder
-            nextUiOrder = Math.max(nextUiOrder, uiOrder)
-            insertUiMessage(db, message, uiOrder)
-          })
-        } else {
-          db.exec('DELETE FROM ui_messages')
-          prepared.uiMessages.forEach((message, index) => insertUiMessage(db, message, index + 1))
-        }
+        replaceUiProjection(db, prepared.uiMessages, isPaged || activeUiStart > 0 ? loadedUiStart : 1)
       }
 
       db.exec('DELETE FROM session_state')

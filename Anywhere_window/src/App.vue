@@ -4166,11 +4166,19 @@ const getSessionDataAsObject = (options = {}) => {
   const createStorageId = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
     ? crypto.randomUUID()
     : `msg_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  const usedStorageIds = new Set();
   fullHistory.value.forEach((message) => {
-    if (message && typeof message === 'object' && !message.storageId) message.storageId = createStorageId();
+    if (!message || typeof message !== 'object') return;
+    const storageId = typeof message.storageId === 'string' ? message.storageId.trim() : '';
+    message.storageId = storageId && !usedStorageIds.has(storageId) ? storageId : createStorageId();
+    usedStorageIds.add(message.storageId);
   });
+  const usedUiStorageIds = new Set();
   chat_show.value.forEach((message) => {
-    if (message && typeof message === 'object' && !message.uiStorageId) message.uiStorageId = createStorageId();
+    if (!message || typeof message !== 'object') return;
+    const uiStorageId = typeof message.uiStorageId === 'string' ? message.uiStorageId.trim() : '';
+    message.uiStorageId = uiStorageId && !usedUiStorageIds.has(uiStorageId) ? uiStorageId : createStorageId();
+    usedUiStorageIds.add(message.uiStorageId);
   });
 
   const currentPromptConfig = {
