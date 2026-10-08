@@ -441,6 +441,7 @@ const STICKY_SCROLL_GUARD_MS = 220;
 const USER_SCROLL_INTENT_MS = 260;
 
 const AUTO_SAVE_INPUT_DEBOUNCE_MS = 800;
+const AUTO_SAVE_REQUEST_CONFIG_DEBOUNCE_MS = 250;
 const AUTO_SAVE_LOADING_THROTTLE_MS = 2500;
 let autoSaveTimer = null;
 let scheduledAutoSaveRequest = null;
@@ -772,13 +773,17 @@ const releaseCurrentConversationLease = async () => {
   const lease = conversationLease.value;
   conversationLease.value = null;
   const dirPath = currentConversationStorage.value?.dirPath || currentConfig.value?.webdav?.localChatPath || '';
-  if (!storage?.conversationId || !lease?.leaseEpoch || !dirPath) return;
-  await window.api.releaseConversationWriteLease({
+  if (!storage?.conversationId || !lease?.leaseEpoch || !dirPath) {
+    window.api.clearRegisteredConversationWriteLease?.();
+    return;
+  }
+  const released = await window.api.releaseConversationWriteLease({
     dirPath,
     conversationId: storage.conversationId,
     holderInstanceId: conversationInstanceId,
     leaseEpoch: lease.leaseEpoch
-  }).catch(() => {});
+  }).then(() => true).catch(() => false);
+  if (released) window.api.clearRegisteredConversationWriteLease?.();
 };
 
 const ensureConversationWriteAccess = (message = '') => {
@@ -814,6 +819,15 @@ const acquireCurrentConversationLease = async () => {
     });
     conversationReadOnly.value = lease?.readonly === true || lease?.ok === false;
     conversationLease.value = lease?.ok ? lease : null;
+
+    if (lease?.ok && lease?.leaseEpoch) {
+      window.api.registerConversationWriteLease?.({
+        dirPath,
+        conversationId: storage.conversationId,
+        holderInstanceId: conversationInstanceId,
+        leaseEpoch: lease.leaseEpoch
+      });
+    }
     if (conversationReadOnly.value) {
       showDismissibleMessage.warning(`该会话正在由${lease?.holderApp || '另一个客户端'}编辑，当前以只读模式打开`);
       return;
@@ -2229,14 +2243,8 @@ const onAvatarClick = async (role, event) => {
 const handleSubmit = () => {
   if (!ensureConversationWriteAccess(true)) return;
 
-  // 自动/手动压缩中：禁止发送与缓冲，避免用户误以为卡死
-  if (compacting.value) {
-    showDismissibleMessage.warning('压缩进行中，暂不可发送');
-    return;
-  }
-  // 生成中（或正在准备发送）时，把消息暂存进缓冲区，本轮结束后自动发送
-  if (loading.value || isPreparingSend.value) {
-    enqueueInputToBuffer();
+  if (compacting.value || loading.value || isPreparingSend.value) {
+    enqueueInputToBuffer(compacting.value ? '正在压缩，消息已加入缓冲区，将在压缩结束后自动发送' : '正在生成，消息已加入缓冲区，将在本轮结束后自动发送');
     return;
   }
   askAI(false);
@@ -2576,7 +2584,7 @@ const saveSystemPrompt = async () => {
 const handleAutoCloseOnBlur = () => closePage(false);
 const syncAutoCloseOnBlurListener = () => {
   window.removeEventListener('blur', handleAutoCloseOnBlur);
-  if (autoCloseOnBlur.value && !loading.value) {
+  if (autoCloseOnBlur.value && !loading.value && !compacting.value) {
     window.addEventListener('blur', handleAutoCloseOnBlur);
   }
 };
@@ -2993,6 +3001,9 @@ onMounted(async () => {
         defaultConversationName.value = descriptor.title || data.conversationTitle || '';
         isSessionRestored = true;
         await loadSession(opened.sessionData);
+        // 历史会话必须保持打开；不能继承快捷助手的失焦即关闭配置。
+        autoCloseOnBlur.value = false;
+        syncAutoCloseOnBlurListener();
         await acquireCurrentConversationLease();
       } else if (data.conversationTitle) {
         defaultConversationName.value = data.conversationTitle;
@@ -3870,6 +3881,12 @@ const autoSaveSession = async (force = false, { skipProjectAssignment = false, v
       currentConversationStorage.value = storage;
       await acquireCurrentConversationLease();
     } else {
+      window.api.reportConversationSaveDiagnostic?.({
+        phase: 'snapshot-start',
+        reason: 'full-snapshot',
+        messageCount: fullHistory.value.length,
+        uiCount: chat_show.value.length
+      });
       const saved = await window.api.saveConversationSnapshot({
         dirPath,
         conversationId: storage.conversationId,
@@ -3884,12 +3901,24 @@ const autoSaveSession = async (force = false, { skipProjectAssignment = false, v
         title: saved.title || defaultConversationName.value,
         revision: Number(saved.revision) || storage.revision
       };
+      window.api.reportConversationSaveDiagnostic?.({
+        phase: 'snapshot-complete',
+        reason: 'full-snapshot',
+        messageCount: fullHistory.value.length,
+        uiCount: chat_show.value.length
+      });
     }
 
     lastPersistedSessionVersion = Math.max(lastPersistedSessionVersion, Number(version) || 0);
     lastAutoSaveAt = Date.now();
     return true;
   } catch (error) {
+    window.api.reportConversationSaveDiagnostic?.({
+      phase: 'snapshot-failed',
+      reason: String(error?.message || error || '').slice(0, 120),
+      messageCount: fullHistory.value.length,
+      uiCount: chat_show.value.length
+    });
     if (/conversation_(revision_conflict|write_lease_lost)/.test(String(error?.message || ''))) {
       conversationReadOnly.value = true;
       showDismissibleMessage.warning('会话已在其他客户端更新，当前窗口已切换为只读模式');
@@ -3898,6 +3927,60 @@ const autoSaveSession = async (force = false, { skipProjectAssignment = false, v
     return false;
   }
 };
+
+const getSessionRequestConfigStatePatch = () => {
+  const currentPromptConfig = {
+    ...(currentConfig.value.prompts?.[CODE.value] || {}),
+    ...(sourcePromptConfig.value || {}),
+    reasoning_effort: tempReasoningEffort.value || 'default',
+    voice: selectedVoice.value || null
+  };
+  sourcePromptConfig.value = { ...currentPromptConfig };
+  return {
+    currentPromptConfig,
+    selectedVoice: selectedVoice.value || '',
+    activeMcpServerIds: [...(sessionMcpServerIds.value || [])],
+    activeSkillIds: [...(sessionSkillIds.value || [])]
+  };
+};
+
+const autoSaveSessionRequestConfig = async (force = false, { version = sessionMutationVersion } = {}) => {
+  const storage = currentConversationStorage.value;
+  if (!storage?.conversationId) {
+    // A new conversation still needs one full snapshot to create its SQLite transcript.
+    return autoSaveSession(force, { version });
+  }
+  if (!force && !shouldPersistCurrentSessionAutomatically()) return false;
+  if (!ensureConversationWriteAccess(false)) return false;
+
+  try {
+    const saved = await window.api.saveConversationState({
+      dirPath: storage.dirPath || currentConfig.value.webdav?.localChatPath || '',
+      conversationId: storage.conversationId,
+      expectedRevision: storage.revision,
+      holderInstanceId: conversationInstanceId,
+      leaseEpoch: conversationLease.value?.leaseEpoch,
+      title: defaultConversationName.value,
+      state: getSessionRequestConfigStatePatch()
+    });
+    currentConversationStorage.value = {
+      ...storage,
+      title: saved.title || storage.title,
+      revision: Number(saved.revision) || storage.revision
+    };
+    lastPersistedSessionVersion = Math.max(lastPersistedSessionVersion, Number(version) || 0);
+    lastAutoSaveAt = Date.now();
+    return true;
+  } catch (error) {
+    if (/conversation_(revision_conflict|write_lease_lost)/.test(String(error?.message || ''))) {
+      conversationReadOnly.value = true;
+      showDismissibleMessage.warning('会话已在其他客户端更新，当前窗口已切换为只读模式');
+    }
+    console.error('Request-config state save failed:', error);
+    return false;
+  }
+};
+
 
 const clearScheduledAutoSave = () => {
   if (autoSaveTimer) {
@@ -3925,17 +4008,22 @@ const executeAutoSaveRequest = async (request = {}) => {
       force: queuedAutoSaveRequest?.force || request.force || false,
       reason: request.reason || queuedAutoSaveRequest?.reason || 'queued',
       version: Math.max(Number(queuedAutoSaveRequest?.version) || 0, Number(request.version) || sessionMutationVersion),
-      skipProjectAssignment: Boolean(queuedAutoSaveRequest?.skipProjectAssignment && request.skipProjectAssignment)
+      skipProjectAssignment: Boolean(queuedAutoSaveRequest?.skipProjectAssignment && request.skipProjectAssignment),
+      // Any normal snapshot supersedes a state-only patch so drafts/messages cannot be skipped.
+      stateOnly: request.stateOnly === true && queuedAutoSaveRequest?.stateOnly !== false
     };
     return autoSaveExecutionPromise;
   }
 
   autoSaveExecutionPromise = (async () => {
     try {
-      return await autoSaveSession(Boolean(request.force), {
+      const saveOptions = {
         skipProjectAssignment: request.skipProjectAssignment === true,
         version: Number(request.version) || sessionMutationVersion
-      });
+      };
+      return request.stateOnly === true
+        ? await autoSaveSessionRequestConfig(Boolean(request.force), saveOptions)
+        : await autoSaveSession(Boolean(request.force), saveOptions);
     } finally {
       autoSaveExecutionPromise = null;
       if (queuedAutoSaveRequest) {
@@ -3949,12 +4037,14 @@ const executeAutoSaveRequest = async (request = {}) => {
   return autoSaveExecutionPromise;
 };
 
-const scheduleAutoSave = ({ reason = 'generic', immediate = false, force = false, delay = 0 } = {}) => {
+const scheduleAutoSave = ({ reason = 'generic', immediate = false, force = false, delay = 0, stateOnly = false } = {}) => {
   if (!force && !shouldPersistCurrentSessionAutomatically()) {
     return;
   }
 
-  const request = { reason, force, version: ++sessionMutationVersion };
+  const request = { reason, force, stateOnly: Boolean(stateOnly), version: ++sessionMutationVersion };
+  // Do not downgrade a pending full snapshot to a state-only patch.
+  if (scheduledAutoSaveRequest && !scheduledAutoSaveRequest.stateOnly) request.stateOnly = false;
 
   if (immediate || force || delay <= 0) {
     clearScheduledAutoSave();
@@ -3981,7 +4071,12 @@ const scheduleAutoSave = ({ reason = 'generic', immediate = false, force = false
 
 watch([selectedVoice, tempReasoningEffort, sessionMcpServerIds, sessionSkillIds], () => {
   if (isRestoringSessionSnapshot) return;
-  scheduleAutoSave({ reason: 'session-request-config', immediate: true });
+  // Request configuration is state only; never rescan or rewrite the full transcript for it.
+  scheduleAutoSave({
+    reason: 'session-request-config',
+    delay: AUTO_SAVE_REQUEST_CONFIG_DEBOUNCE_MS,
+    stateOnly: true
+  });
 }, { deep: true });
 
 
@@ -4081,6 +4176,8 @@ const getSessionDataAsObject = (options = {}) => {
   const currentPromptConfig = {
     ...(currentConfig.value.prompts[CODE.value] || {}),
     ...(sourcePromptConfig.value || {}),
+    reasoning_effort: tempReasoningEffort.value || 'default',
+    voice: selectedVoice.value || null,
     window_height: window.outerHeight,
     window_width: window.outerWidth,
     zoom: zoomLevel.value,
@@ -6289,7 +6386,7 @@ const applyTokenUsageToAssistantMessage = (chatShowIndex, tokenUsage) => {
 
 
 // --- 追加消息缓冲区：loading 期间发送的消息暂存于此，本轮结束后自动追加并续请求 ---
-const enqueueInputToBuffer = () => {
+const enqueueInputToBuffer = (notice = '正在生成，消息已加入缓冲区，将在本轮结束后自动发送') => {
   const text = prompt.value.trim();
   const files = Array.isArray(fileList.value) ? fileList.value.slice() : [];
   if (!text && files.length === 0) return;
@@ -6302,7 +6399,7 @@ const enqueueInputToBuffer = () => {
   prompt.value = "";
   fileList.value = [];
   scheduleAutoSave({ reason: 'append-buffer-enqueued', immediate: true });
-  showDismissibleMessage.info('正在生成，消息已加入缓冲区，将在本轮结束后自动发送');
+  showDismissibleMessage.info(notice);
 };
 
 const removeBufferedMessage = (index) => {
@@ -7159,7 +7256,7 @@ const estimateCompactHistoryTokens = async (messages = []) => {
  */
 const splitFullHistoryPrefixAndTail = async (
   messages = fullHistory.value,
-  { maxPrefixTokens = 0, keepRecentRounds = 0 } = {}
+  { maxPrefixTokens = 0, preferredMaxTokens = maxPrefixTokens, keepRecentRounds = 0 } = {}
 ) => {
   const list = Array.isArray(messages) ? messages : [];
   let windowStart = 0;
@@ -7176,78 +7273,39 @@ const splitFullHistoryPrefixAndTail = async (
 
   const systemMessages = list.filter((message) => message?.role === 'system');
   const windowMessages = list.slice(windowStart);
-  const userStartIndexes = [];
-  windowMessages.forEach((message, index) => {
-    // Cut only before a user message, keeping the previous user/assistant/tool round intact.
-    if (isUserAuthoredMessage(message) && index > 0) userStartIndexes.push(index);
+  const dynamicOverheadTokens = await estimateCurrentDynamicRequestOverhead();
+  if (!window.api?.selectCompactionCut || windowMessages.length < 2 || !Number.isFinite(Number(maxPrefixTokens)) || maxPrefixTokens <= 0) {
+    return { insertIndex: list.length, prefix: [], tail: windowMessages, prefixTokens: 0, tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...windowMessages]) + dynamicOverheadTokens, maxPrefixTokens: Math.max(0, Number(maxPrefixTokens) || 0), tailStartUserOrdinal: 0, strategy: 'none' };
+  }
+
+  const selected = await window.api.selectCompactionCut({
+    systemMessages,
+    windowMessages,
+    thresholdTokens: Math.floor(Number(maxPrefixTokens)),
+    preferredMaxTokens: Math.floor(Math.max(Number(maxPrefixTokens), Number(preferredMaxTokens) || 0)),
+    keepRecentRounds,
+    fixedOverheadTokens: dynamicOverheadTokens
   });
-  if (userStartIndexes.length === 0 || !Number.isFinite(Number(maxPrefixTokens)) || maxPrefixTokens <= 0) {
-    return {
-      insertIndex: list.length,
-      prefix: [],
-      tail: windowMessages,
-      prefixTokens: 0,
-      tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...windowMessages]),
-      maxPrefixTokens: Math.max(0, Number(maxPrefixTokens) || 0),
-      tailStartUserOrdinal: 0
-    };
+  const cutIndex = Math.max(0, Math.min(windowMessages.length, Number(selected?.cutIndex) || 0));
+  if (!cutIndex) {
+    return { insertIndex: list.length, prefix: [], tail: windowMessages, prefixTokens: 0, tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...windowMessages]) + dynamicOverheadTokens, maxPrefixTokens: Math.floor(Number(maxPrefixTokens)), tailStartUserOrdinal: 0, strategy: selected?.strategy || 'none' };
   }
-
-  const budget = Math.floor(Number(maxPrefixTokens));
-  const estimatePrefixAt = async (cutIndex) => (
-    estimateCompactHistoryTokens([...systemMessages, ...windowMessages.slice(0, cutIndex)])
-  );
-
-  // Token totals are monotonic as complete message rounds are added, so binary-search the largest safe cut.
-  let low = 0;
-  let high = userStartIndexes.length - 1;
-  let bestCandidate = -1;
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    const candidate = userStartIndexes[middle];
-    const tokens = await estimatePrefixAt(candidate);
-    if (tokens <= budget) {
-      bestCandidate = middle;
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-
-  if (bestCandidate < 0) {
-    return {
-      insertIndex: list.length,
-      prefix: [],
-      tail: windowMessages,
-      prefixTokens: 0,
-      tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...windowMessages]),
-      maxPrefixTokens: budget,
-      tailStartUserOrdinal: 0
-    };
-  }
-
-  const thresholdCutIndex = userStartIndexes[bestCandidate];
-  const requestedKeepRounds = Math.max(0, Math.floor(Number(keepRecentRounds) || 0));
-  // Move the threshold cut backwards by N complete user rounds to keep them verbatim.
-  const tailStartUserOrdinal = Math.max(0, bestCandidate - requestedKeepRounds);
-  let cutIndex = userStartIndexes[tailStartUserOrdinal] ?? thresholdCutIndex;
-
-  // Never summarize only an existing compaction marker: that would not reduce history.
-  const hasRealPrefixMessage = windowMessages
-    .slice(0, cutIndex)
-    .some((message) => message?.role && message.role !== 'system' && message.role !== 'compaction');
-  if (!hasRealPrefixMessage) cutIndex = thresholdCutIndex;
 
   const prefix = windowMessages.slice(0, cutIndex);
   const tail = windowMessages.slice(cutIndex);
+  const userStarts = windowMessages
+    .map((message, index) => (isUserAuthoredMessage(message) ? index : -1))
+    .filter((index) => index >= 0);
+  const tailStartUserOrdinal = Math.max(0, userStarts.findIndex((index) => index >= cutIndex));
   return {
     insertIndex: windowStart + cutIndex,
     prefix,
     tail,
-    prefixTokens: await estimateCompactHistoryTokens([...systemMessages, ...prefix]),
-    tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...tail]),
-    maxPrefixTokens: budget,
-    tailStartUserOrdinal: Math.max(0, userStartIndexes.indexOf(cutIndex))
+    prefixTokens: await estimateCompactHistoryTokens([...systemMessages, ...prefix]) + dynamicOverheadTokens,
+    tailTokens: await estimateCompactHistoryTokens([...systemMessages, ...tail]) + dynamicOverheadTokens,
+    maxPrefixTokens: Math.floor(Number(maxPrefixTokens)),
+    tailStartUserOrdinal,
+    strategy: selected?.strategy || 'safe_adaptive'
   };
 };
 
@@ -7547,32 +7605,22 @@ const findAiWindowStartIndex = (list = []) => {
  * 在「AI 可见窗口」内切 prefix/tail。
  * UI 不删除 prefix，只在 prefix 后插入 summary。
  */
-const splitAiWindowPrefixAndTail = (messages = [], tailStartUserOrdinal = 0) => {
+// Map a protocol-safe full-history cut to the owning chat bubbles. Full history keeps
+// tool results as rows; chat_show keeps those results inside the assistant bubble.
+// Counting only renderable non-system/non-tool rows keeps user and AI-unit cuts identical.
+const splitChatShowPrefixAtFullCut = (messages = [], fullPrefix = []) => {
   const list = Array.isArray(messages) ? messages : [];
-  if (list.length === 0) {
-    return { windowStart: 0, insertIndex: 0, prefix: [], tail: [] };
-  }
-
+  if (list.length === 0) return { windowStart: 0, insertIndex: 0, prefix: [], tail: [] };
   const windowStart = findAiWindowStartIndex(list);
-  const windowMsgs = list.slice(windowStart);
-  const userStartIndexes = [];
-  windowMsgs.forEach((message, index) => {
-    if (isUserAuthoredMessage(message) && index > 0) userStartIndexes.push(index);
-  });
-  if (userStartIndexes.length === 0) {
-    return { windowStart, insertIndex: list.length, prefix: [], tail: windowMsgs };
-  }
-
-  const safeOrdinal = Math.min(
-    Math.max(0, Math.floor(Number(tailStartUserOrdinal) || 0)),
-    userStartIndexes.length - 1
-  );
-  const cutInWindow = userStartIndexes[safeOrdinal];
+  const visiblePrefixCount = (Array.isArray(fullPrefix) ? fullPrefix : [])
+    .filter((message) => message?.role && message.role !== 'system' && message.role !== 'tool')
+    .length;
+  const insertIndex = Math.max(windowStart, Math.min(list.length, windowStart + visiblePrefixCount));
   return {
     windowStart,
-    insertIndex: windowStart + cutInWindow,
-    prefix: windowMsgs.slice(0, cutInWindow),
-    tail: windowMsgs.slice(cutInWindow)
+    insertIndex,
+    prefix: list.slice(windowStart, insertIndex),
+    tail: list.slice(insertIndex)
   };
 };
 
@@ -7672,7 +7720,7 @@ const handleRestoreCompact = async (payload = null) => {
       chat_show.value = Array.isArray(sessionData.chat_show) ? sessionData.chat_show : [];
       compactArchives.value = Array.isArray(sessionData.compactArchives)
         ? sessionData.compactArchives
-        : compactArchives.value.filter((item) => item?.id !== outermost.snapshotId);
+        : compactArchives.value.filter((item) => item?.id !== (restored?.restoredSnapshotId || outermost.snapshotId));
       currentConversationStorage.value = {
         ...storage,
         title: restored?.descriptor?.title || storage.title,
@@ -7743,6 +7791,8 @@ const runConversationCompact = async ({
   syncHistoryFromFullHistory();
 
   compacting.value = true;
+
+  syncAutoCloseOnBlurListener();
   compactProgress.value = { percent: 2, message: '准备级联压缩…', stage: 'prepare' };
   compactAbortController = new AbortController();
   // 发送区仅 loading 时用户不易感知原因；气泡提示当前在做会话压缩
@@ -7778,20 +7828,18 @@ const runConversationCompact = async ({
         break;
       }
 
-      const maxPrefixTokens = Math.floor(
-        Number(compactConfig.value.contextLength || 0)
-        * Number(compactConfig.value.triggerRatio || 0)
-      );
+      const contextLength = Math.max(0, Number(compactConfig.value.contextLength) || 0);
+      const triggerRatio = Math.min(0.99, Math.max(0.1, Number(compactConfig.value.triggerRatio) || 0));
+      const maxPrefixTokens = Math.floor(contextLength * triggerRatio);
+      // Prefer safe boundaries in the first half of the remaining window: 80% → 80~90%, 90% → 90~95%.
+      const preferredMaxTokens = Math.floor(contextLength * (triggerRatio + ((1 - triggerRatio) * 0.5)));
       const fullSplit = await splitFullHistoryPrefixAndTail(fullHistory.value, {
         maxPrefixTokens,
+        preferredMaxTokens,
         keepRecentRounds: compactConfig.value.keepRecentRounds
       });
-      const {
-        insertIndex: fullInsertIndex,
-        prefix,
-        tailStartUserOrdinal
-      } = fullSplit;
-      const uiSplit = splitAiWindowPrefixAndTail(chat_show.value, tailStartUserOrdinal);
+      const { insertIndex: fullInsertIndex, prefix } = fullSplit;
+      const uiSplit = splitChatShowPrefixAtFullCut(chat_show.value, prefix);
       if (!prefix.length) {
         if (manual && steps === 1 && !quiet) {
           showDismissibleMessage.info('可压缩前缀不足，已跳过');
@@ -7871,12 +7919,10 @@ const runConversationCompact = async ({
     }
 
     autoCompactSuppressedForTurn.value = false;
-    if (hydratedPagedConversation) {
-      await executeAutoSaveRequest({ reason: 'conversation-compacted', force: true, version: ++sessionMutationVersion });
-      await reloadConversationWindowFromStore({ activeOnly: true, pageSize: 200 });
-    } else {
-      scheduleAutoSave({ reason: 'conversation-compacted', immediate: true });
-    }
+    // The database is authoritative after a cascade. Await one full snapshot then reload
+    // the active window so a multi-layer UI projection can never diverge until reopening.
+    await executeAutoSaveRequest({ reason: 'conversation-compacted', force: true, version: ++sessionMutationVersion });
+    await reloadConversationWindowFromStore({ activeOnly: true, pageSize: 200 });
     if (!quiet) {
       showDismissibleMessage.success(manual ? `手动级联压缩完成（${steps} 步）` : `自动级联压缩完成（${steps} 步）`);
     }
@@ -7896,6 +7942,8 @@ const runConversationCompact = async ({
       await reloadConversationWindowFromStore({ activeOnly: true, pageSize: 200 }).catch(() => {});
     }
     compacting.value = false;
+
+    syncAutoCloseOnBlurListener();
     compactAbortController = null;
     compactProgress.value = { percent: 0, message: '', stage: '' };
   }
@@ -9074,11 +9122,17 @@ const deleteMessage = (index) => {
     return;
   }
 
+  // Prefer the durable message identity: UI/system/tool projections do not always have
+  // a one-to-one index relationship, especially in paged or compacted conversations.
+  const messageStorageId = typeof messageToDelete?.storageId === 'string' ? messageToDelete.storageId : '';
   const fullVisibleIndexes = fullHistory.value
     .map((message, fullIndex) => (message?.role === 'tool' ? -1 : fullIndex))
     .filter((fullIndex) => fullIndex >= 0);
-  const fullStartIndex = fullVisibleIndexes[index];
-  if (Number.isInteger(fullStartIndex)) {
+  const matchedStorageIndex = messageStorageId
+    ? fullHistory.value.findIndex((message) => message?.storageId === messageStorageId)
+    : -1;
+  const fullStartIndex = matchedStorageIndex >= 0 ? matchedStorageIndex : fullVisibleIndexes[index];
+  if (Number.isInteger(fullStartIndex) && fullStartIndex >= 0) {
     let fullDeleteCount = 1;
     if (fullHistory.value[fullStartIndex]?.role === 'assistant') {
       const calledIds = new Set((fullHistory.value[fullStartIndex]?.tool_calls || []).map((call) => call?.id).filter(Boolean));
@@ -9114,6 +9168,11 @@ const deleteMessage = (index) => {
   }
   collapsedMessages.value = nextCollapsed;
   focusedMessageIndex.value = null;
+  window.api.reportConversationDeleteDiagnostic?.({
+    phase: 'before-save',
+    messageCount: fullHistory.value.length,
+    uiCount: chat_show.value.length
+  });
   scheduleAutoSave({ reason: 'message-deleted', immediate: true });
 };
 

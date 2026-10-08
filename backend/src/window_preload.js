@@ -230,6 +230,31 @@ window.api = {
     acquireConversationWriteLease: (input = {}) => getConversationModule().acquireWriteLease(input),
     heartbeatConversationWriteLease: (input = {}) => getConversationModule().heartbeatWriteLease(input),
     releaseConversationWriteLease: (input = {}) => getConversationModule().releaseWriteLease(input),
+
+    registerConversationWriteLease: (input = {}) => {
+        if (!senderId) return { ok: false, error: 'window_sender_missing' };
+        utools.sendToParent('window-event', {
+            senderId,
+            event: 'conversation-lease-register',
+            state: input && typeof input === 'object' ? input : {}
+        });
+        return { ok: true };
+    },
+    clearRegisteredConversationWriteLease: () => {
+        if (!senderId) return { ok: false, error: 'window_sender_missing' };
+        utools.sendToParent('window-event', { senderId, event: 'conversation-lease-clear' });
+        return { ok: true };
+    },
+    reportConversationSaveDiagnostic: (state = {}) => {
+        if (!senderId) return false;
+        utools.sendToParent('window-event', { senderId, event: 'conversation-save-diagnostic', state });
+        return true;
+    },
+    reportConversationDeleteDiagnostic: (state = {}) => {
+        if (!senderId) return false;
+        utools.sendToParent('window-event', { senderId, event: 'conversation-delete-diagnostic', state });
+        return true;
+    },
     createConversationSnapshot: (input = {}) => getConversationModule().createConversationSnapshot(input),
     createCloudConversationWorktree: async (input = {}) => {
         const cacheId = String(input?.conversationId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
@@ -586,6 +611,10 @@ window.api = {
         const tokens = getCompactModule().estimateMessagesTokens(messages);
         return { ok: true, tokens };
     },
+    selectCompactionCut: async (input = {}) => {
+        return getCompactModule().selectCompactionCut(input && typeof input === 'object' ? input : {});
+    },
+
     shouldAutoCompact: async (input = {}) => {
         return {
             ok: true,

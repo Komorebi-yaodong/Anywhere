@@ -88,10 +88,10 @@ const compactStatusText = computed(() => {
     if (!props.compacting) return '';
     return props.compactProgress?.message || '正在压缩…';
 });
+// 历史改写继续互斥；压缩本身不再阻止编辑草稿或会话配置。
 const interactionLocked = computed(() => Boolean(props.loading || props.compacting || props.writeLocked));
-
-const configurationLocked = computed(() => Boolean(props.compacting || props.writeLocked));
-const draftInputLocked = computed(() => Boolean(isRecording.value || configurationLocked.value));
+const configurationLocked = computed(() => Boolean(props.writeLocked));
+const draftInputLocked = computed(() => Boolean(isRecording.value || props.writeLocked));
 
 watch(() => props.compactConfig, (next) => {
     if (!next || typeof next !== 'object') return;
@@ -1306,7 +1306,7 @@ defineExpose({ focus, senderRef });
 
         <div class="compact-dialog-scroll">
             <!-- 压缩进行中：关闭仅切换为后台继续，取消才会中断压缩 -->
-            <div v-if="compacting" class="compact-progress-block">
+            <div v-if="compacting" class="compact-section-card compact-progress-block">
                 <div class="compact-progress-heading">
                     <div>
                         <div class="compact-progress-title">{{ compactStatusText }}</div>
@@ -1322,7 +1322,7 @@ defineExpose({ focus, senderRef });
                     <el-button round @click="compactDialogVisible = false">后台继续</el-button>
                 </div>
             </div>
-            <div v-else class="compact-config-block">
+            <div class="compact-config-block">
                 <div class="compact-section-card compact-prompt-usage-card">
                     <div class="compact-prompt-usage-heading">
                         <div class="compact-section-title">Prompt 上下文占用</div>
@@ -1396,7 +1396,7 @@ defineExpose({ focus, senderRef });
                                     <el-tooltip
                                         placement="top"
                                         :show-after="200"
-                                        content="压缩时在摘要后额外保留最近 N 轮原文（user+assistant）。默认 3。设为 0 时仍会至少保留 1 条，保证可续聊。"
+                                        content="优先在摘要后保留最近 N 个用户回合；用户回合不足 N 时，自动以最近完整 AI 单元补足。AI 工具单元会连同全部匹配 tool 结果保留，绝不拆分。默认 3。"
                                     >
                                         <el-icon class="compact-info-icon"><InfoFilled /></el-icon>
                                     </el-tooltip>
@@ -1417,8 +1417,8 @@ defineExpose({ focus, senderRef });
             </div>
         </div>
 
-        <!-- 压缩中不渲染 footer，避免「取消压缩」旁边再出现无用的关闭 -->
-        <template v-if="!compacting" #footer>
+        <!-- 压缩中仍允许保存未来回合使用的配置；历史改写操作保持禁用。 -->
+        <template #footer>
             <div class="compact-dialog-footer">
                 <el-button v-if="canRestoreCompact" round :disabled="interactionLocked" @click="restoreCompact">恢复最外层压缩</el-button>
                 <div class="compact-dialog-footer-right">
@@ -2561,6 +2561,9 @@ html.dark .subagent-detail-output-scroll::-webkit-scrollbar-thumb:hover {
     flex: 1 1 auto;
     min-height: 0;
     max-height: min(56vh, 480px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 4px;
@@ -2834,7 +2837,7 @@ html.dark .compact-dialog-scroll::-webkit-scrollbar-thumb {
 
 .compact-progress-block {
     gap: 16px;
-    padding: 4px 0 2px;
+    padding: 14px;
 }
 
 .compact-progress-heading {
@@ -3017,6 +3020,9 @@ html.dark .compact-config-dialog :deep(.el-dialog) {
     flex: 1 1 auto;
     min-height: 0;
     max-height: min(58vh, 520px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 4px;

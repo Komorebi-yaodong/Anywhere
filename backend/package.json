@@ -9,7 +9,12 @@
     "test:sqlite-compat": "node tests/conversation-sqlite-compat.test.js",
     "test:conversation-lease": "node tests/conversation-lease.test.js",
     "test:conversation-window": "node tests/conversation-window-state.test.js",
-    "test:conversation-time": "node tests/conversation-time.test.js"
+    "test:conversation-time": "node tests/conversation-time.test.js",
+    "test:compact-policy": "node tests/compact-policy.test.js",
+    "test:conversation-window-lifecycle": "node tests/conversation-window-lifecycle.test.js",
+    "test:conversation-message-delete": "node tests/conversation-message-delete.test.js",
+    "test:compaction-interaction": "node tests/compaction-interaction-restore.test.js",
+    "test:conversation-compaction-restore": "node tests/conversation-compaction-restore.test.js"
   },
   "keywords": [],
   "author": "",

@@ -1053,7 +1053,7 @@ async function saveConversationSnapshot({ dirPath, conversationId, expectedRevis
 }
 
 
-async function saveConversationState({ dirPath, conversationId, expectedRevision, holderInstanceId = '', leaseEpoch = null, state = {}, uiMessages = [], title = '' } = {}) {
+async function saveConversationState({ dirPath, conversationId, expectedRevision, holderInstanceId = '', leaseEpoch = null, state = {}, uiMessages = null, title = '' } = {}) {
   const projects = await readLocalProjects(dirPath)
   const descriptor = findConversation(projects, conversationId)
   if (!descriptor) throw new Error('conversation_not_found')
@@ -1210,9 +1210,9 @@ async function restoreConversationCompaction({
         LIMIT 1
       `).get()
       if (!outermost) throw new Error('conversation_compaction_not_found')
-      if (outermost.summary_id !== requestedSnapshotId) {
-        throw new Error('conversation_compaction_not_outermost')
-      }
+      // UI snapshots can lag a completed cascade/autosave. SQLite ordinal is authoritative:
+      // restore the current outermost marker rather than rejecting an otherwise valid user action.
+      const restoredSnapshotId = outermost.summary_id
 
       const uiRows = db.prepare(`
         SELECT ui_uuid, message_uuid, payload_json
@@ -1225,7 +1225,7 @@ async function restoreConversationCompaction({
         if (!matchesSnapshot) {
           try {
             const payload = JSON.parse(uiRow.payload_json)
-            matchesSnapshot = normalizeText(payload?.snapshotId || payload?.id).trim() === requestedSnapshotId
+            matchesSnapshot = normalizeText(payload?.snapshotId || payload?.id).trim() === restoredSnapshotId
           } catch {
             matchesSnapshot = false
           }
@@ -1240,7 +1240,7 @@ async function restoreConversationCompaction({
         try {
           const archives = hydrateAttachments(db, JSON.parse(archivesRow.value_json))
           if (Array.isArray(archives)) {
-            const nextArchives = archives.filter((item) => normalizeText(item?.id).trim() !== requestedSnapshotId)
+            const nextArchives = archives.filter((item) => normalizeText(item?.id).trim() !== restoredSnapshotId)
             const storedArchives = externalizeAttachments(db, nextArchives, 'state:compactArchives')
             db.prepare("UPDATE session_state SET value_json = ?, updated_at = ? WHERE state_key = 'compactArchives'")
               .run(JSON.stringify(storedArchives), nowIso())
@@ -1254,7 +1254,7 @@ async function restoreConversationCompaction({
       const updatedAt = nowIso()
       db.prepare('UPDATE conversation SET updated_at = ?, revision = ? WHERE conversation_id = ?')
         .run(updatedAt, revision, conversationId)
-      return { revision, updatedAt, title: row.title }
+      return { revision, updatedAt, title: row.title, restoredSnapshotId }
     })
 
     const row = getConversationRow(db)
@@ -1274,14 +1274,20 @@ async function restoreConversationCompaction({
       revision: row.revision,
       updatedAt: row.updated_at
     }
-    await writeLocalProjects(dirPath, updateConversation(projects, conversationId, {
-      title: result.title,
-      revision: result.revision,
-      updatedAt: result.updatedAt
-    }))
+    try {
+      await writeLocalProjects(dirPath, updateConversation(projects, conversationId, {
+        title: result.title,
+        revision: result.revision,
+        updatedAt: result.updatedAt
+      }))
+    } catch (error) {
+      // The authoritative SQLite transaction already committed. Do not report a false
+      // restore failure merely because the derived projects index could not refresh.
+      console.warn('[conversation] restored compaction but failed to refresh projects index:', error?.message || error)
+    }
     return {
       ok: true,
-      restoredSnapshotId: requestedSnapshotId,
+      restoredSnapshotId: result.restoredSnapshotId,
       descriptor: nextDescriptor,
       sessionData: {
         anywhere_history: true,

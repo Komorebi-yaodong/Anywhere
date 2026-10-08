@@ -609,6 +609,7 @@ const commandHandlers = {
 
     const senderId = code.replace('append_to_', '');
     const { windowMap } = require('./data.js');
+
     const win = windowMap.get(senderId);
 
     if (!win || win.isDestroyed()) {
@@ -842,6 +843,60 @@ utools.onPluginOut((isKill) => {
 const { ipcRenderer } = require('electron');
 const { windowMap } = require('./data.js');
 
+
+const windowConversationLeaseRegistry = new Map();
+const windowLeaseProbeTimers = new Map();
+const WINDOW_LEASE_PROBE_INTERVAL_MS = 2000;
+
+function normalizeWindowLeaseRegistration(input = {}) {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const dirPath = typeof source.dirPath === 'string' ? source.dirPath.trim() : '';
+  const conversationId = typeof source.conversationId === 'string' ? source.conversationId.trim() : '';
+  const holderInstanceId = typeof source.holderInstanceId === 'string' ? source.holderInstanceId.trim() : '';
+  const leaseEpoch = Number(source.leaseEpoch);
+  if (!dirPath || !conversationId || !holderInstanceId || !Number.isFinite(leaseEpoch) || leaseEpoch <= 0) return null;
+  return { dirPath, conversationId, holderInstanceId, leaseEpoch };
+}
+
+function clearWindowLeaseProbe(senderId) {
+  const timer = windowLeaseProbeTimers.get(senderId);
+  if (timer) clearInterval(timer);
+  windowLeaseProbeTimers.delete(senderId);
+}
+
+function releaseRegisteredWindowLease(senderId, reason = 'closed') {
+  const lease = windowConversationLeaseRegistry.get(senderId);
+  clearWindowLeaseProbe(senderId);
+  if (!lease) return false;
+  windowConversationLeaseRegistry.delete(senderId);
+  Promise.resolve(getConversationModule().releaseWriteLease(lease)).catch((error) => {
+    console.error(`[conversation-lease] release on window ${reason} failed:`, error?.message || error);
+  });
+  return true;
+}
+
+// uTools custom BrowserWindow proxies deliberately do not expose BrowserWindow/WebContents
+// instance events. Probe only explicit terminal states supported by its API; do not release a
+// lease for a merely hidden or unresponsive window.
+function probeRegisteredWindowLease(senderId) {
+  const bw = windowMap.get(senderId);
+  const destroyed = !bw || typeof bw.isDestroyed !== 'function' || bw.isDestroyed();
+  const crashed = !destroyed && typeof bw.webContents?.isCrashed === 'function' && bw.webContents.isCrashed();
+  if (!destroyed && !crashed) return;
+  const reason = crashed ? 'webcontents-crashed' : 'window-destroyed';
+  const hadLease = releaseRegisteredWindowLease(senderId, reason);
+  console.warn('[conversation-window] terminal-state', { senderId, reason, hadLease });
+  windowMap.delete(senderId);
+  try { utools.removeFeature(`append_to_${senderId}`); } catch {}
+}
+
+function bindWindowLeaseCleanup(senderId, bw) {
+  if (!bw || windowLeaseProbeTimers.has(senderId)) return;
+  const timer = setInterval(() => probeRegisteredWindowLease(senderId), WINDOW_LEASE_PROBE_INTERVAL_MS);
+  windowLeaseProbeTimers.set(senderId, timer);
+  probeRegisteredWindowLease(senderId);
+}
+
 // 接收来自选择面板的转发消息，触发目标窗口
 ipcRenderer.on('forward-append-msg', (e, { senderId, type, payload }) => {
   const { windowMap } = require('./data.js');
@@ -864,6 +919,41 @@ ipcRenderer.on('window-event', (e, { senderId, event, state }) => {
 
   try {
     switch (event) {
+
+      case 'conversation-lease-register': {
+        const lease = normalizeWindowLeaseRegistration(state);
+        if (!lease) {
+          console.warn('[conversation-lease] ignored invalid window lease registration', { senderId });
+          break;
+        }
+        windowConversationLeaseRegistry.set(senderId, lease);
+        bindWindowLeaseCleanup(senderId, bw);
+        break;
+      }
+      case 'conversation-lease-clear': {
+        windowConversationLeaseRegistry.delete(senderId);
+        clearWindowLeaseProbe(senderId);
+        break;
+      }
+      case 'conversation-save-diagnostic': {
+        console.warn('[conversation-window] save', {
+          senderId,
+          phase: typeof state?.phase === 'string' ? state.phase : '',
+          reason: typeof state?.reason === 'string' ? state.reason : '',
+          messageCount: Math.max(0, Number(state?.messageCount) || 0),
+          uiCount: Math.max(0, Number(state?.uiCount) || 0)
+        });
+        break;
+      }
+      case 'conversation-delete-diagnostic': {
+        console.warn('[conversation-window] delete', {
+          senderId,
+          phase: typeof state?.phase === 'string' ? state.phase : '',
+          messageCount: Math.max(0, Number(state?.messageCount) || 0),
+          uiCount: Math.max(0, Number(state?.uiCount) || 0)
+        });
+        break;
+      }
       case 'toggle-always-on-top': {
         const currentState = bw.isAlwaysOnTop();
         const newState = !currentState;
@@ -876,6 +966,8 @@ ipcRenderer.on('window-event', (e, { senderId, event, state }) => {
         break;
       }
       case 'close-window': {
+        const hadLease = releaseRegisteredWindowLease(senderId, 'requested-close');
+        console.warn('[conversation-window] close-requested', { senderId, hadLease });
         bw.close();
         windowMap.delete(senderId);
         utools.removeFeature(`append_to_${senderId}`); // 窗口关闭时主动移除对应的追问指令
