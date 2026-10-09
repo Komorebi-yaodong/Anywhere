@@ -27,7 +27,7 @@ function sessionData(text = 'hello') {
 
 async function run() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'anywhere-db-helper-all-api-'));
-  const diagnosticPath = path.join(root, 'diagnostics', 'conversation-db-helper.jsonl');
+  const invokedMethods = new Set();
   const usePublishedRuntime = process.env.ANYWHERE_HELPER_USE_PUBLIC === '1';
   const helperDirectory = usePublishedRuntime ? 'public' : 'src';
   const helperPath = path.resolve(__dirname, '..', helperDirectory, 'conversation_db_helper.js');
@@ -40,24 +40,27 @@ async function run() {
   const client = createConversationDbHelperClient({
     helperPath,
     runtimePath,
-    diagnosticPath,
     execPath: process.execPath,
     expectedModuleAbi: process.versions.modules,
     readyTimeoutMs: 5_000,
     operationTimeoutMs: 20_000
   });
+  const invoke = async (method, args) => {
+    invokedMethods.add(method);
+    return await client.invoke(method, args);
+  };
 
   try {
     await assert.rejects(
-      client.invoke('createCloudConversationWorktree', [{}]),
+      invoke('createCloudConversationWorktree', [{}]),
       /conversation_db_helper_composite_method_required/
     );
     await assert.rejects(
-      client.invoke('arbitraryMethod', []),
+      invoke('arbitraryMethod', []),
       /conversation_rpc_method_not_allowed/
     );
 
-    const created = await client.invoke('createConversation', [{
+    const created = await invoke('createConversation', [{
       dirPath: root,
       title: 'all api helper',
       sessionData: sessionData('initial')
@@ -65,26 +68,26 @@ async function run() {
     const conversationId = created.descriptor.conversationId;
     const holderInstanceId = 'all-api-holder';
 
-    const listed = await client.invoke('listLocalConversations', [root]);
+    const listed = await invoke('listLocalConversations', [root]);
     assert.ok(listed.some((item) => item.conversationId === conversationId));
-    const descriptorResult = await client.invoke('getConversationDescriptor', [{ dirPath: root, reference: conversationId }]);
+    const descriptorResult = await invoke('getConversationDescriptor', [{ dirPath: root, reference: conversationId }]);
     assert.strictEqual(descriptorResult.descriptor.conversationId, conversationId);
 
-    const opened = await client.invoke('openConversation', [{ dirPath: root, reference: conversationId, activeOnly: true }]);
+    const opened = await invoke('openConversation', [{ dirPath: root, reference: conversationId, activeOnly: true }]);
     assert.deepStrictEqual(opened.sessionData.fullHistory.map((message) => message.role), ['system', 'user']);
-    const page = await client.invoke('loadConversationPage', [{ dirPath: root, conversationId, pageSize: 50 }]);
+    const page = await invoke('loadConversationPage', [{ dirPath: root, conversationId, pageSize: 50 }]);
     assert.strictEqual(page.ok, true);
-    const requestBefore = await client.invoke('getConversationRequestMessages', [{ dirPath: root, conversationId }]);
+    const requestBefore = await invoke('getConversationRequestMessages', [{ dirPath: root, conversationId }]);
     assert.strictEqual(requestBefore.messages.length, 2);
 
-    const lease = await client.invoke('acquireConversationWriteLease', [{
+    const lease = await invoke('acquireConversationWriteLease', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
       holderApp: 'utools'
     }]);
     assert.strictEqual(lease.ok, true);
-    const heartbeat = await client.invoke('heartbeatConversationWriteLease', [{
+    const heartbeat = await invoke('heartbeatConversationWriteLease', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
@@ -92,7 +95,7 @@ async function run() {
     }]);
     assert.strictEqual(heartbeat.ok, true);
 
-    const saved = await client.invoke('saveConversationSnapshot', [{
+    const saved = await invoke('saveConversationSnapshot', [{
       dirPath: root,
       conversationId,
       expectedRevision: created.descriptor.revision,
@@ -102,10 +105,10 @@ async function run() {
       sessionData: sessionData('snapshot user')
     }]);
     assert.strictEqual(saved.revision, 1);
-    const requestAfter = await client.invoke('getConversationRequestMessages', [{ dirPath: root, conversationId }]);
+    const requestAfter = await invoke('getConversationRequestMessages', [{ dirPath: root, conversationId }]);
     assert.strictEqual(requestAfter.messages.at(-1).content, 'snapshot user');
 
-    const stateSaved = await client.invoke('saveConversationState', [{
+    const stateSaved = await invoke('saveConversationState', [{
       dirPath: root,
       conversationId,
       expectedRevision: saved.revision,
@@ -115,7 +118,7 @@ async function run() {
     }]);
     assert.strictEqual(stateSaved.revision, 2);
 
-    const appended = await client.invoke('appendConversationMessages', [{
+    const appended = await invoke('appendConversationMessages', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
@@ -123,7 +126,7 @@ async function run() {
       messages: [{ role: 'assistant', content: 'append', storageId: 'append-id' }]
     }]);
     assert.strictEqual(appended.messageIds.length, 1);
-    const updated = await client.invoke('updateConversationMessage', [{
+    const updated = await invoke('updateConversationMessage', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
@@ -132,7 +135,7 @@ async function run() {
       message: { role: 'assistant', content: 'updated' }
     }]);
     assert.strictEqual(updated.storageId, 'append-id');
-    const deleted = await client.invoke('deleteConversationMessages', [{
+    const deleted = await invoke('deleteConversationMessages', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
@@ -141,7 +144,7 @@ async function run() {
     }]);
     assert.strictEqual(deleted.removed, 1);
 
-    const appendedForTruncate = await client.invoke('appendConversationMessages', [{
+    const appendedForTruncate = await invoke('appendConversationMessages', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
@@ -152,7 +155,7 @@ async function run() {
       ]
     }]);
     assert.strictEqual(appendedForTruncate.messageIds.length, 2);
-    const truncated = await client.invoke('truncateConversationMessages', [{
+    const truncated = await invoke('truncateConversationMessages', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
@@ -162,7 +165,7 @@ async function run() {
     }]);
     assert.ok(truncated.removed >= 2);
 
-    const replaced = await client.invoke('replaceActiveConversationMessages', [{
+    const replaced = await invoke('replaceActiveConversationMessages', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
@@ -175,7 +178,7 @@ async function run() {
     assert.strictEqual(replaced.messageIds.length, 2);
 
     await assert.rejects(
-      client.invoke('restoreConversationCompaction', [{
+      invoke('restoreConversationCompaction', [{
         dirPath: root,
         conversationId,
         snapshotId: 'missing-snapshot',
@@ -187,7 +190,7 @@ async function run() {
       /conversation_compaction_not_found/
     );
 
-    const renamed = await client.invoke('renameConversation', [{
+    const renamed = await invoke('renameConversation', [{
       dirPath: root,
       conversationId,
       title: 'renamed through helper',
@@ -197,40 +200,35 @@ async function run() {
     }]);
     assert.strictEqual(renamed.title, 'renamed through helper');
 
-    const snapshot = await client.invoke('readConversationSnapshot', [{ dirPath: root, conversationId }]);
+    const snapshot = await invoke('readConversationSnapshot', [{ dirPath: root, conversationId }]);
     assert.ok(Buffer.isBuffer(snapshot.content));
     assert.ok(snapshot.content.length > 0);
-    const explicitSnapshot = await client.invoke('createConversationSnapshot', [{ dirPath: root, conversationId }]);
+    const explicitSnapshot = await invoke('createConversationSnapshot', [{ dirPath: root, conversationId }]);
     assert.strictEqual(explicitSnapshot.ok, true);
     await fs.rm(explicitSnapshot.path, { force: true });
 
     const importRoot = path.join(root, 'imported');
     await fs.mkdir(importRoot, { recursive: true });
-    const imported = await client.invoke('importConversationSnapshot', [{
+    const imported = await invoke('importConversationSnapshot', [{
       dirPath: importRoot,
       descriptor: { ...renamed, conversationId, dbFile: renamed.dbFile, storageMode: 'local' },
       content: snapshot.content
     }]);
     assert.strictEqual(imported.ok, true);
-    const importedOpened = await client.invoke('openConversation', [{ dirPath: importRoot, reference: conversationId, activeOnly: true }]);
+    const importedOpened = await invoke('openConversation', [{ dirPath: importRoot, reference: conversationId, activeOnly: true }]);
     assert.strictEqual(importedOpened.descriptor.conversationId, conversationId);
 
-    const released = await client.invoke('releaseConversationWriteLease', [{
+    const released = await invoke('releaseConversationWriteLease', [{
       dirPath: root,
       conversationId,
       holderInstanceId,
       leaseEpoch: lease.leaseEpoch
     }]);
     assert.strictEqual(released.ok, true);
-    const removed = await client.invoke('deleteConversation', [{ dirPath: root, conversationId }]);
+    const removed = await invoke('deleteConversation', [{ dirPath: root, conversationId }]);
     assert.strictEqual(removed.removed, true);
 
-    const records = (await fs.readFile(diagnosticPath, 'utf8'))
-      .trim()
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => JSON.parse(line));
-    const methods = new Set(records.filter((record) => record.event === 'operation-start').map((record) => record.method));
+    const methods = invokedMethods;
     for (const method of [
       'createConversation',
       'listLocalConversations',

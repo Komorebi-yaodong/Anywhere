@@ -3881,12 +3881,6 @@ const autoSaveSession = async (force = false, { skipProjectAssignment = false, v
       currentConversationStorage.value = storage;
       await acquireCurrentConversationLease();
     } else {
-      window.api.reportConversationSaveDiagnostic?.({
-        phase: 'snapshot-start',
-        reason: 'full-snapshot',
-        messageCount: fullHistory.value.length,
-        uiCount: chat_show.value.length
-      });
       const saved = await window.api.saveConversationSnapshot({
         dirPath,
         conversationId: storage.conversationId,
@@ -3901,24 +3895,12 @@ const autoSaveSession = async (force = false, { skipProjectAssignment = false, v
         title: saved.title || defaultConversationName.value,
         revision: Number(saved.revision) || storage.revision
       };
-      window.api.reportConversationSaveDiagnostic?.({
-        phase: 'snapshot-complete',
-        reason: 'full-snapshot',
-        messageCount: fullHistory.value.length,
-        uiCount: chat_show.value.length
-      });
     }
 
     lastPersistedSessionVersion = Math.max(lastPersistedSessionVersion, Number(version) || 0);
     lastAutoSaveAt = Date.now();
     return true;
   } catch (error) {
-    window.api.reportConversationSaveDiagnostic?.({
-      phase: 'snapshot-failed',
-      reason: String(error?.message || error || '').slice(0, 120),
-      messageCount: fullHistory.value.length,
-      uiCount: chat_show.value.length
-    });
     if (/conversation_(revision_conflict|write_lease_lost)/.test(String(error?.message || ''))) {
       conversationReadOnly.value = true;
       showDismissibleMessage.warning('会话已在其他客户端更新，当前窗口已切换为只读模式');
@@ -9181,11 +9163,6 @@ const deleteMessage = (index) => {
   }
   collapsedMessages.value = nextCollapsed;
   focusedMessageIndex.value = null;
-  window.api.reportConversationDeleteDiagnostic?.({
-    phase: 'before-save',
-    messageCount: fullHistory.value.length,
-    uiCount: chat_show.value.length
-  });
   scheduleAutoSave({ reason: 'message-deleted', immediate: true });
 };
 

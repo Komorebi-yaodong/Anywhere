@@ -10,7 +10,6 @@ const windowPreloadSource = fs.readFileSync(path.join(root, 'backend', 'src', 'w
 const parentPreloadSource = fs.readFileSync(path.join(root, 'backend', 'src', 'preload.js'), 'utf8');
 const helperClientSource = fs.readFileSync(path.join(root, 'backend', 'src', 'conversationDbHelperClient.js'), 'utf8');
 const helperSource = fs.readFileSync(path.join(root, 'backend', 'src', 'conversation_db_helper.js'), 'utf8');
-const helperDiagnosticSource = fs.readFileSync(path.join(root, 'backend', 'src', 'conversationDbHelperDiagnostics.js'), 'utf8');
 
 assert.match(appSource, /await loadSession\(opened\.sessionData\);[\s\S]{0,300}autoCloseOnBlur\.value = false;[\s\S]{0,120}syncAutoCloseOnBlurListener\(\);[\s\S]{0,120}await acquireCurrentConversationLease\(\);/, 'restored conversations must disable blur auto-close before acquiring the lease');
 assert.match(appSource, /autoCloseOnBlur\.value && !loading\.value && !compacting\.value/, 'compaction must suppress blur auto-close');
@@ -43,18 +42,17 @@ assert.match(parentPreloadSource, /crypto\.timingSafeEqual\(expectedBytes, actua
 assert.match(windowPreloadSource, /heartbeatConversationWriteLease: invokeConversationLeaseHeartbeat/, 'conversation lease heartbeat must be single-flight across parent RPC');
 assert.match(parentPreloadSource, /method === 'acquireConversationWriteLease'[\s\S]{0,700}windowConversationLeaseRegistry\.set\(request\.senderId, lease\)/, 'parent must register a successful lease before replying to the child');
 assert.match(parentPreloadSource, /method === 'releaseConversationWriteLease'[\s\S]{0,300}windowConversationLeaseRegistry\.delete\(request\.senderId\)/, 'parent must clear a released lease without waiting for another child message');
-assert.match(parentPreloadSource, /result = await invokeConversationHelperMethod\(method, args, \{ operationId \}\)/, 'all window conversation methods must run through the DB helper');
+assert.match(parentPreloadSource, /const result = await invokeConversationHelperMethod\(method, args\);/, 'all window conversation methods must run through the DB helper');
 assert.match(parentPreloadSource, /conversationDbHelperClient\.invoke\('getConversationRequestMessages', \[input\]\)/, 'main-panel request history reads must run through the DB helper');
-assert.match(parentPreloadSource, /const operationId = request\.requestId;/, 'child, parent, and helper diagnostics must share one random operation id');
-assert.match(windowPreloadSource, /child-rpc-dispatch/);
-assert.match(parentPreloadSource, /rpc-received/);
-assert.match(parentPreloadSource, /window-terminal/);
+assert.doesNotMatch(parentPreloadSource, /conversationDbHelperDiagnostic|recordConversationDb|windowConversationSnapshotOperations|diagnosticPath/);
+assert.doesNotMatch(windowPreloadSource, /conversationDbHelperDiagnostic|recordConversationDb|child-rpc-dispatch|Diagnostic/);
 assert.match(helperClientSource, /ELECTRON_RUN_AS_NODE: '1'/);
 assert.match(helperClientSource, /spawn\(normalizedExecPath/);
 assert.match(helperClientSource, /stdio: \['pipe', 'pipe', 'pipe'\]/);
 assert.match(helperClientSource, /createJsonLineParser/);
 assert.match(helperClientSource, /serializeJsonLine/);
-assert.match(helperClientSource, /conversation_db_helper_breakpoint_exit/);
+assert.doesNotMatch(helperClientSource, /testMode|testAction|STATUS_BREAKPOINT|breakpoint_exit/);
+assert.doesNotMatch(helperSource, /testMode|testAction|test-exit|STATUS_BREAKPOINT/);
 assert.doesNotMatch(helperClientSource, /fork\(|process\.send|process\.on\('message'|serialization: 'advanced'|windowMap|\.close\(\)|\.destroy\(\)/, 'helper client must use stdio JSONL and never control a uTools window');
 assert.doesNotMatch(helperSource, /process\.send|process\.on\('message'|process\.on\('disconnect'/, 'helper must use stdin/stdout JSONL rather than Node IPC');
 assert.match(helperSource, /createJsonLineParser/);
@@ -62,7 +60,11 @@ assert.match(helperSource, /serializeJsonLine/);
 assert.match(helperSource, /getConversationRpcTarget\(method\)/, 'helper must enforce the shared fixed method whitelist');
 assert.match(helperSource, /repositoryMethod = repository\?\.\[target\]/, 'helper must use only the mapped repository target');
 assert.match(helperClientSource, /getConversationRpcTarget\(method\)/, 'client must reject methods outside the shared whitelist before spawning');
-assert.doesNotMatch(helperDiagnosticSource, /conversationId|holderInstanceId|dirPath|sessionData|fullHistory|chat_show|content/, 'diagnostic logger must not whitelist sensitive conversation fields');
+assert.strictEqual(fs.existsSync(path.join(root, 'backend', 'src', 'conversationDbHelperDiagnostics.js')), false, 'release source must not retain the diagnostic logger module');
+assert.doesNotMatch(parentPreloadSource, /diagnostic|Diagnostic|testMode|testAction|test-exit/);
+assert.doesNotMatch(windowPreloadSource, /diagnostic|Diagnostic|testMode|testAction|test-exit/);
+assert.doesNotMatch(helperClientSource, /diagnostic|Diagnostic|testMode|testAction|test-exit/);
+assert.doesNotMatch(helperSource, /diagnostic|Diagnostic|testMode|testAction|test-exit/);
 
 
 const dataSource = fs.readFileSync(path.join(root, 'backend', 'src', 'data.js'), 'utf8');

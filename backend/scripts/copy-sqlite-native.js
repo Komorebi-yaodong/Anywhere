@@ -10,12 +10,12 @@ const targetRoot = path.join(backendRoot, 'public', 'sqlite-native');
 const manifestPath = path.join(sourceRoot, 'manifest.json');
 const helperFiles = [
   'conversation_db_helper.js',
-  'conversationDbHelperDiagnostics.js',
   'conversationDbHelperJsonProtocol.js',
   'conversationWindowRpc.js'
 ];
 
 fs.rmSync(path.join(backendRoot, 'public', 'sqlite_worker.js'), { force: true });
+fs.rmSync(path.join(backendRoot, 'public', 'conversationDbHelperDiagnostics.js'), { force: true });
 
 if (!fs.existsSync(manifestPath)) {
   throw new Error(`SQLite native manifest missing: ${manifestPath}`);

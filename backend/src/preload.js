@@ -7,10 +7,6 @@ const {
 const {
   createConversationDbHelperClient
 } = require('./conversationDbHelperClient.js');
-const {
-  resolveConversationDbHelperDiagnosticPath,
-  appendConversationDbHelperDiagnostic
-} = require('./conversationDbHelperDiagnostics.js');
 
 
 const { createChatCompletion, getRandomItem, batchTestProviderKeys } = require('./chat.js');
@@ -226,11 +222,6 @@ window.api = {
   importConversationSnapshot: (input = {}) => conversationDbHelperClient.invoke('importConversationSnapshot', [input]),
 
   getConversationDescriptor: (input = {}) => conversationDbHelperClient.invoke('getConversationDescriptor', [input]),
-  getConversationDbHelperDiagnosticPath: () => conversationDbHelperDiagnosticPath,
-  openConversationDbHelperDiagnosticDirectory: () => {
-    utools.shellOpenPath(path.dirname(conversationDbHelperDiagnosticPath));
-    return true;
-  },
   readLocalProjects,
   writeLocalProjects,
   parseProjectsYaml,
@@ -870,25 +861,13 @@ const { windowMap, windowRpcCapabilityMap } = require('./data.js');
 
 
 const windowConversationLeaseRegistry = new Map();
-const windowConversationSnapshotOperations = new Map();
 const windowLeaseProbeTimers = new Map();
 const WINDOW_LEASE_PROBE_INTERVAL_MS = 2000;
-const conversationDbHelperDiagnosticPath = resolveConversationDbHelperDiagnosticPath(utools.getPath('userData'));
 const conversationDbHelperClient = createConversationDbHelperClient({
   helperPath: path.join(__dirname, 'conversation_db_helper.js'),
-  diagnosticPath: conversationDbHelperDiagnosticPath,
   execPath: process.execPath,
   expectedModuleAbi: '110'
 });
-
-function recordConversationDbHostDiagnostic(event, fields = {}) {
-  appendConversationDbHelperDiagnostic(conversationDbHelperDiagnosticPath, {
-    scope: 'parent-renderer',
-    event,
-    pid: process.pid,
-    ...fields
-  });
-}
 
 function isMatchingConversationRpcCapability(request = {}) {
   const expected = windowRpcCapabilityMap.get(request.senderId);
@@ -912,32 +891,8 @@ async function invokeConversationHelperMethod(method, args = [], options = {}) {
 const handleConversationRpcRequest = createConversationRpcRequestHandler({
   resolveWindow: (senderId) => windowMap.get(senderId),
   authorizeRequest: isMatchingConversationRpcCapability,
-  invokeMethod: async (method, args, request) => {
-    const operationId = request.requestId;
-    const isSnapshot = method === 'saveConversationSnapshot';
-    const input = args?.[0] && typeof args[0] === 'object' ? args[0] : {};
-    const sessionData = input.sessionData && typeof input.sessionData === 'object' ? input.sessionData : {};
-    const counts = isSnapshot ? {
-      messageCount: Array.isArray(sessionData.fullHistory) ? sessionData.fullHistory.length : 0,
-      uiCount: Array.isArray(sessionData.chat_show) ? sessionData.chat_show.length : 0
-    } : {};
-
-    if (isSnapshot) windowConversationSnapshotOperations.set(request.senderId, operationId);
-    recordConversationDbHostDiagnostic('rpc-received', {
-      operationId,
-      method,
-      helperPid: conversationDbHelperClient.getState().helperPid,
-      ...counts
-    });
-
-    let result;
-    try {
-      result = await invokeConversationHelperMethod(method, args, { operationId });
-    } finally {
-      if (isSnapshot && windowConversationSnapshotOperations.get(request.senderId) === operationId) {
-        windowConversationSnapshotOperations.delete(request.senderId);
-      }
-    }
+  invokeMethod: async (method, args) => {
+    const result = await invokeConversationHelperMethod(method, args);
     if (method === 'acquireConversationWriteLease' && result?.ok && result?.leaseEpoch) {
       const lease = normalizeWindowLeaseRegistration({
         ...(args?.[0] || {}),
@@ -997,14 +952,6 @@ function probeRegisteredWindowLease(senderId) {
   const crashed = !destroyed && typeof bw.webContents?.isCrashed === 'function' && bw.webContents.isCrashed();
   if (!destroyed && !crashed) return;
   const reason = crashed ? 'webcontents-crashed' : 'window-destroyed';
-  const operationId = windowConversationSnapshotOperations.get(senderId) || '';
-  recordConversationDbHostDiagnostic('window-terminal', {
-    operationId,
-    helperPid: conversationDbHelperClient.getState().helperPid,
-    reason,
-    pendingCount: conversationDbHelperClient.getState().pendingCount
-  });
-  windowConversationSnapshotOperations.delete(senderId);
   const hadLease = releaseRegisteredWindowLease(senderId, reason);
   console.warn('[conversation-window] terminal-state', { senderId, reason, hadLease });
   windowMap.delete(senderId);
@@ -1057,25 +1004,6 @@ ipcRenderer.on('window-event', (e, { senderId, event, state }) => {
         clearWindowLeaseProbe(senderId);
         break;
       }
-      case 'conversation-save-diagnostic': {
-        console.warn('[conversation-window] save', {
-          senderId,
-          phase: typeof state?.phase === 'string' ? state.phase : '',
-          reason: typeof state?.reason === 'string' ? state.reason : '',
-          messageCount: Math.max(0, Number(state?.messageCount) || 0),
-          uiCount: Math.max(0, Number(state?.uiCount) || 0)
-        });
-        break;
-      }
-      case 'conversation-delete-diagnostic': {
-        console.warn('[conversation-window] delete', {
-          senderId,
-          phase: typeof state?.phase === 'string' ? state.phase : '',
-          messageCount: Math.max(0, Number(state?.messageCount) || 0),
-          uiCount: Math.max(0, Number(state?.uiCount) || 0)
-        });
-        break;
-      }
       case 'toggle-always-on-top': {
         const currentState = bw.isAlwaysOnTop();
         const newState = !currentState;
@@ -1088,13 +1016,6 @@ ipcRenderer.on('window-event', (e, { senderId, event, state }) => {
         break;
       }
       case 'close-window': {
-        const operationId = windowConversationSnapshotOperations.get(senderId) || '';
-        recordConversationDbHostDiagnostic('window-close-requested', {
-          operationId,
-          helperPid: conversationDbHelperClient.getState().helperPid,
-          pendingCount: conversationDbHelperClient.getState().pendingCount
-        });
-        windowConversationSnapshotOperations.delete(senderId);
         const hadLease = releaseRegisteredWindowLease(senderId, 'requested-close');
         console.warn('[conversation-window] close-requested', { senderId, hadLease });
         bw.close();

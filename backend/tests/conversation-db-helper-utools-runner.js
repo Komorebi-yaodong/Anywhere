@@ -28,7 +28,6 @@ async function run() {
   assert.strictEqual(process.versions.modules, '110');
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'anywhere-utools-db-helper-'));
   const conversationDir = path.join(tempRoot, 'conversations');
-  const diagnosticPath = path.join(tempRoot, 'diagnostics', 'conversation-db-helper.jsonl');
   const helperPath = path.resolve(__dirname, '..', 'public', 'conversation_db_helper.js');
   const runtimePath = path.resolve(__dirname, '..', 'public', 'conversation_runtime.js');
   let client;
@@ -37,12 +36,10 @@ async function run() {
     client = createConversationDbHelperClient({
       helperPath,
       runtimePath,
-      diagnosticPath,
       execPath: process.execPath,
       expectedModuleAbi: '110',
       readyTimeoutMs: 10_000,
-      operationTimeoutMs: 20_000,
-      testMode: true
+      operationTimeoutMs: 20_000
     });
     await fs.mkdir(conversationDir, { recursive: true });
     const created = await client.invoke('createConversation', [{
@@ -70,18 +67,12 @@ async function run() {
     });
     const firstPid = client.getState().helperPid;
 
-    await assert.rejects(
-      client.saveConversationSnapshot({
-        dirPath: conversationDir,
-        conversationId,
-        expectedRevision: first.revision,
-        holderInstanceId,
-        leaseEpoch: lease.leaseEpoch,
-        title: 'utools helper exit',
-        sessionData: sessionData('exit')
-      }, { testAction: 'exit' }),
-      /conversation_db_helper_(exited|breakpoint_exit)/
-    );
+    process.kill(firstPid);
+    const helperExitStartedAt = Date.now();
+    while (client.getState().connected && Date.now() - helperExitStartedAt < 5_000) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.strictEqual(client.getState().connected, false);
 
     const opened = await client.invoke('openConversation', [{
       dirPath: conversationDir,

@@ -4,10 +4,6 @@ const {
     CONVERSATION_RPC_RESPONSE_CHANNEL,
     createConversationRpcClient,
 } = require('./conversationWindowRpc.js');
-const {
-    resolveConversationDbHelperDiagnosticPath,
-    appendConversationDbHelperDiagnostic,
-} = require('./conversationDbHelperDiagnostics.js');
 const fs = require('fs');
 const path = require('path');
 const { fileURLToPath } = require('url');
@@ -107,35 +103,10 @@ function getProjectsModule() {
 const channel = "window";
 let senderId = null; // [新增] 用于存储当前窗口的唯一ID
 let conversationRpcCapability = null;
-const conversationDbHelperDiagnosticPath = resolveConversationDbHelperDiagnosticPath(utools.getPath('userData'));
-
-function recordConversationDbChildDiagnostic(event, fields = {}) {
-    appendConversationDbHelperDiagnostic(conversationDbHelperDiagnosticPath, {
-        scope: 'child-renderer',
-        event,
-        pid: process.pid,
-        ...fields
-    });
-}
 
 const conversationRpcClient = createConversationRpcClient({
     getSenderId: () => senderId,
     getCapability: () => conversationRpcCapability,
-    onDispatch: ({ requestId, method, args }) => {
-        const input = args?.[0] && typeof args[0] === 'object' ? args[0] : {};
-        const sessionData = input.sessionData && typeof input.sessionData === 'object' ? input.sessionData : {};
-        const counts = method === 'saveConversationSnapshot'
-            ? {
-                messageCount: Array.isArray(sessionData.fullHistory) ? sessionData.fullHistory.length : 0,
-                uiCount: Array.isArray(sessionData.chat_show) ? sessionData.chat_show.length : 0
-              }
-            : {};
-        recordConversationDbChildDiagnostic('child-rpc-dispatch', {
-            operationId: requestId,
-            method,
-            ...counts
-        });
-    },
     sendRequest: (request) => utools.sendToParent(CONVERSATION_RPC_REQUEST_CHANNEL, request),
     subscribeResponse: (callback) => {
         const handler = (_event, response) => callback(response);
@@ -303,27 +274,12 @@ window.api = {
         utools.sendToParent('window-event', { senderId, event: 'conversation-lease-clear' });
         return { ok: true };
     },
-    reportConversationSaveDiagnostic: (state = {}) => {
-        if (!senderId) return false;
-        utools.sendToParent('window-event', { senderId, event: 'conversation-save-diagnostic', state });
-        return true;
-    },
-    reportConversationDeleteDiagnostic: (state = {}) => {
-        if (!senderId) return false;
-        utools.sendToParent('window-event', { senderId, event: 'conversation-delete-diagnostic', state });
-        return true;
-    },
     createConversationSnapshot: (input = {}) => invokeConversationRpc('createConversationSnapshot', input),
     createCloudConversationWorktree: (input = {}) => invokeConversationRpc('createCloudConversationWorktree', input),
     openCloudConversationSnapshot: (input = {}) => invokeConversationRpc('openCloudConversationSnapshot', input),
     readConversationSnapshot: (input = {}) => invokeConversationRpc('readConversationSnapshot', input),
     importConversationSnapshot: (input = {}) => invokeConversationRpc('importConversationSnapshot', input),
     getConversationDescriptor: (input = {}) => invokeConversationRpc('getConversationDescriptor', input),
-    getConversationDbHelperDiagnosticPath: () => conversationDbHelperDiagnosticPath,
-    openConversationDbHelperDiagnosticDirectory: () => {
-        utools.shellOpenPath(path.dirname(conversationDbHelperDiagnosticPath));
-        return true;
-    },
 
     readLocalProjects: (...args) => getProjectsModule().readLocalProjects(...args),
     writeLocalProjects: (...args) => getProjectsModule().writeLocalProjects(...args),
