@@ -1,4 +1,9 @@
 const { ipcRenderer } = require('electron');
+const {
+    CONVERSATION_RPC_REQUEST_CHANNEL,
+    CONVERSATION_RPC_RESPONSE_CHANNEL,
+    createConversationRpcClient,
+} = require('./conversationWindowRpc.js');
 const fs = require('fs');
 const path = require('path');
 const { fileURLToPath } = require('url');
@@ -95,13 +100,32 @@ function getProjectsModule() {
     return require(runtimePath);
 }
 
-function getConversationModule() {
-    const runtimePath = './' + 'conversation_runtime.js';
-    return require(runtimePath);
-}
-
 const channel = "window";
 let senderId = null; // [新增] 用于存储当前窗口的唯一ID
+let conversationRpcCapability = null;
+
+const conversationRpcClient = createConversationRpcClient({
+    getSenderId: () => senderId,
+    getCapability: () => conversationRpcCapability,
+    sendRequest: (request) => utools.sendToParent(CONVERSATION_RPC_REQUEST_CHANNEL, request),
+    subscribeResponse: (callback) => {
+        const handler = (_event, response) => callback(response);
+        ipcRenderer.on(CONVERSATION_RPC_RESPONSE_CHANNEL, handler);
+        return () => ipcRenderer.removeListener(CONVERSATION_RPC_RESPONSE_CHANNEL, handler);
+    }
+});
+
+const invokeConversationRpc = (method, ...args) => conversationRpcClient.invoke(method, ...args);
+
+let conversationLeaseHeartbeatPromise = null;
+const invokeConversationLeaseHeartbeat = (input = {}) => {
+    if (conversationLeaseHeartbeatPromise) return conversationLeaseHeartbeatPromise;
+    conversationLeaseHeartbeatPromise = invokeConversationRpc('heartbeatConversationWriteLease', input)
+        .finally(() => {
+            conversationLeaseHeartbeatPromise = null;
+        });
+    return conversationLeaseHeartbeatPromise;
+};
 
 window.preload = {
     receiveMsg: (callback) => {
@@ -110,8 +134,13 @@ window.preload = {
                 // 捕获并存储 senderId
                 if (data.senderId) {
                     senderId = data.senderId;
+                    conversationRpcCapability = typeof data.conversationRpcCapability === 'string'
+                        ? data.conversationRpcCapability
+                        : null;
                 }
-                callback(data);
+                const safeData = { ...data };
+                delete safeData.conversationRpcCapability;
+                callback(safeData);
             }
         });
     },
@@ -210,26 +239,26 @@ window.api = {
     renameLocalFile,
     listJsonFiles,
     writeLocalFile,
-    listLocalConversations: (...args) => getConversationModule().listLocalConversations(...args),
-    migrateJsonConversation: (input = {}) => getConversationModule().migrateJsonConversation(input),
-    createConversation: (input = {}) => getConversationModule().createConversation(input),
-    openConversation: (input = {}) => getConversationModule().openConversation(input),
-    loadConversationPage: (input = {}) => getConversationModule().loadConversationPage(input),
-    getConversationRequestMessages: (input = {}) => getConversationModule().getConversationRequestMessages(input),
+    listLocalConversations: (...args) => invokeConversationRpc('listLocalConversations', ...args),
+    migrateJsonConversation: (input = {}) => invokeConversationRpc('migrateJsonConversation', input),
+    createConversation: (input = {}) => invokeConversationRpc('createConversation', input),
+    openConversation: (input = {}) => invokeConversationRpc('openConversation', input),
+    loadConversationPage: (input = {}) => invokeConversationRpc('loadConversationPage', input),
+    getConversationRequestMessages: (input = {}) => invokeConversationRpc('getConversationRequestMessages', input),
 
-    saveConversationSnapshot: (input = {}) => getConversationModule().saveConversationSnapshot(input),
-    saveConversationState: (input = {}) => getConversationModule().saveConversationState(input),
-    appendConversationMessages: (input = {}) => getConversationModule().appendMessages(input),
-    updateConversationMessage: (input = {}) => getConversationModule().updateMessage(input),
-    truncateConversationMessages: (input = {}) => getConversationModule().truncateMessages(input),
-    deleteConversationMessages: (input = {}) => getConversationModule().deleteMessages(input),
-    replaceActiveConversationMessages: (input = {}) => getConversationModule().replaceActiveMessages(input),
-    restoreConversationCompaction: (input = {}) => getConversationModule().restoreConversationCompaction(input),
-    renameConversation: (input = {}) => getConversationModule().renameConversation(input),
-    deleteConversation: (input = {}) => getConversationModule().deleteConversation(input),
-    acquireConversationWriteLease: (input = {}) => getConversationModule().acquireWriteLease(input),
-    heartbeatConversationWriteLease: (input = {}) => getConversationModule().heartbeatWriteLease(input),
-    releaseConversationWriteLease: (input = {}) => getConversationModule().releaseWriteLease(input),
+    saveConversationSnapshot: (input = {}) => invokeConversationRpc('saveConversationSnapshot', input),
+    saveConversationState: (input = {}) => invokeConversationRpc('saveConversationState', input),
+    appendConversationMessages: (input = {}) => invokeConversationRpc('appendConversationMessages', input),
+    updateConversationMessage: (input = {}) => invokeConversationRpc('updateConversationMessage', input),
+    truncateConversationMessages: (input = {}) => invokeConversationRpc('truncateConversationMessages', input),
+    deleteConversationMessages: (input = {}) => invokeConversationRpc('deleteConversationMessages', input),
+    replaceActiveConversationMessages: (input = {}) => invokeConversationRpc('replaceActiveConversationMessages', input),
+    restoreConversationCompaction: (input = {}) => invokeConversationRpc('restoreConversationCompaction', input),
+    renameConversation: (input = {}) => invokeConversationRpc('renameConversation', input),
+    deleteConversation: (input = {}) => invokeConversationRpc('deleteConversation', input),
+    acquireConversationWriteLease: (input = {}) => invokeConversationRpc('acquireConversationWriteLease', input),
+    heartbeatConversationWriteLease: invokeConversationLeaseHeartbeat,
+    releaseConversationWriteLease: (input = {}) => invokeConversationRpc('releaseConversationWriteLease', input),
 
     registerConversationWriteLease: (input = {}) => {
         if (!senderId) return { ok: false, error: 'window_sender_missing' };
@@ -255,36 +284,12 @@ window.api = {
         utools.sendToParent('window-event', { senderId, event: 'conversation-delete-diagnostic', state });
         return true;
     },
-    createConversationSnapshot: (input = {}) => getConversationModule().createConversationSnapshot(input),
-    createCloudConversationWorktree: async (input = {}) => {
-        const cacheId = String(input?.conversationId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
-        const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', cacheId);
-        const created = await getConversationModule().createConversation({
-            dirPath: worktreeDir,
-            title: input?.title,
-            sessionData: input?.sessionData,
-            storageMode: 'cloud'
-        });
-        return { ...created, worktreeDir, storageMode: 'cloud' };
-    },
-
-    openCloudConversationSnapshot: async (input = {}) => {
-        const conversationId = String(input?.descriptor?.conversationId || '').trim();
-        if (!conversationId) throw new Error('conversation_descriptor_invalid');
-        const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', conversationId);
-        await getConversationModule().importConversationSnapshot({
-            dirPath: worktreeDir,
-            descriptor: { ...input.descriptor, storageMode: 'cloud' },
-            content: input.content
-        });
-        const opened = await getConversationModule().openConversation({ dirPath: worktreeDir, reference: conversationId, activeOnly: true });
-        return { ...opened, worktreeDir, storageMode: 'cloud' };
-    },
-
-    readConversationSnapshot: (input = {}) => getConversationModule().readConversationSnapshot(input),
-    importConversationSnapshot: (input = {}) => getConversationModule().importConversationSnapshot(input),
-
-    getConversationDescriptor: (input = {}) => getConversationModule().getConversationDescriptor(input),
+    createConversationSnapshot: (input = {}) => invokeConversationRpc('createConversationSnapshot', input),
+    createCloudConversationWorktree: (input = {}) => invokeConversationRpc('createCloudConversationWorktree', input),
+    openCloudConversationSnapshot: (input = {}) => invokeConversationRpc('openCloudConversationSnapshot', input),
+    readConversationSnapshot: (input = {}) => invokeConversationRpc('readConversationSnapshot', input),
+    importConversationSnapshot: (input = {}) => invokeConversationRpc('importConversationSnapshot', input),
+    getConversationDescriptor: (input = {}) => invokeConversationRpc('getConversationDescriptor', input),
 
     readLocalProjects: (...args) => getProjectsModule().readLocalProjects(...args),
     writeLocalProjects: (...args) => getProjectsModule().writeLocalProjects(...args),

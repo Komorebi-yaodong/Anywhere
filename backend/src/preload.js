@@ -1,4 +1,11 @@
 const path = require('path');
+const crypto = require('crypto');
+const {
+  CONVERSATION_RPC_REQUEST_CHANNEL,
+  createConversationRpcMethodInvoker,
+  createConversationRpcRequestHandler,
+} = require('./conversationWindowRpc.js');
+
 
 const { createChatCompletion, getRandomItem, batchTestProviderKeys } = require('./chat.js');
 const { reconcileTaskDeviceState, setCurrentTaskDeviceEnabled } = require('./task_devices.js');
@@ -96,6 +103,36 @@ function getConversationModule() {
   return require(runtimePath);
 }
 
+async function createCloudConversationWorktree(input = {}) {
+  const cacheId = String(input?.conversationId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+  const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', cacheId);
+  const created = await getConversationModule().createConversation({
+    dirPath: worktreeDir,
+    title: input?.title,
+    sessionData: input?.sessionData,
+    storageMode: 'cloud'
+  });
+  return { ...created, worktreeDir, storageMode: 'cloud' };
+}
+
+async function openCloudConversationSnapshot(input = {}) {
+  const conversationId = String(input?.descriptor?.conversationId || '').trim();
+  if (!conversationId) throw new Error('conversation_descriptor_invalid');
+  const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', conversationId);
+  await getConversationModule().importConversationSnapshot({
+    dirPath: worktreeDir,
+    descriptor: { ...input.descriptor, storageMode: 'cloud' },
+    content: input.content
+  });
+  const opened = await getConversationModule().openConversation({
+    dirPath: worktreeDir,
+    reference: conversationId,
+    activeOnly: true
+  });
+  return { ...opened, worktreeDir, storageMode: 'cloud' };
+}
+
+
 const {
   parseChatMetadataYaml,
   serializeChatMetadataYaml,
@@ -181,30 +218,8 @@ window.api = {
   heartbeatConversationWriteLease: (input = {}) => getConversationModule().heartbeatWriteLease(input),
   releaseConversationWriteLease: (input = {}) => getConversationModule().releaseWriteLease(input),
   createConversationSnapshot: (input = {}) => getConversationModule().createConversationSnapshot(input),
-  createCloudConversationWorktree: async (input = {}) => {
-    const cacheId = String(input?.conversationId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
-    const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', cacheId);
-    const created = await getConversationModule().createConversation({
-      dirPath: worktreeDir,
-      title: input?.title,
-      sessionData: input?.sessionData,
-      storageMode: 'cloud'
-    });
-    return { ...created, worktreeDir, storageMode: 'cloud' };
-  },
-
-  openCloudConversationSnapshot: async (input = {}) => {
-    const conversationId = String(input?.descriptor?.conversationId || '').trim();
-    if (!conversationId) throw new Error('conversation_descriptor_invalid');
-    const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', conversationId);
-    await getConversationModule().importConversationSnapshot({
-      dirPath: worktreeDir,
-      descriptor: { ...input.descriptor, storageMode: 'cloud' },
-      content: input.content
-    });
-    const opened = await getConversationModule().openConversation({ dirPath: worktreeDir, reference: conversationId, activeOnly: true });
-    return { ...opened, worktreeDir, storageMode: 'cloud' };
-  },
+  createCloudConversationWorktree,
+  openCloudConversationSnapshot,
 
   readConversationSnapshot: (input = {}) => getConversationModule().readConversationSnapshot(input),
   importConversationSnapshot: (input = {}) => getConversationModule().importConversationSnapshot(input),
@@ -550,12 +565,13 @@ const commandHandlers = {
 
     // 2. 将高开销的底层 API 调用和窗口创建推入下一个事件循环，让系统的隐藏动画先行
     setTimeout(() => {
-      const { windowMap, openAppendSelectorWindow } = require('./data.js');
+      const { windowMap, windowRpcCapabilityMap, openAppendSelectorWindow } = require('./data.js');
 
       // 清理僵尸窗口逻辑
       for (const [sid, win] of windowMap.entries()) {
         if (win.isDestroyed()) {
           windowMap.delete(sid);
+          windowRpcCapabilityMap.delete(sid);
           utools.removeFeature(`append_to_${sid}`);
         }
       }
@@ -608,11 +624,13 @@ const commandHandlers = {
     const { type, payload, code } = action;
 
     const senderId = code.replace('append_to_', '');
-    const { windowMap } = require('./data.js');
+    const { windowMap, windowRpcCapabilityMap } = require('./data.js');
 
     const win = windowMap.get(senderId);
 
     if (!win || win.isDestroyed()) {
+      windowMap.delete(senderId);
+      windowRpcCapabilityMap.delete(senderId);
       utools.removeFeature(code);
       utools.outPlugin();
       return;
@@ -801,11 +819,12 @@ utools.onPluginEnter(async (action) => {
 
   // 启动时顺便清理一下因强制退出等意外残留的僵尸指令
   const features = utools.getFeatures();
-  const { windowMap } = require('./data.js');
+  const { windowMap, windowRpcCapabilityMap } = require('./data.js');
 
   for (const [sid, win] of windowMap.entries()) {
     if (win.isDestroyed()) {
       windowMap.delete(sid);
+      windowRpcCapabilityMap.delete(sid);
     }
   }
 
@@ -841,12 +860,55 @@ utools.onPluginOut((isKill) => {
 });
 
 const { ipcRenderer } = require('electron');
-const { windowMap } = require('./data.js');
+const { windowMap, windowRpcCapabilityMap } = require('./data.js');
 
 
 const windowConversationLeaseRegistry = new Map();
 const windowLeaseProbeTimers = new Map();
 const WINDOW_LEASE_PROBE_INTERVAL_MS = 2000;
+
+function isMatchingConversationRpcCapability(request = {}) {
+  const expected = windowRpcCapabilityMap.get(request.senderId);
+  const actual = typeof request.capability === 'string' ? request.capability : '';
+  if (!expected || !actual || expected.length !== actual.length) return false;
+  const expectedBytes = Buffer.from(expected);
+  const actualBytes = Buffer.from(actual);
+  return crypto.timingSafeEqual(expectedBytes, actualBytes);
+}
+
+const invokeConversationRpcMethod = createConversationRpcMethodInvoker({
+  getRepository: getConversationModule,
+  specialMethods: {
+    createCloudConversationWorktree,
+    openCloudConversationSnapshot
+  }
+});
+
+const handleConversationRpcRequest = createConversationRpcRequestHandler({
+  resolveWindow: (senderId) => windowMap.get(senderId),
+  authorizeRequest: isMatchingConversationRpcCapability,
+  invokeMethod: async (method, args, request) => {
+    const result = await invokeConversationRpcMethod(method, args);
+    if (method === 'acquireConversationWriteLease' && result?.ok && result?.leaseEpoch) {
+      const lease = normalizeWindowLeaseRegistration({
+        ...(args?.[0] || {}),
+        leaseEpoch: result.leaseEpoch
+      });
+      if (lease) {
+        windowConversationLeaseRegistry.set(request.senderId, lease);
+        bindWindowLeaseCleanup(request.senderId, windowMap.get(request.senderId));
+      }
+    } else if (method === 'releaseConversationWriteLease' && result?.ok) {
+      windowConversationLeaseRegistry.delete(request.senderId);
+      clearWindowLeaseProbe(request.senderId);
+    }
+    return result;
+  }
+});
+
+ipcRenderer.on(CONVERSATION_RPC_REQUEST_CHANNEL, (_event, request) => {
+  void handleConversationRpcRequest(request);
+});
 
 function normalizeWindowLeaseRegistration(input = {}) {
   const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
@@ -887,6 +949,7 @@ function probeRegisteredWindowLease(senderId) {
   const hadLease = releaseRegisteredWindowLease(senderId, reason);
   console.warn('[conversation-window] terminal-state', { senderId, reason, hadLease });
   windowMap.delete(senderId);
+  windowRpcCapabilityMap.delete(senderId);
   try { utools.removeFeature(`append_to_${senderId}`); } catch {}
 }
 
@@ -970,6 +1033,7 @@ ipcRenderer.on('window-event', (e, { senderId, event, state }) => {
         console.warn('[conversation-window] close-requested', { senderId, hadLease });
         bw.close();
         windowMap.delete(senderId);
+        windowRpcCapabilityMap.delete(senderId);
         utools.removeFeature(`append_to_${senderId}`); // 窗口关闭时主动移除对应的追问指令
         break;
       }

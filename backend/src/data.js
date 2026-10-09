@@ -2,6 +2,7 @@ const { webFrame, nativeImage } = require('electron');
 const crypto = require('crypto');
 
 const windowMap = new Map();
+const windowRpcCapabilityMap = new Map();
 
 const {
   getCurrentTaskDevice,
@@ -1212,6 +1213,9 @@ async function openWindow(config, msg) {
   // 为窗口生成唯一ID并添加到消息中
   const senderId = crypto.randomUUID();
   msg.senderId = senderId;
+  const conversationRpcCapability = crypto.randomBytes(32).toString('hex');
+  msg.conversationRpcCapability = conversationRpcCapability;
+  windowRpcCapabilityMap.set(senderId, conversationRpcCapability);
   msg.isAlwaysOnTop = isAlwaysOnTop;
 
   setTimeout(() => {
@@ -1219,6 +1223,7 @@ async function openWindow(config, msg) {
       for (const [s_id, win_instance] of windowMap.entries()) {
         if (win_instance.isDestroyed()) {
           windowMap.delete(s_id);
+          windowRpcCapabilityMap.delete(s_id);
           utools.removeFeature(`append_to_${s_id}`);
         }
       }
@@ -1321,6 +1326,7 @@ async function openWindow(config, msg) {
         setTimeout(releaseQueue, 1500);
       });
     }).catch((err) => {
+      windowRpcCapabilityMap.delete(senderId);
       console.error("Window creation queue error:", err);
       resolve(senderId);
     });
@@ -2049,6 +2055,7 @@ module.exports = {
   feature_suffix,
   defaultConfig,
   windowMap,
+  windowRpcCapabilityMap,
   saveFastInputWindowPosition,
   openFastInputWindow,
   openAppendSelectorWindow,

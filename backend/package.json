@@ -12,6 +12,7 @@
     "test:conversation-time": "node tests/conversation-time.test.js",
     "test:compact-policy": "node tests/compact-policy.test.js",
     "test:conversation-window-lifecycle": "node tests/conversation-window-lifecycle.test.js",
+    "test:conversation-window-rpc": "node tests/conversation-window-rpc.test.js && node tests/conversation-window-rpc-integration.test.js",
     "test:conversation-message-delete": "node tests/conversation-message-delete.test.js",
     "test:conversation-cross-client-ui": "node tests/conversation-cross-client-ui.test.js",
     "test:compaction-interaction": "node tests/compaction-interaction-restore.test.js",

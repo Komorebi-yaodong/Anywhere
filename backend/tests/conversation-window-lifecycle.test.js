@@ -26,8 +26,24 @@ assert.match(parentPreloadSource, /function releaseRegisteredWindowLease\(sender
 assert.match(parentPreloadSource, /getConversationModule\(\)\.releaseWriteLease\(lease\)/);
 assert.match(parentPreloadSource, /case 'conversation-lease-register':/);
 assert.match(parentPreloadSource, /case 'conversation-lease-clear':/);
+assert.doesNotMatch(windowPreloadSource, /conversation_runtime\.js/, 'conversation renderer must not load the native SQLite repository');
+assert.match(windowPreloadSource, /createConversationRpcClient/);
+assert.match(parentPreloadSource, /createConversationRpcRequestHandler/);
+assert.match(parentPreloadSource, /windowRpcCapabilityMap\.delete\(senderId\)/);
+assert.match(windowPreloadSource, /delete safeData\.conversationRpcCapability;/, 'RPC capability must not be exposed to the Vue renderer');
+assert.match(parentPreloadSource, /crypto\.timingSafeEqual\(expectedBytes, actualBytes\)/, 'parent RPC authorization must compare the per-window capability');
+assert.match(windowPreloadSource, /heartbeatConversationWriteLease: invokeConversationLeaseHeartbeat/, 'conversation lease heartbeat must be single-flight across parent RPC');
+assert.match(parentPreloadSource, /method === 'acquireConversationWriteLease'[\s\S]{0,700}windowConversationLeaseRegistry\.set\(request\.senderId, lease\)/, 'parent must register a successful lease before replying to the child');
+assert.match(parentPreloadSource, /method === 'releaseConversationWriteLease'[\s\S]{0,300}windowConversationLeaseRegistry\.delete\(request\.senderId\)/, 'parent must clear a released lease without waiting for another child message');
 
-const topLevelWindowMapImport = parentPreloadSource.indexOf("\nconst { windowMap } = require('./data.js');")
+
+const dataSource = fs.readFileSync(path.join(root, 'backend', 'src', 'data.js'), 'utf8');
+assert.match(dataSource, /msg\.conversationRpcCapability = conversationRpcCapability;/);
+assert.match(dataSource, /Window creation queue error:[\s\S]{0,160}windowRpcCapabilityMap\.delete\(senderId\)|windowRpcCapabilityMap\.delete\(senderId\);[\s\S]{0,160}Window creation queue error:/, 'failed window creation must clear the RPC capability');
+
+
+
+const topLevelWindowMapImport = parentPreloadSource.indexOf("\nconst { windowMap, windowRpcCapabilityMap } = require('./data.js');")
 const leaseRegistryStart = parentPreloadSource.indexOf('const windowConversationLeaseRegistry = new Map();')
 const windowEventHubStart = parentPreloadSource.indexOf("ipcRenderer.on('window-event'")
 const appendHandlerStart = parentPreloadSource.indexOf("'append_to_window': async")
