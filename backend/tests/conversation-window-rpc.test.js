@@ -124,8 +124,8 @@ async function run() {
   const requestHandler = createConversationRpcRequestHandler({
     resolveWindow: (senderId) => windows.get(senderId),
     authorizeRequest: (request) => request.capability === `capability-${request.senderId}`,
-    invokeMethod: async (method, args) => {
-      invocations.push({ method, args });
+    invokeMethod: async (method, args, request) => {
+      invocations.push({ method, args, request });
       if (method === 'saveConversationSnapshot') {
         const error = new Error('conversation_revision_conflict');
         error.currentRevision = 9;
@@ -144,7 +144,14 @@ async function run() {
   });
   assert.deepStrictEqual(invocations[0], {
     method: 'openConversation',
-    args: [{ reference: 'conversation-a' }]
+    args: [{ reference: 'conversation-a' }],
+    request: {
+      senderId: 'window-a',
+      requestId: 'handler-success',
+      method: 'openConversation',
+      capability: 'capability-window-a',
+      args: [{ reference: 'conversation-a' }]
+    }
   });
   assert.strictEqual(sentToWindows.length, 1);
   assert.strictEqual(sentToWindows[0].target, 'window-a');

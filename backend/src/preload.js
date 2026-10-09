@@ -891,7 +891,7 @@ async function invokeConversationHelperMethod(method, args = [], options = {}) {
 const handleConversationRpcRequest = createConversationRpcRequestHandler({
   resolveWindow: (senderId) => windowMap.get(senderId),
   authorizeRequest: isMatchingConversationRpcCapability,
-  invokeMethod: async (method, args) => {
+  invokeMethod: async (method, args, request) => {
     const result = await invokeConversationHelperMethod(method, args);
     if (method === 'acquireConversationWriteLease' && result?.ok && result?.leaseEpoch) {
       const lease = normalizeWindowLeaseRegistration({

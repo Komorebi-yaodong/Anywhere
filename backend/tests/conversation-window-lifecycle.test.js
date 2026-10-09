@@ -40,6 +40,9 @@ assert.match(parentPreloadSource, /windowRpcCapabilityMap\.delete\(senderId\)/);
 assert.match(windowPreloadSource, /delete safeData\.conversationRpcCapability;/, 'RPC capability must not be exposed to the Vue renderer');
 assert.match(parentPreloadSource, /crypto\.timingSafeEqual\(expectedBytes, actualBytes\)/, 'parent RPC authorization must compare the per-window capability');
 assert.match(windowPreloadSource, /heartbeatConversationWriteLease: invokeConversationLeaseHeartbeat/, 'conversation lease heartbeat must be single-flight across parent RPC');
+assert.match(parentPreloadSource, /invokeMethod: async \(method, args, request\) => \{[\s\S]{0,1600}windowConversationLeaseRegistry\.set\(request\.senderId, lease\)/, 'lease registration must receive the authenticated RPC request sender');
+assert.match(parentPreloadSource, /method === 'releaseConversationWriteLease'[\s\S]{0,500}windowConversationLeaseRegistry\.delete\(request\.senderId\)/, 'lease release must receive the authenticated RPC request sender');
+
 assert.match(parentPreloadSource, /method === 'acquireConversationWriteLease'[\s\S]{0,700}windowConversationLeaseRegistry\.set\(request\.senderId, lease\)/, 'parent must register a successful lease before replying to the child');
 assert.match(parentPreloadSource, /method === 'releaseConversationWriteLease'[\s\S]{0,300}windowConversationLeaseRegistry\.delete\(request\.senderId\)/, 'parent must clear a released lease without waiting for another child message');
 assert.match(parentPreloadSource, /const result = await invokeConversationHelperMethod\(method, args\);/, 'all window conversation methods must run through the DB helper');
