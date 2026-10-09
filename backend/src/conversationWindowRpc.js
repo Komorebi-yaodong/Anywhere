@@ -141,6 +141,7 @@ function createConversationRpcClient({
   sendRequest,
   subscribeResponse,
   createRequestId,
+  onDispatch,
   timeoutMs = DEFAULT_CONVERSATION_RPC_TIMEOUT_MS
 } = {}) {
   if (typeof getSenderId !== 'function' || typeof getCapability !== 'function' || typeof sendRequest !== 'function' || typeof subscribeResponse !== 'function') {
@@ -198,6 +199,9 @@ function createConversationRpcClient({
       }, safeTimeoutMs);
 
       pending.set(requestId, { senderId, method, resolve, reject, timer });
+      if (typeof onDispatch === 'function') {
+        try { onDispatch({ senderId, requestId, method, args }); } catch {}
+      }
       try {
         sendRequest({
           senderId,

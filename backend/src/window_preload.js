@@ -4,6 +4,10 @@ const {
     CONVERSATION_RPC_RESPONSE_CHANNEL,
     createConversationRpcClient,
 } = require('./conversationWindowRpc.js');
+const {
+    resolveConversationDbHelperDiagnosticPath,
+    appendConversationDbHelperDiagnostic,
+} = require('./conversationDbHelperDiagnostics.js');
 const fs = require('fs');
 const path = require('path');
 const { fileURLToPath } = require('url');
@@ -103,10 +107,31 @@ function getProjectsModule() {
 const channel = "window";
 let senderId = null; // [新增] 用于存储当前窗口的唯一ID
 let conversationRpcCapability = null;
+const conversationDbHelperDiagnosticPath = resolveConversationDbHelperDiagnosticPath(utools.getPath('userData'));
+
+function recordConversationDbChildDiagnostic(event, fields = {}) {
+    appendConversationDbHelperDiagnostic(conversationDbHelperDiagnosticPath, {
+        scope: 'child-renderer',
+        event,
+        pid: process.pid,
+        ...fields
+    });
+}
 
 const conversationRpcClient = createConversationRpcClient({
     getSenderId: () => senderId,
     getCapability: () => conversationRpcCapability,
+    onDispatch: ({ requestId, method, args }) => {
+        if (method !== 'saveConversationSnapshot') return;
+        const input = args?.[0] && typeof args[0] === 'object' ? args[0] : {};
+        const sessionData = input.sessionData && typeof input.sessionData === 'object' ? input.sessionData : {};
+        recordConversationDbChildDiagnostic('child-rpc-dispatch', {
+            operationId: requestId,
+            method,
+            messageCount: Array.isArray(sessionData.fullHistory) ? sessionData.fullHistory.length : 0,
+            uiCount: Array.isArray(sessionData.chat_show) ? sessionData.chat_show.length : 0
+        });
+    },
     sendRequest: (request) => utools.sendToParent(CONVERSATION_RPC_REQUEST_CHANNEL, request),
     subscribeResponse: (callback) => {
         const handler = (_event, response) => callback(response);
@@ -290,6 +315,11 @@ window.api = {
     readConversationSnapshot: (input = {}) => invokeConversationRpc('readConversationSnapshot', input),
     importConversationSnapshot: (input = {}) => invokeConversationRpc('importConversationSnapshot', input),
     getConversationDescriptor: (input = {}) => invokeConversationRpc('getConversationDescriptor', input),
+    getConversationDbHelperDiagnosticPath: () => conversationDbHelperDiagnosticPath,
+    openConversationDbHelperDiagnosticDirectory: () => {
+        utools.shellOpenPath(path.dirname(conversationDbHelperDiagnosticPath));
+        return true;
+    },
 
     readLocalProjects: (...args) => getProjectsModule().readLocalProjects(...args),
     writeLocalProjects: (...args) => getProjectsModule().writeLocalProjects(...args),

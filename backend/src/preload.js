@@ -5,6 +5,13 @@ const {
   createConversationRpcMethodInvoker,
   createConversationRpcRequestHandler,
 } = require('./conversationWindowRpc.js');
+const {
+  createConversationDbHelperClient
+} = require('./conversationDbHelperClient.js');
+const {
+  resolveConversationDbHelperDiagnosticPath,
+  appendConversationDbHelperDiagnostic
+} = require('./conversationDbHelperDiagnostics.js');
 
 
 const { createChatCompletion, getRandomItem, batchTestProviderKeys } = require('./chat.js');
@@ -225,6 +232,11 @@ window.api = {
   importConversationSnapshot: (input = {}) => getConversationModule().importConversationSnapshot(input),
 
   getConversationDescriptor: (input = {}) => getConversationModule().getConversationDescriptor(input),
+  getConversationDbHelperDiagnosticPath: () => conversationDbHelperDiagnosticPath,
+  openConversationDbHelperDiagnosticDirectory: () => {
+    utools.shellOpenPath(path.dirname(conversationDbHelperDiagnosticPath));
+    return true;
+  },
   readLocalProjects,
   writeLocalProjects,
   parseProjectsYaml,
@@ -864,8 +876,66 @@ const { windowMap, windowRpcCapabilityMap } = require('./data.js');
 
 
 const windowConversationLeaseRegistry = new Map();
+const windowConversationSnapshotOperations = new Map();
 const windowLeaseProbeTimers = new Map();
 const WINDOW_LEASE_PROBE_INTERVAL_MS = 2000;
+const conversationDbHelperDiagnosticPath = resolveConversationDbHelperDiagnosticPath(utools.getPath('userData'));
+const conversationDbHelperClient = createConversationDbHelperClient({
+  helperPath: path.join(__dirname, 'conversation_db_helper.js'),
+  runtimePath: path.join(__dirname, 'conversation_runtime.js'),
+  diagnosticPath: conversationDbHelperDiagnosticPath,
+  execPath: process.execPath,
+  expectedModuleAbi: '110'
+});
+
+function recordConversationDbHostDiagnostic(event, fields = {}) {
+  appendConversationDbHelperDiagnostic(conversationDbHelperDiagnosticPath, {
+    scope: 'parent-renderer',
+    event,
+    pid: process.pid,
+    ...fields
+  });
+}
+
+const parentNativeConversationMethods = new Set([
+  'acquireConversationWriteLease',
+  'heartbeatConversationWriteLease',
+  'releaseConversationWriteLease'
+]);
+
+async function invokeParentNativeConversationMethod(method, args = []) {
+  const operationId = crypto.randomUUID();
+  const startedAt = Date.now();
+  recordConversationDbHostDiagnostic('parent-native-start', {
+    operationId,
+    method,
+    helperPid: conversationDbHelperClient.getState().helperPid
+  });
+  try {
+    const result = await invokeConversationRpcMethod(method, args);
+    recordConversationDbHostDiagnostic('parent-native-complete', {
+      operationId,
+      method,
+      ok: true,
+      helperPid: conversationDbHelperClient.getState().helperPid,
+      elapsedMs: Date.now() - startedAt
+    });
+    return result;
+  } catch (error) {
+    recordConversationDbHostDiagnostic('parent-native-failed', {
+      operationId,
+      method,
+      ok: false,
+      helperPid: conversationDbHelperClient.getState().helperPid,
+      elapsedMs: Date.now() - startedAt,
+      reason: error?.message || error,
+      code: error?.code
+    });
+    throw error;
+  }
+}
+
+
 
 function isMatchingConversationRpcCapability(request = {}) {
   const expected = windowRpcCapabilityMap.get(request.senderId);
@@ -888,7 +958,34 @@ const handleConversationRpcRequest = createConversationRpcRequestHandler({
   resolveWindow: (senderId) => windowMap.get(senderId),
   authorizeRequest: isMatchingConversationRpcCapability,
   invokeMethod: async (method, args, request) => {
-    const result = await invokeConversationRpcMethod(method, args);
+    let result;
+    if (method === 'saveConversationSnapshot') {
+      const operationId = request.requestId;
+      const input = args?.[0] && typeof args[0] === 'object' ? args[0] : {};
+      const sessionData = input.sessionData && typeof input.sessionData === 'object' ? input.sessionData : {};
+      const counts = {
+        messageCount: Array.isArray(sessionData.fullHistory) ? sessionData.fullHistory.length : 0,
+        uiCount: Array.isArray(sessionData.chat_show) ? sessionData.chat_show.length : 0
+      };
+      windowConversationSnapshotOperations.set(request.senderId, operationId);
+      recordConversationDbHostDiagnostic('rpc-snapshot-received', {
+        operationId,
+        method,
+        helperPid: conversationDbHelperClient.getState().helperPid,
+        ...counts
+      });
+      try {
+        result = await conversationDbHelperClient.saveConversationSnapshot(input, { operationId });
+      } finally {
+        if (windowConversationSnapshotOperations.get(request.senderId) === operationId) {
+          windowConversationSnapshotOperations.delete(request.senderId);
+        }
+      }
+    } else {
+      result = parentNativeConversationMethods.has(method)
+        ? await invokeParentNativeConversationMethod(method, args)
+        : await invokeConversationRpcMethod(method, args);
+    }
     if (method === 'acquireConversationWriteLease' && result?.ok && result?.leaseEpoch) {
       const lease = normalizeWindowLeaseRegistration({
         ...(args?.[0] || {}),
@@ -946,6 +1043,14 @@ function probeRegisteredWindowLease(senderId) {
   const crashed = !destroyed && typeof bw.webContents?.isCrashed === 'function' && bw.webContents.isCrashed();
   if (!destroyed && !crashed) return;
   const reason = crashed ? 'webcontents-crashed' : 'window-destroyed';
+  const operationId = windowConversationSnapshotOperations.get(senderId) || '';
+  recordConversationDbHostDiagnostic('window-terminal', {
+    operationId,
+    helperPid: conversationDbHelperClient.getState().helperPid,
+    reason,
+    pendingCount: conversationDbHelperClient.getState().pendingCount
+  });
+  windowConversationSnapshotOperations.delete(senderId);
   const hadLease = releaseRegisteredWindowLease(senderId, reason);
   console.warn('[conversation-window] terminal-state', { senderId, reason, hadLease });
   windowMap.delete(senderId);
@@ -1029,6 +1134,13 @@ ipcRenderer.on('window-event', (e, { senderId, event, state }) => {
         break;
       }
       case 'close-window': {
+        const operationId = windowConversationSnapshotOperations.get(senderId) || '';
+        recordConversationDbHostDiagnostic('window-close-requested', {
+          operationId,
+          helperPid: conversationDbHelperClient.getState().helperPid,
+          pendingCount: conversationDbHelperClient.getState().pendingCount
+        });
+        windowConversationSnapshotOperations.delete(senderId);
         const hadLease = releaseRegisteredWindowLease(senderId, 'requested-close');
         console.warn('[conversation-window] close-requested', { senderId, hadLease });
         bw.close();
@@ -1300,6 +1412,7 @@ ipcRenderer.on('background-shell-request', async (e, { requestId, action, payloa
 
 // ================= 窗口彻底关闭/刷新时的清理 =================
 window.addEventListener('beforeunload', () => {
+  conversationDbHelperClient.dispose();
   try {
     const { killAllBackgroundShells } = require('./mcp_builtin.js');
     killAllBackgroundShells();

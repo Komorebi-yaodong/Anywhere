@@ -8,6 +8,10 @@ const backendRoot = path.resolve(__dirname, '..');
 const sourceRoot = path.join(backendRoot, 'src', 'sqlite-native');
 const targetRoot = path.join(backendRoot, 'public', 'sqlite-native');
 const manifestPath = path.join(sourceRoot, 'manifest.json');
+const helperFiles = [
+  'conversation_db_helper.js',
+  'conversationDbHelperDiagnostics.js'
+];
 
 fs.rmSync(path.join(backendRoot, 'public', 'sqlite_worker.js'), { force: true });
 
@@ -43,4 +47,9 @@ fs.copyFileSync(manifestPath, path.join(targetRoot, 'manifest.json'));
 const licensePath = path.join(sourceRoot, 'LICENSE.better-sqlite3.txt');
 if (!fs.existsSync(licensePath)) throw new Error(`SQLite license missing: ${licensePath}`);
 fs.copyFileSync(licensePath, path.join(targetRoot, 'LICENSE.better-sqlite3.txt'));
+for (const helperFile of helperFiles) {
+  const sourceFile = path.join(backendRoot, 'src', helperFile);
+  if (!fs.existsSync(sourceFile)) throw new Error(`Conversation DB helper source missing: ${sourceFile}`);
+  fs.copyFileSync(sourceFile, path.join(backendRoot, 'public', helperFile));
+}
 console.log(`Copied ${targetNames.length} verified SQLite native bindings.`);

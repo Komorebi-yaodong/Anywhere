@@ -8,6 +8,9 @@ const root = path.resolve(__dirname, '..', '..');
 const appSource = fs.readFileSync(path.join(root, 'Anywhere_window', 'src', 'App.vue'), 'utf8');
 const windowPreloadSource = fs.readFileSync(path.join(root, 'backend', 'src', 'window_preload.js'), 'utf8');
 const parentPreloadSource = fs.readFileSync(path.join(root, 'backend', 'src', 'preload.js'), 'utf8');
+const helperClientSource = fs.readFileSync(path.join(root, 'backend', 'src', 'conversationDbHelperClient.js'), 'utf8');
+const helperSource = fs.readFileSync(path.join(root, 'backend', 'src', 'conversation_db_helper.js'), 'utf8');
+const helperDiagnosticSource = fs.readFileSync(path.join(root, 'backend', 'src', 'conversationDbHelperDiagnostics.js'), 'utf8');
 
 assert.match(appSource, /await loadSession\(opened\.sessionData\);[\s\S]{0,300}autoCloseOnBlur\.value = false;[\s\S]{0,120}syncAutoCloseOnBlurListener\(\);[\s\S]{0,120}await acquireCurrentConversationLease\(\);/, 'restored conversations must disable blur auto-close before acquiring the lease');
 assert.match(appSource, /autoCloseOnBlur\.value && !loading\.value && !compacting\.value/, 'compaction must suppress blur auto-close');
@@ -35,6 +38,18 @@ assert.match(parentPreloadSource, /crypto\.timingSafeEqual\(expectedBytes, actua
 assert.match(windowPreloadSource, /heartbeatConversationWriteLease: invokeConversationLeaseHeartbeat/, 'conversation lease heartbeat must be single-flight across parent RPC');
 assert.match(parentPreloadSource, /method === 'acquireConversationWriteLease'[\s\S]{0,700}windowConversationLeaseRegistry\.set\(request\.senderId, lease\)/, 'parent must register a successful lease before replying to the child');
 assert.match(parentPreloadSource, /method === 'releaseConversationWriteLease'[\s\S]{0,300}windowConversationLeaseRegistry\.delete\(request\.senderId\)/, 'parent must clear a released lease without waiting for another child message');
+assert.match(parentPreloadSource, /method === 'saveConversationSnapshot'[\s\S]{0,900}conversationDbHelperClient\.saveConversationSnapshot\(input, \{ operationId \}\)/, 'full snapshots must run in the monitored DB helper');
+assert.match(parentPreloadSource, /const operationId = request\.requestId;/, 'child, parent, and helper diagnostics must share one random operation id');
+assert.match(windowPreloadSource, /child-rpc-dispatch/);
+assert.match(parentPreloadSource, /rpc-snapshot-received/);
+assert.match(parentPreloadSource, /window-terminal/);
+assert.match(helperClientSource, /ELECTRON_RUN_AS_NODE: '1'/);
+assert.match(helperClientSource, /serialization: 'advanced'/);
+assert.match(helperClientSource, /windowsHide: true/);
+assert.match(helperClientSource, /conversation_db_helper_exited/);
+assert.doesNotMatch(helperClientSource, /windowMap|\.close\(\)|\.destroy\(\)/, 'helper lifecycle must not control any uTools window');
+assert.match(helperSource, /method !== 'saveConversationSnapshot'/, 'helper must expose only the snapshot operation during diagnostics');
+assert.doesNotMatch(helperDiagnosticSource, /conversationId|holderInstanceId|dirPath|sessionData|fullHistory|chat_show|content/, 'diagnostic logger must not whitelist sensitive conversation fields');
 
 
 const dataSource = fs.readFileSync(path.join(root, 'backend', 'src', 'data.js'), 'utf8');
