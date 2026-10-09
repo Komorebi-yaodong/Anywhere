@@ -10,7 +10,8 @@ const targetRoot = path.join(backendRoot, 'public', 'sqlite-native');
 const manifestPath = path.join(sourceRoot, 'manifest.json');
 const helperFiles = [
   'conversation_db_helper.js',
-  'conversationDbHelperDiagnostics.js'
+  'conversationDbHelperDiagnostics.js',
+  'conversationWindowRpc.js'
 ];
 
 fs.rmSync(path.join(backendRoot, 'public', 'sqlite_worker.js'), { force: true });

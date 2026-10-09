@@ -2,7 +2,6 @@ const path = require('path');
 const crypto = require('crypto');
 const {
   CONVERSATION_RPC_REQUEST_CHANNEL,
-  createConversationRpcMethodInvoker,
   createConversationRpcRequestHandler,
 } = require('./conversationWindowRpc.js');
 const {
@@ -105,20 +104,15 @@ const {
 } = require('./projects.js');
 
 
-function getConversationModule() {
-  const runtimePath = './' + 'conversation_runtime.js';
-  return require(runtimePath);
-}
-
 async function createCloudConversationWorktree(input = {}) {
   const cacheId = String(input?.conversationId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
   const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', cacheId);
-  const created = await getConversationModule().createConversation({
+  const created = await conversationDbHelperClient.invoke('createConversation', [{
     dirPath: worktreeDir,
     title: input?.title,
     sessionData: input?.sessionData,
     storageMode: 'cloud'
-  });
+  }]);
   return { ...created, worktreeDir, storageMode: 'cloud' };
 }
 
@@ -126,16 +120,16 @@ async function openCloudConversationSnapshot(input = {}) {
   const conversationId = String(input?.descriptor?.conversationId || '').trim();
   if (!conversationId) throw new Error('conversation_descriptor_invalid');
   const worktreeDir = path.join(utools.getPath('userData'), 'Anywhere', 'cloud-worktrees', conversationId);
-  await getConversationModule().importConversationSnapshot({
+  await conversationDbHelperClient.invoke('importConversationSnapshot', [{
     dirPath: worktreeDir,
     descriptor: { ...input.descriptor, storageMode: 'cloud' },
     content: input.content
-  });
-  const opened = await getConversationModule().openConversation({
+  }]);
+  const opened = await conversationDbHelperClient.invoke('openConversation', [{
     dirPath: worktreeDir,
     reference: conversationId,
     activeOnly: true
-  });
+  }]);
   return { ...opened, worktreeDir, storageMode: 'cloud' };
 }
 
@@ -204,34 +198,34 @@ window.api = {
     utools.outPlugin();
     return result;
   },
-  listLocalConversations: (...args) => getConversationModule().listLocalConversations(...args),
-  migrateJsonConversation: (input = {}) => getConversationModule().migrateJsonConversation(input),
-  createConversation: (input = {}) => getConversationModule().createConversation(input),
-  openConversation: (input = {}) => getConversationModule().openConversation(input),
-  loadConversationPage: (input = {}) => getConversationModule().loadConversationPage(input),
-  getConversationRequestMessages: (input = {}) => getConversationModule().getConversationRequestMessages(input),
+  listLocalConversations: (...args) => conversationDbHelperClient.invoke('listLocalConversations', args),
+  migrateJsonConversation: (input = {}) => conversationDbHelperClient.invoke('migrateJsonConversation', [input]),
+  createConversation: (input = {}) => conversationDbHelperClient.invoke('createConversation', [input]),
+  openConversation: (input = {}) => conversationDbHelperClient.invoke('openConversation', [input]),
+  loadConversationPage: (input = {}) => conversationDbHelperClient.invoke('loadConversationPage', [input]),
+  getConversationRequestMessages: (input = {}) => conversationDbHelperClient.invoke('getConversationRequestMessages', [input]),
 
-  saveConversationSnapshot: (input = {}) => getConversationModule().saveConversationSnapshot(input),
-  saveConversationState: (input = {}) => getConversationModule().saveConversationState(input),
-  appendConversationMessages: (input = {}) => getConversationModule().appendMessages(input),
-  updateConversationMessage: (input = {}) => getConversationModule().updateMessage(input),
-  truncateConversationMessages: (input = {}) => getConversationModule().truncateMessages(input),
-  deleteConversationMessages: (input = {}) => getConversationModule().deleteMessages(input),
-  replaceActiveConversationMessages: (input = {}) => getConversationModule().replaceActiveMessages(input),
-  restoreConversationCompaction: (input = {}) => getConversationModule().restoreConversationCompaction(input),
-  renameConversation: (input = {}) => getConversationModule().renameConversation(input),
-  deleteConversation: (input = {}) => getConversationModule().deleteConversation(input),
-  acquireConversationWriteLease: (input = {}) => getConversationModule().acquireWriteLease(input),
-  heartbeatConversationWriteLease: (input = {}) => getConversationModule().heartbeatWriteLease(input),
-  releaseConversationWriteLease: (input = {}) => getConversationModule().releaseWriteLease(input),
-  createConversationSnapshot: (input = {}) => getConversationModule().createConversationSnapshot(input),
+  saveConversationSnapshot: (input = {}) => conversationDbHelperClient.invoke('saveConversationSnapshot', [input]),
+  saveConversationState: (input = {}) => conversationDbHelperClient.invoke('saveConversationState', [input]),
+  appendConversationMessages: (input = {}) => conversationDbHelperClient.invoke('appendConversationMessages', [input]),
+  updateConversationMessage: (input = {}) => conversationDbHelperClient.invoke('updateConversationMessage', [input]),
+  truncateConversationMessages: (input = {}) => conversationDbHelperClient.invoke('truncateConversationMessages', [input]),
+  deleteConversationMessages: (input = {}) => conversationDbHelperClient.invoke('deleteConversationMessages', [input]),
+  replaceActiveConversationMessages: (input = {}) => conversationDbHelperClient.invoke('replaceActiveConversationMessages', [input]),
+  restoreConversationCompaction: (input = {}) => conversationDbHelperClient.invoke('restoreConversationCompaction', [input]),
+  renameConversation: (input = {}) => conversationDbHelperClient.invoke('renameConversation', [input]),
+  deleteConversation: (input = {}) => conversationDbHelperClient.invoke('deleteConversation', [input]),
+  acquireConversationWriteLease: (input = {}) => conversationDbHelperClient.invoke('acquireConversationWriteLease', [input]),
+  heartbeatConversationWriteLease: (input = {}) => conversationDbHelperClient.invoke('heartbeatConversationWriteLease', [input]),
+  releaseConversationWriteLease: (input = {}) => conversationDbHelperClient.invoke('releaseConversationWriteLease', [input]),
+  createConversationSnapshot: (input = {}) => conversationDbHelperClient.invoke('createConversationSnapshot', [input]),
   createCloudConversationWorktree,
   openCloudConversationSnapshot,
 
-  readConversationSnapshot: (input = {}) => getConversationModule().readConversationSnapshot(input),
-  importConversationSnapshot: (input = {}) => getConversationModule().importConversationSnapshot(input),
+  readConversationSnapshot: (input = {}) => conversationDbHelperClient.invoke('readConversationSnapshot', [input]),
+  importConversationSnapshot: (input = {}) => conversationDbHelperClient.invoke('importConversationSnapshot', [input]),
 
-  getConversationDescriptor: (input = {}) => getConversationModule().getConversationDescriptor(input),
+  getConversationDescriptor: (input = {}) => conversationDbHelperClient.invoke('getConversationDescriptor', [input]),
   getConversationDbHelperDiagnosticPath: () => conversationDbHelperDiagnosticPath,
   openConversationDbHelperDiagnosticDirectory: () => {
     utools.shellOpenPath(path.dirname(conversationDbHelperDiagnosticPath));
@@ -882,7 +876,6 @@ const WINDOW_LEASE_PROBE_INTERVAL_MS = 2000;
 const conversationDbHelperDiagnosticPath = resolveConversationDbHelperDiagnosticPath(utools.getPath('userData'));
 const conversationDbHelperClient = createConversationDbHelperClient({
   helperPath: path.join(__dirname, 'conversation_db_helper.js'),
-  runtimePath: path.join(__dirname, 'conversation_runtime.js'),
   diagnosticPath: conversationDbHelperDiagnosticPath,
   execPath: process.execPath,
   expectedModuleAbi: '110'
@@ -897,46 +890,6 @@ function recordConversationDbHostDiagnostic(event, fields = {}) {
   });
 }
 
-const parentNativeConversationMethods = new Set([
-  'acquireConversationWriteLease',
-  'heartbeatConversationWriteLease',
-  'releaseConversationWriteLease'
-]);
-
-async function invokeParentNativeConversationMethod(method, args = []) {
-  const operationId = crypto.randomUUID();
-  const startedAt = Date.now();
-  recordConversationDbHostDiagnostic('parent-native-start', {
-    operationId,
-    method,
-    helperPid: conversationDbHelperClient.getState().helperPid
-  });
-  try {
-    const result = await invokeConversationRpcMethod(method, args);
-    recordConversationDbHostDiagnostic('parent-native-complete', {
-      operationId,
-      method,
-      ok: true,
-      helperPid: conversationDbHelperClient.getState().helperPid,
-      elapsedMs: Date.now() - startedAt
-    });
-    return result;
-  } catch (error) {
-    recordConversationDbHostDiagnostic('parent-native-failed', {
-      operationId,
-      method,
-      ok: false,
-      helperPid: conversationDbHelperClient.getState().helperPid,
-      elapsedMs: Date.now() - startedAt,
-      reason: error?.message || error,
-      code: error?.code
-    });
-    throw error;
-  }
-}
-
-
-
 function isMatchingConversationRpcCapability(request = {}) {
   const expected = windowRpcCapabilityMap.get(request.senderId);
   const actual = typeof request.capability === 'string' ? request.capability : '';
@@ -946,45 +899,44 @@ function isMatchingConversationRpcCapability(request = {}) {
   return crypto.timingSafeEqual(expectedBytes, actualBytes);
 }
 
-const invokeConversationRpcMethod = createConversationRpcMethodInvoker({
-  getRepository: getConversationModule,
-  specialMethods: {
-    createCloudConversationWorktree,
-    openCloudConversationSnapshot
+async function invokeConversationHelperMethod(method, args = [], options = {}) {
+  if (method === 'createCloudConversationWorktree') {
+    return await createCloudConversationWorktree(args?.[0] || {});
   }
-});
+  if (method === 'openCloudConversationSnapshot') {
+    return await openCloudConversationSnapshot(args?.[0] || {});
+  }
+  return await conversationDbHelperClient.invoke(method, args, options);
+}
 
 const handleConversationRpcRequest = createConversationRpcRequestHandler({
   resolveWindow: (senderId) => windowMap.get(senderId),
   authorizeRequest: isMatchingConversationRpcCapability,
   invokeMethod: async (method, args, request) => {
+    const operationId = request.requestId;
+    const isSnapshot = method === 'saveConversationSnapshot';
+    const input = args?.[0] && typeof args[0] === 'object' ? args[0] : {};
+    const sessionData = input.sessionData && typeof input.sessionData === 'object' ? input.sessionData : {};
+    const counts = isSnapshot ? {
+      messageCount: Array.isArray(sessionData.fullHistory) ? sessionData.fullHistory.length : 0,
+      uiCount: Array.isArray(sessionData.chat_show) ? sessionData.chat_show.length : 0
+    } : {};
+
+    if (isSnapshot) windowConversationSnapshotOperations.set(request.senderId, operationId);
+    recordConversationDbHostDiagnostic('rpc-received', {
+      operationId,
+      method,
+      helperPid: conversationDbHelperClient.getState().helperPid,
+      ...counts
+    });
+
     let result;
-    if (method === 'saveConversationSnapshot') {
-      const operationId = request.requestId;
-      const input = args?.[0] && typeof args[0] === 'object' ? args[0] : {};
-      const sessionData = input.sessionData && typeof input.sessionData === 'object' ? input.sessionData : {};
-      const counts = {
-        messageCount: Array.isArray(sessionData.fullHistory) ? sessionData.fullHistory.length : 0,
-        uiCount: Array.isArray(sessionData.chat_show) ? sessionData.chat_show.length : 0
-      };
-      windowConversationSnapshotOperations.set(request.senderId, operationId);
-      recordConversationDbHostDiagnostic('rpc-snapshot-received', {
-        operationId,
-        method,
-        helperPid: conversationDbHelperClient.getState().helperPid,
-        ...counts
-      });
-      try {
-        result = await conversationDbHelperClient.saveConversationSnapshot(input, { operationId });
-      } finally {
-        if (windowConversationSnapshotOperations.get(request.senderId) === operationId) {
-          windowConversationSnapshotOperations.delete(request.senderId);
-        }
+    try {
+      result = await invokeConversationHelperMethod(method, args, { operationId });
+    } finally {
+      if (isSnapshot && windowConversationSnapshotOperations.get(request.senderId) === operationId) {
+        windowConversationSnapshotOperations.delete(request.senderId);
       }
-    } else {
-      result = parentNativeConversationMethods.has(method)
-        ? await invokeParentNativeConversationMethod(method, args)
-        : await invokeConversationRpcMethod(method, args);
     }
     if (method === 'acquireConversationWriteLease' && result?.ok && result?.leaseEpoch) {
       const lease = normalizeWindowLeaseRegistration({
@@ -1028,7 +980,9 @@ function releaseRegisteredWindowLease(senderId, reason = 'closed') {
   clearWindowLeaseProbe(senderId);
   if (!lease) return false;
   windowConversationLeaseRegistry.delete(senderId);
-  Promise.resolve(getConversationModule().releaseWriteLease(lease)).catch((error) => {
+  Promise.resolve(
+    conversationDbHelperClient.invoke('releaseConversationWriteLease', [lease])
+  ).catch((error) => {
     console.error(`[conversation-lease] release on window ${reason} failed:`, error?.message || error);
   });
   return true;

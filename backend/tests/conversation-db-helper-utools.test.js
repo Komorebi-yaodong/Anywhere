@@ -51,3 +51,31 @@ assert.ok(Number(payload.secondPid) > 0);
 assert.notStrictEqual(payload.firstPid, payload.secondPid);
 assert.ok(Number(payload.revision) >= 2);
 console.log(JSON.stringify(payload));
+
+const allApiPath = path.resolve(__dirname, 'conversation-db-helper-all-api.test.js');
+const allApiResult = spawnSync(executable, [allApiPath], {
+  env: {
+    ...process.env,
+    ELECTRON_RUN_AS_NODE: '1',
+    ANYWHERE_HELPER_USE_PUBLIC: '1'
+  },
+  encoding: 'utf8',
+  windowsHide: true,
+  timeout: 120_000,
+  maxBuffer: 10 * 1024 * 1024
+});
+if (allApiResult.error) throw allApiResult.error;
+if (allApiResult.status !== 0) {
+  process.stdout.write(allApiResult.stdout || '');
+  process.stderr.write(allApiResult.stderr || '');
+  throw new Error(`uTools DB helper all-API integration failed with status ${allApiResult.status}`);
+}
+const allApiLines = String(allApiResult.stdout || '').trim().split(/\r?\n/).filter(Boolean);
+const allApiPayload = JSON.parse(allApiLines[allApiLines.length - 1]);
+assert.strictEqual(allApiPayload.ok, true);
+assert.strictEqual(allApiPayload.node, '16.17.1');
+assert.strictEqual(allApiPayload.electron, '22.3.27');
+assert.strictEqual(allApiPayload.modules, '110');
+assert.strictEqual(allApiPayload.publishedRuntime, true);
+assert.ok(Number(allApiPayload.methods) >= 22);
+console.log(JSON.stringify(allApiPayload));

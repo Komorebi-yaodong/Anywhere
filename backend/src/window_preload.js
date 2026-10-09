@@ -122,14 +122,18 @@ const conversationRpcClient = createConversationRpcClient({
     getSenderId: () => senderId,
     getCapability: () => conversationRpcCapability,
     onDispatch: ({ requestId, method, args }) => {
-        if (method !== 'saveConversationSnapshot') return;
         const input = args?.[0] && typeof args[0] === 'object' ? args[0] : {};
         const sessionData = input.sessionData && typeof input.sessionData === 'object' ? input.sessionData : {};
+        const counts = method === 'saveConversationSnapshot'
+            ? {
+                messageCount: Array.isArray(sessionData.fullHistory) ? sessionData.fullHistory.length : 0,
+                uiCount: Array.isArray(sessionData.chat_show) ? sessionData.chat_show.length : 0
+              }
+            : {};
         recordConversationDbChildDiagnostic('child-rpc-dispatch', {
             operationId: requestId,
             method,
-            messageCount: Array.isArray(sessionData.fullHistory) ? sessionData.fullHistory.length : 0,
-            uiCount: Array.isArray(sessionData.chat_show) ? sessionData.chat_show.length : 0
+            ...counts
         });
     },
     sendRequest: (request) => utools.sendToParent(CONVERSATION_RPC_REQUEST_CHANNEL, request),

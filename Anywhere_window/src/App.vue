@@ -6432,8 +6432,10 @@ const appendCurrentInputToHistory = async () => {
     : userContentList;
   appendFullHistory({ role: "user", content: contentForHistory });
   chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
-  scheduleAutoSave({ reason: 'user-message', immediate: true });
+  // Clear the consumed draft before taking the immediate snapshot, otherwise the same text is
+  // persisted both as a user message and as promptDraft and reappears after reopening the session.
   prompt.value = "";
+  scheduleAutoSave({ reason: 'user-message', immediate: true });
   return true;
 };
 
@@ -6459,6 +6461,9 @@ const drainBufferIntoHistory = async () => {
   }
   prompt.value = savedPrompt;
   fileList.value = savedFiles;
+  if (savedPrompt.trim() || savedFiles.length > 0) {
+    scheduleInputDraftAutoSave('buffer-restored-draft');
+  }
   return appendedAny;
 };
 

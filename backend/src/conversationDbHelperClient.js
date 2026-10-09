@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const path = require('path');
 const { fork } = require('child_process');
 
 const {
@@ -8,7 +9,8 @@ const {
 } = require('./conversationDbHelperDiagnostics.js');
 const {
   cloneConversationRpcTransportValue,
-  deserializeConversationRpcError
+  deserializeConversationRpcError,
+  getConversationRpcTarget
 } = require('./conversationWindowRpc.js');
 
 const DEFAULT_READY_TIMEOUT_MS = 15 * 1000;
@@ -41,7 +43,7 @@ function createConversationDbHelperClient({
   env = {}
 } = {}) {
   const normalizedHelperPath = String(helperPath || '').trim();
-  const normalizedRuntimePath = String(runtimePath || '').trim();
+  const normalizedRuntimePath = String(runtimePath || path.join(path.dirname(normalizedHelperPath), 'conversation_runtime.js')).trim();
   const normalizedDiagnosticPath = String(diagnosticPath || '').trim();
   const normalizedExecPath = String(execPath || '').trim();
   if (!normalizedHelperPath || !normalizedRuntimePath || !normalizedDiagnosticPath || !normalizedExecPath) {
@@ -268,7 +270,22 @@ function createConversationDbHelperClient({
     return state.readyPromise;
   }
 
-  async function saveConversationSnapshot(input = {}, options = {}) {
+  async function invoke(method, args = [], options = {}) {
+    const target = getConversationRpcTarget(method);
+    if (target === null) {
+      throw createHelperError(
+        `conversation_db_helper_composite_method_required:${method}`,
+        'conversation_db_helper_composite_method_required'
+      );
+    }
+    const safeMethod = String(method || '').trim();
+    const inputArgs = Array.isArray(args) ? args : [];
+    if (inputArgs.length > 4) {
+      throw createHelperError(
+        'conversation_db_helper_args_invalid',
+        'conversation_db_helper_args_invalid'
+      );
+    }
     const state = await spawnHelper();
     if (!state || state.terminated || !state.child?.connected) {
       throw createHelperError(
@@ -281,9 +298,9 @@ function createConversationDbHelperClient({
     const operationId = typeof options.operationId === 'string' && options.operationId.trim()
       ? options.operationId.trim()
       : crypto.randomUUID();
-    const counts = snapshotCounts(input);
+    const counts = safeMethod === 'saveConversationSnapshot' ? snapshotCounts(inputArgs[0]) : {};
     const startedAt = Date.now();
-    const safeArgs = cloneConversationRpcTransportValue([input]);
+    const safeArgs = cloneConversationRpcTransportValue(inputArgs);
 
     return await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -296,7 +313,7 @@ function createConversationDbHelperClient({
         record('operation-timeout', {
           helperPid: state.child.pid,
           operationId,
-          method: 'saveConversationSnapshot',
+          method: safeMethod,
           pendingCount: state.pending.size,
           elapsedMs: Date.now() - startedAt,
           ...counts
@@ -309,14 +326,14 @@ function createConversationDbHelperClient({
         reject,
         timer,
         operationId,
-        method: 'saveConversationSnapshot',
+        method: safeMethod,
         counts,
         startedAt
       });
       record('operation-dispatch', {
         helperPid: state.child.pid,
         operationId,
-        method: 'saveConversationSnapshot',
+        method: safeMethod,
         pendingCount: state.pending.size,
         ...counts
       });
@@ -325,7 +342,7 @@ function createConversationDbHelperClient({
         state.child.send({
           id,
           operationId,
-          method: 'saveConversationSnapshot',
+          method: safeMethod,
           args: safeArgs,
           ...(testMode && options.testAction ? { testAction: options.testAction } : {})
         }, (error) => {
@@ -349,6 +366,11 @@ function createConversationDbHelperClient({
       }
     });
   }
+
+  const saveConversationSnapshot = (input = {}, options = {}) => (
+    invoke('saveConversationSnapshot', [input], options)
+  );
+
 
   async function dispose() {
     disposed = true;
@@ -387,6 +409,7 @@ function createConversationDbHelperClient({
 
   return {
     saveConversationSnapshot,
+    invoke,
     dispose,
     getState: () => ({
       sessionId,

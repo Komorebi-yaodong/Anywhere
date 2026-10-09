@@ -14,6 +14,9 @@ const helperDiagnosticSource = fs.readFileSync(path.join(root, 'backend', 'src',
 
 assert.match(appSource, /await loadSession\(opened\.sessionData\);[\s\S]{0,300}autoCloseOnBlur\.value = false;[\s\S]{0,120}syncAutoCloseOnBlurListener\(\);[\s\S]{0,120}await acquireCurrentConversationLease\(\);/, 'restored conversations must disable blur auto-close before acquiring the lease');
 assert.match(appSource, /autoCloseOnBlur\.value && !loading\.value && !compacting\.value/, 'compaction must suppress blur auto-close');
+assert.match(appSource, /appendFullHistory\(\{ role: "user", content: contentForHistory \}\);[\s\S]{0,400}prompt\.value = "";[\s\S]{0,160}scheduleAutoSave\(\{ reason: 'user-message', immediate: true \}\);/, 'consumed prompt must clear before the immediate user-message snapshot');
+assert.match(appSource, /prompt\.value = savedPrompt;[\s\S]{0,220}scheduleInputDraftAutoSave\('buffer-restored-draft'\)/, 'buffer-restored unsent drafts must be persisted after the buffered message snapshot');
+
 assert.match(appSource, /registerConversationWriteLease\?\.\(\{[\s\S]*holderInstanceId: conversationInstanceId,[\s\S]*leaseEpoch: lease\.leaseEpoch/, 'successful lease acquisition must register the lease with the parent window');
 assert.match(appSource, /if \(released\) window\.api\.clearRegisteredConversationWriteLease\?\.\(\);/, 'parent registration must only clear after release succeeds');
 
@@ -26,10 +29,12 @@ assert.match(parentPreloadSource, /const WINDOW_LEASE_PROBE_INTERVAL_MS = 2000/)
 assert.match(parentPreloadSource, /typeof bw\.isDestroyed !== 'function' \|\| bw\.isDestroyed\(\)/);
 assert.match(parentPreloadSource, /typeof bw\.webContents\?\.isCrashed === 'function' && bw\.webContents\.isCrashed\(\)/);
 assert.match(parentPreloadSource, /function releaseRegisteredWindowLease\(senderId, reason = 'closed'\)/);
-assert.match(parentPreloadSource, /getConversationModule\(\)\.releaseWriteLease\(lease\)/);
+assert.match(parentPreloadSource, /conversationDbHelperClient\.invoke\('releaseConversationWriteLease', \[lease\]\)/);
 assert.match(parentPreloadSource, /case 'conversation-lease-register':/);
 assert.match(parentPreloadSource, /case 'conversation-lease-clear':/);
-assert.doesNotMatch(windowPreloadSource, /conversation_runtime\.js/, 'conversation renderer must not load the native SQLite repository');
+const rendererNativePatterns = /getConversationModule|conversation_runtime|conversationStore|sqliteSyncDriver|better-sqlite3|sqlite-native/;
+assert.doesNotMatch(windowPreloadSource, rendererNativePatterns, 'conversation renderer must not load the native SQLite repository');
+assert.doesNotMatch(parentPreloadSource, rendererNativePatterns, 'parent uTools renderer must not load the native SQLite repository');
 assert.match(windowPreloadSource, /createConversationRpcClient/);
 assert.match(parentPreloadSource, /createConversationRpcRequestHandler/);
 assert.match(parentPreloadSource, /windowRpcCapabilityMap\.delete\(senderId\)/);
@@ -38,17 +43,20 @@ assert.match(parentPreloadSource, /crypto\.timingSafeEqual\(expectedBytes, actua
 assert.match(windowPreloadSource, /heartbeatConversationWriteLease: invokeConversationLeaseHeartbeat/, 'conversation lease heartbeat must be single-flight across parent RPC');
 assert.match(parentPreloadSource, /method === 'acquireConversationWriteLease'[\s\S]{0,700}windowConversationLeaseRegistry\.set\(request\.senderId, lease\)/, 'parent must register a successful lease before replying to the child');
 assert.match(parentPreloadSource, /method === 'releaseConversationWriteLease'[\s\S]{0,300}windowConversationLeaseRegistry\.delete\(request\.senderId\)/, 'parent must clear a released lease without waiting for another child message');
-assert.match(parentPreloadSource, /method === 'saveConversationSnapshot'[\s\S]{0,900}conversationDbHelperClient\.saveConversationSnapshot\(input, \{ operationId \}\)/, 'full snapshots must run in the monitored DB helper');
+assert.match(parentPreloadSource, /result = await invokeConversationHelperMethod\(method, args, \{ operationId \}\)/, 'all window conversation methods must run through the DB helper');
+assert.match(parentPreloadSource, /conversationDbHelperClient\.invoke\('getConversationRequestMessages', \[input\]\)/, 'main-panel request history reads must run through the DB helper');
 assert.match(parentPreloadSource, /const operationId = request\.requestId;/, 'child, parent, and helper diagnostics must share one random operation id');
 assert.match(windowPreloadSource, /child-rpc-dispatch/);
-assert.match(parentPreloadSource, /rpc-snapshot-received/);
+assert.match(parentPreloadSource, /rpc-received/);
 assert.match(parentPreloadSource, /window-terminal/);
 assert.match(helperClientSource, /ELECTRON_RUN_AS_NODE: '1'/);
 assert.match(helperClientSource, /serialization: 'advanced'/);
 assert.match(helperClientSource, /windowsHide: true/);
 assert.match(helperClientSource, /conversation_db_helper_exited/);
 assert.doesNotMatch(helperClientSource, /windowMap|\.close\(\)|\.destroy\(\)/, 'helper lifecycle must not control any uTools window');
-assert.match(helperSource, /method !== 'saveConversationSnapshot'/, 'helper must expose only the snapshot operation during diagnostics');
+assert.match(helperSource, /getConversationRpcTarget\(method\)/, 'helper must enforce the shared fixed method whitelist');
+assert.match(helperSource, /repositoryMethod = repository\?\.\[target\]/, 'helper must use only the mapped repository target');
+assert.match(helperClientSource, /getConversationRpcTarget\(method\)/, 'client must reject methods outside the shared whitelist before spawning');
 assert.doesNotMatch(helperDiagnosticSource, /conversationId|holderInstanceId|dirPath|sessionData|fullHistory|chat_show|content/, 'diagnostic logger must not whitelist sensitive conversation fields');
 
 
