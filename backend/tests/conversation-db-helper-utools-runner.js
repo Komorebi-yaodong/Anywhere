@@ -8,7 +8,6 @@ const path = require('path');
 const {
   createConversationDbHelperClient
 } = require('../src/conversationDbHelperClient.js');
-const conversationRepository = require('../src/conversationStore.js');
 
 function sessionData(text) {
   return {
@@ -35,21 +34,6 @@ async function run() {
   let client;
 
   try {
-    await fs.mkdir(conversationDir, { recursive: true });
-    const created = await conversationRepository.createConversation({
-      dirPath: conversationDir,
-      title: 'utools helper test',
-      sessionData: sessionData('initial')
-    });
-    const conversationId = created.descriptor.conversationId;
-    const holderInstanceId = 'utools-helper-holder';
-    const lease = await conversationRepository.acquireWriteLease({
-      dirPath: conversationDir,
-      conversationId,
-      holderInstanceId,
-      holderApp: 'utools-helper-test'
-    });
-
     client = createConversationDbHelperClient({
       helperPath,
       runtimePath,
@@ -60,6 +44,20 @@ async function run() {
       operationTimeoutMs: 20_000,
       testMode: true
     });
+    await fs.mkdir(conversationDir, { recursive: true });
+    const created = await client.invoke('createConversation', [{
+      dirPath: conversationDir,
+      title: 'utools helper test',
+      sessionData: sessionData('initial')
+    }]);
+    const conversationId = created.descriptor.conversationId;
+    const holderInstanceId = 'utools-helper-holder';
+    const lease = await client.invoke('acquireConversationWriteLease', [{
+      dirPath: conversationDir,
+      conversationId,
+      holderInstanceId,
+      holderApp: 'utools-helper-test'
+    }]);
 
     const first = await client.saveConversationSnapshot({
       dirPath: conversationDir,
@@ -82,14 +80,14 @@ async function run() {
         title: 'utools helper exit',
         sessionData: sessionData('exit')
       }, { testAction: 'exit' }),
-      /conversation_db_helper_(disconnected|exited)/
+      /conversation_db_helper_(exited|breakpoint_exit)/
     );
 
-    const opened = await conversationRepository.openConversation({
+    const opened = await client.invoke('openConversation', [{
       dirPath: conversationDir,
       reference: conversationId,
       activeOnly: true
-    });
+    }]);
     const second = await client.saveConversationSnapshot({
       dirPath: conversationDir,
       conversationId,
@@ -102,12 +100,12 @@ async function run() {
     const secondPid = client.getState().helperPid;
     assert.notStrictEqual(secondPid, firstPid);
 
-    await conversationRepository.releaseWriteLease({
+    await client.invoke('releaseConversationWriteLease', [{
       dirPath: conversationDir,
       conversationId,
       holderInstanceId,
       leaseEpoch: lease.leaseEpoch
-    });
+    }]);
 
     console.log(JSON.stringify({
       ok: true,

@@ -6,6 +6,10 @@ const {
 const {
   getConversationRpcTarget
 } = require('./conversationWindowRpc.js');
+const {
+  serializeJsonLine,
+  createJsonLineParser
+} = require('./conversationDbHelperJsonProtocol.js');
 
 const runtimePath = String(process.argv[2] || '').trim();
 const diagnosticPath = String(process.argv[3] || '').trim();
@@ -23,6 +27,16 @@ function record(event, fields = {}) {
     modules: process.versions?.modules,
     ...fields
   });
+}
+
+function emitMessage(message) {
+  try {
+    process.stdout.write(`${serializeJsonLine(message)}\n`);
+    return true;
+  } catch (error) {
+    record('protocol-write-failed', { reason: error?.message || error, code: error?.code });
+    return false;
+  }
 }
 
 function serializeError(error) {
@@ -87,9 +101,7 @@ async function handleOperation(message = {}) {
         : (cause?.message || 'conversation_db_helper_request_invalid')
     );
     error.code = error.message;
-    if (typeof process.send === 'function' && id) {
-      process.send({ id, operationId, ok: false, error: serializeError(error) });
-    }
+    if (id) emitMessage({ id, operationId, ok: false, error: serializeError(error) });
     return;
   }
 
@@ -112,9 +124,7 @@ async function handleOperation(message = {}) {
       elapsedMs: Date.now() - startedAt,
       ...counts
     });
-    if (typeof process.send === 'function') {
-      process.send({ id, operationId, ok: true, result });
-    }
+    emitMessage({ id, operationId, ok: true, result });
   } catch (error) {
     record('operation-failed', {
       operationId,
@@ -125,24 +135,30 @@ async function handleOperation(message = {}) {
       code: error?.code,
       ...counts
     });
-    if (typeof process.send === 'function') {
-      process.send({ id, operationId, ok: false, error: serializeError(error) });
-    }
+    emitMessage({ id, operationId, ok: false, error: serializeError(error) });
   }
 }
 
-process.on('message', (message) => {
-  operationQueue = operationQueue
-    .then(() => handleOperation(message))
-    .catch((error) => {
-      record('queue-failed', { reason: error?.message || error, code: error?.code });
-    });
+const inputParser = createJsonLineParser({
+  onMessage: (message) => {
+    operationQueue = operationQueue
+      .then(() => handleOperation(message))
+      .catch((error) => {
+        record('queue-failed', { reason: error?.message || error, code: error?.code });
+      });
+  },
+  onError: (error) => {
+    record('protocol-read-failed', { reason: error?.message || error, code: error?.code });
+    process.exit(2);
+  }
 });
-
-process.on('disconnect', () => {
-  record('parent-disconnected', { expectedExit: true });
-  process.exit(0);
+process.stdin.on('data', (chunk) => inputParser.push(chunk));
+process.stdin.on('end', () => {
+  inputParser.end();
+  record('stdin-ended', { expectedExit: true });
+  operationQueue.finally(() => process.exit(0));
 });
+process.stdin.resume();
 
 process.on('uncaughtException', (error) => {
   record('uncaught-exception', { reason: error?.message || error, code: error?.code });
@@ -154,15 +170,13 @@ process.on('unhandledRejection', (error) => {
   process.exit(1);
 });
 
-if (typeof process.send === 'function') {
-  process.send({
-    type: 'ready',
-    pid: process.pid,
-    versions: {
-      node: process.versions?.node || '',
-      electron: process.versions?.electron || '',
-      modules: process.versions?.modules || ''
-    }
-  });
-}
+emitMessage({
+  type: 'ready',
+  pid: process.pid,
+  versions: {
+    node: process.versions?.node || '',
+    electron: process.versions?.electron || '',
+    modules: process.versions?.modules || ''
+  }
+});
 record('ready');

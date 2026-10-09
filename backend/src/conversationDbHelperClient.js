@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 const path = require('path');
-const { fork } = require('child_process');
+const { spawn } = require('child_process');
 
 const {
   appendConversationDbHelperDiagnostic
@@ -12,15 +12,25 @@ const {
   deserializeConversationRpcError,
   getConversationRpcTarget
 } = require('./conversationWindowRpc.js');
+const {
+  serializeJsonLine,
+  createJsonLineParser
+} = require('./conversationDbHelperJsonProtocol.js');
 
 const DEFAULT_READY_TIMEOUT_MS = 15 * 1000;
 const DEFAULT_OPERATION_TIMEOUT_MS = 5 * 60 * 1000;
+const HELPER_EXIT_BREAKPOINT = 0x80000003;
 
 function createHelperError(message, code, fields = {}) {
   const error = new Error(message);
   error.code = code;
   Object.assign(error, fields);
   return error;
+}
+
+function normalizeExitCode(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? (numeric >>> 0) : null;
 }
 
 function snapshotCounts(input = {}) {
@@ -94,28 +104,82 @@ function createConversationDbHelperClient({
     });
   }
 
+  function handleHelperMessage(state, message) {
+    if (state.terminated || !message || typeof message !== 'object') return;
+    if (message.type === 'ready') {
+      const modules = String(message.versions?.modules || '');
+      if (expectedModuleAbi && modules !== String(expectedModuleAbi)) {
+        const error = createHelperError(
+          `conversation_db_helper_abi_mismatch:expected=${expectedModuleAbi},actual=${modules || 'unknown'}`,
+          'conversation_db_helper_abi_mismatch'
+        );
+        terminateState(state, error, { event: 'ready-abi-mismatch' });
+        try { state.child.kill(); } catch {}
+        return;
+      }
+      clearTimeout(state.readyTimer);
+      if (!state.readySettled) {
+        state.readySettled = true;
+        state.resolveReady(state);
+      }
+      record('ready', {
+        helperPid: state.child.pid,
+        connected: state.child.exitCode == null,
+        node: message.versions?.node,
+        electron: message.versions?.electron,
+        modules
+      });
+      return;
+    }
+
+    const id = typeof message.id === 'string' ? message.id : '';
+    const pending = state.pending.get(id);
+    if (!pending) return;
+    state.pending.delete(id);
+    clearTimeout(pending.timer);
+    if (message.ok === true) {
+      record('operation-complete', {
+        helperPid: state.child.pid,
+        operationId: pending.operationId,
+        method: pending.method,
+        ok: true,
+        elapsedMs: Date.now() - pending.startedAt,
+        ...pending.counts
+      });
+      pending.resolve(message.result);
+    } else {
+      const error = deserializeConversationRpcError(message.error);
+      record('operation-failed', {
+        helperPid: state.child.pid,
+        operationId: pending.operationId,
+        method: pending.method,
+        ok: false,
+        elapsedMs: Date.now() - pending.startedAt,
+        reason: error.message,
+        code: error.code,
+        ...pending.counts
+      });
+      pending.reject(error);
+    }
+  }
+
   function spawnHelper() {
     if (disposed) {
-      return Promise.reject(createHelperError(
-        'conversation_db_helper_disposed',
-        'conversation_db_helper_disposed'
-      ));
+      return Promise.reject(createHelperError('conversation_db_helper_disposed', 'conversation_db_helper_disposed'));
     }
     if (currentState && !currentState.terminated) return currentState.readyPromise;
 
-    record('spawn-start');
+    record('spawn-start', { reason: 'stdio-jsonl' });
     let child;
     try {
-      child = fork(normalizedHelperPath, [normalizedRuntimePath, normalizedDiagnosticPath, sessionId], {
-        execPath: normalizedExecPath,
+      child = spawn(normalizedExecPath, [normalizedHelperPath, normalizedRuntimePath, normalizedDiagnosticPath, sessionId], {
         env: {
           ...process.env,
           ...env,
           ELECTRON_RUN_AS_NODE: '1',
           ...(testMode ? { ANYWHERE_DB_HELPER_TEST_MODE: '1' } : {})
         },
-        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-        serialization: 'advanced',
+        stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true
       });
     } catch (error) {
@@ -135,7 +199,8 @@ function createConversationDbHelperClient({
       rejectReady: null,
       exitSettled: false,
       exitPromise: null,
-      resolveExit: null
+      resolveExit: null,
+      stdoutParser: null
     };
     state.readyPromise = new Promise((resolve, reject) => {
       state.resolveReady = resolve;
@@ -145,78 +210,29 @@ function createConversationDbHelperClient({
       state.resolveExit = resolve;
     });
     currentState = state;
-    record('spawned', { helperPid: child.pid, connected: child.connected === true });
+    record('spawned', { helperPid: child.pid, connected: true, reason: 'stdio-jsonl' });
 
     state.readyTimer = setTimeout(() => {
-      const error = createHelperError(
-        'conversation_db_helper_ready_timeout',
-        'conversation_db_helper_ready_timeout'
-      );
+      const error = createHelperError('conversation_db_helper_ready_timeout', 'conversation_db_helper_ready_timeout');
       terminateState(state, error, { event: 'ready-timeout' });
       try { child.kill(); } catch {}
     }, Math.max(100, Number(readyTimeoutMs) || DEFAULT_READY_TIMEOUT_MS));
 
-    child.stdout?.on('data', () => {});
-    child.stderr?.on('data', () => {});
-
-    child.on('message', (message) => {
-      if (state.terminated || !message || typeof message !== 'object') return;
-      if (message.type === 'ready') {
-        const modules = String(message.versions?.modules || '');
-        if (expectedModuleAbi && modules !== String(expectedModuleAbi)) {
-          const error = createHelperError(
-            `conversation_db_helper_abi_mismatch:expected=${expectedModuleAbi},actual=${modules || 'unknown'}`,
-            'conversation_db_helper_abi_mismatch'
-          );
-          terminateState(state, error, { event: 'ready-abi-mismatch' });
-          try { child.kill(); } catch {}
-          return;
-        }
-        clearTimeout(state.readyTimer);
-        if (!state.readySettled) {
-          state.readySettled = true;
-          state.resolveReady(state);
-        }
-        record('ready', {
-          helperPid: child.pid,
-          connected: child.connected === true,
-          node: message.versions?.node,
-          electron: message.versions?.electron,
-          modules
-        });
-        return;
-      }
-
-      const id = typeof message.id === 'string' ? message.id : '';
-      const pending = state.pending.get(id);
-      if (!pending) return;
-      state.pending.delete(id);
-      clearTimeout(pending.timer);
-      if (message.ok === true) {
-        record('operation-complete', {
-          helperPid: child.pid,
-          operationId: pending.operationId,
-          method: pending.method,
-          ok: true,
-          elapsedMs: Date.now() - pending.startedAt,
-          ...pending.counts
-        });
-        pending.resolve(message.result);
-      } else {
-        const error = deserializeConversationRpcError(message.error);
-        record('operation-failed', {
-          helperPid: child.pid,
-          operationId: pending.operationId,
-          method: pending.method,
-          ok: false,
-          elapsedMs: Date.now() - pending.startedAt,
-          reason: error.message,
-          code: error.code,
-          ...pending.counts
-        });
-        pending.reject(error);
+    state.stdoutParser = createJsonLineParser({
+      onMessage: (message) => handleHelperMessage(state, message),
+      onError: (error) => {
+        const wrapped = createHelperError(
+          `conversation_db_helper_protocol_read_failed:${error?.message || error}`,
+          'conversation_db_helper_protocol_read_failed',
+          { cause: error }
+        );
+        terminateState(state, wrapped, { event: 'protocol-read-failed' });
+        try { child.kill(); } catch {}
       }
     });
+    child.stdout.on('data', (chunk) => state.stdoutParser.push(chunk));
+    child.stdout.on('end', () => state.stdoutParser.end());
+    child.stderr.on('data', () => {});
 
     child.on('error', (error) => {
       const wrapped = createHelperError(
@@ -227,42 +243,34 @@ function createConversationDbHelperClient({
       terminateState(state, wrapped, { event: 'helper-error' });
     });
 
-    child.on('disconnect', () => {
-      if (state.terminated || state.expectedExit) return;
-      const error = createHelperError(
-        'conversation_db_helper_disconnected',
-        'conversation_db_helper_disconnected',
-        { operationOutcomeUnknown: true }
-      );
-      terminateState(state, error, { event: 'helper-disconnected' });
-    });
-
     child.on('exit', (code, signal) => {
       if (!state.exitSettled) {
         state.exitSettled = true;
         state.resolveExit({ code, signal });
       }
+      const normalizedCode = normalizeExitCode(code);
       if (state.terminated) {
         record('helper-exit-observed', {
           helperPid: child.pid,
-          exitCode: code,
+          exitCode: normalizedCode,
           signal,
           expectedExit: state.expectedExit === true
         });
         return;
       }
+      const isBreakpoint = normalizedCode === HELPER_EXIT_BREAKPOINT;
       const error = createHelperError(
-        `conversation_db_helper_exited:code=${code == null ? 'null' : code},signal=${signal || 'none'}`,
-        'conversation_db_helper_exited',
+        `conversation_db_helper_exited:code=${normalizedCode == null ? 'null' : normalizedCode},signal=${signal || 'none'}`,
+        isBreakpoint ? 'conversation_db_helper_breakpoint_exit' : 'conversation_db_helper_exited',
         {
-          exitCode: code,
+          exitCode: normalizedCode,
           signal: signal || '',
           operationOutcomeUnknown: state.pending.size > 0
         }
       );
       terminateState(state, error, {
-        event: 'helper-exited',
-        exitCode: code,
+        event: isBreakpoint ? 'helper-breakpoint-exited' : 'helper-exited',
+        exitCode: normalizedCode,
         signal
       });
     });
@@ -281,17 +289,12 @@ function createConversationDbHelperClient({
     const safeMethod = String(method || '').trim();
     const inputArgs = Array.isArray(args) ? args : [];
     if (inputArgs.length > 4) {
-      throw createHelperError(
-        'conversation_db_helper_args_invalid',
-        'conversation_db_helper_args_invalid'
-      );
+      throw createHelperError('conversation_db_helper_args_invalid', 'conversation_db_helper_args_invalid');
     }
+
     const state = await spawnHelper();
-    if (!state || state.terminated || !state.child?.connected) {
-      throw createHelperError(
-        'conversation_db_helper_unavailable',
-        'conversation_db_helper_unavailable'
-      );
+    if (!state || state.terminated || state.child.exitCode != null || state.child.stdin.destroyed) {
+      throw createHelperError('conversation_db_helper_unavailable', 'conversation_db_helper_unavailable');
     }
 
     const id = crypto.randomUUID();
@@ -338,14 +341,24 @@ function createConversationDbHelperClient({
         ...counts
       });
 
+      let line;
       try {
-        state.child.send({
+        line = `${serializeJsonLine({
           id,
           operationId,
           method: safeMethod,
           args: safeArgs,
           ...(testMode && options.testAction ? { testAction: options.testAction } : {})
-        }, (error) => {
+        })}\n`;
+      } catch (error) {
+        state.pending.delete(id);
+        clearTimeout(timer);
+        reject(error);
+        return;
+      }
+
+      try {
+        state.child.stdin.write(line, 'utf8', (error) => {
           if (!error) return;
           const pending = state.pending.get(id);
           if (!pending) return;
@@ -371,21 +384,16 @@ function createConversationDbHelperClient({
     invoke('saveConversationSnapshot', [input], options)
   );
 
-
   async function dispose() {
     disposed = true;
     const state = currentState;
     if (!state) return;
     if (!state.terminated) {
       state.expectedExit = true;
-      const error = createHelperError(
-        'conversation_db_helper_disposed',
-        'conversation_db_helper_disposed'
-      );
+      const error = createHelperError('conversation_db_helper_disposed', 'conversation_db_helper_disposed');
       terminateState(state, error, { event: 'disposed' });
       try {
-        if (state.child.connected) state.child.disconnect();
-        else state.child.kill();
+        state.child.stdin.end();
       } catch {
         try { state.child.kill(); } catch {}
       }
@@ -408,13 +416,13 @@ function createConversationDbHelperClient({
   }
 
   return {
-    saveConversationSnapshot,
     invoke,
+    saveConversationSnapshot,
     dispose,
     getState: () => ({
       sessionId,
       helperPid: currentState?.child?.pid || null,
-      connected: Boolean(currentState && !currentState.terminated && currentState.child?.connected),
+      connected: Boolean(currentState && !currentState.terminated && currentState.child?.exitCode == null),
       pendingCount: currentState?.pending?.size || 0
     })
   };
@@ -423,5 +431,6 @@ function createConversationDbHelperClient({
 module.exports = {
   DEFAULT_READY_TIMEOUT_MS,
   DEFAULT_OPERATION_TIMEOUT_MS,
+  HELPER_EXIT_BREAKPOINT,
   createConversationDbHelperClient
 };

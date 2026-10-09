@@ -11,6 +11,7 @@ const manifestPath = path.join(sourceRoot, 'manifest.json');
 const helperFiles = [
   'conversation_db_helper.js',
   'conversationDbHelperDiagnostics.js',
+  'conversationDbHelperJsonProtocol.js',
   'conversationWindowRpc.js'
 ];
 
