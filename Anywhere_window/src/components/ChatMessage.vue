@@ -387,7 +387,8 @@ const preprocessKatex = (text) => {
 
   let processedText = preprocessKatexPlainText(protectedText);
   protectedMap.forEach((segment, placeholder) => {
-    processedText = processedText.replaceAll(placeholder, segment);
+    // Protected code may contain `$&`, `$'`, `$$`, etc.; restore it literally.
+    processedText = processedText.replaceAll(placeholder, () => segment);
   });
 
   return processedText;
@@ -416,7 +417,8 @@ const normalizeWindowsLocalMarkdownImagePaths = (markdown) => {
   });
 
   protectedMap.forEach((segment, placeholder) => {
-    protectedText = protectedText.replaceAll(placeholder, segment);
+    // Keep protected Markdown literally intact; never interpret replacement tokens.
+    protectedText = protectedText.replaceAll(placeholder, () => segment);
   });
   return protectedText;
 };
