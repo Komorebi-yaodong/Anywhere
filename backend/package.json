@@ -16,6 +16,7 @@
     "test:conversation-db-helper": "node tests/conversation-db-helper-json-protocol.test.js && node tests/conversation-db-helper.test.js && node tests/conversation-db-helper-all-api.test.js && node tests/conversation-db-helper-utools.test.js",
     "test:conversation-message-delete": "node tests/conversation-message-delete.test.js",
     "test:conversation-cross-client-ui": "node tests/conversation-cross-client-ui.test.js",
+    "test:conversation-persistence": "node tests/conversation-persistence-lifecycle.test.js && node tests/conversation-persistence-roundtrip.test.js",
     "test:compaction-interaction": "node tests/compaction-interaction-restore.test.js",
     "test:conversation-compaction-restore": "node tests/conversation-compaction-restore.test.js"
   },

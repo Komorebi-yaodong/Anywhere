@@ -147,6 +147,19 @@ async function writeLocalProjects(dirPath, data) {
     return { ok: true, path: filePath };
 }
 
+async function writeLocalProjectsBestEffort(dirPath, data, writer = writeLocalProjects) {
+    try {
+        await writer(dirPath, data);
+        return null;
+    } catch (error) {
+        console.warn('[conversation] SQLite commit succeeded but projects index sync failed:', error?.message || error);
+        return {
+            code: 'conversation_index_sync_failed',
+            message: 'conversation_saved_but_index_sync_failed'
+        };
+    }
+}
+
 function removeBasenameFromProjects(projects, basename) {
     const target = normalizeText(basename).trim();
     return target ? projects.map((project) => ({ ...project, files: project.files.filter((file) => file !== target) })) : projects;
@@ -303,6 +316,7 @@ module.exports = {
     serializeProjectsYaml,
     readLocalProjects,
     writeLocalProjects,
+    writeLocalProjectsBestEffort,
     mergeFileAssignment,
     mergeProjectAssignment,
     registerConversation,

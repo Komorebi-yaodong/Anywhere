@@ -1,0 +1,126 @@
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { pathToFileURL } = require('url');
+
+async function run() {
+  const root = path.resolve(__dirname, '..', '..');
+  const appSource = fs.readFileSync(path.join(root, 'Anywhere_window', 'src', 'App.vue'), 'utf8');
+  const queueModule = await import(pathToFileURL(path.join(root, 'Anywhere_window', 'src', 'utils', 'conversationMutationQueue.js')).href);
+  const {
+    completeConversationClose,
+    createConversationMutationQueue,
+    mergeConversationMutationRequests
+  } = queueModule;
+
+  const merged = mergeConversationMutationRequests(
+    { reason: 'config', version: 2, stateOnly: true, force: false, skipProjectAssignment: true },
+    { reason: 'message', version: 3, stateOnly: false, force: true, skipProjectAssignment: false }
+  );
+  assert.deepStrictEqual(merged, {
+    reason: 'message',
+    version: 3,
+    stateOnly: false,
+    force: true,
+    skipProjectAssignment: false
+  });
+
+  let releaseFirst;
+  let markFirstStarted;
+  const firstStarted = new Promise((resolve) => { markFirstStarted = resolve; });
+  const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+  const calls = [];
+  const queue = createConversationMutationQueue(async (request) => {
+    calls.push({ ...request });
+    if (request.version === 1) {
+      markFirstStarted();
+      await firstGate;
+    }
+    return true;
+  });
+
+  const firstDrain = queue.enqueue({ reason: 'old-snapshot', version: 1, stateOnly: false });
+  await firstStarted;
+  const configDrain = queue.enqueue({ reason: 'config', version: 2, stateOnly: true });
+  const closeDrain = queue.enqueue({ reason: 'window-close-final', version: 3, stateOnly: false, force: true });
+  releaseFirst();
+  assert.strictEqual(await firstDrain, true);
+  assert.strictEqual(await configDrain, true);
+  assert.strictEqual(await closeDrain, true);
+  assert.strictEqual(calls.length, 2);
+  assert.strictEqual(calls[1].version, 3);
+  assert.strictEqual(calls[1].stateOnly, false);
+  assert.strictEqual(calls[1].force, true);
+
+  let releaseFailedOld;
+  let markFailedOldStarted;
+  const failedOldStarted = new Promise((resolve) => { markFailedOldStarted = resolve; });
+  const failedOldGate = new Promise((resolve) => { releaseFailedOld = resolve; });
+  const recoveryCalls = [];
+  const recoveryQueue = createConversationMutationQueue(async (request) => {
+    recoveryCalls.push({ ...request });
+    if (request.version === 4) {
+      markFailedOldStarted();
+      await failedOldGate;
+      return false;
+    }
+    return true;
+  });
+  const failedOldDrain = recoveryQueue.enqueue({ reason: 'old-failed', version: 4, stateOnly: true });
+  await failedOldStarted;
+  const recoveredCloseDrain = recoveryQueue.enqueue({ reason: 'window-close-final', version: 5, stateOnly: false });
+  releaseFailedOld();
+  assert.strictEqual(await failedOldDrain, false);
+  assert.strictEqual(await recoveredCloseDrain, true, 'a later full snapshot may durably cover an earlier failed mutation');
+  assert.deepStrictEqual(recoveryCalls.map((request) => request.version), [4, 5]);
+
+  const failedCloseEvents = [];
+  await assert.rejects(
+    completeConversationClose({
+      persist: async () => false,
+      release: async () => { failedCloseEvents.push('release'); },
+      close: async () => { failedCloseEvents.push('close'); }
+    }),
+    /conversation_close_save_incomplete/
+  );
+  assert.deepStrictEqual(failedCloseEvents, [], 'failed persistence must keep the lease and window open');
+
+  const successfulCloseEvents = [];
+  assert.strictEqual(await completeConversationClose({
+    persist: async () => { successfulCloseEvents.push('persist'); return true; },
+    release: async () => { successfulCloseEvents.push('release'); },
+    close: async () => { successfulCloseEvents.push('close'); }
+  }), true);
+  assert.deepStrictEqual(successfulCloseEvents, ['persist', 'release', 'close']);
+
+  assert.doesNotMatch(appSource, /skipQueueWhenBusy|queuedAutoSaveRequest/);
+  assert.match(appSource, /const persistLatestSessionBeforeClose = async[\s\S]{0,2200}await autoSaveMutationQueue\.whenIdle\(\)[\s\S]{0,700}lastPersistedSessionVersion >= targetVersion/);
+  assert.match(appSource, /return await completeConversationClose\(\{[\s\S]{0,500}persistLatestSessionBeforeClose\(shouldForceSave\)[\s\S]{0,300}release: releaseCurrentConversationLease/);
+  assert.match(appSource, /watch\(\[model, selectedVoice, tempReasoningEffort, sessionMcpServerIds, sessionSkillIds, isAutoApproveTools\]/);
+  assert.match(appSource, /state: getSessionRequestConfigStatePatch\(\)/);
+  assert.match(appSource, /typeof jsonData\.isAutoApproveTools === 'boolean'/);
+  assert.match(appSource, /const isClosingWindow = ref\(false\)/);
+  assert.match(appSource, /settlementPromise: turnSettlementPromise,[\s\S]{0,120}resolveSettlement: resolveTurnSettlement/);
+  assert.match(appSource, /turnMeta\.resolveSettlement\?\.\(\)/);
+  assert.match(appSource, /const assistantSettlementPromise = activeAssistantTurnMeta\?\.settlementPromise[\s\S]{0,240}waitForAssistantTurnToSettleBeforeClose\(assistantSettlementPromise\)/);
+
+  assert.match(appSource, /isRestoringSessionSnapshot \|\| conversationReadOnly\.value \|\| conversationLeasePending\.value/);
+  assert.match(appSource, /const hasUnpersistedMutations = sessionMutationVersion > lastPersistedSessionVersion[\s\S]{0,450}conversation_unpersisted_changes_without_write_access/);
+
+  assert.match(appSource, /const waitForPendingWindowMutationsBeforeClose = async[\s\S]{0,900}activeApplyMcpPromise/);
+  assert.match(appSource, /if \(isClosingWindow\.value \|\| !ensureConversationWriteAccess\(true\)\) return/);
+  assert.match(appSource, /await waitForAssistantTurnToSettleBeforeClose\(assistantSettlementPromise\);[\s\S]{0,120}await waitForPendingWindowMutationsBeforeClose\(\)/);
+
+  assert.match(appSource, /if \(!added\) return;[\s\S]{0,500}if \(isClosingWindow\.value\) return;[\s\S]{0,160}loading\.value = true/);
+
+  assert.match(appSource, /:write-locked="conversationReadOnly \|\| conversationLeasePending \|\| isClosingWindow"/);
+
+  console.log('Plugin conversation persistence lifecycle regression passed');
+}
+
+run().catch((error) => {
+  console.error(error?.stack || error);
+  process.exitCode = 1;
+});

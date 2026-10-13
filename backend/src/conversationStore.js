@@ -12,7 +12,8 @@ const {
   registerConversation,
   removeConversation: removeConversationFromProjects,
   updateConversation,
-  writeLocalProjects
+  writeLocalProjects,
+  writeLocalProjectsBestEffort
 } = require('./projects.js');
 
 const SCHEMA_VERSION = 1
@@ -1046,12 +1047,17 @@ async function saveConversationSnapshot({ dirPath, conversationId, expectedRevis
       return { revision: nextRevision, title: nextTitle, updatedAt }
     })
 
-    await writeLocalProjects(dirPath, updateConversation(projects, conversationId, {
+    const warning = await writeLocalProjectsBestEffort(dirPath, updateConversation(projects, conversationId, {
       title: result.title,
       revision: result.revision,
       updatedAt: result.updatedAt
     }))
-    return { ok: true, ...result, descriptor: { ...descriptor, title: result.title, revision: result.revision, updatedAt: result.updatedAt } }
+    return {
+      ok: true,
+      ...result,
+      ...(warning ? { warning } : {}),
+      descriptor: { ...descriptor, title: result.title, revision: result.revision, updatedAt: result.updatedAt }
+    }
   } finally {
     db.close()
   }
@@ -1088,8 +1094,8 @@ async function saveConversationState({ dirPath, conversationId, expectedRevision
       return { revision: nextRevision, title: nextTitle }
     })
     const nextProjects = updateConversation(projects, conversationId, { title: result.title, revision: result.revision, updatedAt: nowIso() })
-    await writeLocalProjects(dirPath, nextProjects)
-    return { ok: true, ...result }
+    const warning = await writeLocalProjectsBestEffort(dirPath, nextProjects)
+    return { ok: true, ...result, ...(warning ? { warning } : {}) }
   } finally { db.close() }
 }
 
