@@ -12,6 +12,7 @@ async function run() {
   const {
     completeConversationClose,
     createConversationMutationQueue,
+    createConversationPersistenceTracker,
     mergeConversationMutationRequests
   } = queueModule;
 
@@ -76,6 +77,23 @@ async function run() {
   assert.strictEqual(await recoveredCloseDrain, true, 'a later full snapshot may durably cover an earlier failed mutation');
   assert.deepStrictEqual(recoveryCalls.map((request) => request.version), [4, 5]);
 
+  const persistenceTracker = createConversationPersistenceTracker();
+  persistenceTracker.markRequired({ version: 1, stateOnly: false });
+  persistenceTracker.markRequired({ version: 2, stateOnly: true });
+  persistenceTracker.markPersisted({ version: 2, stateOnly: true });
+  assert.deepStrictEqual(persistenceTracker.getState(), {
+    requiredMutationVersion: 2,
+    requiredFullSnapshotVersion: 1,
+    persistedMutationVersion: 2,
+    persistedFullSnapshotVersion: 0,
+    hasUnpersistedMutations: false,
+    hasUnpersistedFullSnapshot: true
+  }, 'a successful config patch must not hide an earlier failed full snapshot');
+  persistenceTracker.markRequired({ version: 3, stateOnly: false });
+  persistenceTracker.markPersisted({ version: 3, stateOnly: false });
+  assert.strictEqual(persistenceTracker.getState().hasUnpersistedFullSnapshot, false);
+
+
   const failedCloseEvents = [];
   await assert.rejects(
     completeConversationClose({
@@ -95,8 +113,8 @@ async function run() {
   }), true);
   assert.deepStrictEqual(successfulCloseEvents, ['persist', 'release', 'close']);
 
-  assert.doesNotMatch(appSource, /skipQueueWhenBusy|queuedAutoSaveRequest/);
-  assert.match(appSource, /const persistLatestSessionBeforeClose = async[\s\S]{0,2200}await autoSaveMutationQueue\.whenIdle\(\)[\s\S]{0,700}lastPersistedSessionVersion >= targetVersion/);
+  assert.doesNotMatch(appSource, /skipQueueWhenBusy|queuedAutoSaveRequest|lastPersistedSessionVersion/);
+  assert.match(appSource, /const persistLatestSessionBeforeClose = async[\s\S]{0,2400}await autoSaveMutationQueue\.whenIdle\(\)[\s\S]{0,900}persistedFullSnapshotVersion >= targetVersion/);
   assert.match(appSource, /return await completeConversationClose\(\{[\s\S]{0,500}persistLatestSessionBeforeClose\(shouldForceSave\)[\s\S]{0,300}release: releaseCurrentConversationLease/);
   assert.match(appSource, /watch\(\[model, selectedVoice, tempReasoningEffort, sessionMcpServerIds, sessionSkillIds, isAutoApproveTools\]/);
   assert.match(appSource, /state: getSessionRequestConfigStatePatch\(\)/);
@@ -107,7 +125,9 @@ async function run() {
   assert.match(appSource, /const assistantSettlementPromise = activeAssistantTurnMeta\?\.settlementPromise[\s\S]{0,240}waitForAssistantTurnToSettleBeforeClose\(assistantSettlementPromise\)/);
 
   assert.match(appSource, /isRestoringSessionSnapshot \|\| conversationReadOnly\.value \|\| conversationLeasePending\.value/);
-  assert.match(appSource, /const hasUnpersistedMutations = sessionMutationVersion > lastPersistedSessionVersion[\s\S]{0,450}conversation_unpersisted_changes_without_write_access/);
+  assert.match(appSource, /const hasUnpersistedSession = persistenceState\.hasUnpersistedMutations \|\| persistenceState\.hasUnpersistedFullSnapshot[\s\S]{0,450}conversation_unpersisted_changes_without_write_access/);
+  assert.match(appSource, /conversationPersistenceTracker\.markPersisted\(\{ version, stateOnly: false \}\)/);
+  assert.match(appSource, /conversationPersistenceTracker\.markPersisted\(\{ version, stateOnly: true \}\)/);
 
   assert.match(appSource, /const waitForPendingWindowMutationsBeforeClose = async[\s\S]{0,900}activeApplyMcpPromise/);
   assert.match(appSource, /if \(isClosingWindow\.value \|\| !ensureConversationWriteAccess\(true\)\) return/);

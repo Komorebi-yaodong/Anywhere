@@ -13,7 +13,7 @@ import TaskPanel from './components/TaskPanel.vue';
 
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, formatToolResult, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
-import { completeConversationClose, createConversationMutationQueue, mergeConversationMutationRequests as mergeAutoSaveRequests } from './utils/conversationMutationQueue.js';
+import { completeConversationClose, createConversationMutationQueue, createConversationPersistenceTracker, mergeConversationMutationRequests as mergeAutoSaveRequests } from './utils/conversationMutationQueue.js';
 
 const conversationOwnerId = ref('');
 
@@ -450,7 +450,7 @@ let autoSaveExecutionPromise = null;
 let conversationMetadataMutationPromise = null;
 
 let sessionMutationVersion = 0;
-let lastPersistedSessionVersion = 0;
+const conversationPersistenceTracker = createConversationPersistenceTracker();
 let lastAutoSaveAt = 0;
 let lastAutoSaveError = null;
 
@@ -2648,10 +2648,15 @@ const persistLatestSessionBeforeClose = async (shouldForceSave) => {
     const targetVersion = Number(request.version) || sessionMutationVersion;
     const saved = await executeAutoSaveRequest(request);
     await autoSaveMutationQueue.whenIdle();
-    if (lastPersistedSessionVersion < targetVersion && saved !== true) {
+    const persistenceState = conversationPersistenceTracker.getState();
+    if (persistenceState.persistedFullSnapshotVersion < targetVersion && saved !== true) {
       throw lastAutoSaveError || new Error('conversation_close_save_incomplete');
     }
-    if (sessionMutationVersion <= targetVersion && lastPersistedSessionVersion >= targetVersion) return true;
+    if (
+      sessionMutationVersion <= targetVersion
+      && persistenceState.persistedMutationVersion >= targetVersion
+      && persistenceState.persistedFullSnapshotVersion >= targetVersion
+    ) return true;
     request = {
       reason: 'window-close-final-latest',
       force: shouldForceSave,
@@ -2690,16 +2695,17 @@ const closePage = async (force_save = false) => {
     }
 
     const dirPath = currentConversationStorage.value?.dirPath || currentConfig.value?.webdav?.localChatPath || '';
-    const hasUnpersistedMutations = sessionMutationVersion > lastPersistedSessionVersion;
+    const persistenceState = conversationPersistenceTracker.getState();
+    const hasUnpersistedSession = persistenceState.hasUnpersistedMutations || persistenceState.hasUnpersistedFullSnapshot;
     const canWriteCurrentConversation = !currentConversationStorage.value?.conversationId || ensureConversationWriteAccess(false);
-    if (hasUnpersistedMutations && !canWriteCurrentConversation) {
+    if (hasUnpersistedSession && !canWriteCurrentConversation) {
       throw lastAutoSaveError || new Error('conversation_unpersisted_changes_without_write_access');
     }
     const shouldPersistOnClose = Boolean(
       dirPath &&
       (defaultConversationName.value || shouldForceSave) &&
       canWriteCurrentConversation &&
-      (hasUnpersistedMutations || shouldForceSave)
+      (hasUnpersistedSession || shouldForceSave)
     );
     return await completeConversationClose({
       persist: async () => shouldPersistOnClose
@@ -3981,7 +3987,7 @@ const autoSaveSession = async (force = false, { skipProjectAssignment = false, v
       };
     }
 
-    lastPersistedSessionVersion = Math.max(lastPersistedSessionVersion, Number(version) || 0);
+    conversationPersistenceTracker.markPersisted({ version, stateOnly: false });
     lastAutoSaveAt = Date.now();
     lastAutoSaveError = null;
     return true;
@@ -4050,7 +4056,7 @@ const autoSaveSessionRequestConfig = async (force = false, { version = sessionMu
       title: saved.title || storage.title,
       revision: Number(saved.revision) || storage.revision
     };
-    lastPersistedSessionVersion = Math.max(lastPersistedSessionVersion, Number(version) || 0);
+    conversationPersistenceTracker.markPersisted({ version, stateOnly: true });
     lastAutoSaveAt = Date.now();
     lastAutoSaveError = null;
     return true;
@@ -4088,7 +4094,9 @@ const autoSaveMutationQueue = createConversationMutationQueue(async (request = {
 });
 
 const executeAutoSaveRequest = async (request = {}) => {
-  const completionPromise = autoSaveMutationQueue.enqueue(request);
+  const normalizedRequest = { ...request, version: Math.max(0, Number(request.version) || sessionMutationVersion) };
+  conversationPersistenceTracker.markRequired(normalizedRequest);
+  const completionPromise = autoSaveMutationQueue.enqueue(normalizedRequest);
   const idlePromise = autoSaveMutationQueue.whenIdle();
   autoSaveExecutionPromise = idlePromise;
   void idlePromise.finally(() => {
@@ -4103,6 +4111,7 @@ const scheduleAutoSave = ({ reason = 'generic', immediate = false, force = false
 
   let request = { reason, force, stateOnly: Boolean(stateOnly), version: ++sessionMutationVersion };
   request = mergeAutoSaveRequests(scheduledAutoSaveRequest, request);
+  conversationPersistenceTracker.markRequired(request);
 
   if (immediate || force || delay <= 0) {
     clearScheduledAutoSave();

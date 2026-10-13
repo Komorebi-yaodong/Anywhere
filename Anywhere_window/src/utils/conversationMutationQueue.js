@@ -10,6 +10,47 @@ export function mergeConversationMutationRequests(currentRequest = null, incomin
   };
 }
 
+export function createConversationPersistenceTracker() {
+  let requiredMutationVersion = 0;
+  let requiredFullSnapshotVersion = 0;
+  let persistedMutationVersion = 0;
+  let persistedFullSnapshotVersion = 0;
+
+  const normalizeVersion = (version) => Math.max(0, Number(version) || 0);
+  const markRequired = ({ version = 0, stateOnly = false } = {}) => {
+    const normalizedVersion = normalizeVersion(version);
+    requiredMutationVersion = Math.max(requiredMutationVersion, normalizedVersion);
+    if (stateOnly !== true) {
+      requiredFullSnapshotVersion = Math.max(requiredFullSnapshotVersion, normalizedVersion);
+    }
+  };
+  const markPersisted = ({ version = 0, stateOnly = false } = {}) => {
+    const normalizedVersion = normalizeVersion(version);
+    persistedMutationVersion = Math.max(persistedMutationVersion, normalizedVersion);
+    if (stateOnly !== true) {
+      persistedFullSnapshotVersion = Math.max(persistedFullSnapshotVersion, normalizedVersion);
+    }
+  };
+  const getState = () => ({
+    requiredMutationVersion,
+    requiredFullSnapshotVersion,
+    persistedMutationVersion,
+    persistedFullSnapshotVersion,
+    hasUnpersistedMutations: requiredMutationVersion > persistedMutationVersion,
+    hasUnpersistedFullSnapshot: requiredFullSnapshotVersion > persistedFullSnapshotVersion
+  });
+  const reset = () => {
+    requiredMutationVersion = 0;
+    requiredFullSnapshotVersion = 0;
+    persistedMutationVersion = 0;
+    persistedFullSnapshotVersion = 0;
+  };
+
+  return { markRequired, markPersisted, getState, reset };
+}
+
+
+
 export async function completeConversationClose({ persist, release, close } = {}) {
   if (typeof persist !== 'function' || typeof release !== 'function' || typeof close !== 'function') {
     throw new TypeError('conversation_close_callbacks_required');
