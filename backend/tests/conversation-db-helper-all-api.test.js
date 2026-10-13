@@ -94,6 +94,15 @@ async function run() {
       leaseEpoch: lease.leaseEpoch
     }]);
     assert.strictEqual(heartbeat.ok, true);
+    const repaired = await invoke('repairConversationUiLinks', [{
+      dirPath: root,
+      conversationId,
+      expectedRevision: created.descriptor.revision,
+      holderInstanceId,
+      leaseEpoch: lease.leaseEpoch
+    }]);
+    assert.strictEqual(repaired.changed, 0);
+    assert.strictEqual(repaired.revision, created.descriptor.revision);
 
     const saved = await invoke('saveConversationSnapshot', [{
       dirPath: root,
@@ -235,6 +244,7 @@ async function run() {
       'openConversation',
       'loadConversationPage',
       'getConversationRequestMessages',
+      'repairConversationUiLinks',
       'saveConversationSnapshot',
       'saveConversationState',
       'appendConversationMessages',

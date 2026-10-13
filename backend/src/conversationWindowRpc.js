@@ -11,6 +11,7 @@ const CONVERSATION_RPC_METHOD_TARGETS = Object.freeze({
   openConversation: 'openConversation',
   loadConversationPage: 'loadConversationPage',
   getConversationRequestMessages: 'getConversationRequestMessages',
+  repairConversationUiLinks: 'repairConversationUiLinks',
   saveConversationSnapshot: 'saveConversationSnapshot',
   saveConversationState: 'saveConversationState',
   appendConversationMessages: 'appendMessages',

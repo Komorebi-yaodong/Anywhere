@@ -348,6 +348,29 @@ function messageSignature(message = {}) {
   })
 }
 
+function normalizeRenderableContent(content) {
+  if (!Array.isArray(content)) return content ?? null
+  const parts = content.filter((part) => part && !part.isTranscript)
+  if (parts.length > 0 && parts.every((part) => part?.type === 'text')) {
+    return parts.map((part) => part.text ?? '').join('')
+  }
+  return parts.map((part) => (
+    part?.type === 'text' ? { type: 'text', text: part.text ?? '' } : part
+  ))
+}
+
+function messageLinkSignature(message = {}) {
+  const role = normalizeText(message?.role)
+  if (role === 'user' || role === 'assistant') {
+    return JSON.stringify({ role, content: normalizeRenderableContent(message?.content) })
+  }
+  if (role === 'compaction') {
+    return JSON.stringify({ role, snapshotId: normalizeText(message?.snapshotId || message?.id) })
+  }
+  return messageSignature(message)
+}
+
+
 function prepareMigrationMessages(fullHistory = [], chatShow = []) {
   const usedMessageIds = new Set()
   const messages = (Array.isArray(fullHistory) ? fullHistory : []).map((message) => {
@@ -359,19 +382,30 @@ function prepareMigrationMessages(fullHistory = [], chatShow = []) {
     usedMessageIds.add(next.storageId)
     return next
   })
+  const canonicalByStorageId = new Map(messages.map((message) => [message.storageId, message]))
   const signatureQueues = new Map()
   messages.forEach((message) => {
     if (message.role === 'tool') return
-    const signature = messageSignature(message)
+    const signature = messageLinkSignature(message)
     if (!signatureQueues.has(signature)) signatureQueues.set(signature, [])
     signatureQueues.get(signature).push(message.storageId)
   })
+  const claimedStorageIds = new Set()
   const usedUiStorageIds = new Set()
   const uiMessages = (Array.isArray(chatShow) ? chatShow : []).map((message) => {
     const next = clone(message)
-    const signature = messageSignature(next)
-    const queue = signatureQueues.get(signature)
-    next.storageId = normalizeText(next.storageId).trim() || (queue?.shift() || '')
+    const signature = messageLinkSignature(next)
+    const requestedStorageId = normalizeText(next.storageId).trim()
+    const requestedCanonical = canonicalByStorageId.get(requestedStorageId)
+    const requestedIsValid = Boolean(
+      requestedCanonical
+      && !claimedStorageIds.has(requestedStorageId)
+      && messageLinkSignature(requestedCanonical) === signature
+    )
+    const reboundCandidates = (signatureQueues.get(signature) || []).filter((storageId) => !claimedStorageIds.has(storageId))
+    const reboundStorageId = reboundCandidates.length === 1 ? reboundCandidates[0] : ''
+    next.storageId = requestedIsValid ? requestedStorageId : reboundStorageId
+    if (next.storageId) claimedStorageIds.add(next.storageId)
     const requestedUiStorageId = normalizeText(next.uiStorageId).trim()
     next.uiStorageId = requestedUiStorageId && !usedUiStorageIds.has(requestedUiStorageId)
       ? requestedUiStorageId
@@ -549,6 +583,54 @@ function syncUiMessagesIncrementally(db, messages, lowerBound = 1) {
 }
 
 
+function repairUiMessageLinks(db, { apply = true } = {}) {
+  const canonicalRows = db.prepare("SELECT message_uuid, role_code, payload_json FROM messages WHERE role_code IN ('user', 'assistant', 'compaction')").all()
+  const canonicalById = new Map()
+  const candidatesBySignature = new Map()
+  for (const row of canonicalRows) {
+    const message = JSON.parse(row.payload_json)
+    const entry = { id: row.message_uuid, role: row.role_code, signature: messageLinkSignature(message) }
+    canonicalById.set(entry.id, entry)
+    if (!candidatesBySignature.has(entry.signature)) candidatesBySignature.set(entry.signature, [])
+    candidatesBySignature.get(entry.signature).push(entry)
+  }
+
+  const uiRows = db.prepare("SELECT ui_uuid, message_uuid, role_code, payload_json FROM ui_messages WHERE message_uuid IS NOT NULL AND role_code IN ('user', 'assistant', 'compaction') ORDER BY ui_order").all()
+  const claimedCanonicalIds = new Set()
+  const invalidRows = []
+  for (const row of uiRows) {
+    const uiMessage = JSON.parse(row.payload_json)
+    const signature = messageLinkSignature(uiMessage)
+    const linked = canonicalById.get(row.message_uuid)
+    if (linked && linked.role === row.role_code && linked.signature === signature && !claimedCanonicalIds.has(linked.id)) {
+      claimedCanonicalIds.add(linked.id)
+    } else {
+      invalidRows.push({ ...row, signature })
+    }
+  }
+
+  const repairs = []
+  let rebound = 0
+  let unlinked = 0
+  for (const row of invalidRows) {
+    const candidates = (candidatesBySignature.get(row.signature) || []).filter((candidate) => !claimedCanonicalIds.has(candidate.id))
+    const nextMessageId = candidates.length === 1 ? candidates[0].id : null
+    repairs.push({ uiStorageId: row.ui_uuid, messageStorageId: nextMessageId })
+    if (nextMessageId) {
+      claimedCanonicalIds.add(nextMessageId)
+      rebound += 1
+    } else {
+      unlinked += 1
+    }
+  }
+  if (apply && repairs.length > 0) {
+    const updateLink = db.prepare('UPDATE ui_messages SET message_uuid = ? WHERE ui_uuid = ?')
+    for (const repair of repairs) updateLink.run(repair.messageStorageId, repair.uiStorageId)
+  }
+  return { changed: repairs.length, rebound, unlinked, repairs }
+}
+
+
 function replaceUiProjection(db, uiMessages, lowerBound) {
   db.prepare("DELETE FROM ui_messages WHERE role_code = 'system' OR ui_order >= ?").run(lowerBound)
   const systemUi = uiMessages.filter((message) => message?.role === 'system')
@@ -664,6 +746,44 @@ function loadMessages(db, { activeOnly = true, limit = 0, beforeOrdinal = null }
   }))
 }
 
+function resolveValidatedUiMessageStorageId(db, row, canonicalCache = new Map()) {
+  const requestedStorageId = normalizeText(row?.message_uuid).trim()
+  if (!requestedStorageId) return ''
+  let canonical = canonicalCache.get(requestedStorageId)
+  if (canonical === undefined) {
+    canonical = db.prepare('SELECT role_code, payload_json FROM messages WHERE message_uuid = ?').get(requestedStorageId) || null
+    canonicalCache.set(requestedStorageId, canonical)
+  }
+  if (!canonical || canonical.role_code !== row?.role_code) return ''
+  try {
+    return messageLinkSignature(JSON.parse(row.payload_json)) === messageLinkSignature(JSON.parse(canonical.payload_json))
+      ? requestedStorageId
+      : ''
+  } catch {
+    return ''
+  }
+}
+
+
+function materializeUiMessages(db, rows = []) {
+  const canonicalCache = new Map()
+  return rows.map((row) => {
+    const storageId = resolveValidatedUiMessageStorageId(db, row, canonicalCache)
+    const payload = hydrateAttachments(db, JSON.parse(row.payload_json))
+    delete payload.storageId
+    delete payload.storageOrdinal
+    delete payload.uiStorageId
+    delete payload.uiStorageOrder
+    return {
+      ...payload,
+      ...(storageId ? { storageId } : {}),
+      uiStorageId: row.ui_uuid,
+      uiStorageOrder: row.ui_order
+    }
+  })
+}
+
+
 function loadUiMessages(db, { activeOnly = true, limit = 0 } = {}) {
   let rows
   if (activeOnly) {
@@ -672,7 +792,7 @@ function loadUiMessages(db, { activeOnly = true, limit = 0 } = {}) {
     `).get()
     if (lastCompact?.ui_order) {
       rows = db.prepare(`
-        SELECT ui_order, ui_uuid, message_uuid, payload_json
+        SELECT ui_order, ui_uuid, message_uuid, role_code, payload_json
         FROM ui_messages
         WHERE role_code = 'system' OR ui_order >= ?
         ORDER BY ui_order
@@ -682,23 +802,18 @@ function loadUiMessages(db, { activeOnly = true, limit = 0 } = {}) {
   if (!rows) {
     if (Number(limit) > 0) {
       const tailRows = db.prepare(`
-        SELECT ui_order, ui_uuid, message_uuid, payload_json FROM (
-          SELECT ui_order, ui_uuid, message_uuid, payload_json
+        SELECT ui_order, ui_uuid, message_uuid, role_code, payload_json FROM (
+          SELECT ui_order, ui_uuid, message_uuid, role_code, payload_json
           FROM ui_messages WHERE role_code != 'system' ORDER BY ui_order DESC LIMIT ?
         ) ORDER BY ui_order
       `).all(Math.floor(Number(limit)))
-      const systemRows = db.prepare("SELECT ui_order, ui_uuid, message_uuid, payload_json FROM ui_messages WHERE role_code = 'system' ORDER BY ui_order").all()
+      const systemRows = db.prepare("SELECT ui_order, ui_uuid, message_uuid, role_code, payload_json FROM ui_messages WHERE role_code = 'system' ORDER BY ui_order").all()
       rows = [...systemRows, ...tailRows]
     } else {
-      rows = db.prepare('SELECT ui_order, ui_uuid, message_uuid, payload_json FROM ui_messages ORDER BY ui_order').all()
+      rows = db.prepare('SELECT ui_order, ui_uuid, message_uuid, role_code, payload_json FROM ui_messages ORDER BY ui_order').all()
     }
   }
-  return rows.map((row) => ({
-    ...hydrateAttachments(db, JSON.parse(row.payload_json)),
-    ...(row.message_uuid ? { storageId: row.message_uuid } : {}),
-    uiStorageId: row.ui_uuid,
-    uiStorageOrder: row.ui_order
-  }))
+  return materializeUiMessages(db, rows)
 }
 
 async function migrateJsonConversation({ dirPath, jsonBasename, instanceId = '', appType = 'desktop' } = {}) {
@@ -942,19 +1057,15 @@ async function loadConversationPage({ dirPath, conversationId, beforeOrdinal = n
     const safeUiBefore = beforeUiOrder !== null && beforeUiOrder !== undefined && beforeUiOrder !== '' && Number.isFinite(Number(beforeUiOrder))
       ? Number(beforeUiOrder)
       : null
-    const uiMessages = safeUiBefore != null
+    const uiRows = safeUiBefore != null
       ? db.prepare(`
-          SELECT ui_order, ui_uuid, message_uuid, payload_json FROM (
-            SELECT ui_order, ui_uuid, message_uuid, payload_json
+          SELECT ui_order, ui_uuid, message_uuid, role_code, payload_json FROM (
+            SELECT ui_order, ui_uuid, message_uuid, role_code, payload_json
             FROM ui_messages WHERE ui_order < ? ORDER BY ui_order DESC LIMIT ?
           ) ORDER BY ui_order
-        `).all(safeUiBefore, Math.max(1, Number(pageSize) || 200)).map((row) => ({
-          ...hydrateAttachments(db, JSON.parse(row.payload_json)),
-          ...(row.message_uuid ? { storageId: row.message_uuid } : {}),
-          uiStorageId: row.ui_uuid,
-          uiStorageOrder: row.ui_order
-        }))
+        `).all(safeUiBefore, Math.max(1, Number(pageSize) || 200))
       : []
+    const uiMessages = materializeUiMessages(db, uiRows)
     const loadedFromOrdinal = messages.find((message) => message.role !== 'system')?.storageOrdinal || 0
     const loadedFromUiOrder = uiMessages.find((message) => message.role !== 'system')?.uiStorageOrder || 0
     return {
@@ -1098,6 +1209,88 @@ async function saveConversationState({ dirPath, conversationId, expectedRevision
     return { ok: true, ...result, ...(warning ? { warning } : {}) }
   } finally { db.close() }
 }
+
+async function repairConversationUiLinks({ dirPath, conversationId, expectedRevision, holderInstanceId = '', leaseEpoch = null } = {}) {
+  const projects = await readLocalProjects(dirPath)
+  const descriptor = findConversation(projects, conversationId)
+  if (!descriptor) throw new Error('conversation_not_found')
+  const databasePath = resolveDatabasePath(dirPath, descriptor.dbFile)
+  const inspectDb = openDatabase(databasePath)
+  let preview
+  let initialRow
+  try {
+    initializeSchema(inspectDb)
+    initialRow = getConversationRow(inspectDb)
+    assertConversationWriteLease(inspectDb, { holderInstanceId, leaseEpoch })
+    if (Number.isFinite(Number(expectedRevision)) && Number(expectedRevision) !== Number(initialRow.revision)) {
+      const error = new Error('conversation_revision_conflict')
+      error.currentRevision = initialRow.revision
+      throw error
+    }
+    preview = repairUiMessageLinks(inspectDb, { apply: false })
+  } finally { inspectDb.close() }
+
+  if (preview.changed === 0) {
+    return {
+      ok: true,
+      changed: 0,
+      rebound: 0,
+      unlinked: 0,
+      revision: initialRow.revision,
+      title: initialRow.title,
+      updatedAt: initialRow.updated_at,
+      backupCreated: false
+    }
+  }
+
+  const snapshotDir = path.join(path.dirname(databasePath), '.snapshots')
+  const snapshotPath = path.join(snapshotDir, `${conversationId}-pre-ui-link-repair-${Date.now()}.db`)
+  await fs.mkdir(snapshotDir, { recursive: true })
+  await fs.rm(snapshotPath, { force: true })
+  const backupDb = openDatabase(databasePath)
+  try {
+    assertConversationWriteLease(backupDb, { holderInstanceId, leaseEpoch })
+    await sqliteBackup(backupDb, snapshotPath)
+  } finally { backupDb.close() }
+
+  const db = openDatabase(databasePath)
+  let result
+  try {
+    initializeSchema(db)
+    result = withTransaction(db, () => {
+      const row = getConversationRow(db)
+      assertConversationWriteLease(db, { holderInstanceId, leaseEpoch })
+      if (Number(row.revision) !== Number(initialRow.revision)) {
+        const error = new Error('conversation_revision_conflict')
+        error.currentRevision = row.revision
+        throw error
+      }
+      const repaired = repairUiMessageLinks(db)
+      const updatedAt = nowIso()
+      const revision = Number(row.revision) + 1
+      db.prepare('UPDATE conversation SET updated_at = ?, revision = ? WHERE conversation_id = ?')
+        .run(updatedAt, revision, conversationId)
+      return {
+        changed: repaired.changed,
+        rebound: repaired.rebound,
+        unlinked: repaired.unlinked,
+        revision,
+        title: row.title,
+        updatedAt,
+        backupCreated: true
+      }
+    })
+  } finally { db.close() }
+
+  const warning = await writeLocalProjectsBestEffort(dirPath, updateConversation(projects, conversationId, {
+    title: result.title,
+    revision: result.revision,
+    updatedAt: result.updatedAt
+  }))
+  return { ok: true, ...result, ...(warning ? { warning } : {}) }
+}
+
+
 
 async function appendMessages({ dirPath, conversationId, holderInstanceId = '', leaseEpoch = null, messages = [] } = {}) {
   if (!Array.isArray(messages) || messages.length === 0) return { ok: true, messageIds: [] }
@@ -1573,6 +1766,8 @@ module.exports = {
   listLocalConversations,
   loadConversationPage,
   getConversationRequestMessages,
+  repairConversationUiLinks,
+
   saveConversationSnapshot,
   saveConversationState,
   appendMessages,

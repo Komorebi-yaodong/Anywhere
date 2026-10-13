@@ -245,6 +245,7 @@ window.api = {
     openConversation: (input = {}) => invokeConversationRpc('openConversation', input),
     loadConversationPage: (input = {}) => invokeConversationRpc('loadConversationPage', input),
     getConversationRequestMessages: (input = {}) => invokeConversationRpc('getConversationRequestMessages', input),
+    repairConversationUiLinks: (input = {}) => invokeConversationRpc('repairConversationUiLinks', input),
 
     saveConversationSnapshot: (input = {}) => invokeConversationRpc('saveConversationSnapshot', input),
     saveConversationState: (input = {}) => invokeConversationRpc('saveConversationState', input),

@@ -200,6 +200,7 @@ window.api = {
   openConversation: (input = {}) => conversationDbHelperClient.invoke('openConversation', [input]),
   loadConversationPage: (input = {}) => conversationDbHelperClient.invoke('loadConversationPage', [input]),
   getConversationRequestMessages: (input = {}) => conversationDbHelperClient.invoke('getConversationRequestMessages', [input]),
+  repairConversationUiLinks: (input = {}) => conversationDbHelperClient.invoke('repairConversationUiLinks', [input]),
 
   saveConversationSnapshot: (input = {}) => conversationDbHelperClient.invoke('saveConversationSnapshot', [input]),
   saveConversationState: (input = {}) => conversationDbHelperClient.invoke('saveConversationState', [input]),

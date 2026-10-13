@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
+const { DatabaseSync } = require('../src/sqliteSyncDriver.js');
 const store = require('../src/conversationStore.js');
 const { writeLocalProjectsBestEffort } = require('../src/projects.js');
 
@@ -90,7 +91,8 @@ async function verifyRecoveredUiProjection(root) {
   const opened = await store.openConversation({ dirPath: root, reference: conversationId, activeOnly: true, pageSize: 200 });
   const edited = opened.sessionData;
   const recovered = edited.fullHistory.find((message) => message.storageId === 'projection-recovered');
-  edited.chat_show.splice(2, 0, { ...recovered, id: 99, uiStorageId: 'ui-projection-recovered' });
+  // Simulate a historical UI cache whose bubble content is correct but storageId points at another canonical message.
+  edited.chat_show.splice(2, 0, { ...recovered, storageId: 'projection-tail', id: 99, uiStorageId: 'ui-projection-recovered' });
   edited.fullHistory = edited.fullHistory.filter((message) => message.storageId !== 'projection-delete');
   edited.chat_show = edited.chat_show.filter((message) => message.storageId !== 'projection-delete');
   edited.activeSkillIds = ['skill-enabled'];
@@ -115,9 +117,75 @@ async function verifyRecoveredUiProjection(root) {
     'projection-tail'
   ]);
   assert.deepStrictEqual(reopened.sessionData.chat_show.map((message) => message.uiStorageOrder), [1, 2, 3, 4, 5]);
+  assert.strictEqual(reopened.sessionData.chat_show.find((message) => message.uiStorageId === 'ui-projection-recovered')?.storageId, 'projection-recovered');
+  assert.strictEqual(reopened.sessionData.fullHistory.some((message) => message.storageId === 'projection-tail'), true);
   assert.strictEqual(reopened.sessionData.fullHistory.some((message) => message.storageId === 'projection-delete'), false);
   assert.deepStrictEqual(reopened.sessionData.activeSkillIds, ['skill-enabled']);
   await store.releaseWriteLease({ dirPath: root, conversationId, holderInstanceId, leaseEpoch: lease.leaseEpoch });
+}
+
+
+async function verifyUiLinkRepair(root) {
+  const created = await store.createConversation({
+    dirPath: root,
+    title: 'ui-link-repair',
+    sessionData: {
+      anywhere_history: true,
+      sessionMetadata: { title: 'ui-link-repair' },
+      fullHistory: [
+        { role: 'user', content: 'repair-user', storageId: 'repair-user' },
+        { role: 'assistant', content: 'repair-assistant', storageId: 'repair-assistant' }
+      ],
+      history: [],
+      chat_show: [
+        { role: 'user', content: [{ type: 'text', text: 'repair-user' }], storageId: 'repair-user', uiStorageId: 'ui-repair-user' },
+        { role: 'assistant', content: 'repair-assistant', storageId: 'repair-assistant', uiStorageId: 'ui-repair-assistant' }
+      ]
+    }
+  });
+  const db = new DatabaseSync(created.databasePath);
+  const canonicalBefore = db.prepare('SELECT ordinal, message_uuid, role_code, payload_json FROM messages ORDER BY ordinal').all();
+  db.prepare('UPDATE ui_messages SET message_uuid = ? WHERE ui_uuid = ?').run('missing-canonical-id', 'ui-repair-user');
+  db.close();
+
+  const isolated = await store.openConversation({ dirPath: root, reference: created.descriptor.conversationId, activeOnly: true, pageSize: 200 });
+  assert.strictEqual(isolated.sessionData.chat_show.find((message) => message.uiStorageId === 'ui-repair-user')?.storageId, undefined);
+
+  const holderInstanceId = 'plugin-ui-link-repair-holder';
+  const lease = await store.acquireWriteLease({ dirPath: root, conversationId: created.descriptor.conversationId, holderInstanceId, holderApp: 'utools-test' });
+  const repaired = await store.repairConversationUiLinks({
+    dirPath: root,
+    conversationId: created.descriptor.conversationId,
+    expectedRevision: created.descriptor.revision,
+    holderInstanceId,
+    leaseEpoch: lease.leaseEpoch
+  });
+  assert.deepStrictEqual({ changed: repaired.changed, rebound: repaired.rebound, unlinked: repaired.unlinked }, { changed: 1, rebound: 1, unlinked: 0 });
+  assert.strictEqual(repaired.revision, created.descriptor.revision + 1);
+  assert.strictEqual(repaired.backupCreated, true);
+  const repairSnapshots = await fs.readdir(path.join(root, '.snapshots'));
+  assert.strictEqual(repairSnapshots.filter((name) => name.includes('pre-ui-link-repair')).length, 1);
+  const noOpRepair = await store.repairConversationUiLinks({
+    dirPath: root,
+    conversationId: created.descriptor.conversationId,
+    expectedRevision: repaired.revision,
+    holderInstanceId,
+    leaseEpoch: lease.leaseEpoch
+  });
+  assert.deepStrictEqual({ changed: noOpRepair.changed, backupCreated: noOpRepair.backupCreated, revision: noOpRepair.revision }, {
+    changed: 0,
+    backupCreated: false,
+    revision: repaired.revision
+  });
+  assert.strictEqual((await fs.readdir(path.join(root, '.snapshots'))).filter((name) => name.includes('pre-ui-link-repair')).length, 1);
+
+  const reopened = await store.openConversation({ dirPath: root, reference: created.descriptor.conversationId, activeOnly: true, pageSize: 200 });
+  assert.strictEqual(reopened.sessionData.chat_show.find((message) => message.uiStorageId === 'ui-repair-user')?.storageId, 'repair-user');
+  const verifyDb = new DatabaseSync(created.databasePath, { readOnly: true });
+  const canonicalAfter = verifyDb.prepare('SELECT ordinal, message_uuid, role_code, payload_json FROM messages ORDER BY ordinal').all();
+  verifyDb.close();
+  assert.deepStrictEqual(canonicalAfter, canonicalBefore, 'UI link repair must not modify canonical messages');
+  await store.releaseWriteLease({ dirPath: root, conversationId: created.descriptor.conversationId, holderInstanceId, leaseEpoch: lease.leaseEpoch });
 }
 
 
@@ -191,6 +259,8 @@ async function run() {
     }
 
     await verifyRecoveredUiProjection(root);
+
+    await verifyUiLinkRepair(root);
 
 
     const warning = await writeLocalProjectsBestEffort(root, { version: 2, conversations: {}, projects: [] }, async () => {
