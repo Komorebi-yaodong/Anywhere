@@ -285,14 +285,18 @@ function extractTextFromContent(content) {
     .join('\n')
 }
 
-const VISION_TOKEN_LIMIT = 16384
-const VISION_UNKNOWN_IMAGE_EDGE = 4096
+// Local multimodal estimates are calibrated from the user's observed Gemini/GPT usage.
+// They are intentionally provider-neutral approximations; API usage remains authoritative.
+const BINARY_MEBIBYTE = 1024 * 1024
+const IMAGE_TOKENS_PER_MEBIBYTE = 1875
+const PDF_TOKENS_PER_PAGE = 32250 / 29
+const UNKNOWN_IMAGE_TOKENS = Math.round(1.44 * IMAGE_TOKENS_PER_MEBIBYTE)
 const VISUAL_METADATA_CACHE_LIMIT = 256
 const visualMetadataCache = new Map()
 
-function getVisualCacheKey(kind, dataUrl = '') {
-  const value = typeof dataUrl === 'string' ? dataUrl : ''
-  return `${kind}:${value.length}:${value.slice(0, 160)}:${value.slice(-160)}`
+function getVisualCacheKey(kind, value = '') {
+  const source = typeof value === 'string' ? value : ''
+  return `${kind}:${source.length}:${source.slice(0, 160)}:${source.slice(-160)}`
 }
 
 function rememberVisualMetadata(cacheKey, value) {
@@ -305,78 +309,19 @@ function rememberVisualMetadata(cacheKey, value) {
   return value
 }
 
-function resolveVisionTokenProfile(modelInput = '') {
-  const model = String(modelInput || '').toLowerCase()
-  // QVQ and Qwen2.5-VL use 28×28 patches; Qwen3-VL and the current Qwen-VL family use 32×32.
-  const patchSize = /(qvq|qwen2\.5-vl)/.test(model) ? 28 : 32
-  return {
-    patchSize,
-    minPixels: 4 * patchSize * patchSize,
-    maxPixels: VISION_TOKEN_LIMIT * patchSize * patchSize
-  }
-}
-
-function readUint24LE(buffer, offset) {
-  return buffer[offset] | (buffer[offset + 1] << 8) | (buffer[offset + 2] << 16)
-}
-
-function decodeDataUrlPrefix(dataUrl = '', maxBase64Chars = 65536) {
-  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return null
+function estimateDataUrlBinaryBytes(dataUrl = '') {
+  const cacheKey = getVisualCacheKey('binary-bytes', dataUrl)
+  const cached = visualMetadataCache.get(cacheKey)
+  if (Number.isFinite(cached) && cached >= 0) return cached
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return rememberVisualMetadata(cacheKey, 0)
   const comma = dataUrl.indexOf(',')
-  if (comma < 0) return null
-  const header = dataUrl.slice(5, comma)
-  const mimeType = header.split(';')[0]?.toLowerCase() || ''
-  if (!mimeType || !/;base64(?:;|$)/i.test(header)) return null
-  try {
-    const source = dataUrl.slice(comma + 1, comma + 1 + maxBase64Chars - (maxBase64Chars % 4))
-    return { mimeType, bytes: Buffer.from(source, 'base64') }
-  } catch {
-    return null
-  }
-}
-
-function readImageDimensionsFromDataUrl(dataUrl = '') {
-  const cacheKey = getVisualCacheKey('image-size', dataUrl)
-  if (visualMetadataCache.has(cacheKey)) return visualMetadataCache.get(cacheKey)
-  const decoded = decodeDataUrlPrefix(dataUrl)
-  const bytes = decoded?.bytes
-  if (!bytes || bytes.length < 10) return rememberVisualMetadata(cacheKey, null)
-  try {
-    if (decoded.mimeType === 'image/png' && bytes.length >= 24 && bytes.subarray(1, 4).toString('ascii') === 'PNG') {
-      return rememberVisualMetadata(cacheKey, { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) })
-    }
-    if (decoded.mimeType === 'image/gif' && bytes.subarray(0, 3).toString('ascii') === 'GIF') {
-      return rememberVisualMetadata(cacheKey, { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) })
-    }
-    if (decoded.mimeType === 'image/webp' && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') {
-      const kind = bytes.subarray(12, 16).toString('ascii')
-      if (kind === 'VP8X' && bytes.length >= 30) {
-        return rememberVisualMetadata(cacheKey, { width: readUint24LE(bytes, 24) + 1, height: readUint24LE(bytes, 27) + 1 })
-      }
-      if (kind === 'VP8 ' && bytes.length >= 30 && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
-        return rememberVisualMetadata(cacheKey, { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff })
-      }
-      if (kind === 'VP8L' && bytes.length >= 25 && bytes[20] === 0x2f) {
-        const bits = bytes.readUInt32LE(21)
-        return rememberVisualMetadata(cacheKey, { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 })
-      }
-    }
-    if (decoded.mimeType === 'image/jpeg' && bytes[0] === 0xff && bytes[1] === 0xd8) {
-      for (let offset = 2; offset + 9 < bytes.length;) {
-        if (bytes[offset] !== 0xff) { offset += 1; continue }
-        const marker = bytes[offset + 1]
-        const length = bytes.readUInt16BE(offset + 2)
-        if (length < 2) break
-        if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
-          return rememberVisualMetadata(cacheKey, { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) })
-        }
-        offset += length + 2
-      }
-    }
-  } catch {
-    return rememberVisualMetadata(cacheKey, null)
-  }
-  return rememberVisualMetadata(cacheKey, null)
+  if (comma < 0 || !/;base64(?:;|$)/i.test(dataUrl.slice(0, comma))) return rememberVisualMetadata(cacheKey, 0)
+  const payloadLength = dataUrl.length - comma - 1
+  if (payloadLength <= 0) return rememberVisualMetadata(cacheKey, 0)
+  const last = dataUrl.charCodeAt(dataUrl.length - 1)
+  const previous = dataUrl.charCodeAt(dataUrl.length - 2)
+  const padding = last === 61 ? (previous === 61 ? 2 : 1) : 0
+  return rememberVisualMetadata(cacheKey, Math.max(0, Math.floor((payloadLength * 3) / 4) - padding))
 }
 
 function estimatePdfPageCountFromDataUrl(dataUrl = '') {
@@ -408,25 +353,10 @@ function estimatePdfPageCountFromDataUrl(dataUrl = '') {
   }
 }
 
-
-function estimateVisualImageTokens({ width, height, modelInput = '' } = {}) {
-  const profile = resolveVisionTokenProfile(modelInput)
-  const sourceWidth = Math.max(1, Math.floor(Number(width) || VISION_UNKNOWN_IMAGE_EDGE))
-  const sourceHeight = Math.max(1, Math.floor(Number(height) || VISION_UNKNOWN_IMAGE_EDGE))
-  const { patchSize, minPixels, maxPixels } = profile
-  let normalizedWidth = Math.max(patchSize, Math.round(sourceWidth / patchSize) * patchSize)
-  let normalizedHeight = Math.max(patchSize, Math.round(sourceHeight / patchSize) * patchSize)
-  const pixels = normalizedWidth * normalizedHeight
-  if (pixels > maxPixels) {
-    const beta = Math.sqrt((sourceWidth * sourceHeight) / maxPixels)
-    normalizedWidth = Math.max(patchSize, Math.floor(sourceWidth / beta / patchSize) * patchSize)
-    normalizedHeight = Math.max(patchSize, Math.floor(sourceHeight / beta / patchSize) * patchSize)
-  } else if (pixels < minPixels) {
-    const beta = Math.sqrt(minPixels / Math.max(1, sourceWidth * sourceHeight))
-    normalizedWidth = Math.max(patchSize, Math.ceil(sourceWidth * beta / patchSize) * patchSize)
-    normalizedHeight = Math.max(patchSize, Math.ceil(sourceHeight * beta / patchSize) * patchSize)
-  }
-  return Math.floor((normalizedWidth * normalizedHeight) / (patchSize * patchSize)) + 2
+function estimateVisualImageTokens({ byteLength, bytes } = {}) {
+  const resolvedBytes = Math.max(0, Number(byteLength ?? bytes) || 0)
+  if (resolvedBytes <= 0) return UNKNOWN_IMAGE_TOKENS
+  return Math.max(1, Math.round((resolvedBytes / BINARY_MEBIBYTE) * IMAGE_TOKENS_PER_MEBIBYTE))
 }
 
 function getPartTokenEstimate(part = {}) {
@@ -436,7 +366,7 @@ function getPartTokenEstimate(part = {}) {
   return part.tokenEstimate || imageMeta || fileMeta || {}
 }
 
-function estimateMultimodalContentTokens(content, modelInput = '') {
+function estimateMultimodalContentTokens(content) {
   if (!Array.isArray(content)) return 0
   let total = 0
   for (const part of content) {
@@ -444,10 +374,8 @@ function estimateMultimodalContentTokens(content, modelInput = '') {
     if (part.type === 'image_url') {
       const source = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url
       const metadata = getPartTokenEstimate(part)
-      const dimensions = Number(metadata?.width) > 0 && Number(metadata?.height) > 0
-        ? { width: Number(metadata.width), height: Number(metadata.height) }
-        : readImageDimensionsFromDataUrl(source)
-      total += estimateVisualImageTokens({ ...dimensions, modelInput })
+      const byteLength = Math.max(0, Number(metadata?.byteLength ?? metadata?.bytes ?? metadata?.size) || estimateDataUrlBinaryBytes(source))
+      total += estimateVisualImageTokens({ byteLength })
       continue
     }
     if (part.type === 'file' || part.type === 'input_file') {
@@ -459,8 +387,7 @@ function estimateMultimodalContentTokens(content, modelInput = '') {
       const metadata = getPartTokenEstimate(part)
       const source = String(file?.file_data || file?.url || '')
       const pageCount = Math.max(1, Math.floor(Number(metadata?.pageCount || metadata?.pages) || estimatePdfPageCountFromDataUrl(source)))
-      // PDF pages are sent to vision-capable models as image-like document pages. Estimate each page at the configured high-resolution cap.
-      total += pageCount * estimateVisualImageTokens({ width: VISION_UNKNOWN_IMAGE_EDGE, height: VISION_UNKNOWN_IMAGE_EDGE, modelInput })
+      total += Math.max(1, Math.round(pageCount * PDF_TOKENS_PER_PAGE))
     }
   }
   return total

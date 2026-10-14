@@ -53,46 +53,28 @@ function verifyRatioWindow(ratio) {
 
 async function main() {
 
-  const pngHeader = Buffer.alloc(24);
-  pngHeader[0] = 0x89;
-  pngHeader.write('PNG', 1, 'ascii');
-  pngHeader.writeUInt32BE(640, 16);
-  pngHeader.writeUInt32BE(480, 20);
-  const manualImage = `data:image/png;base64,${pngHeader.toString('base64')}`;
+  const oneMiBImage = `data:image/png;base64,${Buffer.alloc(1024 * 1024, 1).toString('base64')}`;
   const baseUserTokens = estimateMessagesTokens([{ role: 'user', content: [] }], { modelInput: 'qwen3-vl' });
-  const imageTokens = estimateMessagesTokens([{ role: 'user', content: [{ type: 'image_url', image_url: { url: manualImage } }] }], { modelInput: 'qwen3-vl' });
-  assert.equal(imageTokens - baseUserTokens, estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen3-vl' }));
-  const webpHeader = Buffer.alloc(30);
-  webpHeader.write('RIFF', 0, 'ascii');
-  webpHeader.write('WEBP', 8, 'ascii');
-  webpHeader.write('VP8 ', 12, 'ascii');
-  webpHeader[23] = 0x9d;
-  webpHeader[24] = 0x01;
-  webpHeader[25] = 0x2a;
-  webpHeader.writeUInt16LE(640, 26);
-  webpHeader.writeUInt16LE(480, 28);
-  const manualWebp = `data:image/webp;base64,${webpHeader.toString('base64')}`;
-  const webpTokens = estimateMessagesTokens([{ role: 'user', content: [{ type: 'image_url', image_url: { url: manualWebp } }] }], { modelInput: 'qwen3-vl' });
-  assert.equal(webpTokens - baseUserTokens, estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen3-vl' }), 'legacy VP8 WebP dimensions must be estimated from its file header');
+  const imageTokens = estimateMessagesTokens([{ role: 'user', content: [{ type: 'image_url', image_url: { url: oneMiBImage } }] }], { modelInput: 'qwen3-vl' });
+  assert.equal(imageTokens - baseUserTokens, 1875, 'a 1 MiB image must use the user-calibrated 1,875 token ratio');
+  assert.equal(estimateVisualImageTokens({ byteLength: 1024 * 1024 }), 1875);
+  assert.equal(estimateVisualImageTokens(), 2700, 'images without usable byte metadata must use the calibrated 1.44 MiB fallback');
 
-  assert.notEqual(
-    estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen3-vl' }),
-    estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen2.5-vl' }),
-    'Qwen3-VL and Qwen2.5-VL must use their respective visual patch sizes'
-  );
-  const perHighResolutionPage = estimateVisualImageTokens({ width: 4096, height: 4096, modelInput: 'qwen3-vl' });
+  const unknownImageTokens = estimateMessagesTokens([{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'https://example.invalid/image.png' } }] }]);
+  assert.equal(unknownImageTokens - baseUserTokens, 2700, 'remote images without local bytes must use the calibrated fallback');
+
   const pdfTokens = estimateMessagesTokens([{ role: 'user', content: [{
     type: 'file',
-    file: { filename: 'synthetic.pdf', file_data: 'data:application/pdf;base64,JVBERi0=', tokenEstimate: { pageCount: 10 } }
+    file: { filename: 'synthetic.pdf', file_data: 'data:application/pdf;base64,JVBERi0=', tokenEstimate: { pageCount: 29 } }
   }] }], { modelInput: 'qwen3-vl' });
-  assert.equal(pdfTokens - baseUserTokens, perHighResolutionPage * 10, 'a 10-page PDF must be estimated as 10 high-resolution visual pages');
+  assert.equal(pdfTokens - baseUserTokens, 32250, 'a 29-page PDF must use the user-calibrated 32,250 token total');
 
-  const legacyPdfBody = `%PDF-1.7\n${'/Type /Page\n'.repeat(10)}`;
+  const legacyPdfBody = `%PDF-1.7\n${'/Type /Page\n'.repeat(29)}`;
   const legacyPdfTokens = estimateMessagesTokens([{ role: 'user', content: [{
     type: 'file',
     file: { filename: 'legacy.pdf', file_data: `data:application/pdf;base64,${Buffer.from(legacyPdfBody, 'latin1').toString('base64')}` }
   }] }], { modelInput: 'qwen3-vl' });
-  assert.equal(legacyPdfTokens - baseUserTokens, perHighResolutionPage * 10, 'legacy PDFs without metadata must lazily recover their page count');
+  assert.equal(legacyPdfTokens - baseUserTokens, 32250, 'legacy PDFs without metadata must lazily recover their page count');
 
 
   const eighty = verifyRatioWindow(0.8);
