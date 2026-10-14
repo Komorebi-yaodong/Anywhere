@@ -40,6 +40,7 @@ function selectCompactionCut({
   preferredMaxTokens = 0,
   keepRecentRounds = 0,
   fixedOverheadTokens = 0,
+  modelInput = '',
   includeCandidates = false
 } = {}) {
   const system = Array.isArray(systemMessages) ? systemMessages : []
@@ -67,12 +68,12 @@ function selectCompactionCut({
 
   const userStartSet = new Set(userStarts)
   const pendingToolCallIds = new Set()
-  const baseTokens = estimateMessagesTokens(system) + Math.max(0, Number(fixedOverheadTokens) || 0)
+  const baseTokens = estimateMessagesTokens(system, { modelInput }) + Math.max(0, Number(fixedOverheadTokens) || 0)
   let prefixTokens = baseTokens
   const candidates = []
   for (let cutIndex = 1; cutIndex < window.length; cutIndex += 1) {
     const previousMessage = window[cutIndex - 1]
-    prefixTokens += estimateMessagesTokens([previousMessage])
+    prefixTokens += estimateMessagesTokens([previousMessage], { modelInput })
     for (const toolCallId of getToolCallIds(previousMessage)) pendingToolCallIds.add(toolCallId)
     if (previousMessage?.role === 'tool') {
       const toolCallId = String(previousMessage?.tool_call_id || previousMessage?.toolCallId || '').trim()
@@ -275,13 +276,189 @@ function extractTextFromContent(content) {
     .map((part) => {
       if (!part || typeof part !== 'object') return ''
       if (part.type === 'text' && typeof part.text === 'string') return part.text
-      if (part.type === 'image_url') return '[image]'
+      // Images and PDFs are counted separately by the visual estimator; do not double-count placeholders as text.
+      if (part.type === 'image_url' || part.type === 'file' || part.type === 'input_file') return ''
       if (part.type === 'input_audio' || part.type === 'audio') return '[audio]'
       return ''
     })
     .filter(Boolean)
     .join('\n')
 }
+
+const VISION_TOKEN_LIMIT = 16384
+const VISION_UNKNOWN_IMAGE_EDGE = 4096
+const VISUAL_METADATA_CACHE_LIMIT = 256
+const visualMetadataCache = new Map()
+
+function getVisualCacheKey(kind, dataUrl = '') {
+  const value = typeof dataUrl === 'string' ? dataUrl : ''
+  return `${kind}:${value.length}:${value.slice(0, 160)}:${value.slice(-160)}`
+}
+
+function rememberVisualMetadata(cacheKey, value) {
+  if (!cacheKey || value == null) return value
+  visualMetadataCache.delete(cacheKey)
+  visualMetadataCache.set(cacheKey, value)
+  while (visualMetadataCache.size > VISUAL_METADATA_CACHE_LIMIT) {
+    visualMetadataCache.delete(visualMetadataCache.keys().next().value)
+  }
+  return value
+}
+
+function resolveVisionTokenProfile(modelInput = '') {
+  const model = String(modelInput || '').toLowerCase()
+  // QVQ and Qwen2.5-VL use 28×28 patches; Qwen3-VL and the current Qwen-VL family use 32×32.
+  const patchSize = /(qvq|qwen2\.5-vl)/.test(model) ? 28 : 32
+  return {
+    patchSize,
+    minPixels: 4 * patchSize * patchSize,
+    maxPixels: VISION_TOKEN_LIMIT * patchSize * patchSize
+  }
+}
+
+function readUint24LE(buffer, offset) {
+  return buffer[offset] | (buffer[offset + 1] << 8) | (buffer[offset + 2] << 16)
+}
+
+function decodeDataUrlPrefix(dataUrl = '', maxBase64Chars = 65536) {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return null
+  const comma = dataUrl.indexOf(',')
+  if (comma < 0) return null
+  const header = dataUrl.slice(5, comma)
+  const mimeType = header.split(';')[0]?.toLowerCase() || ''
+  if (!mimeType || !/;base64(?:;|$)/i.test(header)) return null
+  try {
+    const source = dataUrl.slice(comma + 1, comma + 1 + maxBase64Chars - (maxBase64Chars % 4))
+    return { mimeType, bytes: Buffer.from(source, 'base64') }
+  } catch {
+    return null
+  }
+}
+
+function readImageDimensionsFromDataUrl(dataUrl = '') {
+  const cacheKey = getVisualCacheKey('image-size', dataUrl)
+  if (visualMetadataCache.has(cacheKey)) return visualMetadataCache.get(cacheKey)
+  const decoded = decodeDataUrlPrefix(dataUrl)
+  const bytes = decoded?.bytes
+  if (!bytes || bytes.length < 10) return rememberVisualMetadata(cacheKey, null)
+  try {
+    if (decoded.mimeType === 'image/png' && bytes.length >= 24 && bytes.subarray(1, 4).toString('ascii') === 'PNG') {
+      return rememberVisualMetadata(cacheKey, { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) })
+    }
+    if (decoded.mimeType === 'image/gif' && bytes.subarray(0, 3).toString('ascii') === 'GIF') {
+      return rememberVisualMetadata(cacheKey, { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) })
+    }
+    if (decoded.mimeType === 'image/webp' && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') {
+      const kind = bytes.subarray(12, 16).toString('ascii')
+      if (kind === 'VP8X' && bytes.length >= 30) {
+        return rememberVisualMetadata(cacheKey, { width: readUint24LE(bytes, 24) + 1, height: readUint24LE(bytes, 27) + 1 })
+      }
+    }
+    if (decoded.mimeType === 'image/jpeg' && bytes[0] === 0xff && bytes[1] === 0xd8) {
+      for (let offset = 2; offset + 9 < bytes.length;) {
+        if (bytes[offset] !== 0xff) { offset += 1; continue }
+        const marker = bytes[offset + 1]
+        const length = bytes.readUInt16BE(offset + 2)
+        if (length < 2) break
+        if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+          return rememberVisualMetadata(cacheKey, { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) })
+        }
+        offset += length + 2
+      }
+    }
+  } catch {
+    return rememberVisualMetadata(cacheKey, null)
+  }
+  return rememberVisualMetadata(cacheKey, null)
+}
+
+function estimatePdfPageCountFromDataUrl(dataUrl = '') {
+  const cacheKey = getVisualCacheKey('pdf-pages', dataUrl)
+  const cached = visualMetadataCache.get(cacheKey)
+  if (Number.isFinite(cached) && cached > 0) return cached
+  if (typeof dataUrl !== 'string' || !/^data:application\/pdf(?:;[^,]*)?;base64,/i.test(dataUrl)) return 1
+  const base64Start = dataUrl.indexOf(',') + 1
+  if (base64Start <= 0 || base64Start >= dataUrl.length) return 1
+  try {
+    const chunkChars = 64 * 1024
+    let carry = ''
+    let pageObjects = 0
+    let maxPageTreeCount = 0
+    for (let offset = base64Start; offset < dataUrl.length; offset += chunkChars) {
+      const chunk = Buffer.from(dataUrl.slice(offset, offset + chunkChars), 'base64').toString('latin1')
+      const source = carry + chunk
+      for (const match of source.matchAll(/\/Type\s*\/Page\b/g)) {
+        if (match.index + match[0].length > carry.length) pageObjects += 1
+      }
+      for (const match of source.matchAll(/\/Type\s*\/Pages\b[\s\S]{0,256}?\/Count\s+(\d+)/g)) {
+        if (match.index + match[0].length > carry.length) maxPageTreeCount = Math.max(maxPageTreeCount, Number(match[1]) || 0)
+      }
+      carry = source.slice(-512)
+    }
+    return rememberVisualMetadata(cacheKey, Math.max(1, pageObjects, maxPageTreeCount))
+  } catch {
+    return rememberVisualMetadata(cacheKey, 1)
+  }
+}
+
+
+function estimateVisualImageTokens({ width, height, modelInput = '' } = {}) {
+  const profile = resolveVisionTokenProfile(modelInput)
+  const sourceWidth = Math.max(1, Math.floor(Number(width) || VISION_UNKNOWN_IMAGE_EDGE))
+  const sourceHeight = Math.max(1, Math.floor(Number(height) || VISION_UNKNOWN_IMAGE_EDGE))
+  const { patchSize, minPixels, maxPixels } = profile
+  let normalizedWidth = Math.max(patchSize, Math.round(sourceWidth / patchSize) * patchSize)
+  let normalizedHeight = Math.max(patchSize, Math.round(sourceHeight / patchSize) * patchSize)
+  const pixels = normalizedWidth * normalizedHeight
+  if (pixels > maxPixels) {
+    const beta = Math.sqrt((sourceWidth * sourceHeight) / maxPixels)
+    normalizedWidth = Math.max(patchSize, Math.floor(sourceWidth / beta / patchSize) * patchSize)
+    normalizedHeight = Math.max(patchSize, Math.floor(sourceHeight / beta / patchSize) * patchSize)
+  } else if (pixels < minPixels) {
+    const beta = Math.sqrt(minPixels / Math.max(1, sourceWidth * sourceHeight))
+    normalizedWidth = Math.max(patchSize, Math.ceil(sourceWidth * beta / patchSize) * patchSize)
+    normalizedHeight = Math.max(patchSize, Math.ceil(sourceHeight * beta / patchSize) * patchSize)
+  }
+  return Math.floor((normalizedWidth * normalizedHeight) / (patchSize * patchSize)) + 2
+}
+
+function getPartTokenEstimate(part = {}) {
+  if (!part || typeof part !== 'object') return {}
+  const imageMeta = part?.image_url && typeof part.image_url === 'object' ? part.image_url.tokenEstimate : null
+  const fileMeta = part?.file && typeof part.file === 'object' ? part.file.tokenEstimate : null
+  return part.tokenEstimate || imageMeta || fileMeta || {}
+}
+
+function estimateMultimodalContentTokens(content, modelInput = '') {
+  if (!Array.isArray(content)) return 0
+  let total = 0
+  for (const part of content) {
+    if (!part || typeof part !== 'object') continue
+    if (part.type === 'image_url') {
+      const source = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url
+      const metadata = getPartTokenEstimate(part)
+      const dimensions = Number(metadata?.width) > 0 && Number(metadata?.height) > 0
+        ? { width: Number(metadata.width), height: Number(metadata.height) }
+        : readImageDimensionsFromDataUrl(source)
+      total += estimateVisualImageTokens({ ...dimensions, modelInput })
+      continue
+    }
+    if (part.type === 'file' || part.type === 'input_file') {
+      const file = part.file || part
+      const isPdf = /^application\/pdf(?:;|$)/i.test(String(file?.mimeType || file?.type || ''))
+        || /^data:application\/pdf;base64,/i.test(String(file?.file_data || file?.url || ''))
+        || /\.pdf$/i.test(String(file?.filename || file?.name || ''))
+      if (!isPdf) continue
+      const metadata = getPartTokenEstimate(part)
+      const source = String(file?.file_data || file?.url || '')
+      const pageCount = Math.max(1, Math.floor(Number(metadata?.pageCount || metadata?.pages) || estimatePdfPageCountFromDataUrl(source)))
+      // PDF pages are sent to vision-capable models as image-like document pages. Estimate each page at the configured high-resolution cap.
+      total += pageCount * estimateVisualImageTokens({ width: VISION_UNKNOWN_IMAGE_EDGE, height: VISION_UNKNOWN_IMAGE_EDGE, modelInput })
+    }
+  }
+  return total
+}
+
 
 function messageToPlainText(message = {}) {
   const role = message?.role || 'unknown'
@@ -299,17 +476,19 @@ function messageToPlainText(message = {}) {
   return [role, text, reasoning, toolCalls].filter(Boolean).join('\n')
 }
 
-function estimateMessagesTokens(messages = []) {
+function estimateMessagesTokens(messages = [], { modelInput = '' } = {}) {
   if (!Array.isArray(messages) || messages.length === 0) return 0
   let total = 0
   for (const message of messages) {
     const text = messageToPlainText(message)
-    if (!text) continue
-    try {
-      total += encode(text).length
-    } catch {
-      total += Math.ceil(text.length / 4)
+    if (text) {
+      try {
+        total += encode(text).length
+      } catch {
+        total += Math.ceil(text.length / 4)
+      }
     }
+    total += estimateMultimodalContentTokens(message?.content, modelInput)
   }
   // small per-message overhead
   total += messages.length * 4
@@ -1113,7 +1292,7 @@ async function runConversationCompaction({
   }
 
   const summarySource = flattenForSummary(sourceMessages)
-  const localTokens = estimateMessagesTokens(summarySource)
+  const localTokens = estimateMessagesTokens(summarySource, { modelInput: modelValue })
   report('estimate_usage', {
     percent: 25,
     message: '估算上下文用量…',
@@ -1220,6 +1399,7 @@ module.exports = {
   pruneCompactCacheByEnabledModels,
   resolveModelContextLength,
   estimateMessagesTokens,
+  estimateVisualImageTokens,
   estimateTextTokens,
   resolveEffectiveTokenUsage,
   buildCompactedHistory,

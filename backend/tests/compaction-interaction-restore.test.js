@@ -23,7 +23,7 @@ assert.match(store, /return \{ revision, updatedAt, title: row\.title, restoredS
 assert.match(store, /restoredSnapshotId: result\.restoredSnapshotId/);
 assert.match(store, /uiMessages = null/);
 assert.match(app, /const autoSaveSessionRequestConfig = async/);
-assert.match(app, /saveConversationState\(\{[\s\S]{0,700}state: getSessionRequestConfigStatePatch\(\)/);
+assert.match(app, /saveConversationState\(\{[\s\S]{0,700}state:\s*\{\s*\.\.\.getSessionRequestConfigStatePatch\(\),\s*\.\.\.getSessionTransientStatePatch\(\)\s*\}/);
 assert.match(app, /delay: AUTO_SAVE_REQUEST_CONFIG_DEBOUNCE_MS,[\s\S]{0,80}stateOnly: true/);
 assert.match(app, /const splitChatShowPrefixAtFullCut =/);
 assert.match(app, /await executeAutoSaveRequest\(\{ reason: 'conversation-compacted', force: true[\s\S]{0,180}await reloadConversationWindowFromStore/);

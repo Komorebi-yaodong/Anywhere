@@ -54,7 +54,15 @@ const fileHandlers = {
     },
     pdf: {
         extensions: ['.pdf'],
-        handler: async (file) => ({ type: "file", file: { filename: file.name, file_data: file.url } })
+        handler: async (file) => ({
+            type: "file",
+            file: {
+                filename: file.name,
+                file_data: file.url,
+                // Local-only visual-token estimate metadata. Chat request normalizers strip it before provider calls.
+                tokenEstimate: { pageCount: estimatePdfPageCountFromDataUrl(file.url) }
+            }
+        })
     }
 };
 
@@ -78,6 +86,34 @@ const isFileTypeSupported = (fileName) => {
     // 3. 其他未知后缀统统放行，在 parseFileObject 时通过内容探针检查是否为文本
     return true;
 };
+
+function estimatePdfPageCountFromDataUrl(dataUrl = '') {
+    if (typeof dataUrl !== 'string') return 1;
+    const base64 = dataUrl.split(',')[1] || '';
+    if (!base64) return 1;
+    try {
+        // Scan one small decoded block at a time so token metadata never creates a second full PDF-sized buffer.
+        const chunkChars = 64 * 1024;
+        let carry = '';
+        let pageObjects = 0;
+        let maxPageTreeCount = 0;
+        for (let offset = 0; offset < base64.length; offset += chunkChars) {
+            const chunk = Buffer.from(base64.slice(offset, offset + chunkChars), 'base64').toString('latin1');
+            const source = carry + chunk;
+            for (const match of source.matchAll(/\/Type\s*\/Page\b/g)) {
+                if (match.index + match[0].length > carry.length) pageObjects += 1;
+            }
+            for (const match of source.matchAll(/\/Type\s*\/Pages\b[\s\S]{0,256}?\/Count\s+(\d+)/g)) {
+                if (match.index + match[0].length > carry.length) maxPageTreeCount = Math.max(maxPageTreeCount, Number(match[1]) || 0);
+            }
+            carry = source.slice(-512);
+        }
+        return Math.max(1, pageObjects, maxPageTreeCount);
+    } catch {
+        return 1;
+    }
+}
+
 
 const parseFileObject = async (fileObj) => {
     let handler = getFileHandler(fileObj.name);

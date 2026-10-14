@@ -39,6 +39,21 @@ async function run() {
   ], [
     { role: 'user', content: 'duplicate', storageId: 'stale-id' }
   ], 0), -1, 'ambiguous stale UI rows must fail closed');
+  assert.strictEqual(resolveSafeConversationMutationTarget([
+    { role: 'assistant', content: null, storageId: 'empty-assistant' }
+  ], [
+    { role: 'assistant', content: [], storageId: 'empty-assistant' }
+  ], 0), 0, 'a stable link must safely delete an empty assistant terminal bubble');
+  assert.strictEqual(resolveSafeConversationMutationTarget([
+    { role: 'assistant', content: null, storageId: 'empty-assistant' }
+  ], [
+    { role: 'assistant', content: [], storageId: '' }
+  ], 0), -1, 'an empty assistant bubble without a verified stable link must fail closed');
+  assert.strictEqual(resolveSafeConversationMutationTarget([
+    { role: 'assistant', content: null, storageId: 'tool-terminal', tool_calls: [{ id: 'call_1' }] }
+  ], [
+    { role: 'assistant', content: [], storageId: 'tool-terminal', tool_calls: [{ id: 'call_1' }] }
+  ], 0), -1, 'an empty assistant tool turn must remain non-deletable even with a stable ID');
 
 
   const merged = mergeConversationMutationRequests(
@@ -142,7 +157,8 @@ async function run() {
   assert.match(appSource, /const persistLatestSessionBeforeClose = async[\s\S]{0,2400}await autoSaveMutationQueue\.whenIdle\(\)[\s\S]{0,900}persistedFullSnapshotVersion >= targetVersion/);
   assert.match(appSource, /return await completeConversationClose\(\{[\s\S]{0,500}persistLatestSessionBeforeClose\(shouldForceSave\)[\s\S]{0,300}release: releaseCurrentConversationLease/);
   assert.match(appSource, /watch\(\[model, selectedVoice, tempReasoningEffort, sessionMcpServerIds, sessionSkillIds, isAutoApproveTools\]/);
-  assert.match(appSource, /state: getSessionRequestConfigStatePatch\(\)/);
+  assert.match(appSource, /state:\s*\{\s*\.\.\.getSessionRequestConfigStatePatch\(\),\s*\.\.\.getSessionTransientStatePatch\(\)\s*\}/);
+  assert.match(appSource, /const scheduleInputDraftAutoSave = \(reason = 'input-draft'\) => \{[\s\S]{0,240}stateOnly: true/);
   assert.match(appSource, /typeof jsonData\.isAutoApproveTools === 'boolean'/);
   assert.match(appSource, /const isClosingWindow = ref\(false\)/);
   assert.match(appSource, /settlementPromise: turnSettlementPromise,[\s\S]{0,120}resolveSettlement: resolveTurnSettlement/);
@@ -164,7 +180,7 @@ async function run() {
   assert.match(appSource, /if \(isClosingWindow\.value \|\| !ensureConversationWriteAccess\(true\)\) return/);
   assert.match(appSource, /await waitForAssistantTurnToSettleBeforeClose\(assistantSettlementPromise\);[\s\S]{0,120}await waitForPendingWindowMutationsBeforeClose\(\)/);
 
-  assert.match(appSource, /if \(!added\) return;[\s\S]{0,500}if \(isClosingWindow\.value\) return;[\s\S]{0,160}loading\.value = true/);
+  assert.match(appSource, /if \(!added\) return;[\s\S]{0,1800}if \(isClosingWindow\.value\) return;[\s\S]{0,160}loading\.value = true/);
 
   assert.match(appSource, /:write-locked="conversationReadOnly \|\| conversationLeasePending \|\| isClosingWindow"/);
 

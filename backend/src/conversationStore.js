@@ -428,10 +428,15 @@ function messageSignature(message = {}) {
 }
 
 function normalizeRenderableContent(content) {
-  if (!Array.isArray(content)) return content ?? null
+  if (!Array.isArray(content)) {
+    const value = content ?? ''
+    return typeof value === 'string' && value.length === 0 ? null : value
+  }
   const parts = content.filter((part) => part && !part.isTranscript)
-  if (parts.length > 0 && parts.every((part) => part?.type === 'text')) {
-    return parts.map((part) => part.text ?? '').join('')
+  if (parts.length === 0) return null
+  if (parts.every((part) => part?.type === 'text')) {
+    const text = parts.map((part) => part.text ?? '').join('')
+    return text.length === 0 ? null : text
   }
   return parts.map((part) => (
     part?.type === 'text' ? { type: 'text', text: part.text ?? '' } : part

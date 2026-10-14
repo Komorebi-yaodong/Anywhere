@@ -162,8 +162,13 @@ onMounted(async () => {
     }
 });
 
-onActivated(() => {
+onActivated(async () => {
     window.addEventListener('keydown', handleGlobalKeyDown);
+    await refreshLocalProjectOptions();
+});
+
+watch(() => currentConfig.value?.webdav?.localChatPath, () => {
+    void refreshLocalProjectOptions();
 });
 
 onDeactivated(() => {
@@ -837,6 +842,7 @@ async function openTaskChat(logFile, conversationId = '') {
                                                             <el-select
                                                                 :model-value="selectedTask.autoSaveProjectId || ''"
                                                                 @change="(val) => saveTaskSetting('autoSaveProjectId', val || '')"
+                                                                @visible-change="(visible) => { if (visible) void refreshLocalProjectOptions(); }"
                                                                 clearable
                                                                 :placeholder="t('tasks.autoSaveProjectPlaceholder', '未分组')"
                                                                 class="task-project-select">

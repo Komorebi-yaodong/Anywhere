@@ -4,7 +4,9 @@ const assert = require('assert');
 const { performance } = require('perf_hooks');
 const {
   selectCompactionCut,
-  createCompactionTimeoutContext
+  createCompactionTimeoutContext,
+  estimateMessagesTokens,
+  estimateVisualImageTokens
 } = require('../src/compact.js');
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,6 +52,36 @@ function verifyRatioWindow(ratio) {
 }
 
 async function main() {
+
+  const pngHeader = Buffer.alloc(24);
+  pngHeader[0] = 0x89;
+  pngHeader.write('PNG', 1, 'ascii');
+  pngHeader.writeUInt32BE(640, 16);
+  pngHeader.writeUInt32BE(480, 20);
+  const manualImage = `data:image/png;base64,${pngHeader.toString('base64')}`;
+  const baseUserTokens = estimateMessagesTokens([{ role: 'user', content: [] }], { modelInput: 'qwen3-vl' });
+  const imageTokens = estimateMessagesTokens([{ role: 'user', content: [{ type: 'image_url', image_url: { url: manualImage } }] }], { modelInput: 'qwen3-vl' });
+  assert.equal(imageTokens - baseUserTokens, estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen3-vl' }));
+  assert.notEqual(
+    estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen3-vl' }),
+    estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen2.5-vl' }),
+    'Qwen3-VL and Qwen2.5-VL must use their respective visual patch sizes'
+  );
+  const perHighResolutionPage = estimateVisualImageTokens({ width: 4096, height: 4096, modelInput: 'qwen3-vl' });
+  const pdfTokens = estimateMessagesTokens([{ role: 'user', content: [{
+    type: 'file',
+    file: { filename: 'synthetic.pdf', file_data: 'data:application/pdf;base64,JVBERi0=', tokenEstimate: { pageCount: 10 } }
+  }] }], { modelInput: 'qwen3-vl' });
+  assert.equal(pdfTokens - baseUserTokens, perHighResolutionPage * 10, 'a 10-page PDF must be estimated as 10 high-resolution visual pages');
+
+  const legacyPdfBody = `%PDF-1.7\n${'/Type /Page\n'.repeat(10)}`;
+  const legacyPdfTokens = estimateMessagesTokens([{ role: 'user', content: [{
+    type: 'file',
+    file: { filename: 'legacy.pdf', file_data: `data:application/pdf;base64,${Buffer.from(legacyPdfBody, 'latin1').toString('base64')}` }
+  }] }], { modelInput: 'qwen3-vl' });
+  assert.equal(legacyPdfTokens - baseUserTokens, perHighResolutionPage * 10, 'legacy PDFs without metadata must lazily recover their page count');
+
+
   const eighty = verifyRatioWindow(0.8);
   const ninety = verifyRatioWindow(0.9);
   assert.equal(eighty.selected.strategy, 'ai_unit_keep');

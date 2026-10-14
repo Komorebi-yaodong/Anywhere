@@ -1,13 +1,19 @@
 function normalizeRenderableContent(content) {
-  if (!Array.isArray(content)) return content ?? null;
+  if (!Array.isArray(content)) {
+    const value = content ?? '';
+    return typeof value === 'string' && value.length === 0 ? null : value;
+  }
   const parts = content.filter((part) => part && !part.isTranscript);
-  if (parts.length > 0 && parts.every((part) => part?.type === 'text')) {
-    return parts.map((part) => part.text ?? '').join('');
+  if (parts.length === 0) return null;
+  if (parts.every((part) => part?.type === 'text')) {
+    const text = parts.map((part) => part.text ?? '').join('');
+    return text.length === 0 ? null : text;
   }
   return parts.map((part) => (
     part?.type === 'text' ? { type: 'text', text: part.text ?? '' } : part
   ));
 }
+
 
 export function createRenderableMutationSignature(message = {}) {
   if (!message || !['user', 'assistant'].includes(message.role)) return '';
@@ -15,6 +21,22 @@ export function createRenderableMutationSignature(message = {}) {
     role: message.role,
     content: normalizeRenderableContent(message.content)
   });
+}
+
+function isSafeEmptyAssistantTerminal(message = {}) {
+  const hasToolCalls = (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0)
+    || (Array.isArray(message?.toolCalls) && message.toolCalls.length > 0);
+  return message?.role === 'assistant'
+    && normalizeRenderableContent(message?.content) === null
+    && !hasToolCalls
+    && !message?.tool_call_id
+    && !message?.toolCallId
+    && !message?.sourceToolCallId;
+}
+
+function isEmptyRenderableMutation(message = {}) {
+  return ['user', 'assistant'].includes(message?.role)
+    && normalizeRenderableContent(message?.content) === null;
 }
 
 function findCompactionIndex(fullHistory, uiMessage) {
@@ -80,6 +102,9 @@ export function resolveVerifiedStorageTarget(fullHistory = [], chatShow = [], sh
   const candidate = fullHistory[candidateIndex];
   const uiSignature = createRenderableMutationSignature(uiMessage);
   if (candidate?.role !== uiMessage.role || !uiSignature || createRenderableMutationSignature(candidate) !== uiSignature) return -1;
+  // Content-free rows cannot be semantically anchored. Permit only a true assistant terminal
+  // pair with no tool or tool-link semantics, and only through this verified stable ID path.
+  if (isEmptyRenderableMutation(uiMessage) && (!isSafeEmptyAssistantTerminal(uiMessage) || !isSafeEmptyAssistantTerminal(candidate))) return -1;
 
   return candidateIndex;
 }
@@ -90,5 +115,8 @@ export function resolveSafeConversationMutationTarget(fullHistory = [], chatShow
 
   const verifiedIndex = resolveVerifiedStorageTarget(fullHistory, chatShow, showIndex);
   if (verifiedIndex >= 0) return verifiedIndex;
+  // Empty/error assistant bubbles have no semantic body to anchor safely. They are mutable only
+  // when the stable storage link was verified above; never infer them from position or uniqueness.
+  if (isEmptyRenderableMutation(uiMessage)) return -1;
   return resolveUniqueAnchoredTarget(fullHistory, chatShow, showIndex, createRenderableMutationSignature(uiMessage));
 }

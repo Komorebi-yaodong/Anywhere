@@ -311,6 +311,12 @@ const onCopyImage = async () => {
 
 
 // 如果是最后一条消息 && 正在加载 && 没有正在进行的思考内容
+const preparingStatusText = computed(() => {
+  if (props.message?.status === 'retrying') return props.message?.retryMessage || '网络异常，正在自动重试…';
+  return '';
+});
+
+
 const showBubbleLoading = computed(() => {
   if (!props.isLastMessage || !props.isLoading) return false;
 
@@ -844,8 +850,9 @@ const truncateFilename = (filename, maxLength = 30) => {
             :content="(message.reasoning_content || '').trim()" :modelValue="false" :status="message.status">
           </Thinking>
         </template>
-        <template #content v-if="hasContentToShow">
-          <div v-if="!isEditing" ref="markdownRootRef" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
+        <template #content v-if="hasContentToShow || preparingStatusText">
+          <div v-if="preparingStatusText" class="preparing-status-text">{{ preparingStatusText }}</div>
+          <div v-else-if="!isEditing" ref="markdownRootRef" class="markdown-wrapper" :class="{ 'collapsed': isCollapsed }">
             <XMarkdown :markdown="renderedMarkdownContent" :is-dark="isDarkMode" :enable-latex="true"
               :mermaid-config="mermaidConfig" :default-theme-mode="isDarkMode ? 'dark' : 'light'"
               :themes="{ light: 'one-light', dark: 'vesper' }" :allow-html="true" />
@@ -1081,7 +1088,15 @@ html.dark .chat-message .user-bubble {
   }
 }
 
-.chat-message .ai-bubble {
+.chat-message .preparing-status-text {
+  color: var(--el-text-color-secondary, #667085);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 4px 0;
+}
+
+
+.ai-bubble {
   :deep(.el-bubble-content-wrapper .el-bubble-content) {
     border-radius: var(--bubble-radius);
     background-color: transparent;

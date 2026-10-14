@@ -603,8 +603,8 @@ window.api = {
     pruneCompactCache: async (enabledModels = []) => {
         return getCompactModule().pruneCompactCacheByEnabledModels(enabledModels);
     },
-    estimateCompactTokens: async (messages = []) => {
-        const tokens = getCompactModule().estimateMessagesTokens(messages);
+    estimateCompactTokens: async (messages = [], options = {}) => {
+        const tokens = getCompactModule().estimateMessagesTokens(messages, options);
         return { ok: true, tokens };
     },
     selectCompactionCut: async (input = {}) => {

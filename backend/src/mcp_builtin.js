@@ -179,6 +179,21 @@ function inspectViewableImage(buffer) {
     return null;
 }
 
+function estimatePdfPageCount(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0) return 1;
+    try {
+        const source = buffer.toString('latin1');
+        const pageObjects = (source.match(/\/Type\s*\/Page\b/g) || []).length;
+        const pageTreeCounts = [...source.matchAll(/\/Type\s*\/Pages\b[\s\S]{0,256}?\/Count\s+(\d+)/g)]
+            .map((match) => Number(match[1]))
+            .filter((count) => Number.isFinite(count) && count > 0);
+        return Math.max(1, pageObjects, ...pageTreeCounts);
+    } catch {
+        return 1;
+    }
+}
+
+
 const subAgentTasks = new Map();
 const MAX_SUBAGENT_TASKS = 100;
 const MAX_SUBAGENT_LOG_CHARS = 1024 * 1024;
@@ -2513,7 +2528,7 @@ ${contextBlock}
             const displayText = `Local PDF loaded as complete document context: ${path.basename(safePath)} (${(stats.size / 1024 / 1024).toFixed(2)} MB).`;
             return {
                 __anywhereToolResult: 'pdf',
-                pdf: { encodedBytes: bytes.toString('base64'), mimeType: 'application/pdf', fileName: path.basename(safePath) },
+                pdf: { encodedBytes: bytes.toString('base64'), mimeType: 'application/pdf', fileName: path.basename(safePath), pageCount: estimatePdfPageCount(bytes) },
                 display: { text: displayText, fileName: path.basename(safePath), bytes: stats.size }
             };
         } catch (error) {
