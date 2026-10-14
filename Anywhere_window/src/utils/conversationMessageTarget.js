@@ -34,6 +34,27 @@ function isSafeEmptyAssistantTerminal(message = {}) {
     && !message?.sourceToolCallId;
 }
 
+function getVerifiedToolCallIds(message = {}) {
+  const toolCalls = Array.isArray(message?.tool_calls)
+    ? message.tool_calls
+    : (Array.isArray(message?.toolCalls) ? message.toolCalls : null);
+  if (!toolCalls?.length) return null;
+  const ids = toolCalls.map((call) => (typeof call?.id === 'string' ? call.id.trim() : ''));
+  if (ids.some((id) => !id) || new Set(ids).size !== ids.length) return null;
+  return ids.sort();
+}
+
+function isVerifiedEmptyAssistantToolCallTurn(uiMessage = {}, candidate = {}) {
+  if (uiMessage?.role !== 'assistant' || candidate?.role !== 'assistant') return false;
+  if (normalizeRenderableContent(uiMessage?.content) !== null || normalizeRenderableContent(candidate?.content) !== null) return false;
+  if (uiMessage?.tool_call_id || uiMessage?.toolCallId || uiMessage?.sourceToolCallId
+    || candidate?.tool_call_id || candidate?.toolCallId || candidate?.sourceToolCallId) return false;
+  const uiIds = getVerifiedToolCallIds(uiMessage);
+  const candidateIds = getVerifiedToolCallIds(candidate);
+  return Boolean(uiIds && candidateIds && uiIds.length === candidateIds.length
+    && uiIds.every((id, index) => id === candidateIds[index]));
+}
+
 function isEmptyRenderableMutation(message = {}) {
   return ['user', 'assistant'].includes(message?.role)
     && normalizeRenderableContent(message?.content) === null;
@@ -102,9 +123,12 @@ export function resolveVerifiedStorageTarget(fullHistory = [], chatShow = [], sh
   const candidate = fullHistory[candidateIndex];
   const uiSignature = createRenderableMutationSignature(uiMessage);
   if (candidate?.role !== uiMessage.role || !uiSignature || createRenderableMutationSignature(candidate) !== uiSignature) return -1;
-  // Content-free rows cannot be semantically anchored. Permit only a true assistant terminal
-  // pair with no tool or tool-link semantics, and only through this verified stable ID path.
-  if (isEmptyRenderableMutation(uiMessage) && (!isSafeEmptyAssistantTerminal(uiMessage) || !isSafeEmptyAssistantTerminal(candidate))) return -1;
+  // Content-free rows cannot be semantically anchored. Permit only a true assistant terminal,
+  // or an exact stable-ID-verified assistant tool-call turn with identical call IDs. Tool-linked
+  // rows and every incomplete/mismatched tool-call shape remain fail-closed.
+  if (isEmptyRenderableMutation(uiMessage)
+    && !((isSafeEmptyAssistantTerminal(uiMessage) && isSafeEmptyAssistantTerminal(candidate))
+      || isVerifiedEmptyAssistantToolCallTurn(uiMessage, candidate))) return -1;
 
   return candidateIndex;
 }
