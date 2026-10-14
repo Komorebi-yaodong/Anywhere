@@ -120,6 +120,88 @@ watch(() => currentConfig.value?.webdav, (newWebdav) => {
     }
 }, { deep: true });
 
+const WEBDAV_LOCK_RETRY_DELAYS_MS = [200, 500, 1000];
+let chatMetadataWriteQueue = Promise.resolve();
+
+let cloudProjectsWriteQueue = Promise.resolve();
+
+const getWebdavErrorStatus = (error) => {
+    const candidates = [
+        error?.status,
+        error?.statusCode,
+        error?.response?.status,
+        error?.response?.statusCode,
+        error?.data?.status
+    ];
+    for (const candidate of candidates) {
+        const status = Number(candidate);
+        if (Number.isInteger(status) && status >= 100 && status <= 599) return status;
+    }
+    const message = typeof error?.message === 'string' ? error.message : '';
+    const matched = message.match(/\b([1-5]\d{2})\b/);
+    return matched ? Number(matched[1]) : 0;
+};
+
+const formatWebdavError = (error, fallback = 'WebDAV 操作失败') => {
+    if (!error) return fallback;
+    if (typeof error === 'string') return error;
+    if (typeof error?.message === 'string' && error.message) return error.message;
+
+    const status = getWebdavErrorStatus(error);
+    const statusText = [error?.statusText, error?.response?.statusText, error?.data?.statusText]
+        .find((value) => typeof value === 'string' && value.trim())?.trim() || '';
+    return status ? `Invalid response: ${status}${statusText ? ` ${statusText}` : ''}` : fallback;
+};
+
+const isWebdavLockedError = (error) => getWebdavErrorStatus(error) === 423 || /\b423\b|\blocked\b/i.test(formatWebdavError(error, ''));
+const isWebdavNotFoundError = (error) => getWebdavErrorStatus(error) === 404 || /\b404\b|not found|does not exist/i.test(formatWebdavError(error, ''));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const retryLockedWebdavWrite = async (task) => {
+    let lastError;
+    for (let attempt = 0; attempt <= WEBDAV_LOCK_RETRY_DELAYS_MS.length; attempt += 1) {
+        try {
+            return await task();
+        } catch (error) {
+            lastError = error;
+            if (!isWebdavLockedError(error) || attempt === WEBDAV_LOCK_RETRY_DELAYS_MS.length) throw error;
+            await delay(WEBDAV_LOCK_RETRY_DELAYS_MS[attempt]);
+        }
+    }
+    throw lastError;
+};
+
+const enqueueCloudProjectsWrite = (task) => {
+    const run = cloudProjectsWriteQueue.then(task, task);
+    cloudProjectsWriteQueue = run.catch(() => {});
+    return run;
+};
+
+const retryCloudProjectsWrite = async (task) => {
+    const delays = [200, 500, 1000];
+    let lastError;
+    for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+        try {
+            return await task();
+        } catch (error) {
+            lastError = error;
+            const message = formatWebdavError(error, '').toLowerCase();
+            const retryable = getWebdavErrorStatus(error) === 423 || message.includes('locked') || message.includes('aborted');
+            if (!retryable || attempt === delays.length) throw error;
+            await delay(delays[attempt]);
+        }
+    }
+    throw lastError;
+};
+
+
+const enqueueChatMetadataWrite = (task) => {
+    const run = chatMetadataWriteQueue.then(task, task);
+    chatMetadataWriteQueue = run.catch(() => {});
+    return run;
+};
+
+
 // --- Sync Progress State ---
 const isSyncing = ref(false);
 const syncProgress = ref(0);
@@ -349,6 +431,20 @@ const readCloudChatFile = async (basename) => {
     };
 };
 
+const commitCloudChatMetadata = async (client, remoteDir, files) => enqueueChatMetadataWrite(async () => {
+    const remoteList = normalizeDirectoryContents(await client.getDirectoryContents(remoteDir, { details: true }).catch(() => []));
+    const metadata = await reconcileCloudChatMetadata(client, remoteDir, remoteList);
+    files.forEach((file) => {
+        const filename = getSafeString(file?.filename);
+        if (!filename) return;
+        metadata.chats[filename] = window.api.normalizeChatMetadataEntry(
+            filename,
+            normalizeChatMetadataPayload(file.chatMetadata)
+        );
+    });
+    await writeCloudChatMetadata(client, remoteDir, metadata);
+});
+
 const writeSingleCloudChatFile = async ({ filename, content, chatMetadata }) => {
     const normalizedBasename = getSafeString(filename);
     const { client, remoteDir } = getWebdavClientForChats();
@@ -356,27 +452,9 @@ const writeSingleCloudChatFile = async ({ filename, content, chatMetadata }) => 
         await client.createDirectory(remoteDir, { recursive: true });
     }
 
-    const remoteList = normalizeDirectoryContents(await client.getDirectoryContents(remoteDir, { details: true }).catch(() => []));
-    const metadata = await reconcileCloudChatMetadata(client, remoteDir, remoteList);
-    const previousEntry = metadata.chats[normalizedBasename] ? { ...metadata.chats[normalizedBasename] } : null;
-    metadata.chats[normalizedBasename] = window.api.normalizeChatMetadataEntry(
-        normalizedBasename,
-        normalizeChatMetadataPayload(chatMetadata)
-    );
-    await writeCloudChatMetadata(client, remoteDir, metadata);
-
-    try {
-        await client.putFileContents(`${remoteDir}/${normalizedBasename}`, content, { overwrite: true });
-        return { ok: true, filename: normalizedBasename };
-    } catch (error) {
-        if (previousEntry) {
-            metadata.chats[normalizedBasename] = previousEntry;
-        } else {
-            delete metadata.chats[normalizedBasename];
-        }
-        await writeCloudChatMetadata(client, remoteDir, metadata).catch(() => {});
-        throw error;
-    }
+    await retryLockedWebdavWrite(() => client.putFileContents(`${remoteDir}/${normalizedBasename}`, content, { overwrite: true }));
+    await commitCloudChatMetadata(client, remoteDir, [{ filename: normalizedBasename, chatMetadata }]);
+    return { ok: true, filename: normalizedBasename };
 };
 
 const moveCloudChatFileWithMetadata = async (oldFilename, newFilename) => {
@@ -459,15 +537,18 @@ const readCloudChatMetadata = async (client, remoteDir) => {
         return window.api.normalizeChatMetadataIndex(
             await window.api.parseChatMetadataYaml(typeof text === 'string' ? text : String(text || ''))
         );
-    } catch {
-        return window.api.normalizeChatMetadataIndex({ version: 1, chats: {} });
+    } catch (error) {
+        if (isWebdavNotFoundError(error)) {
+            return window.api.normalizeChatMetadataIndex({ version: 1, chats: {} });
+        }
+        throw new Error(formatWebdavError(error, '读取 chat-metadata.yaml 失败'));
     }
 };
 
 const writeCloudChatMetadata = async (client, remoteDir, metadata) => {
     const remotePath = buildChatMetadataRemotePath(remoteDir);
     const content = await window.api.serializeChatMetadataYaml(metadata);
-    await client.putFileContents(remotePath, content, { overwrite: true });
+    await retryLockedWebdavWrite(() => client.putFileContents(remotePath, content, { overwrite: true }));
 };
 
 const reconcileCloudChatMetadata = async (client, remoteDir, files = null) => {
@@ -544,44 +625,27 @@ const uploadFilesToCloudInBatches = async (basenames, signal, options = {}) => {
             files.push(payload);
         }
 
-        const remoteList = await client.getDirectoryContents(remoteDir, { details: true });
-        const metadata = await reconcileCloudChatMetadata(client, remoteDir, Array.isArray(remoteList) ? remoteList : (Array.isArray(remoteList?.data) ? remoteList.data : []));
-        const previousEntries = new Map();
-
-        files.forEach((file) => {
-            previousEntries.set(file.filename, metadata.chats[file.filename] ? { ...metadata.chats[file.filename] } : null);
-            metadata.chats[file.filename] = window.api.normalizeChatMetadataEntry(file.filename, normalizeChatMetadataPayload(file.chatMetadata));
-        });
-        await writeCloudChatMetadata(client, remoteDir, metadata);
-
         const batchResults = await Promise.all(files.map(async (file) => {
             try {
-                await client.putFileContents(`${remoteDir}/${file.filename}`, file.content, { overwrite: true });
-                return { ok: true, filename: file.filename };
+                await retryLockedWebdavWrite(() => client.putFileContents(`${remoteDir}/${file.filename}`, file.content, { overwrite: true }));
+                return { ok: true, file };
             } catch (error) {
-                return { ok: false, filename: file.filename, message: String(error?.message || error) };
+                return { ok: false, filename: file.filename, message: formatWebdavError(error) };
             }
         }));
 
-        let hasFailed = false;
-        batchResults.forEach((result) => {
-            if (result.ok) {
-                completed.push(result.filename);
-            } else {
-                hasFailed = true;
-                failed.push({ filename: result.filename, message: result.message });
-                const previous = previousEntries.get(result.filename);
-                if (previous) {
-                    metadata.chats[result.filename] = previous;
-                } else {
-                    delete metadata.chats[result.filename];
-                }
-            }
-        });
-
-        if (hasFailed) {
-            await writeCloudChatMetadata(client, remoteDir, metadata);
+        const uploaded = batchResults.filter((result) => result.ok).map((result) => result.file);
+        try {
+            await commitCloudChatMetadata(client, remoteDir, uploaded);
+            completed.push(...uploaded.map((file) => file.filename));
+        } catch (error) {
+            const message = formatWebdavError(error, '写入 chat-metadata.yaml 失败');
+            failed.push(...uploaded.map((file) => ({ filename: file.filename, message })));
         }
+
+        batchResults.filter((result) => !result.ok).forEach((result) => {
+            failed.push({ filename: result.filename, message: result.message });
+        });
 
         if (!signal?.aborted) {
             const processedCount = completed.length + failed.length;
@@ -1242,8 +1306,8 @@ async function readCloudProjectsViaWebdav() {
         const parsed = await window.api.parseProjectsYaml(typeof text === 'string' ? text : String(text));
         return normalizeProjectsResult(parsed);
     } catch (error) {
-        console.warn('[chats] 读取云端项目失败:', error);
-        return { version: 1, projects: [] };
+        if (isWebdavNotFoundError(error)) return { version: 1, projects: [] };
+        throw new Error(formatWebdavError(error, '读取 projects.yaml 失败'));
     }
 }
 
@@ -1252,7 +1316,7 @@ async function writeCloudProjectsViaWebdav(data) {
     const client = createClient(url, { username, password });
     const remotePath = buildCloudProjectsRemotePath();
     const content = await window.api.serializeProjectsYaml(data);
-    await client.putFileContents(remotePath, content, { overwrite: true });
+    await retryCloudProjectsWrite(() => client.putFileContents(remotePath, content, { overwrite: true }));
 }
 
 async function fetchLocalProjects() {
@@ -2052,18 +2116,25 @@ const cancelSync = () => {
 };
 
 async function runConcurrentTasks(tasks, signal, concurrencyLimit = 3) {
-    const results = { completed: 0, failed: 0, failedFiles: [], completedFiles: [] };
+    const results = { completed: 0, failed: 0, failedFiles: [], completedFiles: [], projectDescriptors: [] };
     const queue = [...tasks];
+    let cancelled = false;
 
     const worker = async () => {
         while (queue.length > 0) {
-            if (signal.aborted) throw new Error("Cancelled");
+            if (signal.aborted) {
+                cancelled = true;
+                break;
+            }
             const task = queue.shift();
             try {
                 const taskResult = await task.action(signal);
                 if (Array.isArray(taskResult?.completedFiles)) {
                     results.completed += taskResult.completedFiles.length;
                     results.completedFiles.push(...taskResult.completedFiles);
+                    if (Array.isArray(taskResult?.projectDescriptors)) {
+                        results.projectDescriptors.push(...taskResult.projectDescriptors);
+                    }
                     if (Array.isArray(taskResult?.failed)) {
                         results.failed += taskResult.failed.length;
                         results.failedFiles.push(...taskResult.failed.map((item) => item?.filename || item).filter(Boolean));
@@ -2094,7 +2165,7 @@ async function runConcurrentTasks(tasks, signal, concurrencyLimit = 3) {
 
     const workers = Array(concurrencyLimit).fill(null).map(worker);
     await Promise.all(workers);
-    return results;
+    return { ...results, cancelled };
 }
 
 async function intelligentUpload() {
@@ -2117,7 +2188,7 @@ async function intelligentUpload() {
         await syncProjectsBulk(uploadedBasenames, 'upload');
     } catch (error) {
         if (error === 'cancel' || error === 'close') return;
-        ElMessage.error(`${error.message}`);
+        ElMessage.error(formatWebdavError(error));
     }
 }
 
@@ -2137,7 +2208,7 @@ async function intelligentDownload() {
         await syncProjectsBulk(filesToDownload.map((file) => file.basename).filter((basename) => String(basename).toLowerCase().endsWith('.json')), 'download');
     } catch (error) {
         if (error === 'cancel' || error === 'close') return;
-        ElMessage.error(`${error.message}`);
+        ElMessage.error(formatWebdavError(error));
     }
 }
 
@@ -2149,16 +2220,19 @@ async function executeSync(tasks, title) {
 
     try {
         const results = await runConcurrentTasks(tasks, syncAbortController.value.signal);
+        // Do not abandon descriptors produced by already completed .db uploads on cancellation.
+        await commitDatabaseProjectDescriptors(results.projectDescriptors);
         let message = title === t('chats.alerts.syncConfirmUploadTitle') ? t('chats.alerts.syncSuccessUpload', { count: results.completed }) : t('chats.alerts.syncSuccessDownload', { count: results.completed });
         if (results.failed > 0) message += ` ${t('chats.alerts.syncFailedPartially', { failedCount: results.failed })}`;
-        ElMessage.success(message);
+        if (results.cancelled) ElMessage.warning(t('chats.alerts.syncCancelled'));
+        else ElMessage.success(message);
         await refreshData();
         return results;
     } catch (error) {
-        if (error.message === 'Cancelled') {
+        if (formatWebdavError(error) === 'Cancelled') {
             ElMessage.warning(t('chats.alerts.syncCancelled'));
         } else {
-            ElMessage.error(t('chats.alerts.syncFailed', { message: error.message }));
+            ElMessage.error(t('chats.alerts.syncFailed', { message: formatWebdavError(error) }));
         }
         throw error;
     } finally {
@@ -2183,27 +2257,42 @@ const uploadDatabaseConversation = async (file) => {
     const bytes = snapshot.content?.encoding === 'base64'
         ? Uint8Array.from(atob(snapshot.content.data), (char) => char.charCodeAt(0))
         : snapshot.content;
-    await client.putFileContents(`${remoteDir}/${descriptor.dbFile}`, bytes, { overwrite: true });
-    const cloudData = await readCloudProjectsViaWebdav();
-    const localProject = (localProjects.value.projects || []).find((project) =>
-        (project.conversationIds || []).includes(descriptor.conversationId)
-        || (descriptor.legacyJson && (project.files || []).includes(descriptor.legacyJson))
-    );
-    let projects = cloudData.projects.map((project) => ({
-        ...project,
-        conversationIds: (project.conversationIds || []).filter((id) => id !== descriptor.conversationId)
+    await retryLockedWebdavWrite(() => client.putFileContents(`${remoteDir}/${descriptor.dbFile}`, bytes, { overwrite: true }));
+    return { completedFiles: [descriptor.dbFile], projectDescriptors: [descriptor] };
+};
+
+const commitDatabaseProjectDescriptors = async (descriptors) => {
+    const uniqueDescriptors = Array.from(new Map(
+        (Array.isArray(descriptors) ? descriptors : [])
+            .filter((descriptor) => descriptor?.conversationId && descriptor?.dbFile)
+            .map((descriptor) => [descriptor.conversationId, descriptor])
+    ).values());
+    if (uniqueDescriptors.length === 0) return;
+
+    await enqueueCloudProjectsWrite(() => retryCloudProjectsWrite(async () => {
+        const cloudData = normalizeProjectsResult(await readCloudProjectsViaWebdav());
+        let projects = cloudData.projects.map((project) => ({ ...project, conversationIds: [...(project.conversationIds || [])] }));
+        const conversations = { ...cloudData.conversations };
+        for (const descriptor of uniqueDescriptors) {
+            const localProject = (localProjects.value.projects || []).find((project) =>
+                (project.conversationIds || []).includes(descriptor.conversationId)
+                || (descriptor.legacyJson && (project.files || []).includes(descriptor.legacyJson))
+            );
+            projects = projects.map((project) => ({
+                ...project,
+                conversationIds: (project.conversationIds || []).filter((id) => id !== descriptor.conversationId)
+            }));
+            if (localProject) {
+                projects = projects.map((project) => project.id === localProject.id
+                    ? { ...project, conversationIds: [...project.conversationIds, descriptor.conversationId] }
+                    : project);
+            }
+            conversations[descriptor.conversationId] = descriptor;
+        }
+        const nextCloudData = { ...cloudData, conversations, projects };
+        await writeCloudProjectsViaWebdav(nextCloudData);
+        cloudProjects.value = normalizeProjectsResult(nextCloudData);
     }));
-    if (localProject) {
-        projects = projects.map((project) => project.id === localProject.id
-            ? { ...project, conversationIds: [...project.conversationIds, descriptor.conversationId] }
-            : project);
-    }
-    await writeCloudProjectsViaWebdav({
-        ...cloudData,
-        conversations: { ...cloudData.conversations, [descriptor.conversationId]: descriptor },
-        projects
-    });
-    return { completedFiles: [descriptor.dbFile] };
 };
 
 const downloadDatabaseConversation = async (file) => {
@@ -2263,7 +2352,7 @@ async function forceSyncFile(basename, direction, signal, options = {}) {
         }
     } catch (error) {
         if (error.name === 'AbortError') throw new Error("Cancelled");
-        ElMessage.error(`同步文件 "${basename}" 失败: ${error.message}`);
+        ElMessage.error(`同步文件 "${basename}" 失败: ${formatWebdavError(error)}`);
         throw error;
     } finally {
         singleFileSyncing.value[basename] = false;
