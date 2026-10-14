@@ -125,6 +125,85 @@ function openDatabase(databasePath, { readOnly = false } = {}) {
   return db
 }
 
+function descriptorFromConversationRow(row, dbFile, existing = {}) {
+  const conversationId = normalizeText(row?.conversation_id).trim()
+  if (!conversationId) return null
+  const createdAt = normalizeTimestamp(row?.created_at)
+  const updatedAt = normalizeTimestamp(row?.updated_at) || createdAt
+  return {
+    conversationId,
+    dbFile,
+    title: normalizeText(row?.title).trim() || normalizeText(existing?.title).trim() || conversationId,
+    legacyJson: normalizeBasename(existing?.legacyJson || row?.legacy_json),
+    storageMode: normalizeText(existing?.storageMode, 'local').trim() || 'local',
+    revision: Math.max(0, Math.floor(Number(row?.revision) || 0)),
+    createdAt: createdAt || updatedAt,
+    updatedAt,
+    schemaVersion: Math.max(1, Math.floor(Number(row?.schema_version) || SCHEMA_VERSION))
+  }
+}
+
+async function synchronizeLocalProjectsWithDatabases(dirPath) {
+  const normalizedDir = path.resolve(normalizeText(dirPath).trim())
+  let projects = await readLocalProjects(normalizedDir)
+  const entries = await fs.readdir(normalizedDir, { withFileTypes: true }).catch((error) => {
+    if (error?.code === 'ENOENT') return []
+    throw error
+  })
+  const discoveredById = new Map()
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(DB_EXTENSION)) continue
+    let db
+    try {
+      db = openDatabase(path.join(normalizedDir, entry.name), { readOnly: true })
+      const row = getConversationRow(db)
+      const existing = projects.conversations?.[normalizeText(row?.conversation_id).trim()] || {}
+      const descriptor = descriptorFromConversationRow(row, entry.name, existing)
+      if (!descriptor) continue
+      if (!discoveredById.has(descriptor.conversationId)) discoveredById.set(descriptor.conversationId, [])
+      discoveredById.get(descriptor.conversationId).push(descriptor)
+    } catch {
+      // Ignore unrelated/corrupt .db files; only valid Anywhere conversation databases are indexed.
+    } finally {
+      try { db?.close() } catch {}
+    }
+  }
+
+  const rootDatabaseFiles = new Set(
+    entries.filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(DB_EXTENSION))
+      .map((entry) => entry.name.toLowerCase())
+  )
+  const discoveredConversationIdByFile = new Map()
+  const selectedDescriptors = new Map()
+  for (const [conversationId, descriptors] of discoveredById.entries()) {
+    for (const descriptor of descriptors) {
+      discoveredConversationIdByFile.set(descriptor.dbFile.toLowerCase(), descriptor.conversationId)
+    }
+    const indexedDbFile = normalizeText(projects.conversations?.[conversationId]?.dbFile).trim().toLowerCase()
+    const descriptor = descriptors.find((item) => item.dbFile.toLowerCase() === indexedDbFile)
+      || (descriptors.length === 1 ? descriptors[0] : null)
+    if (descriptor) selectedDescriptors.set(conversationId, descriptor)
+  }
+
+  let nextProjects = projects
+  for (const [conversationId, descriptor] of Object.entries(projects.conversations || {})) {
+    if (selectedDescriptors.has(conversationId)) continue
+    const indexedDbFile = normalizeText(descriptor?.dbFile).trim().toLowerCase()
+    const discoveredConversationId = discoveredConversationIdByFile.get(indexedDbFile)
+    if (!rootDatabaseFiles.has(indexedDbFile) || (discoveredConversationId && discoveredConversationId !== conversationId)) {
+      nextProjects = removeConversationFromProjects(nextProjects, conversationId)
+    }
+  }
+  for (const [conversationId, descriptor] of selectedDescriptors.entries()) {
+    nextProjects = registerConversation(nextProjects, descriptor)
+  }
+  if (JSON.stringify(nextProjects) !== JSON.stringify(projects)) {
+    await writeLocalProjects(normalizedDir, nextProjects)
+  }
+  return nextProjects
+}
+
+
 function initializeSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -932,7 +1011,7 @@ async function createConversation({ dirPath, title, sessionData = {}, projectId 
 
 async function openConversation({ dirPath, reference, activeOnly = true, pageSize = 200 } = {}) {
   const normalizedDir = path.resolve(normalizeText(dirPath).trim())
-  let projects = await readLocalProjects(normalizedDir)
+  let projects = await synchronizeLocalProjectsWithDatabases(normalizedDir)
   let descriptor = findConversation(projects, reference)
   if (!descriptor && normalizeBasename(reference).toLowerCase().endsWith('.json')) {
     const migration = await migrateJsonConversation({ dirPath: normalizedDir, jsonBasename: reference })
@@ -983,7 +1062,7 @@ async function openConversation({ dirPath, reference, activeOnly = true, pageSiz
 
 async function listLocalConversations(dirPath) {
   const normalizedDir = path.resolve(normalizeText(dirPath).trim())
-  const projects = await readLocalProjects(normalizedDir)
+  const projects = await synchronizeLocalProjectsWithDatabases(normalizedDir)
   const files = await fs.readdir(normalizedDir, { withFileTypes: true }).catch((error) => {
     if (error?.code === 'ENOENT') return []
     throw error
@@ -1576,26 +1655,27 @@ async function deleteConversation({ dirPath, conversationId, holderInstanceId = 
 }
 
 async function acquireWriteLease({ dirPath, conversationId, holderInstanceId, holderApp = 'desktop', force = false } = {}) {
-  const descriptor = findConversation(await readLocalProjects(dirPath), conversationId)
+  const descriptor = findConversation(await synchronizeLocalProjectsWithDatabases(dirPath), conversationId)
   if (!descriptor) throw new Error('conversation_not_found')
   const db = openDatabase(resolveDatabasePath(dirPath, descriptor.dbFile))
   try {
     initializeSchema(db)
     return withTransaction(db, () => {
       const resource = 'conversation'
+      const conversation = getConversationRow(db)
       const holder = normalizeText(holderInstanceId).trim()
       if (!holder) throw new Error('conversation_write_lease_holder_required')
       const current = db.prepare('SELECT * FROM write_lease WHERE resource = ?').get(resource)
       const expired = !current || new Date(current.expires_at).getTime() <= Date.now()
       if (!force && current && !expired && current.holder_instance_id !== holder) {
-        return { ok: false, readonly: true, holderApp: current.holder_app, expiresAt: current.expires_at, leaseEpoch: current.lease_epoch }
+        return { ok: false, readonly: true, holderApp: current.holder_app, expiresAt: current.expires_at, leaseEpoch: current.lease_epoch, revision: conversation.revision }
       }
       const heartbeatAt = nowIso()
       const expiresAt = new Date(Date.now() + WRITE_LEASE_TTL_MS).toISOString()
       if (!force && current && !expired && current.holder_instance_id === holder) {
         db.prepare("UPDATE write_lease SET holder_app = ?, heartbeat_at = ?, expires_at = ? WHERE resource = 'conversation' AND holder_instance_id = ? AND lease_epoch = ?")
           .run(holderApp, heartbeatAt, expiresAt, holder, current.lease_epoch)
-        return { ok: true, readonly: false, leaseEpoch: current.lease_epoch, expiresAt }
+        return { ok: true, readonly: false, leaseEpoch: current.lease_epoch, expiresAt, revision: conversation.revision }
       }
       const epoch = Number(current?.lease_epoch || 0) + 1
       db.prepare(`
@@ -1608,7 +1688,7 @@ async function acquireWriteLease({ dirPath, conversationId, holderInstanceId, ho
           heartbeat_at = excluded.heartbeat_at,
           expires_at = excluded.expires_at
       `).run(resource, holder, holderApp, epoch, heartbeatAt, expiresAt)
-      return { ok: true, readonly: false, leaseEpoch: epoch, expiresAt }
+      return { ok: true, readonly: false, leaseEpoch: epoch, expiresAt, revision: conversation.revision }
     })
   } finally { db.close() }
 }
@@ -1753,7 +1833,7 @@ async function importConversationSnapshot({ dirPath, descriptor: rawDescriptor =
 
 
 async function getConversationDescriptor({ dirPath, reference } = {}) {
-  const descriptor = findConversation(await readLocalProjects(dirPath), reference)
+  const descriptor = findConversation(await synchronizeLocalProjectsWithDatabases(dirPath), reference)
   return descriptor ? { ok: true, descriptor } : { ok: false, descriptor: null }
 }
 
