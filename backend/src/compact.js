@@ -296,7 +296,7 @@ function getVisualCacheKey(kind, dataUrl = '') {
 }
 
 function rememberVisualMetadata(cacheKey, value) {
-  if (!cacheKey || value == null) return value
+  if (!cacheKey) return value
   visualMetadataCache.delete(cacheKey)
   visualMetadataCache.set(cacheKey, value)
   while (visualMetadataCache.size > VISUAL_METADATA_CACHE_LIMIT) {
@@ -352,6 +352,13 @@ function readImageDimensionsFromDataUrl(dataUrl = '') {
       const kind = bytes.subarray(12, 16).toString('ascii')
       if (kind === 'VP8X' && bytes.length >= 30) {
         return rememberVisualMetadata(cacheKey, { width: readUint24LE(bytes, 24) + 1, height: readUint24LE(bytes, 27) + 1 })
+      }
+      if (kind === 'VP8 ' && bytes.length >= 30 && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+        return rememberVisualMetadata(cacheKey, { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff })
+      }
+      if (kind === 'VP8L' && bytes.length >= 25 && bytes[20] === 0x2f) {
+        const bits = bytes.readUInt32LE(21)
+        return rememberVisualMetadata(cacheKey, { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 })
       }
     }
     if (decoded.mimeType === 'image/jpeg' && bytes[0] === 0xff && bytes[1] === 0xd8) {
@@ -1356,7 +1363,8 @@ async function runConversationCompaction({
       createdAt: Date.now(),
       collapsed: true,
       expanded: false,
-      archivedMessages: deepClone(sourceMessages),
+      // SQLite canonical messages remain the recovery source. Do not clone the covered prefix
+      // into this runtime IPC result: it can contain large attachment data URLs and is unused by new-session restore.
       timestamp: new Date().toLocaleString('sv-SE')
     },
     modelConfig,

@@ -62,6 +62,19 @@ async function main() {
   const baseUserTokens = estimateMessagesTokens([{ role: 'user', content: [] }], { modelInput: 'qwen3-vl' });
   const imageTokens = estimateMessagesTokens([{ role: 'user', content: [{ type: 'image_url', image_url: { url: manualImage } }] }], { modelInput: 'qwen3-vl' });
   assert.equal(imageTokens - baseUserTokens, estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen3-vl' }));
+  const webpHeader = Buffer.alloc(30);
+  webpHeader.write('RIFF', 0, 'ascii');
+  webpHeader.write('WEBP', 8, 'ascii');
+  webpHeader.write('VP8 ', 12, 'ascii');
+  webpHeader[23] = 0x9d;
+  webpHeader[24] = 0x01;
+  webpHeader[25] = 0x2a;
+  webpHeader.writeUInt16LE(640, 26);
+  webpHeader.writeUInt16LE(480, 28);
+  const manualWebp = `data:image/webp;base64,${webpHeader.toString('base64')}`;
+  const webpTokens = estimateMessagesTokens([{ role: 'user', content: [{ type: 'image_url', image_url: { url: manualWebp } }] }], { modelInput: 'qwen3-vl' });
+  assert.equal(webpTokens - baseUserTokens, estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen3-vl' }), 'legacy VP8 WebP dimensions must be estimated from its file header');
+
   assert.notEqual(
     estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen3-vl' }),
     estimateVisualImageTokens({ width: 640, height: 480, modelInput: 'qwen2.5-vl' }),

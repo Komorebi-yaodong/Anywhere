@@ -9,6 +9,8 @@ const input = fs.readFileSync(path.join(root, 'Anywhere_window', 'src', 'compone
 const app = fs.readFileSync(path.join(root, 'Anywhere_window', 'src', 'App.vue'), 'utf8');
 const store = fs.readFileSync(path.join(root, 'backend', 'src', 'conversationStore.js'), 'utf8');
 
+const compact = fs.readFileSync(path.join(root, 'backend', 'src', 'compact.js'), 'utf8');
+
 assert.match(input, /const configurationLocked = computed\(\(\) => Boolean\(props\.writeLocked\)\)/);
 assert.match(input, /const draftInputLocked = computed\(\(\) => Boolean\(isRecording\.value \|\| props\.writeLocked\)\)/);
 assert.match(input, /<div v-if="compacting" class="compact-section-card compact-progress-block">/);
@@ -22,6 +24,8 @@ assert.doesNotMatch(store, /if \(outermost\.summary_id !== requestedSnapshotId\)
 assert.match(store, /return \{ revision, updatedAt, title: row\.title, restoredSnapshotId \}/);
 assert.match(store, /restoredSnapshotId: result\.restoredSnapshotId/);
 assert.match(store, /uiMessages = null/);
+
+assert.doesNotMatch(compact, /archivedMessages:\s*deepClone\(sourceMessages\)/);
 assert.match(app, /const autoSaveSessionRequestConfig = async/);
 assert.match(app, /saveConversationState\(\{[\s\S]{0,700}state:\s*\{\s*\.\.\.getSessionRequestConfigStatePatch\(\),\s*\.\.\.getSessionTransientStatePatch\(\)\s*\}/);
 assert.match(app, /delay: AUTO_SAVE_REQUEST_CONFIG_DEBOUNCE_MS,[\s\S]{0,80}stateOnly: true/);
