@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { resolveSafeConversationMutationTarget } from '../src/utils/conversationMessageTarget.js'
+import { createLinkedUserMessagePair } from '../src/utils/linkedUserMessage.js'
 
 const toolTurn = (toolCallIds) => ({
   role: 'assistant',
@@ -46,5 +47,34 @@ assert.equal(
   -1,
   'tool-linked assistant rows must remain fail-closed'
 )
+
+const duplicateOlderUser = { role: 'user', storageId: 'older-user', content: 'same text' }
+const linkedLatestUser = createLinkedUserMessagePair({
+  storageId: 'latest-user',
+  uiId: 99,
+  historyContent: 'same text',
+  uiContent: [{ type: 'text', text: 'same text' }],
+  timestamp: '2026-10-15 12:00:00'
+})
+assert.equal(linkedLatestUser.historyMessage.storageId, linkedLatestUser.uiMessage.storageId)
+assert.equal(
+  resolveSafeConversationMutationTarget(
+    [duplicateOlderUser, linkedLatestUser.historyMessage],
+    [linkedLatestUser.uiMessage],
+    0
+  ),
+  1,
+  'a just-sent user message must remain exactly deletable by its shared stable ID after the cancelled assistant bubble is removed'
+)
+assert.equal(
+  resolveSafeConversationMutationTarget(
+    [duplicateOlderUser, linkedLatestUser.historyMessage],
+    [{ ...linkedLatestUser.uiMessage, storageId: undefined }],
+    0
+  ),
+  -1,
+  'duplicate user text without a stable link must remain fail-closed'
+)
+
 
 console.log('Plugin conversation message target regression passed')

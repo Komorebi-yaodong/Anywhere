@@ -14,6 +14,7 @@ import TaskPanel from './components/TaskPanel.vue';
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, formatToolResult, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
 import { resolveSafeConversationMutationTarget } from './utils/conversationMessageTarget.js';
+import { createLinkedUserMessagePair } from './utils/linkedUserMessage.js';
 import { completeConversationClose, createConversationMutationQueue, createConversationPersistenceTracker, mergeConversationMutationRequests as mergeAutoSaveRequests } from './utils/conversationMutationQueue.js';
 import { MAX_AUTOMATIC_NETWORK_RETRIES, createNetworkRetryingStream, runWithNetworkRetries } from './utils/conversationNetworkRetry.js';
 
@@ -763,6 +764,22 @@ const conversationInstanceId = (typeof crypto !== 'undefined' && typeof crypto.r
   ? crypto.randomUUID()
   : `plugin_window_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 let conversationLeaseHeartbeatTimer = null;
+
+const appendLinkedUserMessage = ({ historyContent, uiContent = historyContent, timestamp = '', historyExtras = {}, uiExtras = {} } = {}) => {
+  const pair = createLinkedUserMessagePair({
+    storageId: createConversationStorageId(),
+    uiId: messageIdCounter.value++,
+    historyContent,
+    uiContent,
+    timestamp,
+    historyExtras,
+    uiExtras
+  });
+  appendFullHistory(pair.historyMessage);
+  chat_show.value.push(pair.uiMessage);
+  return pair;
+};
+
 
 const createConversationStorageId = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
   ? crypto.randomUUID()
@@ -3163,11 +3180,10 @@ onMounted(async () => {
         const system_time = new Date().toLocaleString('sv-SE');
         const pre_prompt = `## Scheduled Task\n\n**system_time**:${system_time}\n\n`;
         const suffix_prompt = "\n\nScheduled task triggered! This is a task that you need to execute autonomously without human intervention. Please execute immediately and provide correct feedback.";
-        appendFullHistory({ role: "user", content: pre_prompt + data.payload + suffix_prompt });
-        chat_show.value.push({
-          id: messageIdCounter.value++,
-          role: "user",
-          content: [{ type: "text", text: pre_prompt + data.payload + suffix_prompt }],
+        const scheduledTaskContent = pre_prompt + data.payload + suffix_prompt;
+        appendLinkedUserMessage({
+          historyContent: scheduledTaskContent,
+          uiContent: [{ type: "text", text: scheduledTaskContent }],
           timestamp: new Date().toLocaleString('sv-SE')
         });
 
@@ -3211,16 +3227,15 @@ onMounted(async () => {
           if (CODE.value.trim().toLowerCase().includes(data.payload.trim().toLowerCase())) { /* do nothing */ }
           else {
             if (currentPromptConfig.isDirectSend_normal) {
-              appendFullHistory({ role: "user", content: data.payload });
-              chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: data.payload }] });
+              appendLinkedUserMessage({ historyContent: data.payload, uiContent: [{ type: "text", text: data.payload }] });
               shouldDirectSend = true;
             } else { prompt.value = data.payload; }
           }
         }
       } else if (data.type === "img" && data.payload) {
         if (currentPromptConfig.isDirectSend_image ?? true) {
-          appendFullHistory({ role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
-          chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
+          const imageContent = [{ type: "image_url", image_url: { url: String(data.payload) } }];
+          appendLinkedUserMessage({ historyContent: imageContent, uiContent: imageContent });
           shouldDirectSend = true;
         } else {
           fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(data.payload) });
@@ -3314,11 +3329,10 @@ onMounted(async () => {
 
       // 2. 将收到的数据直接压入聊天历史或文件列表
       if (data.type === "over" && data.payload) {
-        appendFullHistory({ role: "user", content: data.payload });
-        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "text", text: data.payload }], timestamp: nowTime });
+        appendLinkedUserMessage({ historyContent: data.payload, uiContent: [{ type: "text", text: data.payload }], timestamp: nowTime });
       } else if (data.type === "img" && data.payload) {
-        appendFullHistory({ role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }] });
-        chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: [{ type: "image_url", image_url: { url: String(data.payload) } }], timestamp: nowTime });
+        const imageContent = [{ type: "image_url", image_url: { url: String(data.payload) } }];
+        appendLinkedUserMessage({ historyContent: imageContent, uiContent: imageContent, timestamp: nowTime });
       } else if (data.type === "files" && data.payload) {
         try {
           const fileProcessingPromises = data.payload.map((fileInfo) => processFilePath(fileInfo.path));
@@ -6542,8 +6556,7 @@ const appendCurrentInputToHistory = async () => {
   const contentForHistory = userContentList.length === 1 && userContentList[0].type === 'text'
     ? userContentList[0].text
     : userContentList;
-  appendFullHistory({ role: "user", content: contentForHistory });
-  chat_show.value.push({ id: messageIdCounter.value++, role: "user", content: userContentList, timestamp: userTimestamp });
+  appendLinkedUserMessage({ historyContent: contentForHistory, uiContent: userContentList, timestamp: userTimestamp });
   // Clear the consumed draft before taking the immediate snapshot, otherwise the same text is
   // persisted both as a user message and as promptDraft and reappears after reopening the session.
   prompt.value = "";
@@ -8176,6 +8189,7 @@ const isUserAuthoredMessage = (message = {}) => message?.role === 'user' && !isT
 
 const createViewImageMessage = (toolCallId, payload) => ({
   id: messageIdCounter.value++,
+  storageId: createConversationStorageId(),
   role: 'user',
   origin: 'view_image',
   sourceToolCallId: toolCallId,
@@ -8189,6 +8203,7 @@ const createViewImageMessage = (toolCallId, payload) => ({
 
 const createViewPdfMessage = (toolCallId, payload) => ({
   id: messageIdCounter.value++,
+  storageId: createConversationStorageId(),
   role: 'user',
   origin: 'view_pdf',
   sourceToolCallId: toolCallId,
