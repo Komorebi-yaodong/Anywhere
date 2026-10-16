@@ -27,6 +27,7 @@ const {
 
 const {
     handleFilePath,
+    sendfileDirect,
     saveFile,
     writeLocalFile,
     isFileTypeSupported,
@@ -235,6 +236,7 @@ window.api = {
     },
     copyText,
     handleFilePath,
+    sendfileDirect,
     saveFile,
     renameLocalFile,
     listJsonFiles,

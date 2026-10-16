@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:markdown-placeholder": "node tests/markdown-placeholder.test.mjs"
+    "test:markdown-placeholder": "node tests/markdown-placeholder.test.mjs",
+    "test:agent-message-buffer": "node tests/agent-message-buffer.test.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

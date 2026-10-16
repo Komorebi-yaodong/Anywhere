@@ -1276,8 +1276,14 @@ const pendingAppendBuffer = ref([]);
 
 
 const normalizePendingInputBuffer = (items) => (Array.isArray(items) ? items : [])
-  .filter((item) => item?.kind === 'input')
+  .filter((item) => item?.kind === 'input' || item?.kind === 'agent')
   .map((item) => {
+    if (item.kind === 'agent') {
+      const text = typeof item.text === 'string' ? item.text : '';
+      const filePaths = Array.isArray(item.filePaths) ? item.filePaths.filter((path) => typeof path === 'string' && path.trim()) : [];
+      if (!text.trim() && !filePaths.length) return null;
+      return { kind: 'agent', text, filePaths, source: 'continue_agent_chats', preview: text || `[${filePaths.length} files]` };
+    }
     const text = typeof item.text === 'string' ? item.text : '';
     const files = Array.isArray(item.files) ? item.files.filter((file) => file && typeof file === 'object') : [];
     if (!text.trim() && files.length === 0) return null;
@@ -2837,7 +2843,7 @@ onMounted(async () => {
   // 暴露给后台MCP调用的 Agent API
 
   window.__AGENT_API__ = {
-    isBusy: () => loading.value,
+    isBusy: () => isAgentMessageBusy(),
 
     getChatLength: () => chat_show.value.length,
 
@@ -2959,28 +2965,7 @@ onMounted(async () => {
       }
       return "Unknown message format.";
     },
-    sendMessage: async (text, filePaths) => {
-      if (!ensureConversationWriteAccess(false)) {
-        return Promise.reject('Error: This conversation is read-only or its write lease is still being confirmed.');
-      }
-      if (loading.value) {
-        return Promise.reject("Error: This agent is currently busy generating a response. Please wait until it becomes Idle.");
-      }
-      if (text) prompt.value = text;
-
-      let fileMsg = "";
-      if (filePaths && Array.isArray(filePaths) && filePaths.length > 0) {
-        let success = 0;
-        for (const p of filePaths) {
-          try { await processFilePath(p); success++; } catch (e) { }
-        }
-        await nextTick();
-        fileMsg = ` (${success} files attached)`;
-      }
-
-      askAI(false).catch(err => console.error("Background generation error:", err));
-      return `Message sent successfully${fileMsg}. Agent is now generating response...`;
-    },
+    sendMessage: async (text, filePaths) => sendAgentToolMessage({ text, filePaths, source: 'continue_agent_chats' }),
     closeWindow: async () => {
       await closePage(true);
       return "Window closing initiated.";
@@ -6108,6 +6093,102 @@ const processFilePath = async (filePath) => {
   } catch (error) { console.error('调用 handleFilePath 时发生意外错误:', error); showDismissibleMessage.error('处理文件路径时发生未知错误'); }
 };
 
+const buildAgentToolContentList = async ({ text, filePaths, source = 'agent_tool' } = {}) => {
+  const normalizedText = typeof text === 'string' ? text.trim() : '';
+  const normalizedPaths = Array.isArray(filePaths)
+    ? filePaths.filter((item) => typeof item === 'string' && item.trim())
+    : [];
+
+  const contentList = [];
+  if (normalizedText) {
+    contentList.push({ type: 'text', text: normalizedText });
+  }
+
+  let fileContentList = [];
+  if (normalizedPaths.length > 0) {
+    try {
+      fileContentList = await window.api.sendfileDirect(normalizedPaths.map((path) => ({ path })));
+    } catch (error) {
+      throw new Error(`Failed to attach files. ${error?.message || 'unknown error'}`);
+    }
+  }
+
+  if (normalizedPaths.length && (!Array.isArray(fileContentList) || fileContentList.length !== normalizedPaths.length)) {
+    throw new Error('One or more attachments could not be prepared. The message was not sent.');
+  }
+  if (Array.isArray(fileContentList) && fileContentList.length > 0) {
+    contentList.push(...fileContentList);
+  }
+
+  return {
+    normalizedText,
+    normalizedPaths,
+    attachedFiles: Array.isArray(fileContentList) ? fileContentList : [],
+    contentList
+  };
+};
+
+const AGENT_MESSAGE_QUEUED = 'The other agent is currently responding. Your message has been queued and will be viewed after it finishes its current response.';
+const AGENT_MESSAGE_SENT = 'Message sent successfully. The other agent is now responding to your message.';
+
+const isAgentMessageBusy = () => loading.value || isPreparingSend.value || compacting.value || isMcpLoading.value || Boolean(activeAssistantTurnMeta) || isFlushingAppendBuffer;
+
+const queueAgentToolMessage = (message, prepend = false) => {
+  const item = { kind: 'agent', ...message, preview: message.text || `[${message.filePaths.length} files]` };
+  if (prepend) pendingAppendBuffer.value.unshift(item);
+  else pendingAppendBuffer.value.push(item);
+  scheduleAutoSave({ reason: 'agent-message-buffered', immediate: true });
+  return AGENT_MESSAGE_QUEUED;
+};
+
+const appendAgentToolContent = (contentList) => {
+  if (isClosingWindow.value || !ensureConversationWriteAccess(false)) {
+    throw new Error('The target conversation is closing, read-only, or its write lease is unavailable.');
+  }
+  if (!contentList.length) throw new Error('No text or valid attachments were provided.');
+  appendLinkedUserMessage({
+    historyContent: contentList.length === 1 && contentList[0].type === 'text' ? contentList[0].text : contentList,
+    uiContent: contentList,
+    timestamp: new Date().toLocaleString('sv-SE')
+  });
+  scheduleAutoSave({ reason: 'agent-tool-message', immediate: true });
+};
+
+const sendAgentToolMessage = async ({ text, filePaths, source = 'agent_tool' } = {}) => {
+  if (isClosingWindow.value || !ensureConversationWriteAccess(false)) {
+    throw new Error('The target conversation is closing, read-only, or its write lease is unavailable.');
+  }
+  const message = {
+    text: typeof text === 'string' ? text.trim() : '',
+    filePaths: Array.isArray(filePaths) ? filePaths.filter((path) => typeof path === 'string' && path.trim()) : [],
+    source
+  };
+  if (!message.text && !message.filePaths.length) throw new Error('No text or valid attachments were provided.');
+  if (isAgentMessageBusy() || pendingAppendBuffer.value.length) {
+    const result = queueAgentToolMessage(message);
+    nextTick(() => { flushAppendBuffer(); });
+    return result;
+  }
+
+  // Reserve preparation before awaiting attachments; never use or clear the user's draft.
+  isPreparingSend.value = true;
+  try {
+    const { contentList } = await buildAgentToolContentList(message);
+    if (isClosingWindow.value || !ensureConversationWriteAccess(false)) {
+      throw new Error('The target conversation is closing, read-only, or its write lease is unavailable.');
+    }
+    if (loading.value || compacting.value || isMcpLoading.value || activeAssistantTurnMeta) {
+      // This message reserved the idle slot before later arrivals were queued.
+      return queueAgentToolMessage(message, true);
+    }
+    appendAgentToolContent(contentList);
+  } finally {
+    isPreparingSend.value = false;
+  }
+  askAI(true).catch((err) => console.error('Background generation error:', err));
+  return AGENT_MESSAGE_SENT;
+};
+
 const sendFile = async () => {
   let contentList = [];
   if (fileList.value.length === 0) return contentList;
@@ -6571,45 +6652,72 @@ const drainBufferIntoHistory = async () => {
   const savedPrompt = prompt.value;
   const savedFiles = Array.isArray(fileList.value) ? fileList.value.slice() : [];
   let appendedAny = false;
-  for (const item of items) {
-    if (item.kind === 'input') {
-      prompt.value = item.text || '';
-      fileList.value = Array.isArray(item.files) ? item.files : [];
-      isPreparingSend.value = true;
-      try {
-        const added = await appendCurrentInputToHistory();
-        if (added) appendedAny = true;
-      } finally {
-        isPreparingSend.value = false;
+  let consumed = 0;
+  let draftSwapped = false;
+  try {
+    for (const item of items) {
+      if (isClosingWindow.value || !ensureConversationWriteAccess(false)) break;
+      if (item.kind === 'agent') {
+        isPreparingSend.value = true;
+        try {
+          const { contentList } = await buildAgentToolContentList(item);
+          if (loading.value || compacting.value || isMcpLoading.value || activeAssistantTurnMeta) break;
+          appendAgentToolContent(contentList);
+          appendedAny = true;
+        } finally {
+          isPreparingSend.value = false;
+        }
+      } else if (item.kind === 'input') {
+        draftSwapped = true;
+        prompt.value = item.text || '';
+        fileList.value = Array.isArray(item.files) ? item.files : [];
+        isPreparingSend.value = true;
+        try {
+          const added = await appendCurrentInputToHistory();
+          if (added) appendedAny = true;
+        } finally {
+          isPreparingSend.value = false;
+        }
       }
+      consumed++;
     }
-  }
-  prompt.value = savedPrompt;
-  fileList.value = savedFiles;
-  if (savedPrompt.trim() || savedFiles.length > 0) {
-    scheduleInputDraftAutoSave('buffer-restored-draft');
+  } catch (error) {
+    showDismissibleMessage.error(`Buffered message was not sent: ${error?.message || 'Message preparation failed.'}`);
+  } finally {
+    // Keep failed/unconsumed messages ahead of arrivals received during attachment parsing.
+    pendingAppendBuffer.value.unshift(...items.slice(consumed));
+    if (draftSwapped) {
+      prompt.value = savedPrompt;
+      fileList.value = savedFiles;
+    }
+    scheduleAutoSave({ reason: 'append-buffer-drained', immediate: true });
+    if (prompt.value.trim() || fileList.value.length) scheduleInputDraftAutoSave('buffer-restored-draft');
   }
   return appendedAny;
 };
 
 const flushAppendBuffer = async () => {
+  // A buffered turn may begin only after the previous turn has fully released ownership.
+  // isMcpLoading is deliberately declared before this function.
   if (isClosingWindow.value || !ensureConversationWriteAccess(false)) return;
-  if (isFlushingAppendBuffer || loading.value || isPreparingSend.value || compacting.value || isMcpLoading.value) return;
+  if (isFlushingAppendBuffer || loading.value || isPreparingSend.value || compacting.value || isMcpLoading.value || activeAssistantTurnMeta) return;
   isFlushingAppendBuffer = true;
+  let startedTurn = false;
   try {
     const appendedAny = await drainBufferIntoHistory();
     if (appendedAny) {
+      startedTurn = true;
       await askAI(true);
     }
   } finally {
     isFlushingAppendBuffer = false;
+    // The turn finalizer cannot drain while this lock is held. Resume later arrivals now.
+    if (startedTurn && pendingAppendBuffer.value.length) nextTick(() => { flushAppendBuffer(); });
   }
 };
 
-
-
-watch(isMcpLoading, (now, prev) => {
-  if (prev && !now) {
+watch([isMcpLoading, compacting, isPreparingSend], (now, prev) => {
+  if (!isFlushingAppendBuffer && prev.some((busy, index) => busy && !now[index])) {
     nextTick(() => { flushAppendBuffer(); });
   }
 });
