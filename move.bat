@@ -20,5 +20,14 @@ echo.
 echo === run Python : moveDist.py ===
 
 python moveDist.py
+if errorlevel 1 (
+    echo release sync error
+    goto :eof
+)
+
+echo.
+echo === verify release ZIP size ===
+cd backend
+CALL pnpm run test:release-size
 
 :eof

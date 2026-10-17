@@ -7,6 +7,8 @@
     "build": "pnpm exec esbuild src/preload.js src/window_preload.js src/fast_window_preload.js --bundle --minify --platform=node --outdir=./public --format=cjs --external:electron --external:@aws-sdk/client-s3 --legal-comments=none && pnpm exec esbuild src/lazy_runtime.js --bundle --minify --platform=node --outfile=./public/lazy_runtime.js --format=cjs --external:electron --external:@aws-sdk/client-s3 --legal-comments=none && pnpm exec esbuild src/file_runtime.js --bundle --minify --platform=node --outfile=./public/file_runtime.js --format=cjs --external:electron --legal-comments=none && pnpm exec esbuild src/projects_runtime.js --bundle --minify --platform=node --outfile=./public/projects_runtime.js --format=cjs --external:electron --legal-comments=none && pnpm exec esbuild src/conversation_runtime.js --bundle --minify --platform=node --outfile=./public/conversation_runtime.js --format=cjs --external:electron --legal-comments=none && node scripts/copy-sqlite-native.js",
     "watch": "pnpm exec esbuild src/preload.js src/window_preload.js src/fast_window_preload.js src/lazy_runtime.js src/file_runtime.js src/projects_runtime.js src/conversation_runtime.js --bundle --platform=node --outdir=./public --format=cjs --external:electron --external:@aws-sdk/client-s3 --watch",
     "test:utools-runtime-compat": "node tests/utools-runtime-compat.test.js",
+    "test:preload-lazy-runtime": "node tests/preload-lazy-runtime.test.js",
+    "test:release-size": "node tests/release-size.test.js",
     "test:sqlite-compat": "node tests/conversation-sqlite-compat.test.js",
     "test:conversation-lease": "node tests/conversation-lease.test.js",
     "test:conversation-window": "node tests/conversation-window-state.test.js",

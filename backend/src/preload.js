@@ -10,7 +10,6 @@ const {
 const { getCurrentModuleAbi } = require('./utoolsRuntime.js');
 
 
-const { createChatCompletion, getRandomItem, batchTestProviderKeys } = require('./chat.js');
 const { reconcileTaskDeviceState, setCurrentTaskDeviceEnabled } = require('./task_devices.js');
 
 const {
@@ -58,36 +57,41 @@ const {
 } = require('./file.js');
 
 
-const {
-  invokeBuiltinTool,
-  handleBgShellRequest,
-  killAllBackgroundShells,
-} = require('./mcp_builtin.js');
+// Keep heavyweight Chat/MCP/Skill/OAuth dependencies in lazy_runtime.js so the
+// main preload and custom-window preload share one release artifact instead of
+// each embedding the same dependency graph.
+function getLazyRuntime() {
+  const runtimePath = './' + 'lazy_runtime.js';
+  return require(runtimePath);
+}
+
+function getChatModule() {
+  return getLazyRuntime();
+}
+
+function getMcpBuiltinModule() {
+  return getLazyRuntime();
+}
 
 function getMcpModule() {
-  return require('./mcp.js');
+  return getLazyRuntime();
+}
+
+function getSkillModule() {
+  return getLazyRuntime();
+}
+
+function getCompactModule() {
+  return getLazyRuntime();
 }
 
 function getOauthStore() {
-  return require('./mcp_oauth_store.js');
+  return getLazyRuntime().oauthStore;
 }
 
 function getOauthProvider() {
-  return require('./mcp_oauth_provider.js');
+  return getLazyRuntime().oauthProvider;
 }
-
-const {
-  listSkills,
-  getSkillDetails,
-  generateSkillToolDefinition,
-  resolveSkillInvocation,
-  saveSkill,
-  deleteSkill,
-  exportSkillToPackage,
-  exportSkillPackageBuffer,
-  extractSkillPackage,
-  importSkillPackageBuffer,
-} = require('./skill.js');
 
 const {
   readLocalProjects,
@@ -148,10 +152,12 @@ window.api = {
   saveSetting,
   updateConfigWithoutFeatures,
   getUser,
-  getRandomItem,
-  batchTestProviderKeys,
+  getRandomItem: (list) => getChatModule().getRandomItem(list),
+  batchTestProviderKeys: async (input = {}) => {
+    return await getChatModule().batchTestProviderKeys(input);
+  },
   createChatCompletion: async (params) => {
-    return await createChatCompletion(params);
+    return await getChatModule().createChatCompletion(params);
   },
   copyText,
   handleFilePath,
@@ -393,37 +399,37 @@ window.api = {
   // Skill 相关 API
   listSkills: async (path) => {
     try {
-      return listSkills(path);
+      return getSkillModule().listSkills(path);
     } catch (e) {
       console.error("listSkills error:", e);
       return [];
     }
   },
   getSkillDetails: async (rootPath, id) => {
-    return getSkillDetails(rootPath, id);
+    return getSkillModule().getSkillDetails(rootPath, id);
   },
   saveSkill: async (rootPath, id, content) => {
-    const res = await saveSkill(rootPath, id, content);
+    const res = await getSkillModule().saveSkill(rootPath, id, content);
     broadcastEvent('skills-updated');
     return res;
   },
   deleteSkill: async (rootPath, id) => {
-    const res = await deleteSkill(rootPath, id);
+    const res = await getSkillModule().deleteSkill(rootPath, id);
     broadcastEvent('skills-updated');
     return res;
   },
   // 暴露给前端的导出/导入接口
   exportSkillToPackage: async (rootPath, skillId, outputDir, options = {}) => {
-    return exportSkillToPackage(rootPath, skillId, outputDir, options);
+    return getSkillModule().exportSkillToPackage(rootPath, skillId, outputDir, options);
   },
   exportSkillPackageBuffer: async (rootPath, skillId, options = {}) => {
-    return exportSkillPackageBuffer(rootPath, skillId, options);
+    return getSkillModule().exportSkillPackageBuffer(rootPath, skillId, options);
   },
   extractSkillPackage: async (filePath) => {
-    return extractSkillPackage(filePath);
+    return getSkillModule().extractSkillPackage(filePath);
   },
   importSkillPackageBuffer: async (rootPath, skillId, packageBuffer) => {
-    const result = importSkillPackageBuffer(rootPath, skillId, packageBuffer);
+    const result = getSkillModule().importSkillPackageBuffer(rootPath, skillId, packageBuffer);
     broadcastEvent('skills-updated');
     return result;
   },
@@ -457,11 +463,12 @@ window.api = {
   // 生成 Skill Tool 定义 (供前端构建请求参数时使用)
   getSkillToolDefinition: async (rootPath, enabledSkillNames = []) => {
     try {
-      const allSkills = listSkills(rootPath);
+      const skillModule = getSkillModule();
+      const allSkills = skillModule.listSkills(rootPath);
       // 过滤出已启用且存在的 Skills
       const activeSkills = allSkills.filter(s => enabledSkillNames.includes(s.name));
       if (activeSkills.length === 0) return null;
-      return generateSkillToolDefinition(activeSkills, rootPath);
+      return skillModule.generateSkillToolDefinition(activeSkills, rootPath);
     } catch (e) {
       return null;
     }
@@ -469,7 +476,7 @@ window.api = {
   // 执行 Skill (AI 调用 tool 时使用)
   resolveSkillInvocation: async (rootPath, skillName, toolArgs, globalContext = null, signal = null) => {
     // 1. 获取 Skill 解析结果
-    const result = resolveSkillInvocation(rootPath, skillName, toolArgs);
+    const result = getSkillModule().resolveSkillInvocation(rootPath, skillName, toolArgs);
 
     // 2. 检查是否为 Fork 请求
     if (result && result.__isForkRequest && result.subAgentArgs) {
@@ -483,7 +490,7 @@ window.api = {
 
       // 3. 自动调用内置的 sub_agent 工具
       // 注意：invokeBuiltinTool 已经修复为返回序列化的 JSON 字符串，直接透传即可
-      return await invokeBuiltinTool(
+      return await getMcpBuiltinModule().invokeBuiltinTool(
         'sub_agent',
         result.subAgentArgs,
         signal,
@@ -548,10 +555,10 @@ window.api = {
   importMemoryData,
   // Compact cache is a separate DB doc; include in settings export/import.
   getCompactCache: async () => {
-    return require('./compact.js').getCompactCacheSnapshot();
+    return getCompactModule().getCompactCacheSnapshot();
   },
   importCompactCache: async (models = {}) => {
-    return require('./compact.js').importCompactCacheModels(models);
+    return getCompactModule().importCompactCacheModels(models);
   },
 };
 
@@ -851,7 +858,7 @@ utools.onPluginEnter(async (action) => {
 utools.onPluginOut((isKill) => {
   if (isKill) {
     try {
-      killAllBackgroundShells();
+      getMcpBuiltinModule().killAllBackgroundShells();
     } catch (e) {
       console.error("Error during background shells cleanup:", e);
     }
@@ -1264,7 +1271,7 @@ try {
 
 ipcRenderer.on('background-shell-request', async (e, { requestId, action, payload }) => {
   try {
-    const result = await handleBgShellRequest(action, payload);
+    const result = await getMcpBuiltinModule().handleBgShellRequest(action, payload);
 
     // 广播结果给所有存活的窗口，让发起者认领
     for (const win of windowMap.values()) {
@@ -1291,8 +1298,7 @@ ipcRenderer.on('background-shell-request', async (e, { requestId, action, payloa
 window.addEventListener('beforeunload', () => {
   conversationDbHelperClient.dispose();
   try {
-    const { killAllBackgroundShells } = require('./mcp_builtin.js');
-    killAllBackgroundShells();
+    getMcpBuiltinModule().killAllBackgroundShells();
   } catch (e) {
     console.error("Cleanup on beforeunload failed:", e);
   }
