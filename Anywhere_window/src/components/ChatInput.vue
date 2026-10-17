@@ -328,19 +328,19 @@ watch(() => props.voiceList, (newVal) => {
 
 // --- Computed Properties ---
 const reasoningEffortOptions = [
-    { value: 'default', label: '默认', tooltip: 'auto' },
-    { value: 'none', label: '关闭', tooltip: 'off' },
-    { value: 'low', label: '快速', tooltip: 'low' },
-    { value: 'medium', label: '均衡', tooltip: 'medium' },
-    { value: 'high', label: '深入', tooltip: 'high' },
-    { value: 'xhigh', label: '强化', tooltip: 'xhigh' },
-    { value: 'max', label: '极致', tooltip: 'max' }
+    { value: 'none', label: '关闭' },
+    { value: 'default', label: '自动' },
+    { value: 'low', label: '快速' },
+    { value: 'medium', label: '均衡' },
+    { value: 'high', label: '深入' },
+    { value: 'xhigh', label: '强化' },
+    { value: 'max', label: '极致' }
 ];
+const reasoningEffortValues = new Set(reasoningEffortOptions.map((option) => option.value));
 
-const reasoningTooltipContent = computed(() => {
-    const map = { default: '默认', none: '关闭', low: '快速', medium: '均衡', high: '深入', xhigh: '强化', max: '极致' };
-    return `思考预算: ${map[tempReasoningEffort.value] || '默认'}`;
-});
+const normalizeReasoningEffort = (value) => reasoningEffortValues.has(value) ? value : 'default';
+const currentReasoningOption = computed(() => reasoningEffortOptions.find((option) => option.value === normalizeReasoningEffort(tempReasoningEffort.value)) || reasoningEffortOptions[1]);
+const reasoningTooltipContent = computed(() => `思维深度: ${currentReasoningOption.value.label}`);
 
 const isImage = (file) => {
     if (file.type && file.type.startsWith('image/')) return true;
@@ -572,7 +572,7 @@ const toggleReasoningSelector = () => {
 };
 
 const handleReasoningSelection = (effort) => {
-    tempReasoningEffort.value = effort;
+    tempReasoningEffort.value = normalizeReasoningEffort(effort);
     isReasoningSelectorVisible.value = false;
 };
 
@@ -999,19 +999,17 @@ defineExpose({ focus, senderRef });
         <el-row v-if="isReasoningSelectorVisible" class="option-selector-row">
             <el-col :span="0" />
             <el-col :span="24">
-                <div class="option-selector-wrapper" ref="reasoningSelectorRef">
-                    <div class="option-selector-content">
-                        <el-text tag="b" class="selector-label">思考预算</el-text>
-                        <el-divider direction="vertical" />
-                        <el-tooltip v-for="option in reasoningEffortOptions" :key="option.value"
-                            :content="option.tooltip" placement="top" :show-after="250">
-                            <el-button @click="handleReasoningSelection(option.value)"
-                                :type="tempReasoningEffort === option.value ? 'primary' : 'default'" round>
-                                {{ option.label }}
-                            </el-button>
-                        </el-tooltip>
+                <section class="reasoning-depth-selector" ref="reasoningSelectorRef" aria-label="思维深度">
+                    <div class="reasoning-depth-track" role="radiogroup" aria-label="思维深度选项">
+                        <button v-for="option in reasoningEffortOptions" :key="option.value" type="button"
+                            class="reasoning-depth-node" :class="{ active: normalizeReasoningEffort(tempReasoningEffort) === option.value }"
+                            :aria-checked="normalizeReasoningEffort(tempReasoningEffort) === option.value" role="radio"
+                            :title="option.label" @click="handleReasoningSelection(option.value)">
+                            <span class="reasoning-depth-dot"></span>
+                            <span class="reasoning-depth-label">{{ option.label }}</span>
+                        </button>
                     </div>
-                </div>
+                </section>
             </el-col>
             <el-col :span="0" />
         </el-row>
@@ -1931,6 +1929,100 @@ html.dark .waveform-display-area {
 .option-selector-row {
     margin-bottom: 8px;
 }
+
+.reasoning-depth-selector {
+    padding: 10px 14px 6px;
+    border-radius: 12px;
+    background: var(--el-bg-color-input);
+}
+
+.reasoning-depth-track {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-items: start;
+    padding: 0 4px;
+}
+
+.reasoning-depth-track::before {
+    position: absolute;
+    top: 5px;
+    right: 7%;
+    left: 7%;
+    height: 2px;
+    background: var(--el-border-color);
+    content: '';
+}
+
+.reasoning-depth-node {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    color: var(--el-text-color-secondary);
+    background: transparent;
+    cursor: pointer;
+}
+
+.reasoning-depth-dot {
+    box-sizing: border-box;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--el-bg-color-input);
+    border-radius: 50%;
+    background: var(--el-text-color-secondary);
+    transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.reasoning-depth-label {
+    overflow: hidden;
+    max-width: 100%;
+    font-size: 11px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.reasoning-depth-node:hover,
+.reasoning-depth-node:focus-visible {
+    color: var(--el-color-primary);
+}
+
+.reasoning-depth-node:hover .reasoning-depth-dot,
+.reasoning-depth-node:focus-visible .reasoning-depth-dot {
+    transform: scale(1.2);
+    background: var(--el-color-primary);
+}
+
+.reasoning-depth-node.active {
+    color: var(--el-color-primary);
+    font-weight: 600;
+}
+
+.reasoning-depth-node.active .reasoning-depth-dot {
+    background: var(--el-bg-color-overlay);
+    box-shadow: 0 0 0 4px var(--el-color-primary);
+}
+
+html.dark .reasoning-depth-node.active .reasoning-depth-dot {
+    background: var(--el-bg-color-overlay);
+}
+
+@media (max-width: 500px) {
+    .reasoning-depth-selector {
+        padding-right: 8px;
+        padding-left: 8px;
+    }
+
+    .reasoning-depth-label {
+        font-size: 10px;
+    }
+}
+
 
 .option-selector-wrapper {
     background-color: var(--el-bg-color-input);

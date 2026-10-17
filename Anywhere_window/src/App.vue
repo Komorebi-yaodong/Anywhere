@@ -912,6 +912,8 @@ const acquireCurrentConversationLease = async () => {
   }
 };
 const selectedVoice = ref(null);
+const REASONING_EFFORT_VALUES = new Set(['default', 'none', 'low', 'medium', 'high', 'xhigh', 'max']);
+const normalizeReasoningEffort = (value) => REASONING_EFFORT_VALUES.has(value) ? value : 'default';
 const tempReasoningEffort = ref('default');
 
 let isRestoringSessionSnapshot = false;
@@ -3066,7 +3068,7 @@ onMounted(async () => {
     if (data?.type === "task" || data?.type === "summon") {
       autoCloseOnBlur.value = false;
     }
-    tempReasoningEffort.value = currentPromptConfig.reasoning_effort || 'default';
+    tempReasoningEffort.value = normalizeReasoningEffort(currentPromptConfig.reasoning_effort);
     model.value = currentPromptConfig.model || modelList.value[0]?.value || '';
     selectedVoice.value = currentPromptConfig.voice || null;
 
@@ -4064,7 +4066,7 @@ const getSessionRequestConfigStatePatch = () => {
     ...(currentConfig.value.prompts?.[CODE.value] || {}),
     ...(sourcePromptConfig.value || {}),
     model: model.value || '',
-    reasoning_effort: tempReasoningEffort.value || 'default',
+    reasoning_effort: normalizeReasoningEffort(tempReasoningEffort.value),
     voice: selectedVoice.value || null,
     window_height: window.outerHeight,
     window_width: window.outerWidth,
@@ -5872,9 +5874,7 @@ const loadSession = async (jsonData) => {
     if (typeof jsonData.promptDraft === 'string') prompt.value = jsonData.promptDraft;
     if (Array.isArray(jsonData.draftFileList)) fileList.value = deepCloneSafe(jsonData.draftFileList);
 
-    tempReasoningEffort.value = typeof jsonData.currentPromptConfig?.reasoning_effort === 'string'
-      ? jsonData.currentPromptConfig.reasoning_effort
-      : 'default';
+    tempReasoningEffort.value = normalizeReasoningEffort(jsonData.currentPromptConfig?.reasoning_effort);
     isAutoApproveTools.value = typeof jsonData.isAutoApproveTools === 'boolean'
       ? jsonData.isAutoApproveTools
       : true;
