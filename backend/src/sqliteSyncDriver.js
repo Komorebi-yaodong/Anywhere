@@ -4,32 +4,45 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const { setImmediate: scheduleImmediate } = require('timers');
-const BetterSqlite3 = require('better-sqlite3');
-const { cppdb } = require('better-sqlite3/lib/util');
+const { requireSupportedUtoolsRuntime } = require('./utoolsRuntime.js');
+const BetterSqlite3U7 = require('better-sqlite3-u7');
+const { cppdb: cppdbU7 } = require('better-sqlite3-u7/lib/util');
+const BetterSqlite3U8 = require('better-sqlite3-u8');
+const { cppdb: cppdbU8 } = require('better-sqlite3-u8/lib/util');
 
 const fsAccess = promisify(fs.access);
 const SQLITE_BUSY = 5;
 const SQLITE_LOCKED = 6;
 
-
-function loadNativeManifest() {
-  const manifestPath = path.join(__dirname, 'sqlite-native', 'manifest.json');
+function loadNativeManifest(runtime) {
+  const manifestPath = path.join(__dirname, 'sqlite-native', runtime.nativeDirectory, 'manifest.json');
   try {
     return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   } catch (error) {
-    throw new Error(`sqlite_native_manifest_invalid:${error?.message || error}`);
+    throw new Error(`sqlite_native_manifest_invalid:${runtime.id}:${error?.message || error}`);
   }
 }
 
-function assertNativeRuntime(manifest, target) {
+function assertNativeRuntime(manifest, runtime, target) {
   const expectedAbi = String(manifest?.moduleAbi || '');
   const actualAbi = String(process.versions?.modules || '');
-  if (!expectedAbi || expectedAbi !== actualAbi) {
-    throw new Error(`sqlite_native_abi_mismatch:expected=${expectedAbi || 'unknown'},actual=${actualAbi || 'unknown'}`);
+  if (!expectedAbi || expectedAbi !== runtime.moduleAbi || expectedAbi !== actualAbi) {
+    throw new Error(`sqlite_native_abi_mismatch:expected=${expectedAbi || runtime.moduleAbi || 'unknown'},actual=${actualAbi || 'unknown'}`);
   }
   if (!manifest?.targets?.[target]) {
-    throw new Error(`sqlite_native_binding_unsupported:${target}`);
+    throw new Error(`sqlite_native_binding_unsupported:${runtime.id}:${target}`);
   }
+}
+
+function getSqliteImplementation() {
+  const runtime = requireSupportedUtoolsRuntime();
+  if (runtime.id === 'u7') {
+    return { runtime, BetterSqlite3: BetterSqlite3U7, cppdb: cppdbU7 };
+  }
+  if (runtime.id === 'u8') {
+    return { runtime, BetterSqlite3: BetterSqlite3U8, cppdb: cppdbU8 };
+  }
+  throw new Error(`sqlite_native_package_unavailable:${runtime.id}`);
 }
 
 function loadNodeSqlite() {
@@ -47,17 +60,19 @@ const nodeSqlite = loadNodeSqlite();
 
 class CompatibleDatabaseSync {
   constructor(databasePath, { readOnly = false, timeout = 4000 } = {}) {
+    const { runtime, BetterSqlite3 } = getSqliteImplementation();
     const target = `${process.platform}-${process.arch}`;
-    const manifest = loadNativeManifest();
-    assertNativeRuntime(manifest, target);
+    const manifest = loadNativeManifest(runtime);
+    assertNativeRuntime(manifest, runtime, target);
     const nativeBinding = path.join(
       __dirname,
       'sqlite-native',
+      runtime.nativeDirectory,
       target,
       'better_sqlite3.node',
     );
     if (!fs.existsSync(nativeBinding)) {
-      throw new Error(`sqlite_native_binding_unsupported:${target}`);
+      throw new Error(`sqlite_native_binding_unsupported:${runtime.id}:${target}`);
     }
     return new BetterSqlite3(databasePath, {
       readonly: readOnly === true,
@@ -111,6 +126,7 @@ async function compatibleBackup(database, destination, options = {}) {
   const attachedName = typeof options?.attached === 'string' && options.attached
     ? options.attached
     : 'main';
+  const { cppdb } = getSqliteImplementation();
   const nativeBackup = database[cppdb].backup(database, attachedName, filename, isNewFile);
   nativeBackup.retryErrors = [SQLITE_BUSY, SQLITE_LOCKED];
   return runBackup(nativeBackup, typeof options?.progress === 'function' ? options.progress : null);

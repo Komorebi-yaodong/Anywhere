@@ -7,6 +7,7 @@ const {
 const {
   createConversationDbHelperClient
 } = require('./conversationDbHelperClient.js');
+const { getCurrentModuleAbi } = require('./utoolsRuntime.js');
 
 
 const { createChatCompletion, getRandomItem, batchTestProviderKeys } = require('./chat.js');
@@ -867,7 +868,7 @@ const WINDOW_LEASE_PROBE_INTERVAL_MS = 2000;
 const conversationDbHelperClient = createConversationDbHelperClient({
   helperPath: path.join(__dirname, 'conversation_db_helper.js'),
   execPath: process.execPath,
-  expectedModuleAbi: '110'
+  expectedModuleAbi: getCurrentModuleAbi()
 });
 
 function isMatchingConversationRpcCapability(request = {}) {

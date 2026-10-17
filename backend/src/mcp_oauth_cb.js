@@ -9,6 +9,7 @@
 
 const http = require('http');
 const { URL } = require('url');
+const { supportsBrowserWindowOAuthFallback } = require('./utoolsRuntime.js');
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5 min for a human to log in
 const PREFERRED_PORTS = [0]; // 0 = let OS pick an ephemeral loopback port
@@ -237,9 +238,14 @@ async function runAuthFlowWithFallback({ authorizeUrl, expectedState, preferredP
     return params;
   } catch (loopbackErr) {
     if (managedLoopback && managedLoopback.cleanup) managedLoopback.cleanup();
+    if (!supportsBrowserWindowOAuthFallback()) {
+      const error = new Error(`OAuth loopback callback failed: ${loopbackErr?.message || loopbackErr}`);
+      error.code = 'mcp_oauth_loopback_callback_failed';
+      error.cause = loopbackErr;
+      throw error;
+    }
     const redirectUri = managedLoopback ? managedLoopback.redirectUri : loopbackRedirectUri(preferredPort);
-    const params = await startBrowserWindowFallback({ authorizeUrl, redirectUri, expectedState, timeoutMs });
-    return params;
+    return await startBrowserWindowFallback({ authorizeUrl, redirectUri, expectedState, timeoutMs });
   } finally {
     if (managedLoopback && managedLoopback.cleanup) managedLoopback.cleanup();
   }

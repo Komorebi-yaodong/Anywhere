@@ -17,9 +17,12 @@ importers:
       adm-zip:
         specifier: ^0.5.16
         version: 0.5.16
-      better-sqlite3:
-        specifier: 8.7.0
-        version: 8.7.0
+      better-sqlite3-u7:
+        specifier: npm:better-sqlite3@8.7.0
+        version: better-sqlite3@8.7.0
+      better-sqlite3-u8:
+        specifier: npm:better-sqlite3@12.4.1
+        version: better-sqlite3@12.4.1
       gpt-tokenizer:
         specifier: 3.4.0
         version: 3.4.0
@@ -432,6 +435,10 @@ packages:
   batch-cluster@13.0.0:
     resolution: {integrity: sha512-EreW0Vi8TwovhYUHBXXRA5tthuU2ynGsZFlboyMJHCCUXYa2AjgwnE3ubBOJs2xJLcuXFJbi6c/8pH5+FVj8Og==}
     engines: {node: '>=14'}
+
+  better-sqlite3@12.4.1:
+    resolution: {integrity: sha512-3yVdyZhklTiNrtg+4WqHpJpFDd+WHTg2oM7UcR80GqL05AOV0xEJzc6qNvFYoEtE+hRp1n9MpN6/+4yhlGkDXQ==}
+    engines: {node: 20.x || 22.x || 23.x || 24.x}
 
   better-sqlite3@8.7.0:
     resolution: {integrity: sha512-99jZU4le+f3G6aIl6PmmV0cxUIWqKieHxsiF7G34CVFiE+/UabpYqkU0NJIkY/96mQKikHeBjtR27vFfs5JpEw==}
@@ -1807,6 +1814,11 @@ snapshots:
   base64-js@1.5.1: {}
 
   batch-cluster@13.0.0: {}
+
+  better-sqlite3@12.4.1:
+    dependencies:
+      bindings: 1.5.0
+      prebuild-install: 7.1.3
 
   better-sqlite3@8.7.0:
     dependencies:

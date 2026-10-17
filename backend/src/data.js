@@ -1,5 +1,10 @@
 const { webFrame, nativeImage } = require('electron');
 const crypto = require('crypto');
+const {
+  setCompatibleFeatureDescription,
+  getCompatibleFeatureDescription,
+  createCompatibleWindowOptions,
+} = require('./utoolsRuntime.js');
 
 const windowMap = new Map();
 const windowRpcCapabilityMap = new Map();
@@ -902,13 +907,12 @@ function updateConfig(newConfig) {
       const functionCmdCode = key + feature_suffix;
 
       // 更新或添加匹配指令
-      const expectedMatchFeature = {
+      const expectedMatchFeature = setCompatibleFeatureDescription({
         code: featureCode,
-        explain: key,
         mainHide: true,
         cmds: [],
         icon: prompt.icon || ""
-      };
+      }, key);
       if (prompt.type === "general") {
         expectedMatchFeature.cmds.push({ type: "over", label: key, "maxLength": 99999999999 });
         expectedMatchFeature.cmds.push({ type: "img", label: key });
@@ -934,13 +938,12 @@ function updateConfig(newConfig) {
 
       // 更新或添加功能指令（仅限窗口模式和快速展示模式）
       if (prompt.showMode === "window") {
-        utools.setFeature({
+        utools.setFeature(setCompatibleFeatureDescription({
           code: functionCmdCode,
-          explain: key,
           mainHide: true,
           cmds: [key],
           icon: prompt.icon || ""
-        });
+        }, key));
       } else {
         if (featuresMap.has(functionCmdCode)) {
           utools.removeFeature(functionCmdCode);
@@ -962,7 +965,7 @@ function updateConfig(newConfig) {
       continue;
     }
 
-    const promptKey = feature.explain;
+    const promptKey = getCompatibleFeatureDescription(feature);
     if (!enabledPromptKeys.has(promptKey) ||
       (currentPrompts[promptKey] && (currentPrompts[promptKey].showMode !== "window") && code.endsWith(feature_suffix))
     ) {
@@ -1239,7 +1242,7 @@ async function openWindow(config, msg) {
       let maxIdx = -1;
       features.forEach(f => {
         if (f.code.startsWith('append_to_')) {
-          const match = f.explain.match(nameRegex);
+          const match = getCompatibleFeatureDescription(f).match(nameRegex);
           if (match) {
             if (match[1]) {
               maxIdx = Math.max(maxIdx, parseInt(match[1], 10)); // 匹配到 "-x"
@@ -1256,9 +1259,8 @@ async function openWindow(config, msg) {
       }
 
       // 2. 动态注册专属“追问”特征指令
-      utools.setFeature({
+      utools.setFeature(setCompatibleFeatureDescription({
         code: `append_to_${senderId}`,
-        explain: displayName,
         icon: promptConfig?.icon || "logo.png",
         mainHide: true,
         cmds: [
@@ -1266,13 +1268,13 @@ async function openWindow(config, msg) {
           { type: "img", label: displayName },
           { type: "files", label: displayName},
         ]
-      });
+      }, displayName));
     } catch (e) {
       console.error("Async feature registration failed:", e);
     }
   }, 500);
 
-  const windowOptions = {
+  const windowOptions = createCompatibleWindowOptions({
     show: false,
     backgroundColor: backgroundColor,
     title: "Anywhere",
@@ -1286,9 +1288,8 @@ async function openWindow(config, msg) {
     hasShadow: true,
     webPreferences: {
       preload: "./window_preload.js",
-      devTools: utools.isDev()
     },
-  };
+  }, { devTools: utools.isDev() });
   const entryPath = config.isDarkMode ? "./window/index.html?dark=1" : "./window/index.html";
 
   return new Promise((resolve) => {
@@ -1566,7 +1567,7 @@ async function openFastInputWindow(config, msg) {
   const senderId = crypto.randomUUID();
   msg.senderId = senderId;
 
-  const windowOptions = {
+  const windowOptions = createCompatibleWindowOptions({
     show: true,
     width: width,
     height: height,
@@ -1582,9 +1583,8 @@ async function openFastInputWindow(config, msg) {
     skipTaskbar: true,
     webPreferences: {
       preload: "./fast_window_preload.js",
-      devTools: utools.isDev()
     }
-  };
+  }, { devTools: utools.isDev() });
 
   const entryPath = "./fast_window/fast_input.html";
 
@@ -1602,6 +1602,7 @@ async function openFastInputWindow(config, msg) {
         streamBuffer.length = 0;
       }
       if (utools.isDev()) {
+        try { fastWindow.webContents.openDevTools({ mode: "detach" }); } catch {}
         console.log(`[Timer] Fast window opened`);
       }
     }
@@ -1611,7 +1612,7 @@ async function openFastInputWindow(config, msg) {
 async function openAppendSelectorWindow(features, payload, type) {
   const listData = features.map(f => ({
     senderId: f.code.replace('append_to_', ''),
-    name: f.explain.replace('追问 ', ''),
+    name: getCompatibleFeatureDescription(f).replace('追问 ', ''),
     icon: f.icon
   })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
@@ -1640,7 +1641,7 @@ async function openAppendSelectorWindow(features, payload, type) {
   if (x + winWidth > display.x + display.width) x = display.x + display.width - winWidth;
   if (y + winHeight > display.y + display.height) y = display.y + display.height - winHeight;
 
-  const selectorWin = utools.createBrowserWindow('./fast_window/append_selector.html', {
+  const selectorWin = utools.createBrowserWindow('./fast_window/append_selector.html', createCompatibleWindowOptions({
     show: true,
     width: winWidth,
     height: winHeight,
@@ -1657,7 +1658,7 @@ async function openAppendSelectorWindow(features, payload, type) {
     webPreferences: {
       preload: "./fast_window_preload.js",
     }
-  }, () => {
+  }, { devTools: utools.isDev() }), () => {
 
     if (utools.isDev()) {
       const windowShownTime = performance.now();

@@ -1,63 +1,59 @@
 {
-	"main": "/main/index.html",
-	"preload": "preload.js",
-	"logo": "favicon.png",
-	"platform": [
-		"win32",
-		"darwin",
-		"linux"
-	],
-	"pluginSetting": {
-		"single": true
-	},
-	"features": [
-		{
-			"code": "Anywhere Settings",
-			"explain": "设置页面",
-			"cmds": [
-				"Anywhere Settings"
-			]
-		},
-		{
-			"code": "Resume Conversation",
-			"explain": "恢复聊天",
-			"cmds": [
-				{
-					"type": "files",
-					"label": "恢复聊天",
-					"fileType": "file",
-					"match": "/\\.(json)$/i"
-				},
-				{
-					"type": "over",
-					"label": "恢复聊天",
-					"maxLength": 99999999999
-				}
-			],
-			"mainHide": true,
-			"icon": "history.png"
-		},
-		{
-			"code": "append_global",
-			"explain": "追问",
-			"cmds": [
-				{
-					"type": "over",
-					"label": "追问",
-					"maxLength": 99999999999
-				},
-				{
-					"type": "img",
-					"label": "追问"
-				},
-				{
-					"type": "files",
-					"label": "追问",
-					"match": "/.*/i"
-				}
-			],
-			"mainHide": true,
-			"icon": "ask.png"
-		}
-	]
+  "main": "main/index.html",
+  "preload": "preload.js",
+  "logo": "favicon.png",
+  "platform": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "pluginSetting": {
+    "single": true
+  },
+  "features": [
+    {
+      "code": "Anywhere Settings",
+      "cmds": [
+        "Anywhere Settings"
+      ]
+    },
+    {
+      "code": "Resume Conversation",
+      "cmds": [
+        {
+          "type": "files",
+          "label": "恢复聊天",
+          "fileType": "file",
+          "match": "/\\.(json)$/i"
+        },
+        {
+          "type": "over",
+          "label": "恢复聊天",
+          "maxLength": 99999999999
+        }
+      ],
+      "mainHide": true,
+      "icon": "history.png"
+    },
+    {
+      "code": "append_global",
+      "cmds": [
+        {
+          "type": "over",
+          "label": "追问",
+          "maxLength": 99999999999
+        },
+        {
+          "type": "img",
+          "label": "追问"
+        },
+        {
+          "type": "files",
+          "label": "追问"
+        }
+      ],
+      "mainHide": true,
+      "icon": "ask.png"
+    }
+  ]
 }

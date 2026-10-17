@@ -15,6 +15,7 @@
 // injected by the caller (see test_oauth.js).
 
 const crypto = require('crypto');
+const { isUtools8OrLater } = require('./utoolsRuntime.js');
 
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
@@ -33,8 +34,11 @@ function getDeviceSeed() {
     ? String(utools.getNativeId() || '')
     : '';
   if (nativeId) return nativeId;
-  // Stable fallback: hash the native id + plugin id so the derived key is still
-  // machine-bound even if getNativeId() returns empty transiently.
+  // uTools 8 no longer documents getAppId(). Refuse to derive encryption keys
+  // from an unstable substitute there; preserve the U7 compatibility fallback.
+  if (isUtools8OrLater()) {
+    throw new Error('mcp_oauth_native_id_unavailable');
+  }
   const pluginId = (typeof utools !== 'undefined' && typeof utools.getAppId === 'function')
     ? String(utools.getAppId() || '')
     : 'anywhere-mcp';
