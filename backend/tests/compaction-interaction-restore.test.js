@@ -30,6 +30,9 @@ assert.match(app, /const autoSaveSessionRequestConfig = async/);
 assert.match(app, /saveConversationState\(\{[\s\S]{0,700}state:\s*\{\s*\.\.\.getSessionRequestConfigStatePatch\(\),\s*\.\.\.getSessionTransientStatePatch\(\)\s*\}/);
 assert.match(app, /delay: AUTO_SAVE_REQUEST_CONFIG_DEBOUNCE_MS,[\s\S]{0,80}stateOnly: true/);
 assert.match(app, /const splitChatShowPrefixAtFullCut =/);
-assert.match(app, /await executeAutoSaveRequest\(\{ reason: 'conversation-compacted', force: true[\s\S]{0,180}await reloadConversationWindowFromStore/);
+const saveStart = app.indexOf("const saved = await executeAutoSaveRequest({ reason: 'conversation-compacted'");
+const saveGuard = app.indexOf('if (saved !== true)', saveStart);
+const reloadStart = app.indexOf('await reloadConversationWindowFromStore({ activeOnly: true, pageSize: 200, expectedSnapshotId })', saveStart);
+assert.ok(saveStart >= 0 && saveGuard > saveStart && reloadStart > saveGuard, 'compaction must verify persistence before checkpoint reload');
 
 console.log('Plugin compaction interaction and authoritative restore regression passed');

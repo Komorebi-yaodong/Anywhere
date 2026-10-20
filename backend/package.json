@@ -22,6 +22,7 @@
     "test:conversation-persistence": "node tests/conversation-persistence-lifecycle.test.js && node tests/conversation-persistence-roundtrip.test.js",
     "test:conversation-network-retry": "node tests/conversation-network-retry.test.js",
     "test:compaction-interaction": "node tests/compaction-interaction-restore.test.js",
+    "test:compaction-checkpoint": "node tests/conversation-checkpoint-insert.test.js && node tests/compaction-completion.test.js",
     "test:conversation-compaction-restore": "node tests/conversation-compaction-restore.test.js"
   },
   "keywords": [],

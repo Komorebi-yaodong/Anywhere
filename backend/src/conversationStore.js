@@ -547,7 +547,7 @@ function insertMessage(db, message, ordinal) {
       storageId,
       Number.isFinite(Number(payload.coveredStartOrdinal)) ? Number(payload.coveredStartOrdinal) : null,
       Number.isFinite(Number(payload.coveredEndOrdinal)) ? Number(payload.coveredEndOrdinal) : null,
-      ordinal - 1,
+      db.prepare('SELECT MAX(ordinal) AS value FROM messages WHERE ordinal < ?').get(ordinal)?.value ?? null,
       normalizeText(payload.summary || payload.content),
       normalizeText(payload.summaryPrefix),
       Math.max(0, Number(payload.tokenCount) || 0),
@@ -594,7 +594,98 @@ function canIncrementallySyncOrder(existingIds, currentMessages, idKey) {
   return true
 }
 
+// Insert checkpoints without rebuilding canonical history or moving existing ordinals.
+function syncInsertedCompactions(db, messages, lowerBound, { ui = false } = {}) {
+  const table = ui ? 'ui_messages' : 'messages'
+  const orderKey = ui ? 'ui_order' : 'ordinal'
+  const rowIdKey = ui ? 'ui_uuid' : 'message_uuid'
+  const messageIdKey = ui ? 'uiStorageId' : 'storageId'
+  const checkpoints = messages.filter((message) => message.role === 'compaction')
+  if (!checkpoints.length) return false
+  const existingCheckpointIds = new Set(db.prepare(`SELECT ${rowIdKey} FROM ${table} WHERE role_code = 'compaction'`).all().map((row) => row[rowIdKey]))
+  if (checkpoints.every((message) => existingCheckpointIds.has(message[messageIdKey]))) return false
+  const rows = db.prepare(`SELECT * FROM ${table} ORDER BY ${orderKey}`).all()
+  const byId = new Map(rows.map((row) => [row[rowIdKey], row]))
+  const added = messages.filter((message) => !byId.has(message[messageIdKey]))
+  if (!added.some((message) => message.role === 'compaction')) return false
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]
+    if (!byId.has(message[messageIdKey]) && message.role !== 'compaction'
+      && messages.slice(index + 1).some((item) => byId.has(item[messageIdKey]))) return false
+  }
+  const ids = messages.map((message) => message[messageIdKey])
+  if (new Set(ids).size !== ids.length || ids.some((id) => !id)) return false
+  const retained = ids.filter((id) => byId.has(id))
+  const retainedSet = new Set(retained)
+  if (rows.some((row) => (row.role_code === 'system' || row[orderKey] >= lowerBound) && !retainedSet.has(row[rowIdKey]))) return false
+  if (rows.filter((row) => retainedSet.has(row[rowIdKey])).map((row) => row[rowIdKey]).join('\0') !== retained.join('\0')) return false
+
+  if (ui) {
+    for (const message of messages) {
+      const row = byId.get(message[messageIdKey])
+      if (!row || row.role_code === 'system' || row[orderKey] >= lowerBound) continue
+      const stored = hydrateAttachments(db, JSON.parse(row.payload_json))
+      if (JSON.stringify(stored) !== JSON.stringify(stripMessageStorageMetadata(message, { ui: true }))
+        || (row.message_uuid || null) !== (normalizeText(message.storageId).trim() || null)) {
+        throw new Error('conversation_compaction_protected_prefix_changed')
+      }
+    }
+    const active = messages.filter((message) => {
+      const row = byId.get(message[messageIdKey])
+      return message.role === 'system' || !row || row[orderKey] >= lowerBound
+    })
+    replaceUiProjection(db, active, lowerBound)
+    return true
+  }
+
+  const orders = new Map()
+  const occupied = new Set(rows.map((row) => Number(row[orderKey])))
+  let left = null
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]
+    const existing = byId.get(message[messageIdKey])
+    if (existing) { left = Number(existing[orderKey]); continue }
+    const next = messages.slice(index + 1).find((item) => byId.has(item[messageIdKey]))
+    const right = next ? Number(byId.get(next[messageIdKey])[orderKey]) : null
+    // Include unloaded historical rows when finding the gap before the next retained row.
+    const previous = right == null
+      ? Number(rows[rows.length - 1]?.[orderKey] || 0)
+      : rows.reduce((max, row) => Number(row[orderKey]) < right ? Math.max(max, Number(row[orderKey])) : max, right - 1)
+    const lower = Math.max(left ?? previous, previous)
+    const order = right == null ? lower + 1 : lower + (right - lower) / 2
+    if (!Number.isFinite(order) || order <= lower || (right != null && order >= right) || occupied.has(order)) {
+      throw new Error('conversation_compaction_order_space_exhausted')
+    }
+    orders.set(message[messageIdKey], order)
+    occupied.add(order)
+    left = order
+  }
+
+  for (const message of messages) {
+    const id = message[messageIdKey]
+    const existing = byId.get(id)
+    if (!existing) {
+      if (ui) insertUiMessage(db, message, orders.get(id))
+      else insertMessage(db, message, orders.get(id))
+      continue
+    }
+    const stored = hydrateAttachments(db, JSON.parse(existing.payload_json))
+    const payload = stripMessageStorageMetadata(message, { ui })
+    const role = normalizeText(message.role, 'user')
+    const sameLink = !ui || (existing.message_uuid || null) === (normalizeText(message.storageId).trim() || null)
+    if (existing.role_code === role && sameLink && JSON.stringify(stored) === JSON.stringify(payload)) continue
+    if (existing.role_code !== 'system' && existing[orderKey] < lowerBound) {
+      throw new Error('conversation_compaction_protected_prefix_changed')
+    }
+    db.prepare(`DELETE FROM ${table} WHERE ${rowIdKey} = ?`).run(id)
+    if (ui) insertUiMessage(db, message, existing[orderKey])
+    else insertMessage(db, message, existing[orderKey])
+  }
+  return true
+}
+
 function syncMessagesIncrementally(db, messages, lowerBound = 1) {
+  if (syncInsertedCompactions(db, messages, lowerBound)) return true
   const existingRows = db.prepare(`
     SELECT ordinal, message_uuid, role_code, payload_json
     FROM messages WHERE role_code = 'system' OR ordinal >= ? ORDER BY ordinal
@@ -629,6 +720,7 @@ function syncMessagesIncrementally(db, messages, lowerBound = 1) {
 }
 
 function syncUiMessagesIncrementally(db, messages, lowerBound = 1) {
+  if (syncInsertedCompactions(db, messages, lowerBound, { ui: true })) return true
   const existingRows = db.prepare(`
     SELECT ui_order, ui_uuid, message_uuid, role_code, payload_json
     FROM ui_messages WHERE role_code = 'system' OR ui_order >= ? ORDER BY ui_order
