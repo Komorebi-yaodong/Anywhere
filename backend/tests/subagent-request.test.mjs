@@ -14,11 +14,26 @@ try {
   }
   assert.match(formatSubAgentError(Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNRESET' } })), /network_error.*ECONNRESET/)
   const logs = []
-  let requestSignal
-  await assert.rejects(requestSubAgentCompletion(params => { requestSignal = params.signal; return new Promise(() => {}) }, {}, text => logs.push(text), { timeoutMs: 35, progressMs: 5 }), /deadline/)
-  assert.equal(requestSignal.aborted, true)
-  assert.ok(logs.some(line => line.includes('[Waiting]')))
-  assert.match(logs.at(-1), /SUBAGENT_REQUEST_TIMEOUT/)
+  let requestSignal, resolveLongRequest, progressTick, progressCleared = false, clock = 1000
+  const helperSource = await fs.readFile(new URL('../src/subAgentRequest.js', import.meta.url), 'utf8')
+  const helper = vm.runInNewContext(helperSource.replace(/^export /gm, '').replace(/^module\.exports =.*$/gm, '') + '\n;({requestSubAgentCompletion})', {
+    Date: {now: () => clock}, AbortController,
+    setTimeout: () => {throw new Error('Sub-Agent must not install a total deadline')},
+    setInterval: callback => {progressTick = callback; return {unref() {}}},
+    clearInterval: () => {progressCleared = true},
+  })
+  const longRequest = helper.requestSubAgentCompletion(params => {requestSignal = params.signal; return new Promise(resolve => {resolveLongRequest = resolve})}, {}, text => logs.push(text))
+  await Promise.resolve()
+  clock += 20 * 60 * 1000
+  progressTick()
+  assert.equal(requestSignal.aborted, false, '20 minutes of thinking is not a stop condition')
+  assert.match(logs.at(-1), /1200s; not stopped/)
+  resolveLongRequest({ok: true})
+  assert.deepEqual(await longRequest, {ok: true})
+  assert.equal(progressCleared, true)
+  const transportTimeout = Object.assign(new Error('shared transport timeout'), {code: 'ETIMEDOUT'})
+  await assert.rejects(requestSubAgentCompletion(async () => {throw transportTimeout}, {}, text => logs.push(text)), error => error === transportTimeout)
+  assert.match(logs.at(-1), /timeout.*ETIMEDOUT/)
   const parent = new AbortController()
   const cancelled = requestSubAgentCompletion(() => new Promise(() => {}), { signal: parent.signal }, () => {})
   parent.abort()
@@ -54,7 +69,7 @@ try {
   assert.match(task.error, /HTTP 429/)
   assert.ok(!task.latestLog.includes('sk-test-secret'))
   assert.equal(updates.at(-1).status, 'failed')
-  console.log(`PASS Sub-Agent ${plugin ? 'uTools' : 'Desktop'} HTTP/network/deadline/progress/cancel/redaction/terminal-state regression`)
+  console.log(`PASS Sub-Agent ${plugin ? 'uTools' : 'Desktop'} HTTP/network/20-minute-wait/progress/cancel/redaction/terminal-state regression`)
 } finally {
   clearInterval(keepAlive)
 }
