@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:markdown-placeholder": "node tests/markdown-placeholder.test.mjs",
-    "test:agent-message-buffer": "node tests/agent-message-buffer.test.mjs"
+    "test:agent-message-buffer": "node tests/agent-message-buffer.test.mjs",
+    "test:conversation-heartbeat": "node tests/conversation-heartbeat-recovery.test.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

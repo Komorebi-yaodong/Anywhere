@@ -65,7 +65,7 @@ function harness() {
   const context = vm.createContext({
     computed, ref, watch, nextTick,
     loading: ref(false), isPreparingSend: ref(false), compacting: ref(false), isMcpLoading: ref(false),
-    isClosingWindow: ref(false), pendingAppendBuffer: ref([]), prompt: ref('unsent draft'),
+    isClosingWindow: ref(false), desktopTakeoverPending: ref(false), pendingAppendBuffer: ref([]), prompt: ref('unsent draft'),
     fileList: ref([{ name: 'draft.txt', url: 'synthetic draft' }]),
     ensureConversationWriteAccess: () => controls.write,
     scheduleAutoSave: (options) => saves.push(options.reason),
@@ -95,7 +95,7 @@ function harness() {
     ${normalizer}
     ${sender}
     ${drain}
-    ;({ sendAgentToolMessage, flushAppendBuffer, normalizePendingInputBuffer,
+    ;({ sendAgentToolMessage, flushAppendBuffer, drainBufferIntoHistory, normalizePendingInputBuffer,
       loading, compacting, isPreparingSend, isMcpLoading, isClosingWindow,
       pendingAppendBuffer, prompt, fileList,
       setActive: (value) => { activeAssistantTurnMeta = value },
@@ -277,6 +277,45 @@ for (const flag of ['isPreparingSend', 'compacting', 'isMcpLoading']) {
     await tick()
   })
 }
+
+assert.match(source, /await drainBufferIntoHistory\(\{ toolBoundaryTurn: turnMeta \}\)/)
+await run('agent messages drain at the owning tool boundary, not after final response', async (h) => {
+  const turn = { controller: new AbortController() }
+  h.loading.value = true
+  h.setActive(turn)
+  await h.sendAgentToolMessage({ text: 'notice before next tool round' })
+  await h.sendAgentToolMessage({ text: 'second notice' })
+  assert.equal(await h.drainBufferIntoHistory({ toolBoundaryTurn: turn }), true)
+  assert.deepEqual(h.history.map(item => item.historyContent), ['notice before next tool round', 'second notice'])
+  assert.equal(h.pendingAppendBuffer.value.length, 0)
+  assert.equal(h.requests.length, 0, 'the existing tool loop continues; no second askAI')
+  assert.equal(h.prompt.value, 'unsent draft')
+})
+await run('boundary attachments recheck cancellation and preserve FIFO and edited drafts', async (h) => {
+  const turn = { controller: new AbortController() }
+  h.loading.value = true
+  h.setActive(turn)
+  const prepare = deferred()
+  h.controls.prepare = () => prepare.promise
+  await h.sendAgentToolMessage({ text: 'file notice', filePaths: ['synthetic.txt'] })
+  const draining = h.drainBufferIntoHistory({ toolBoundaryTurn: turn })
+  await h.sendAgentToolMessage({ text: 'later arrival' })
+  h.prompt.value = 'edited draft'
+  turn.controller.abort()
+  prepare.resolve([{ type: 'text', text: 'synthetic file' }])
+  assert.equal(await draining, false)
+  assert.equal(h.history.length, 0)
+  assert.deepEqual(h.pendingAppendBuffer.value.map(item => item.text), ['file notice', 'later arrival'])
+  assert.equal(h.prompt.value, 'edited draft')
+})
+await run('wrong boundary owner cannot consume the active turn queue', async (h) => {
+  h.loading.value = true
+  h.setActive({})
+  await h.sendAgentToolMessage({ text: 'preserved' })
+  assert.equal(await h.drainBufferIntoHistory({ toolBoundaryTurn: {} }), false)
+  assert.equal(h.pendingAppendBuffer.value.length, 1)
+})
+
 
 await run('tool-round/finalizer ownership blocks early draining', async (h) => {
   h.loading.value = true

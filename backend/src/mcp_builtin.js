@@ -8,6 +8,7 @@ const { exec, spawn } = require('child_process');
 const { handleFilePath, parseFileObject } = require('./file.js');
 
 const { createChatCompletion } = require('./chat.js');
+const { formatSubAgentError, requestSubAgentCompletion } = require('./subAgentRequest.js');
 const { setCurrentTaskDeviceEnabled } = require('./task_devices.js');
 
 const isWin = process.platform === 'win32';
@@ -1977,7 +1978,7 @@ ${userContext || 'No additional context provided.'}
             // 3.1 LLM 思考 (使用 chat.js)
             const currentApiType = apiType || 'chat_completions';
 
-            const response = await createChatCompletion({
+            const response = await requestSubAgentCompletion(createChatCompletion, {
                 baseUrl: baseUrl,
                 apiKey: apiKey,
                 model: requestModelName,
@@ -1989,7 +1990,7 @@ ${userContext || 'No additional context provided.'}
                 tool_choice: availableTools.length > 0 ? "auto" : undefined,
                 stream: false,
                 signal: signal
-            });
+            }, log);
 
             let messageContent = "";
             let toolCalls = [];
@@ -2077,8 +2078,9 @@ ${userContext || 'No additional context provided.'}
             }
         } catch (e) {
             if (e.name === 'AbortError') throw e;
-            log(`[Critical Error] ${e.message}`);
-            return `[Sub-Agent Error] ${e.message}`;
+            const reason = formatSubAgentError(e, apiKey);
+            log(`[Critical Error] ${reason}`);
+            return `[Sub-Agent Error] ${reason}`;
         }
     }
 
@@ -2109,7 +2111,7 @@ ${userContext || 'No additional context provided.'}
         });
 
         const currentApiType = apiType || 'chat_completions';
-        const summaryResponse = await createChatCompletion({
+        const summaryResponse = await requestSubAgentCompletion(createChatCompletion, {
             baseUrl: baseUrl,
             apiKey: apiKey,
             model: requestModelName,
@@ -2117,11 +2119,9 @@ ${userContext || 'No additional context provided.'}
             retryCount: Number.isInteger(providerInfo.retryCount) ? providerInfo.retryCount : 3,
             headers: providerHeaders,
             messages: messages,
-            tools: availableTools.length > 0 ? availableTools : undefined,
-            tool_choice: availableTools.length > 0 ? "auto" : undefined,
             stream: false,
             signal: signal
-        });
+        }, log);
 
         let summaryContent = "";
         if (currentApiType === 'responses' && summaryResponse.output) {
@@ -2141,7 +2141,8 @@ ${userContext || 'No additional context provided.'}
             return `[Sub-Agent Timeout Summary]\n${summaryContent}\n\n(System Note: The sub-agent stopped because the step limit of ${MAX_STEPS} was reached...)`;
         }
     } catch (e) {
-        log(`[Error] Failed to generate summary: ${e.message}`);
+        if (signal?.aborted) throw e;
+        log(`[Error] Failed to generate summary: ${formatSubAgentError(e, apiKey)}`);
     }
 
     return generateStaticReport() + `\n\n[Instruction for Main Agent]: Please check the conversation context...`;

@@ -815,6 +815,8 @@ const releaseCurrentConversationLease = async () => {
 const ensureConversationWriteAccess = (message = '') => {
   const storage = currentConversationStorage.value;
   if (!storage?.conversationId) return true;
+  const confirmedExpiry = Date.parse(conversationLease.value?.expiresAt);
+  if (Number.isFinite(confirmedExpiry) && confirmedExpiry <= Date.now()) conversationLeasePending.value = true;
   if (conversationLeasePending.value) {
     if (message) showDismissibleMessage.warning('正在确认会话编辑权，请稍后再试');
     return false;
@@ -876,21 +878,48 @@ const acquireCurrentConversationLease = async () => {
       await reloadConversationWindowFromStore({ activeOnly: true, pageSize: Number(storage.pageSize) || 200 });
       showDismissibleMessage.info('已安全修复历史会话的消息索引映射');
     }
+    let heartbeatInFlight = false;
     conversationLeaseHeartbeatTimer = setInterval(async () => {
       const currentLease = conversationLease.value;
       const currentStorage = currentConversationStorage.value;
       if (!currentLease?.leaseEpoch || !currentStorage?.conversationId) return;
-      const result = await window.api.heartbeatConversationWriteLease({
-        dirPath: currentStorage.dirPath || currentConfig.value?.webdav?.localChatPath || '',
-        conversationId: currentStorage.conversationId,
-        holderInstanceId: conversationInstanceId,
-        leaseEpoch: currentLease.leaseEpoch
-      }).catch(() => ({ ok: false }));
-      if (!result?.ok) {
-        conversationReadOnly.value = true;
-        conversationLease.value = null;
-        stopConversationLeaseHeartbeat();
-        showDismissibleMessage.warning('会话编辑权已失效，已切换为只读模式');
+      if (!(Date.parse(currentLease.expiresAt) > Date.now())) conversationLeasePending.value = true;
+      if (heartbeatInFlight) return;
+      const dirPath = currentStorage.dirPath || currentConfig.value?.webdav?.localChatPath || '';
+      const isCurrent = () => conversationLease.value === currentLease
+        && currentConversationStorage.value?.conversationId === currentStorage.conversationId
+        && (currentConversationStorage.value?.dirPath || currentConfig.value?.webdav?.localChatPath || '') === dirPath;
+      heartbeatInFlight = true;
+      try {
+        const result = await window.api.heartbeatConversationWriteLease({
+          dirPath,
+          conversationId: currentStorage.conversationId,
+          holderInstanceId: conversationInstanceId,
+          leaseEpoch: currentLease.leaseEpoch
+        });
+        if (!isCurrent()) return;
+        if (result?.ok === false) {
+          conversationReadOnly.value = true;
+          conversationLeasePending.value = false;
+          conversationLease.value = null;
+          stopConversationLeaseHeartbeat();
+          showDismissibleMessage.warning('会话编辑权已失效，已切换为只读模式');
+        } else if (result?.ok === true && Number.isFinite(Date.parse(result.expiresAt))) {
+          currentLease.expiresAt = result.expiresAt;
+          conversationLeasePending.value = false;
+        } else {
+          throw new Error('conversation_heartbeat_response_invalid');
+        }
+      } catch {
+        if (!isCurrent()) return;
+        // Transport/SQLite errors are not evidence that another writer owns the lease.
+        // Keep retrying this exact holder/epoch, but never write past its confirmed expiry.
+        if (!(Date.parse(currentLease.expiresAt) > Date.now())) {
+          if (!conversationLeasePending.value) showDismissibleMessage.warning('暂时无法确认会话编辑权，已暂停写入，正在重试；未保存内容仍保留在窗口中');
+          conversationLeasePending.value = true;
+        }
+      } finally {
+        heartbeatInFlight = false;
       }
     }, 5000);
   } catch (error) {
@@ -6645,8 +6674,13 @@ const appendCurrentInputToHistory = async () => {
   return true;
 };
 
-const drainBufferIntoHistory = async () => {
-  if (pendingAppendBuffer.value.length === 0) return false;
+const drainBufferIntoHistory = async ({ toolBoundaryTurn = null } = {}) => {
+  const canDrain = () => !isClosingWindow.value && ensureConversationWriteAccess(false)
+    && !compacting.value && !isMcpLoading.value
+    && (toolBoundaryTurn
+      ? activeAssistantTurnMeta === toolBoundaryTurn && !toolBoundaryTurn.controller?.signal?.aborted
+      : !loading.value && !activeAssistantTurnMeta);
+  if (!canDrain() || pendingAppendBuffer.value.length === 0) return false;
   const items = pendingAppendBuffer.value.splice(0, pendingAppendBuffer.value.length);
   // 还原用户在缓冲期间可能输入但尚未发送的内容
   const savedPrompt = prompt.value;
@@ -6656,12 +6690,12 @@ const drainBufferIntoHistory = async () => {
   let draftSwapped = false;
   try {
     for (const item of items) {
-      if (isClosingWindow.value || !ensureConversationWriteAccess(false)) break;
+      if (!canDrain()) break;
       if (item.kind === 'agent') {
         isPreparingSend.value = true;
         try {
           const { contentList } = await buildAgentToolContentList(item);
-          if (loading.value || compacting.value || isMcpLoading.value || activeAssistantTurnMeta) break;
+          if (!canDrain()) break;
           appendAgentToolContent(contentList);
           appendedAny = true;
         } finally {
@@ -9141,7 +9175,7 @@ const askAI = async (forceSend = false) => {
         isModelIterationConfigLocked.value = false;
         // 工具调用完成后，把缓冲区消息插入历史，使下一轮请求即可纳入
         throwIfTurnAborted();
-        await drainBufferIntoHistory();
+        await drainBufferIntoHistory({ toolBoundaryTurn: turnMeta });
         throwIfTurnAborted();
 
         // 关键：tool 结果与缓冲消息写回后、进入下一轮 AI 请求前做上下文检测。
