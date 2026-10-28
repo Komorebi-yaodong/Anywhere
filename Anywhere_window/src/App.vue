@@ -14,6 +14,7 @@ import TaskPanel from './components/TaskPanel.vue';
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, formatToolResult, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
 import { resolveSafeConversationMutationTarget } from './utils/conversationMessageTarget.js';
+import { prepareViewImagePayload } from './utils/viewImageCompression.js';
 import { createLinkedUserMessagePair } from './utils/linkedUserMessage.js';
 import { completeConversationClose, createConversationMutationQueue, createConversationPersistenceTracker, mergeConversationMutationRequests as mergeAutoSaveRequests } from './utils/conversationMutationQueue.js';
 import { MAX_AUTOMATIC_NETWORK_RETRIES, createNetworkRetryingStream, runWithNetworkRetries } from './utils/conversationNetworkRetry.js';
@@ -8311,18 +8312,7 @@ const maybeAutoCompactAfterTurn = async () => {
 
 // view_image results become regular, visible user media messages. This makes image context
 // durable across reask, save/restore, exports, and model-protocol switches.
-const getViewImagePayload = (result) => {
-  if (result?.__anywhereToolResult !== 'image') return null;
-  const mimeType = result?.image?.mimeType;
-  const encodedBytes = result?.image?.encodedBytes;
-  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(mimeType)) return null;
-  if (typeof encodedBytes !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(encodedBytes)) return null;
-  return {
-    dataUrl: `data:${mimeType};base64,${encodedBytes}`,
-    detail: result?.image?.detail === 'original' ? 'original' : 'high',
-    displayText: typeof result?.display?.text === 'string' ? result.display.text : 'Local image loaded for visual inspection.'
-  };
-};
+const getViewImagePayload = prepareViewImagePayload;
 
 const getViewPdfPayload = (result) => {
   if (result?.__anywhereToolResult !== 'pdf') return null;
@@ -9104,7 +9094,8 @@ const askAI = async (forceSend = false) => {
                   withConversationOwnerContext(executionContext)
                 );
 
-                const imagePayload = getViewImagePayload(result);
+                const imagePayload = await getViewImagePayload(result, toolCallControllers.value.get(toolCall.id)?.signal || requestSignal);
+                throwIfTurnAborted();
                 const pdfPayload = getViewPdfPayload(result);
                 if (imagePayload) {
                   toolMediaMessagesByToolCallId.set(toolCall.id, createViewImageMessage(toolCall.id, imagePayload));
