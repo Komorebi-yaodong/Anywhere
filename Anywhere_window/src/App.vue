@@ -14,6 +14,7 @@ import TaskPanel from './components/TaskPanel.vue';
 import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, formatToolResult, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
 import { resolveSafeConversationMutationTarget } from './utils/conversationMessageTarget.js';
+import { createConversationDeleteRecovery } from './utils/conversationDeleteRecovery.js';
 import { prepareViewImagePayload } from './utils/viewImageCompression.js';
 import { createLinkedUserMessagePair } from './utils/linkedUserMessage.js';
 import { completeConversationClose, createConversationMutationQueue, createConversationPersistenceTracker, mergeConversationMutationRequests as mergeAutoSaveRequests } from './utils/conversationMutationQueue.js';
@@ -9461,7 +9462,24 @@ const reaskAI = async (assistantMessageId = null) => {
   }
 };
 
-const deleteMessage = (index) => {
+// Recovery reads only persisted canonical history and merges an unloaded prefix; it never
+// reloads the UI/draft or replaces a dirty in-memory tail.
+const conversationDeleteRecovery = createConversationDeleteRecovery({
+  getState: () => ({storage: currentConversationStorage.value, full: fullHistory.value, ui: chat_show.value, lease: conversationLease.value, version: sessionMutationVersion}),
+  canMutate: (command) => !loading.value && !compacting.value && !isPreparingSend.value && !isClosingWindow.value && ensureConversationWriteAccess(false),
+  readHistory: (storage) => window.api.openConversation({dirPath: storage.dirPath, reference: storage.conversationId, activeOnly: false, pageSize: 0}),
+  apply: ({fullHistory: merged, uiMessages, loadedFromOrdinal}) => {
+    fullHistory.value = merged;
+    // Keep live message object identities: a concurrent renderer event must not select a new row.
+    uiMessages.forEach((message, index) => {if (message.storageId) chat_show.value[index].storageId = message.storageId;});
+    if (loadedFromOrdinal !== null) currentConversationStorage.value = {...currentConversationStorage.value, loadedFromOrdinal};
+    syncHistoryFromFullHistory();
+  },
+  remove: (index, command, recovered) => deleteMessage(index, recovered),
+  onFailure: () => showDismissibleMessage.warning('消息关联无法唯一确认，已阻止删除；未保存内容保持不变，请稍后重试')
+});
+
+const deleteMessage = (index, recovered = false) => {
   if (!ensureConversationWriteAccess(true)) return;
 
   if (loading.value || compacting.value) {
@@ -9479,7 +9497,8 @@ const deleteMessage = (index) => {
   // require a verified storage link or one unique semantic anchor match.
   const fullStartIndex = resolveSafeConversationMutationTarget(fullHistory.value, chat_show.value, index);
   if (fullStartIndex < 0) {
-    showDismissibleMessage.warning('消息索引未能安全匹配，已阻止删除；请重开会话后重试');
+    if (!recovered && currentConversationStorage.value?.conversationId) return conversationDeleteRecovery.recover(messageToDelete);
+    showDismissibleMessage.warning('消息关联无法唯一确认，已阻止删除；未保存内容保持不变');
     return;
   }
   {
@@ -9488,7 +9507,8 @@ const deleteMessage = (index) => {
       const calledIds = new Set((fullHistory.value[fullStartIndex]?.tool_calls || []).map((call) => call?.id).filter(Boolean));
       let cursor = fullStartIndex + 1;
       while (cursor < fullHistory.value.length && fullHistory.value[cursor]?.role === 'tool') {
-        if (calledIds.size === 0 || calledIds.has(fullHistory.value[cursor]?.tool_call_id)) fullDeleteCount += 1;
+        if (!calledIds.has(fullHistory.value[cursor]?.tool_call_id)) break;
+        fullDeleteCount += 1;
         cursor += 1;
       }
       while (isToolMediaMessage(fullHistory.value[cursor]) && calledIds.has(fullHistory.value[cursor]?.sourceToolCallId)) {
@@ -9519,6 +9539,7 @@ const deleteMessage = (index) => {
   collapsedMessages.value = nextCollapsed;
   focusedMessageIndex.value = null;
   scheduleAutoSave({ reason: 'message-deleted', immediate: true });
+  return true;
 };
 
 const clearHistory = async () => {

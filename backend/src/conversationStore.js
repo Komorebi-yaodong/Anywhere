@@ -446,12 +446,23 @@ function normalizeRenderableContent(content) {
 function messageLinkSignature(message = {}) {
   const role = normalizeText(message?.role)
   if (role === 'user' || role === 'assistant') {
-    return JSON.stringify({ role, content: normalizeRenderableContent(message?.content) })
+    const calls = Array.isArray(message.tool_calls) ? message.tool_calls : (Array.isArray(message.toolCalls) ? message.toolCalls : [])
+    const ids = calls.map((call) => typeof call?.id === 'string' ? call.id.trim() : '')
+    if (ids.some((id) => !id) || new Set(ids).size !== ids.length) return ''
+    return JSON.stringify({ role, content: normalizeRenderableContent(message?.content), ...(ids.length ? { toolCallIds: ids.sort() } : {}) })
   }
   if (role === 'compaction') {
     return JSON.stringify({ role, snapshotId: normalizeText(message?.snapshotId || message?.id) })
   }
   return messageSignature(message)
+}
+
+function canRebindMessageLink(message) {
+  if (!messageLinkSignature(message)) return false
+  if (message?.role === 'compaction') return Boolean(message.snapshotId || message.id)
+  return normalizeRenderableContent(message?.content) !== null
+    || (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0)
+    || (Array.isArray(message?.toolCalls) && message.toolCalls.length > 0)
 }
 
 
@@ -466,37 +477,39 @@ function prepareMigrationMessages(fullHistory = [], chatShow = []) {
     usedMessageIds.add(next.storageId)
     return next
   })
-  const canonicalByStorageId = new Map(messages.map((message) => [message.storageId, message]))
-  const signatureQueues = new Map()
-  messages.forEach((message) => {
-    if (message.role === 'tool') return
+  const canonicalByStorageId = new Map(messages.map(message => [message.storageId, message]))
+  const signatures = new Map()
+  for (const message of messages) {
+    if (message.role === 'tool') continue
     const signature = messageLinkSignature(message)
-    if (!signatureQueues.has(signature)) signatureQueues.set(signature, [])
-    signatureQueues.get(signature).push(message.storageId)
-  })
-  const claimedStorageIds = new Set()
-  const usedUiStorageIds = new Set()
-  const uiMessages = (Array.isArray(chatShow) ? chatShow : []).map((message) => {
+    if (!signature) continue
+    if (!signatures.has(signature)) signatures.set(signature, [])
+    signatures.get(signature).push(message.storageId)
+  }
+  const claimed = new Set()
+  const unresolved = []
+  const usedUiIds = new Set()
+  const uiMessages = (Array.isArray(chatShow) ? chatShow : []).map((message, index) => {
     const next = clone(message)
+    const requested = normalizeText(next.storageId).trim()
     const signature = messageLinkSignature(next)
-    const requestedStorageId = normalizeText(next.storageId).trim()
-    const requestedCanonical = canonicalByStorageId.get(requestedStorageId)
-    const requestedIsValid = Boolean(
-      requestedCanonical
-      && !claimedStorageIds.has(requestedStorageId)
-      && messageLinkSignature(requestedCanonical) === signature
-    )
-    const reboundCandidates = (signatureQueues.get(signature) || []).filter((storageId) => !claimedStorageIds.has(storageId))
-    const reboundStorageId = reboundCandidates.length === 1 ? reboundCandidates[0] : ''
-    next.storageId = requestedIsValid ? requestedStorageId : reboundStorageId
-    if (next.storageId) claimedStorageIds.add(next.storageId)
-    const requestedUiStorageId = normalizeText(next.uiStorageId).trim()
-    next.uiStorageId = requestedUiStorageId && !usedUiStorageIds.has(requestedUiStorageId)
-      ? requestedUiStorageId
-      : createUuid()
-    usedUiStorageIds.add(next.uiStorageId)
+    const candidate = canonicalByStorageId.get(requested)
+    const valid = signature && candidate && messageLinkSignature(candidate) === signature && !claimed.has(requested)
+    next.storageId = valid ? requested : ''
+    if (valid) claimed.add(requested)
+    else unresolved.push({index, signature, mayRebind: canRebindMessageLink(next)})
+    const uiId = normalizeText(next.uiStorageId).trim()
+    next.uiStorageId = uiId && !usedUiIds.has(uiId) ? uiId : createUuid()
+    usedUiIds.add(next.uiStorageId)
     return next
   })
+  const proposals = unresolved.map(row => {
+    const candidates = row.mayRebind ? (signatures.get(row.signature) || []).filter(id => !claimed.has(id)) : []
+    return {...row, target: candidates.length === 1 ? candidates[0] : null}
+  })
+  const demand = new Map()
+  for (const {target} of proposals) if (target) demand.set(target, (demand.get(target) || 0) + 1)
+  for (const {index, target} of proposals) if (target && demand.get(target) === 1) uiMessages[index].storageId = target
   return { messages, uiMessages }
 }
 
@@ -767,41 +780,40 @@ function repairUiMessageLinks(db, { apply = true } = {}) {
     const message = JSON.parse(row.payload_json)
     const entry = { id: row.message_uuid, role: row.role_code, signature: messageLinkSignature(message) }
     canonicalById.set(entry.id, entry)
+    if (!entry.signature) continue
     if (!candidatesBySignature.has(entry.signature)) candidatesBySignature.set(entry.signature, [])
     candidatesBySignature.get(entry.signature).push(entry)
   }
-
-  const uiRows = db.prepare("SELECT ui_uuid, message_uuid, role_code, payload_json FROM ui_messages WHERE message_uuid IS NOT NULL AND role_code IN ('user', 'assistant', 'compaction') ORDER BY ui_order").all()
-  const claimedCanonicalIds = new Set()
-  const invalidRows = []
+  const uiRows = db.prepare("SELECT ui_uuid, message_uuid, role_code, payload_json FROM ui_messages WHERE role_code IN ('user', 'assistant', 'compaction') ORDER BY ui_order").all()
+  const claimed = new Set()
+  const invalid = []
   for (const row of uiRows) {
-    const uiMessage = JSON.parse(row.payload_json)
-    const signature = messageLinkSignature(uiMessage)
+    const message = JSON.parse(row.payload_json)
+    const signature = messageLinkSignature(message)
     const linked = canonicalById.get(row.message_uuid)
-    if (linked && linked.role === row.role_code && linked.signature === signature && !claimedCanonicalIds.has(linked.id)) {
-      claimedCanonicalIds.add(linked.id)
-    } else {
-      invalidRows.push({ ...row, signature })
-    }
+    if (signature && linked && linked.role === row.role_code && linked.signature === signature && !claimed.has(linked.id)) claimed.add(linked.id)
+    else invalid.push({...row, signature, mayRebind: canRebindMessageLink(message)})
   }
-
+  // Resolve all proposals before claiming: two UI rows must never win the same target by order.
+  const proposals = invalid.map(row => {
+    const candidates = row.mayRebind ? (candidatesBySignature.get(row.signature) || []).filter(candidate => !claimed.has(candidate.id)) : []
+    return {row, target: candidates.length === 1 ? candidates[0].id : null}
+  })
+  const demand = new Map()
+  for (const {target} of proposals) if (target) demand.set(target, (demand.get(target) || 0) + 1)
   const repairs = []
   let rebound = 0
   let unlinked = 0
-  for (const row of invalidRows) {
-    const candidates = (candidatesBySignature.get(row.signature) || []).filter((candidate) => !claimedCanonicalIds.has(candidate.id))
-    const nextMessageId = candidates.length === 1 ? candidates[0].id : null
-    repairs.push({ uiStorageId: row.ui_uuid, messageStorageId: nextMessageId })
-    if (nextMessageId) {
-      claimedCanonicalIds.add(nextMessageId)
-      rebound += 1
-    } else {
-      unlinked += 1
-    }
+  for (const {row, target} of proposals) {
+    const nextId = target && demand.get(target) === 1 ? target : null
+    if ((row.message_uuid || null) === nextId) continue
+    repairs.push({uiStorageId: row.ui_uuid, messageStorageId: nextId})
+    if (nextId) rebound++
+    else unlinked++
   }
-  if (apply && repairs.length > 0) {
-    const updateLink = db.prepare('UPDATE ui_messages SET message_uuid = ? WHERE ui_uuid = ?')
-    for (const repair of repairs) updateLink.run(repair.messageStorageId, repair.uiStorageId)
+  if (apply && repairs.length) {
+    const update = db.prepare('UPDATE ui_messages SET message_uuid = ? WHERE ui_uuid = ?')
+    for (const repair of repairs) update.run(repair.messageStorageId, repair.uiStorageId)
   }
   return { changed: repairs.length, rebound, unlinked, repairs }
 }
@@ -932,7 +944,8 @@ function resolveValidatedUiMessageStorageId(db, row, canonicalCache = new Map())
   }
   if (!canonical || canonical.role_code !== row?.role_code) return ''
   try {
-    return messageLinkSignature(JSON.parse(row.payload_json)) === messageLinkSignature(JSON.parse(canonical.payload_json))
+    const signature = messageLinkSignature(JSON.parse(row.payload_json))
+    return signature && signature === messageLinkSignature(JSON.parse(canonical.payload_json))
       ? requestedStorageId
       : ''
   } catch {
@@ -959,6 +972,45 @@ function materializeUiMessages(db, rows = []) {
   })
 }
 
+
+// Paging may include more tool results than bubbles. Expand only the required contiguous
+// canonical range so every linked UI target and its adjacent tool batch are available.
+function coverUiMessageTargets(db, messages, uiMessages, {beforeOrdinal = null} = {}) {
+  const orders = messages.filter(message => message.role !== 'system').map(message => Number(message.storageOrdinal))
+  const lookup = db.prepare('SELECT ordinal FROM messages WHERE message_uuid = ?')
+  for (const ui of uiMessages) {
+    if (!ui.storageId || ui.role === 'system') continue
+    const row = lookup.get(ui.storageId)
+    if (row) orders.push(Number(row.ordinal))
+  }
+  if (!orders.length) return messages
+  const lower = Math.min(...orders)
+  const start = db.prepare("SELECT ordinal FROM messages WHERE ordinal <= ? AND role_code NOT IN ('system', 'tool') ORDER BY ordinal DESC LIMIT 1").get(lower)?.ordinal ?? lower
+  const upper = beforeOrdinal == null ? null : Math.max(...orders)
+  const end = upper == null ? null : db.prepare("SELECT ordinal FROM messages WHERE ordinal > ? AND role_code NOT IN ('system', 'tool') ORDER BY ordinal LIMIT 1").get(upper)?.ordinal
+  const rows = end == null
+    ? db.prepare("SELECT ordinal, message_uuid, payload_json FROM messages WHERE role_code != 'system' AND ordinal >= ? ORDER BY ordinal").all(start)
+    : db.prepare("SELECT ordinal, message_uuid, payload_json FROM messages WHERE role_code != 'system' AND ordinal >= ? AND ordinal < ? ORDER BY ordinal").all(start, end)
+  return [...messages.filter(message => message.role === 'system'), ...rows.map(row => ({...hydrateAttachments(db, JSON.parse(row.payload_json)), storageId: row.message_uuid, storageOrdinal: row.ordinal}))]
+}
+
+// An old Renderer may send UI rows from a prefix it never loaded. Preserve only a
+// DB-verified exact link in that protected prefix, never trust an arbitrary UI pointer.
+function preserveUnloadedUiLinks(db, fullHistory, chatShow, prepared, lowerBound) {
+  const loadedIds = new Set(fullHistory.map(message => message.storageId).filter(Boolean))
+  const claimed = new Set(prepared.uiMessages.map(message => message.storageId).filter(Boolean))
+  const lookup = db.prepare('SELECT ordinal, payload_json FROM messages WHERE message_uuid = ?')
+  for (let index = 0; index < chatShow.length; index++) {
+    const ui = chatShow[index]
+    if (!ui.storageId || loadedIds.has(ui.storageId) || claimed.has(ui.storageId)) continue
+    const canonical = lookup.get(ui.storageId)
+    const signature = messageLinkSignature(ui)
+    if (!canonical || canonical.ordinal >= lowerBound || !signature) continue
+    if (messageLinkSignature(hydrateAttachments(db, JSON.parse(canonical.payload_json))) !== signature) continue
+    prepared.uiMessages[index].storageId = ui.storageId
+    claimed.add(ui.storageId)
+  }
+}
 
 function loadUiMessages(db, { activeOnly = true, limit = 0 } = {}) {
   let rows
@@ -1123,11 +1175,12 @@ async function openConversation({ dirPath, reference, activeOnly = true, pageSiz
     const state = loadState(db)
     const activeStart = activeOnly ? getActiveMessageStart(db) : 0
     const shouldPage = activeStart === 0 && Number(pageSize) > 0
-    const fullHistory = loadMessages(db, { activeOnly, limit: shouldPage ? pageSize : 0 })
+    let fullHistory = loadMessages(db, { activeOnly, limit: shouldPage ? pageSize : 0 })
     let chatShow = loadUiMessages(db, { activeOnly, limit: shouldPage ? pageSize : 0 })
     if (chatShow.length === 0) {
       chatShow = fullHistory.filter((message) => message.role !== 'tool').map((message, index) => ({ ...clone(message), id: index + 1 }))
     }
+    if (shouldPage) fullHistory = coverUiMessageTargets(db, fullHistory, chatShow)
     return {
       ok: true,
       descriptor: { ...descriptor, title: row.title, revision: row.revision, createdAt: row.created_at, updatedAt: row.updated_at },
@@ -1229,7 +1282,7 @@ async function loadConversationPage({ dirPath, conversationId, beforeOrdinal = n
   if (!descriptor) throw new Error('conversation_not_found')
   const db = openDatabase(resolveDatabasePath(dirPath, descriptor.dbFile), { readOnly: true })
   try {
-    const messages = loadMessages(db, { activeOnly: false, limit: pageSize, beforeOrdinal })
+    let messages = loadMessages(db, { activeOnly: false, limit: pageSize, beforeOrdinal })
     const safeUiBefore = beforeUiOrder !== null && beforeUiOrder !== undefined && beforeUiOrder !== '' && Number.isFinite(Number(beforeUiOrder))
       ? Number(beforeUiOrder)
       : null
@@ -1242,6 +1295,7 @@ async function loadConversationPage({ dirPath, conversationId, beforeOrdinal = n
         `).all(safeUiBefore, Math.max(1, Number(pageSize) || 200))
       : []
     const uiMessages = materializeUiMessages(db, uiRows)
+    messages = coverUiMessageTargets(db, messages, uiMessages, {beforeOrdinal})
     const loadedFromOrdinal = messages.find((message) => message.role !== 'system')?.storageOrdinal || 0
     const loadedFromUiOrder = uiMessages.find((message) => message.role !== 'system')?.uiStorageOrder || 0
     return {
@@ -1291,6 +1345,7 @@ async function saveConversationSnapshot({ dirPath, conversationId, expectedRevis
       const loadedFromOrdinal = Math.max(1, Number(pagingState.loadedFromOrdinal) || 1)
 
       const messageLowerBound = isPaged ? loadedFromOrdinal : (activeStart > 0 ? activeStart : 1)
+      if (isPaged || activeStart > 0) preserveUnloadedUiLinks(db, fullHistory, chatShow, prepared, messageLowerBound)
       const messageIncremental = syncMessagesIncrementally(db, prepared.messages, messageLowerBound)
       if (!messageIncremental) {
         if (isPaged || activeStart > 0) {
@@ -1641,13 +1696,14 @@ async function restoreConversationCompaction({
     const state = loadState(db)
     const activeStart = getActiveMessageStart(db)
     const shouldPage = activeStart === 0 && Number(pageSize) > 0
-    const fullHistory = loadMessages(db, { activeOnly: true, limit: shouldPage ? pageSize : 0 })
+    let fullHistory = loadMessages(db, { activeOnly: true, limit: shouldPage ? pageSize : 0 })
     let chatShow = loadUiMessages(db, { activeOnly: true, limit: shouldPage ? pageSize : 0 })
     if (chatShow.length === 0) {
       chatShow = fullHistory
         .filter((message) => message.role !== 'tool')
         .map((message, index) => ({ ...clone(message), id: index + 1 }))
     }
+    if (shouldPage) fullHistory = coverUiMessageTargets(db, fullHistory, chatShow)
     const nextDescriptor = {
       ...descriptor,
       title: row.title,

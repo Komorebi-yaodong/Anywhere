@@ -23,15 +23,48 @@ export function createRenderableMutationSignature(message = {}) {
   });
 }
 
-function isSafeEmptyAssistantTerminal(message = {}) {
-  const hasToolCalls = (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0)
+function hasAssistantToolCalls(message = {}) {
+  return (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0)
     || (Array.isArray(message?.toolCalls) && message.toolCalls.length > 0);
+}
+
+function hasMatchingToolCallIdentity(left = {}, right = {}) {
+  if (!hasAssistantToolCalls(left) && !hasAssistantToolCalls(right)) return true;
+  const leftIds = getVerifiedToolCallIds(left);
+  const rightIds = getVerifiedToolCallIds(right);
+  return Boolean(leftIds && rightIds && leftIds.length === rightIds.length
+    && leftIds.every((id, index) => id === rightIds[index]));
+}
+
+function isSafeEmptyAssistantTerminal(message = {}) {
+  const hasToolCalls = hasAssistantToolCalls(message);
   return message?.role === 'assistant'
     && normalizeRenderableContent(message?.content) === null
     && !hasToolCalls
     && !message?.tool_call_id
     && !message?.toolCallId
     && !message?.sourceToolCallId;
+}
+
+function getVerifiedToolCallIds(message = {}) {
+  const toolCalls = Array.isArray(message?.tool_calls)
+    ? message.tool_calls
+    : (Array.isArray(message?.toolCalls) ? message.toolCalls : null);
+  if (!toolCalls?.length) return null;
+  const ids = toolCalls.map((call) => (typeof call?.id === 'string' ? call.id.trim() : ''));
+  if (ids.some((id) => !id) || new Set(ids).size !== ids.length) return null;
+  return ids.sort();
+}
+
+function isVerifiedEmptyAssistantToolCallTurn(uiMessage = {}, candidate = {}) {
+  if (uiMessage?.role !== 'assistant' || candidate?.role !== 'assistant') return false;
+  if (normalizeRenderableContent(uiMessage?.content) !== null || normalizeRenderableContent(candidate?.content) !== null) return false;
+  if (uiMessage?.tool_call_id || uiMessage?.toolCallId || uiMessage?.sourceToolCallId
+    || candidate?.tool_call_id || candidate?.toolCallId || candidate?.sourceToolCallId) return false;
+  const uiIds = getVerifiedToolCallIds(uiMessage);
+  const candidateIds = getVerifiedToolCallIds(candidate);
+  return Boolean(uiIds && candidateIds && uiIds.length === candidateIds.length
+    && uiIds.every((id, index) => id === candidateIds[index]));
 }
 
 function isEmptyRenderableMutation(message = {}) {
@@ -83,6 +116,7 @@ function resolveUniqueAnchoredTarget(fullHistory = [], chatShow = [], showIndex 
   const candidates = [];
   for (let index = 0; index < fullHistory.length; index += 1) {
     if (createRenderableMutationSignature(fullHistory[index]) !== targetSignature) continue;
+    if (!hasMatchingToolCallIdentity(chatShow[showIndex], fullHistory[index])) continue;
     if (!matchesNeighborAnchors(fullHistory, index, previousAnchors, nextAnchors)) continue;
     candidates.push(index);
     if (candidates.length > 1) return -1;
@@ -101,15 +135,45 @@ export function resolveVerifiedStorageTarget(fullHistory = [], chatShow = [], sh
   if (candidateIndex < 0) return -1;
   const candidate = fullHistory[candidateIndex];
   const uiSignature = createRenderableMutationSignature(uiMessage);
-  if (candidate?.role !== uiMessage.role || !uiSignature || createRenderableMutationSignature(candidate) !== uiSignature) return -1;
-  // Content-free rows cannot be semantically anchored. Only a true empty assistant
-  // terminal with no tool-call semantics may be deleted through a verified stable ID.
-  // Every tool-linked row remains fail-closed, even when both sides carry the same ID.
+  if (candidate?.role !== uiMessage.role || !uiSignature || createRenderableMutationSignature(candidate) !== uiSignature
+    || !hasMatchingToolCallIdentity(uiMessage, candidate)) return -1;
+  // Content-free rows cannot be semantically anchored. Permit only a true assistant terminal,
+  // or an exact stable-ID-verified assistant tool-call turn with identical call IDs. Tool-linked
+  // rows and every incomplete/mismatched tool-call shape remain fail-closed.
   if (isEmptyRenderableMutation(uiMessage)
-    && !(isSafeEmptyAssistantTerminal(uiMessage) && isSafeEmptyAssistantTerminal(candidate))) return -1;
+    && !((isSafeEmptyAssistantTerminal(uiMessage) && isSafeEmptyAssistantTerminal(candidate))
+      || isVerifiedEmptyAssistantToolCallTurn(uiMessage, candidate))) return -1;
 
   return candidateIndex;
 }
+
+// Recovery is identity-only: no fuzzy text, no position, and no first-wins duplicate claims.
+export function rebindUniqueConversationLinks(fullHistory = [], chatShow = []) {
+  const claimed = new Set();
+  const unresolved = [];
+  const result = chatShow.slice();
+  const identityMatches = (ui, candidate) => createRenderableMutationSignature(ui)
+    && createRenderableMutationSignature(ui) === createRenderableMutationSignature(candidate)
+    && hasMatchingToolCallIdentity(ui, candidate);
+  for (let index = 0; index < chatShow.length; index++) {
+    const verified = resolveVerifiedStorageTarget(fullHistory, chatShow, index);
+    if (verified >= 0 && !claimed.has(fullHistory[verified].storageId)) claimed.add(fullHistory[verified].storageId);
+    else unresolved.push(index);
+  }
+  const proposals = unresolved.map(index => {
+    const ui = chatShow[index];
+    if (isEmptyRenderableMutation(ui) && !getVerifiedToolCallIds(ui)) return {index, target: null};
+    const matches = fullHistory.filter(candidate => candidate?.storageId && !claimed.has(candidate.storageId) && identityMatches(ui, candidate));
+    return {index, target: matches.length === 1 ? matches[0] : null};
+  });
+  const demand = new Map();
+  for (const {target} of proposals) if (target) demand.set(target.storageId, (demand.get(target.storageId) || 0) + 1);
+  for (const {index, target} of proposals) {
+    if (target && demand.get(target.storageId) === 1) result[index] = {...chatShow[index], storageId: target.storageId};
+  }
+  return result;
+}
+
 
 export function resolveSafeConversationMutationTarget(fullHistory = [], chatShow = [], showIndex = -1) {
   const uiMessage = Array.isArray(chatShow) ? chatShow[showIndex] : null;

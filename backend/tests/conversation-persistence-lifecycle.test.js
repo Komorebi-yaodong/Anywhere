@@ -53,7 +53,7 @@ async function run() {
     { role: 'assistant', content: null, storageId: 'tool-terminal', tool_calls: [{ id: 'call_1' }] }
   ], [
     { role: 'assistant', content: [], storageId: 'tool-terminal', tool_calls: [{ id: 'call_1' }] }
-  ], 0), -1, 'an empty assistant tool turn must remain non-deletable even with a stable ID');
+  ], 0), 0, 'an empty assistant tool turn with verified stable ID and exact unique call IDs is deletable');
 
 
   const merged = mergeConversationMutationRequests(
