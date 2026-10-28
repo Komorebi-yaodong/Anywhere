@@ -8,6 +8,7 @@
     "watch": "pnpm exec esbuild src/preload.js src/window_preload.js src/fast_window_preload.js src/lazy_runtime.js src/file_runtime.js src/projects_runtime.js src/conversation_runtime.js --bundle --platform=node --outdir=./public --format=cjs --external:electron --external:@aws-sdk/client-s3 --watch",
     "test:utools-runtime-compat": "node tests/utools-runtime-compat.test.js",
     "test:subagent-request": "node tests/subagent-request.test.mjs",
+    "test:web-fetch": "node tests/web-fetch.test.mjs",
     "test:preload-lazy-runtime": "node tests/preload-lazy-runtime.test.js",
     "test:release-size": "node tests/release-size.test.js",
     "test:sqlite-compat": "node tests/conversation-sqlite-compat.test.js",
