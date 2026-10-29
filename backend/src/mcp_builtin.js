@@ -1142,14 +1142,14 @@ IMPORTANT:
         },
         {
             name: "builtin_web_fetch",
-            description: "Read a webpage or download an HTTP(S) file. HTML is converted to readable text; JSON/plain text is returned with pagination. PDF, ZIP and other binary/attachment responses are automatically saved to the system default Downloads directory, returning the local absolute path, filename, size and type, NOT their contents. Set download=true to save any response (including HTML/text) instead of reading it. Downloads never overwrite existing files and are not opened, executed or extracted. offset/length apply only to reading text; use offset=0 for downloads.",
+            description: "Read webpages as text. Binary files/attachments are automatically saved to system Downloads; returns path, size and type. Responses must be <200 MB. Use download=true to save text too.",
             inputSchema: {
                 type: "object",
                 properties: {
                     url: { type: "string", description: "Full http:// or https:// URL of the webpage or file." },
-                    download: { type: "boolean", description: "Optional. Force saving the response to the system default Downloads directory. Defaults to false; binary files and attachments are downloaded automatically.", default: false },
+                    download: { type: "boolean", description: "Save text as a file too. Default false; binary files auto-download.", default: false },
                     offset: { type: "integer", description: "Optional. Text character offset, default 0. Downloads require 0 and always save the complete file.", default: 0 },
-                    length: { type: "integer", description: `Optional. Characters of text to return, default ${MAX_READ}, hard cap ${MAX_READ_HARD}. Does not limit download size.`, default: MAX_READ }
+                    length: { type: "integer", description: `Text characters to return (default ${MAX_READ}, max ${MAX_READ_HARD}); not download size.`, default: MAX_READ }
                 },
                 required: ["url"]
             }

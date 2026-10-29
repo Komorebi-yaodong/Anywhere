@@ -3,6 +3,8 @@ const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 
 const READ_TIMEOUT_MS = 60000
+const MAX_RESPONSE_BYTES = 200_000_000 // Strictly less than 200 MB (decimal), before buffering/writing.
+const SIZE_LIMIT_ERROR = 'Response must be smaller than 200 MB (200,000,000 bytes); fetch stopped.'
 const MIME_EXTENSIONS = {
   'application/pdf': '.pdf',
   'application/zip': '.zip',
@@ -133,6 +135,7 @@ function openBody(response, signal) {
     (body?.[Symbol.asyncIterator]?.() || (!body && { next: async () => ({ done: true }) }))
   if (!reader && !iterator) throw new Error('The response has no readable body.')
   let stopped = false
+  let receivedBytes = 0
   let ended = false
   let failure = null
   let pendingReject = null
@@ -173,7 +176,14 @@ function openBody(response, signal) {
         checkCancelled(signal)
         if (failure) throw failure
         ended = result.done
-        return result.done ? null : Buffer.from(result.value)
+        if (result.done) return null
+        receivedBytes += result.value.byteLength
+        if (receivedBytes >= MAX_RESPONSE_BYTES) {
+          failure = new Error(SIZE_LIMIT_ERROR)
+          stop()
+          throw failure
+        }
+        return Buffer.from(result.value)
       } finally {
         clearTimeout(timer)
         pendingReject = null
@@ -284,6 +294,10 @@ async function fetchWebResource(
       return `Failed to fetch URL (Anti-bot protection ${response.status}).`
     if (!response.ok || response.status === 206)
       return `Failed to fetch URL. Status: ${response.status} ${response.statusText}`
+    const declaredLength = (response.headers.get('content-length') || '').trim()
+    if (/^\d+$/.test(declaredLength) && BigInt(declaredLength) >= BigInt(MAX_RESPONSE_BYTES)) {
+      throw new Error(SIZE_LIMIT_ERROR)
+    }
     const finalUrl = validateUrl(response.url || url)
     const contentType = (response.headers.get('content-type') || '')
       .split(';')[0]

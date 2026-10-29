@@ -376,6 +376,147 @@ try {
     .replace(/^const .* = require\('node:[^']+'\)\r?\n/gm, '')
     .replace(/^export /gm, '')
     .replace(/^module\.exports =.*$/gm, '')
+  // Verify the production 200 MB boundary without allocating or saving a large file.
+  const production = vm.runInNewContext(helperBody + '\n;({openBody, MAX_RESPONSE_BYTES})', {
+    fs: fsSync,
+    path,
+    Buffer,
+    URL,
+    setTimeout,
+    clearTimeout
+  })
+  assert.equal(production.MAX_RESPONSE_BYTES, 200_000_000)
+  const reusableChunk = Buffer.alloc(1_000_000, 1)
+  for (const total of [199_999_999, 200_000_000, 200_000_001]) {
+    let emitted = 0
+    let stopped = false
+    const body = production.openBody({
+      body: {
+        getReader: () => ({
+          read: async () => {
+            if (emitted === total) return { done: true }
+            const size = Math.min(total - emitted, reusableChunk.length)
+            emitted += size
+            return { done: false, value: reusableChunk.subarray(0, size) }
+          },
+          cancel: async () => {
+            stopped = true
+          }
+        })
+      }
+    })
+    let accepted = 0
+    const consume = async () => {
+      for (let chunk = await body.next(); chunk !== null; chunk = await body.next())
+        accepted += chunk.length
+    }
+    try {
+      if (total < production.MAX_RESPONSE_BYTES) {
+        await consume()
+        assert.equal(accepted, total)
+      } else {
+        await assert.rejects(consume, /smaller than 200 MB/)
+        assert.ok(accepted < production.MAX_RESPONSE_BYTES)
+        assert.equal(stopped, true)
+      }
+    } finally {
+      body.close()
+    }
+    checks++
+  }
+  for (const declared of ['200000000', '20000000000', '999999999999999999999999999999']) {
+    let reads = 0
+    let cancelled = false
+    const huge = response(pdf, 'application/pdf', { 'content-length': declared })
+    huge.body = {
+      getReader: () => ({
+        read: async () => {
+          reads++
+          throw new Error('oversized header must not read body')
+        },
+        cancel: async () => {
+          cancelled = true
+        }
+      })
+    }
+    assert.match(await run(huge), /smaller than 200 MB/)
+    assert.equal(reads, 0)
+    assert.equal(cancelled, true)
+    checks++
+  }
+  // Scale only the private constant inside the test sandbox to exercise disk cleanup cheaply.
+  const bounded = vm.runInNewContext(
+    helperBody.replace('200_000_000', '2_048') + '\nfetchWebResource',
+    {
+      fs: fsSync,
+      path,
+      randomUUID: () => 'limit-' + Math.random().toString(36).slice(2),
+      Buffer,
+      URL,
+      setTimeout,
+      clearTimeout
+    }
+  )
+  const beforeLimitTests = (await fs.readdir(downloads)).sort()
+  for (const type of ['application/pdf', 'text/plain']) {
+    for (const length of [null, '1', 'invalid']) {
+      const limitResponse = response(Buffer.alloc(4096, 65), type, { 'content-length': length })
+      const chunk = Buffer.alloc(1024, 65)
+      let reads = 0
+      let cancelled = false
+      limitResponse.body = {
+        getReader: () => ({
+          read: async () => {
+            reads++
+            return { done: false, value: chunk }
+          },
+          cancel: async () => {
+            cancelled = true
+          }
+        })
+      }
+      const result = await bounded(
+        { url: 'https://synthetic.invalid/limit', download: type === 'text/plain' },
+        {
+          ...options,
+          fetchImpl: async () => limitResponse
+        }
+      )
+      assert.match(result, /smaller than 200 MB/)
+      assert.equal(reads, 2, 'Stop as soon as accumulated bytes reach the limit')
+      assert.equal(cancelled, true)
+      assert.deepEqual((await fs.readdir(downloads)).sort(), beforeLimitTests)
+      checks++
+    }
+  }
+  const compressed = response(Buffer.alloc(2048, 65), 'text/plain', {
+    'content-length': '10',
+    'content-encoding': 'gzip'
+  })
+  assert.match(
+    await bounded(
+      { url: 'https://synthetic.invalid/compressed' },
+      {
+        ...options,
+        fetchImpl: async () => compressed
+      }
+    ),
+    /smaller than 200 MB/
+  )
+  const below = Buffer.alloc(2047, 65)
+  await saved(
+    await bounded(
+      { url: 'https://synthetic.invalid/below', download: true },
+      {
+        ...options,
+        fetchImpl: async () => response(below, 'text/plain')
+      }
+    ),
+    below
+  )
+  await noPartial()
+  checks++
+
   let timerCallback
   let timeoutBodyCancelled = false
   const unsupportedLinks = {
