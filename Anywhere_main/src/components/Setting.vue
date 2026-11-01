@@ -246,6 +246,10 @@ function importConfig() {
             throw new Error("Imported file is not a valid configuration object.");
           }
 
+          // Desktop-only request statistics must never enter the plugin's config/database.
+          delete importedData.usageStatistics;
+
+
           if (currentLocalChatPath) {
             if (!importedData.webdav) {
               importedData.webdav = {};
