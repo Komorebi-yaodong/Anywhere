@@ -53,7 +53,7 @@ async function removeAppliedTaskDevice(device) {
 
 const searchQuery = ref('');
 
-// 收集可用的快捷助手 (只允许独立窗口模式)
+// 收集可用的智能体 (只允许独立窗口模式)
 const availablePrompts = computed(() => {
     if (!currentConfig.value || !currentConfig.value.prompts) return [];
     const prompts = Object.entries(currentConfig.value.prompts)

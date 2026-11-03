@@ -3,7 +3,7 @@
     "header": {
       "chats": "Chats",
       "tasks": "Scheduled Task",
-      "prompts": "Agent Prompts",
+      "prompts": "Agents",
       "mcp": "MCP Servers",
       "skills": "Skills",
       "providers": "Providers",
@@ -13,7 +13,7 @@
     "tabs": {
       "chats": "Chat History",
       "tasks": "Scheduled Task",
-      "prompts": "Agent Prompts",
+      "prompts": "Agents",
       "mcp": "MCP Servers",
       "skills": "Skills",
       "providers": "Providers",
@@ -26,7 +26,7 @@
     "loadFailed": "Failed to load documentation. Please check your network connection.",
     "checkNetwork": "Please ensure you can access GitHub or its mirrors.",
     "titles": {
-      "ai": "Agent Prompts",
+      "ai": "Agents",
       "chat": "Chat History",
       "task": "Scheduled Task",
       "mcp": "MCP Servers",
@@ -183,7 +183,7 @@
     "defaultPromptLabel": "Default Agent (Recommended)",
     "refreshSuccess": "History refreshed successfully",
     "refreshFailed": "Refresh failed",
-    "defaultModelUpdated": "Default agent model updated",
+    "defaultModelUpdated": "Default Agent model updated",
     "nameInvalidChar": "Task name cannot contain special characters",
     "nameInvalidFileSystem": "Task name cannot contain file system special characters",
     "testTaskTooltip": "Run task immediately",
@@ -236,11 +236,11 @@
       "0": "Sun"
     },
     "executionContentTitle": "Execution Content & Target",
-    "targetPromptLabel": "Target Quick Prompt",
-    "targetPromptTooltip": "Only enabled assistants in 'Standalone Window' mode can perform scheduled tasks",
-    "targetPromptUnavailableWarning": "The prompt currently referenced by this task is disabled, deleted, or no longer in standalone window mode. Please select another enabled prompt.",
+    "targetPromptLabel": "Target Agent",
+    "targetPromptTooltip": "Only enabled Agents in 'Standalone Window' mode can perform scheduled tasks",
+    "targetPromptUnavailableWarning": "The Agent currently referenced by this task is disabled, deleted, or no longer in standalone window mode. Please select another enabled Agent.",
     "promptContentLabel": "Prompt Content",
-    "promptContentPlaceholder": "Please describe what the AI needs to do in natural language. E.g., Search for today's big AI news and summarize it into a table.\nYou can enable built-in MCP to allow the assistant to perform more functions, such as saving the result as an MD file.",
+    "promptContentPlaceholder": "Please describe what the AI needs to do in natural language. E.g., Search for today's big AI news and summarize it into a table.\nYou can enable built-in MCP to allow the Agent to perform more functions, such as saving the result as an MD file.",
     "advancedSettingsTitle": "Background & Extensions",
     "overrideMcpLabel": "Override MCP Servers",
     "overrideMcpPlaceholder": "Built-in services selected by default",
@@ -263,8 +263,8 @@
     "addDialogTitle": "New Scheduled Task",
     "addDialogNameLabel": "Task Name",
     "addDialogNamePlaceholder": "Enter a valid filename format",
-    "globalSettingsDialogTitle": "Default Assistant Route Settings",
-    "defaultAssistantRouteLabel": "Default Assistant Model Capability",
+    "globalSettingsDialogTitle": "Default Agent Route Settings",
+    "defaultAssistantRouteLabel": "Default Agent Model Capability",
     "defaultAssistantRoutes": {
       "superior": {
         "label": "Superior Model",
@@ -283,13 +283,13 @@
   "prompts": {
     "allPrompts": "ALL",
     "searchPlaceholder": "Search name, content, model or provider...",
-    "noPrompts": "No prompts defined yet.",
-    "noPromptsInTag": "No prompts in this tag.",
-    "addExistingPrompt": "Add Existing Prompt",
-    "addNewPrompt": "Add New Prompt",
-    "editPrompt": "Edit Prompt",
+    "noPrompts": "No Agents defined yet.",
+    "noPromptsInTag": "No Agents in this tag.",
+    "addExistingPrompt": "Add Existing Agent",
+    "addNewPrompt": "Add New Agent",
+    "editPrompt": "Edit Agent",
     "addNewTag": "Add New Tag",
-    "assignPromptsToTag": "Add Prompts to '{tagName}'",
+    "assignPromptsToTag": "Add Agents to '{tagName}'",
     "promptKeyLabel": "Name",
     "promptKeyPlaceholder": "e.g., CodeGeneration",
     "typeLabel": "Type",
@@ -299,9 +299,9 @@
     "orClickToUpload": "or click",
     "disableAll": "Disable All",
     "enableAll": "Enable All",
-    "openWindow": "Open Dialog Window",
-    "deletePrompt": "Delete this Prompt",
-    "inputPlaceholder": "Enter prompt content...",
+    "openWindow": "Open Agent Window",
+    "deletePrompt": "Delete this Agent",
+    "inputPlaceholder": "Enter Agent instructions...",
     "selectNewModel": "Please select a new model",
     "icon": {
       "uploadText": "Drag/Paste\nClick to Upload",
@@ -340,8 +340,8 @@
     "promptKeyLabelShort": "Name",
     "modelLabel": "Model",
     "llmParametersLabel": "Model Parameters",
-    "llmParametersRemark": "Only effective for the current Quick Prompt model; no longer effective after switching to other models",
-    "AssistantParametersLabel": "Quick Prompt Parameters",
+    "llmParametersRemark": "Only effective for the current Agent model; no longer effective after switching to other models",
+    "AssistantParametersLabel": "Agent Parameters",
     "sendDirectLabel": "Direct Text Sending",
     "sendImageDirectLabel": "Direct Image Sending",
     "sendFileLabel": "Direct File Sending",
@@ -354,16 +354,16 @@
     "addToTagLabel": "Add to Tag (Optional)",
     "addToTagPlaceholder": "Select tag (optional)",
     "tagNameLabel": "Tag Name",
-    "selectPromptsToAddLabel": "Select Prompts to Add",
-    "selectPromptsPlaceholder": "Choose prompts",
+    "selectPromptsToAddLabel": "Select Agents to Add",
+    "selectPromptsPlaceholder": "Choose Agents",
     "isAlwaysOnTopLabel": "Always on Top",
     "autoCloseOnBlurLabel": "Auto-close on Blur",
     "autoSaveChatLabel": "Auto-save Chat",
     "autoSaveProjectLabel": "Save to",
     "autoSaveProjectPlaceholder": "Ungrouped",
     "autoSaveProjectUngrouped": "Ungrouped",
-    "defaultAssistantRoutesButton": "Default Assistant Route",
-    "defaultAssistantRoutesDialogTitle": "Default Assistant Route",
+    "defaultAssistantRoutesButton": "Default Agent Route",
+    "defaultAssistantRoutesDialogTitle": "Default Agent Route",
     "defaultAssistantRoutesFastTip": "For the fast route, choose the quickest and most cost-effective model. It is suitable for simple sub-agent tasks, lightweight scheduled tasks, and automatic chat naming.",
     "replaceModels": "Replace Models",
     "replaceModelsDialog": {
@@ -374,27 +374,27 @@
     "alerts": {
       "tagNameEmpty": "Tag name cannot be empty.",
       "tagExists": "Tag \"{tagName}\" already exists.",
-      "promptKeyEmpty": "Prompt name cannot be empty.",
+      "promptKeyEmpty": "Agent name cannot be empty.",
       "promptKeyRejected": "The name \"__DEFAULT__\" is a system reserved word; please use another name.",
-      "promptKeyExists": "Prompt name \"{newKey}\" already exists.",
+      "promptKeyExists": "Agent name \"{newKey}\" already exists.",
       "targetTagNotFound": "Target tag not found.",
-      "noPromptsToAssign": "No other prompts available to assign to this tag.",
+      "noPromptsToAssign": "No other Agents available to assign to this tag.",
       "invalidImageFormat": "Invalid image format. Please use {formats}.",
       "imageSizeTooLarge": "Image size exceeds {maxSize}.",
-      "modelsReplacedSuccess": "Successfully replaced the model for {count} prompts.",
-      "refreshSuccess": "Agent Prompts configuration has been refreshed!",
+      "modelsReplacedSuccess": "Successfully replaced the model for {count} Agents.",
+      "refreshSuccess": "Agents configuration has been refreshed!",
       "noIconToDownload": "No icon available to download.",
       "selectModels": "Please select source and target models.",
       "sameModels": "Source and target models cannot be the same.",
-      "configFetchFailed": "Failed to fetch latest prompts settings, data might be stale.",
-      "promptNotFound": "Prompt not found, it may have been deleted.",
+      "configFetchFailed": "Failed to fetch latest Agents settings, data might be stale.",
+      "promptNotFound": "Agent not found, it may have been deleted.",
       "saveFailed": "Configuration save failed, please try again.",
       "saveSettingFailed": "Save failed"
     },
     "tooltips": {
       "moveLeft": "Move Left",
       "moveRight": "Move Right",
-      "removeFromTag": "Remove prompt from this tag",
+      "removeFromTag": "Remove Agent from this tag",
       "deleteTag": "Delete current tag",
       "sendDirect": "When enabled, selected text will be sent directly to the AI.",
       "sendImageDirect": "When enabled, selected screenshot/image will be sent directly to the AI.",
@@ -405,8 +405,8 @@
       "autoCloseOnBlurTooltip": "Enable to close the standalone window when it loses focus.",
       "autoSaveChatTooltip": "When enabled, conversations will be automatically saved to local storage every 15 seconds (requires local chat path configured in settings).",
       "autoSaveProjectTooltip": "When selected, auto-saved conversations will be assigned to this project. Leave empty to keep them ungrouped.",
-      "defaultMcpServers": "When set, the selected MCP services will be automatically enabled when this assistant is opened in a standalone window.",
-      "defaultSkills": "When set, these skills will be automatically visible to AI when this assistant is opened in a standalone window."
+      "defaultMcpServers": "When set, the selected MCP services will be automatically enabled when this Agent is opened in a standalone window.",
+      "defaultSkills": "When set, these skills will be automatically visible to AI when this Agent is opened in a standalone window."
     },
     "voiceLabel": "Default Voice",
     "voicePlaceholder": "Select a voice or disable",
@@ -425,9 +425,9 @@
       "max": "Maximum"
     },
     "defaultMcpServersLabel": "MCP",
-    "defaultMcpServersPlaceholder": "Select default MCP services for this assistant",
+    "defaultMcpServersPlaceholder": "Select default MCP services for this Agent",
     "defaultSkillsLabel": "SKILL",
-    "defaultSkillsPlaceholder": "Select default skills for this assistant"
+    "defaultSkillsPlaceholder": "Select default skills for this Agent"
   },
   "mcp": {
     "title": "MCP Servers",
@@ -611,7 +611,7 @@
       "toolsHint": "Leave blank for no tool restrictions",
       "toolsPlaceholder": "Enter tool names, separated by commas (e.g., read_file, grep_search)",
       "instructions": "Instructions",
-      "instructionPlaceholder": "Enter detailed prompts instructions..."
+      "instructionPlaceholder": "Enter detailed Agents instructions..."
     },
     "tooltips": {
       "forkOn": "Enable Sub-Agent Mode",
@@ -757,15 +757,15 @@
     "title": "General Settings",
     "isAlwaysOnTop_global": {
       "label": "Global Always on Top",
-      "description": "Globally control whether all assistant windows are always on top"
+      "description": "Globally control whether all Agent windows are always on top"
     },
     "autoCloseOnBlur_global": {
       "label": "Global Auto-close on Blur",
-      "description": "Globally control whether all assistant windows close automatically on blur"
+      "description": "Globally control whether all Agent windows close automatically on blur"
     },
     "autoSaveChat_global": {
       "label": "Global Auto-save Chat",
-      "description": "Globally control whether all assistants automatically save chats locally"
+      "description": "Globally control whether all Agents automatically save chats locally"
     },
     "skipLineBreak": {
       "label": "Skip Line Breaks on Send",

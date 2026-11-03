@@ -400,7 +400,7 @@ const availableMcpServers = computed(() => {
     .sort((a, b) => a.label.localeCompare(b.label)); // 新增此行以按名称排序
 });
 
-// [新增] 计算所有快捷助手中正在使用的模型列表 (用于替换模型的源模型下拉)
+// [新增] 计算所有智能体中正在使用的模型列表 (用于替换模型的源模型下拉)
 const usedModels = computed(() => {
   if (!currentConfig.value || !currentConfig.value.prompts) return [];
   const modelSet = new Set();
@@ -679,7 +679,7 @@ function savePrompt() {
     const oldTags = Object.keys(config.tags).filter(tagName => config.tags[tagName].includes(keyToUseForTags));
     const newTags = editingPrompt.selectedTag;
 
-    // 从不再包含此快捷助手的标签中移除
+    // 从不再包含此智能体的标签中移除
     oldTags.forEach(tagName => {
       if (!newTags.includes(tagName)) {
         config.tags[tagName] = config.tags[tagName].filter(pk => pk !== keyToUseForTags);
@@ -1106,7 +1106,7 @@ async function refreshPromptsConfig() {
                 <template #label>
                   <div>
                     {{ t('prompts.llmParametersLabel') }}
-                    <div class="form-item-subtitle">{{ t('prompts.llmParametersRemark', '（仅当前快捷助手模型生效，更换其他模型后不再生效）') }}
+                    <div class="form-item-subtitle">{{ t('prompts.llmParametersRemark', '（仅当前智能体模型生效，更换其他模型后不再生效）') }}
                     </div>
                   </div>
                 </template>

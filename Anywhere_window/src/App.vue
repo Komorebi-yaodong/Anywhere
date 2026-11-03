@@ -2648,7 +2648,7 @@ const saveSystemPrompt = async () => {
     if (promptExists) {
       await window.api.saveSetting(`prompts.${CODE.value}.prompt`, newPromptContent);
       currentConfig.value.prompts[CODE.value].prompt = newPromptContent;
-      showDismissibleMessage.success('快捷助手提示词已更新');
+      showDismissibleMessage.success('智能体提示词已更新');
     } else {
       const latestConfigData = await window.api.getConfig();
       const baseConfig = sourcePromptConfig.value || defaultConfig.config.prompts.AI;
@@ -2680,7 +2680,7 @@ const saveSystemPrompt = async () => {
       await window.api.updateConfig(latestConfigData);
       currentConfig.value = latestConfigData.config;
       sourcePromptConfig.value = newPrompt;
-      showDismissibleMessage.success(`已为您创建并保存新的快捷助手: "${CODE.value}"`);
+      showDismissibleMessage.success(`已为您创建并保存新的智能体: "${CODE.value}"`);
     }
   } catch (error) {
     console.error("保存系统提示词失败:", error);
@@ -3172,7 +3172,7 @@ onMounted(async () => {
         defaultConversationName.value = descriptor.title || data.conversationTitle || '';
         isSessionRestored = true;
         await loadSession(opened.sessionData);
-        // 历史会话必须保持打开；不能继承快捷助手的失焦即关闭配置。
+        // 历史会话必须保持打开；不能继承智能体的失焦即关闭配置。
         autoCloseOnBlur.value = false;
         syncAutoCloseOnBlurListener();
         await acquireCurrentConversationLease();
@@ -4009,7 +4009,7 @@ const autoSaveSession = async (force = false, { skipProjectAssignment = false, v
   const promptConfig = currentConfig.value?.prompts?.[CODE.value] || {};
   const autoSaveProjectId = typeof promptConfig.autoSaveProjectId === 'string' ? promptConfig.autoSaveProjectId : '';
 
-  // 2. 获取当前快捷助手的配置
+  // 2. 获取当前智能体的配置
   const shouldAutoSave = shouldPersistCurrentSessionAutomatically();
 
   if (!shouldAutoSave && !force) {
@@ -4281,7 +4281,7 @@ onBeforeUnmount(async () => {
 
 const saveWindowSize = async () => {
   if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
-    showDismissibleMessage.warning('无法保存窗口设置，因为当前不是一个已定义的快捷助手。');
+    showDismissibleMessage.warning('无法保存窗口设置，因为当前不是一个已定义的智能体。');
     return;
   }
 
@@ -4301,7 +4301,7 @@ const saveWindowSize = async () => {
   try {
     const result = await window.api.savePromptWindowSettings(CODE.value, settingsToSave);
     if (result.success) {
-      showDismissibleMessage.success('当前快捷助手的窗口大小、位置与缩放已保存');
+      showDismissibleMessage.success('当前智能体的窗口大小、位置与缩放已保存');
       if (currentConfig.value.prompts[CODE.value]) {
         Object.assign(currentConfig.value.prompts[CODE.value], settingsToSave);
       }
@@ -9641,7 +9641,7 @@ function getDisplayTypeName(type) {
 
 const handleSaveModel = async (modelToSave) => {
   if (!CODE.value || !currentConfig.value.prompts[CODE.value]) {
-    showDismissibleMessage.warning('无法保存模型，因为当前不是一个已定义的快捷助手。');
+    showDismissibleMessage.warning('无法保存模型，因为当前不是一个已定义的智能体。');
     return;
   }
 
@@ -9650,7 +9650,7 @@ const handleSaveModel = async (modelToSave) => {
     changeModel_page.value = false;
     if (result && result.success) {
       currentConfig.value.prompts[CODE.value].model = modelToSave;
-      showDismissibleMessage.success(`模型已为快捷助手 "${CODE.value}" 保存成功！`);
+      showDismissibleMessage.success(`模型已为智能体 "${CODE.value}" 保存成功！`);
     } else {
       throw new Error(result?.message || '保存失败');
     }

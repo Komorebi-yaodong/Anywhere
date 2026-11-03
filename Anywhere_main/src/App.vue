@@ -486,7 +486,7 @@ watch(locale, () => {
               </el-button>
             </el-tooltip>
 
-            <!-- 3. Prompts (快捷助手/Agent) -->
+            <!-- 3. Prompts (智能体（Agent）) -->
             <el-tooltip :content="t('app.tabs.prompts')" placement="bottom">
               <el-button class="tab-button" text @click="changeTab(2)" :class="{ 'active-tab': tab === 2 }">
                 <el-icon :size="20">

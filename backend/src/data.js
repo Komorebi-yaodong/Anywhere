@@ -550,7 +550,7 @@ function checkConfig(config) {
       flag = true;
   }
 
-  // --- 4. Prompts (快捷助手) 检查 ---
+  // --- 4. Prompts (智能体) 检查 ---
   if (config.prompts) {
     if (config.prompts['__DEFAULT__']) {
       delete config.prompts['__DEFAULT__'];
@@ -571,9 +571,9 @@ function checkConfig(config) {
       const p = config.prompts[key];
 
       // 4.1 结构有效性检查
-      // model 允许为空：表示快捷助手不绑定专属模型，运行时走默认模型/首个可用模型兜底。
+      // model 允许为空：表示智能体不绑定专属模型，运行时走默认模型/首个可用模型兜底。
       // 注意：前端清空 el-select 时可能得到 undefined，完整配置保存经过 JSON.stringify 后会丢失该字段；
-      // 这里必须归一化而不是删除整个快捷助手，避免重启插件后快捷助手消失。
+      // 这里必须归一化而不是删除整个智能体，避免重启插件后智能体消失。
       if (!p || typeof p !== 'object' || '0' in p || !p.type || p.prompt === undefined) {
         delete config.prompts[key];
         flag = true;
@@ -1379,8 +1379,8 @@ function setZoomFactor(factor) {
 }
 
 /**
- * 保存单个快捷助手的窗口设置，直接操作 "prompts" 文档
- * @param {string} promptKey - 快捷助手的 key
+ * 保存单个智能体的窗口设置，直接操作 "prompts" 文档
+ * @param {string} promptKey - 智能体的 key
  * @param {object} settings - 要保存的窗口设置
  * @returns {Promise<{success: boolean, message?: string}>}
  */
@@ -1396,11 +1396,11 @@ async function savePromptWindowSettings(promptKey, settings) {
 
     const promptsData = promptsDoc.data;
     if (!promptsData[promptKey]) {
-      // 如果快捷助手不存在，则无法更新。这是一个错误情况。
+      // 如果智能体不存在，则无法更新。这是一个错误情况。
       return { success: false, message: `Prompt with key '${promptKey}' not found in document` };
     }
 
-    // 将新的设置合并到现有的快捷助手配置中
+    // 将新的设置合并到现有的智能体配置中
     promptsData[promptKey] = {
       ...promptsData[promptKey],
       ...settings
@@ -1455,7 +1455,7 @@ async function openFastInputWindow(config, msg) {
   const code = msg.code;
   const promptConfig = config.prompts[code];
 
-  // 解析模型配置：快捷助手 model 允许为空，空值回退到默认助手模型/首个可用模型。
+  // 解析模型配置：智能体 model 允许为空，空值回退到默认助手模型/首个可用模型。
   let apiUrl = config.providers["0"]?.url; // 默认 fallback
   let apiKey = config.providers["0"]?.api_key;
   let apiType = config.providers["0"]?.apiType || 'chat_completions'; // 默认 API 类型

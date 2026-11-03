@@ -480,7 +480,7 @@ function deleteServer(serverId, serverName) {
                 delete config.mcpServers[serverId];
             }
 
-            // 2. 遍历所有快捷助手，从 defaultMcpServers 中移除已删除的 ID
+            // 2. 遍历所有智能体，从 defaultMcpServers 中移除已删除的 ID
             if (config.prompts) {
                 Object.values(config.prompts).forEach(prompt => {
                     if (Array.isArray(prompt.defaultMcpServers)) {

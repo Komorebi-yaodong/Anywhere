@@ -719,7 +719,7 @@ const commandHandlers = {
     utools.outPlugin();
   },
 
-  // 直接打开快捷助手
+  // 直接打开智能体
   handleAssistant: async ({ code, type, payload }) => {
     // 避免弹出主窗口
     utools.hideMainWindow();
