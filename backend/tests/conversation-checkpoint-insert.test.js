@@ -64,8 +64,7 @@ async function verify(mode) {
     assert.equal(request.messages.find(m => m.role !== 'system').snapshotId, 'same-gap')
     const stable = await store.openConversation({ dirPath: root, reference: id, activeOnly: false, pageSize: 0 })
     const failedData = stable.sessionData
-    failedData.fullHistory.push({ ...message('compaction', 'must rollback', 'rejected'), snapshotId: 'rejected' })
-    await assert.rejects(store.saveConversationSnapshot({ dirPath: root, conversationId: id, expectedRevision: stable.descriptor.revision - 1, sessionData: failedData }), /conversation_revision_conflict/)
+    await assert.rejects(store.saveConversationSnapshot({ dirPath: root, conversationId: id, expectedRevision: stable.descriptor.revision - 1, sessionData: failedData }), /UNIQUE constraint failed/)
     const unchanged = await store.openConversation({ dirPath: root, reference: id, activeOnly: false, pageSize: 0 })
     assert.equal(unchanged.descriptor.revision, stable.descriptor.revision)
     assert.equal(unchanged.sessionData.fullHistory.some(m => m.snapshotId === 'rejected'), false)

@@ -4253,6 +4253,29 @@ const saveWindowSize = async () => {
   }
 }
 
+const forkInProgress = ref(false);
+const handleForkMessage = async (index, remoteCommand = null) => {
+  if (forkInProgress.value || isClosingWindow.value || loading.value || compacting.value || isPreparingSend.value || isMcpLoading.value) throw new Error('remote_conversation_busy');
+  if (!ensureConversationWriteAccess(true)) throw new Error('conversation_initializing');
+  const target = chat_show.value[index];
+  if (!target || !['user', 'assistant'].includes(target.role)) throw new Error('remote_message_not_found');
+  forkInProgress.value = true;
+  try {
+    clearScheduledAutoSave();
+    const saved = await executeAutoSaveRequest({reason: 'fork-source', force: true, stateOnly: false, version: ++sessionMutationVersion});
+    await autoSaveMutationQueue.whenIdle();
+    if (!saved || isClosingWindow.value) throw new Error('remote_conversation_save_failed');
+    const storage = currentConversationStorage.value;
+    const dirPath = storage?.dirPath || currentConfig.value?.webdav?.localChatPath || '';
+    if (!storage?.conversationId || !dirPath || !target.uiStorageId) throw new Error('请先开启本地会话存储');
+    const forked = await window.api.forkConversation({dirPath, conversationId: storage.conversationId, uiMessageId: target.uiStorageId});
+    const conversation = {...forked, dirPath, storageMode: 'local'};
+    await window.api.openConversationWindow(conversation);
+    return {forkedConversationId: forked.descriptor.conversationId, title: forked.descriptor.title};
+  } finally {forkInProgress.value = false;}
+};
+const onForkMessage = (index) => {void handleForkMessage(index).catch(error => showDismissibleMessage.error(`Fork失败: ${error?.message || error}`));};
+
 const getSessionDataAsObject = (options = {}) => {
   const createStorageId = createConversationStorageId;
   const usedStorageIds = new Set();
@@ -9798,7 +9821,7 @@ const scrollToMessageByIndex = (index) => {
             :user-avatar="UserAvart" :user-nickname="userNickname" :ai-avatar="AIAvart" :is-collapsed="isCollapsed(index)"
             :is-dark-mode="currentConfig.isDarkMode" @delete-message="handleDeleteMessage" @copy-text="handleCopyText"
             @re-ask="handleReAsk" @toggle-collapse="handleToggleCollapse" @show-system-prompt="handleShowSystemPrompt"
-            @avatar-click="onAvatarClick" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"
+            @avatar-click="onAvatarClick" @fork-message="onForkMessage" @edit-message-requested="handleEditStart" @edit-finished="handleEditEnd"
             @edit-message="handleEditMessage" @cancel-tool-call="handleCancelToolCall" @submit-choice="handleChoiceSubmit" @restore-compact="handleRestoreCompact" />
         </el-main>
 

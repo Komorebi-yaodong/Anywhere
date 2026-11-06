@@ -888,6 +888,7 @@ function isMatchingConversationRpcCapability(request = {}) {
 }
 
 async function invokeConversationHelperMethod(method, args = [], options = {}) {
+  if (method === 'openConversationWindow') return window.api.openConversationWindow(args?.[0] || {});
   if (method === 'createCloudConversationWorktree') {
     return await createCloudConversationWorktree(args?.[0] || {});
   }

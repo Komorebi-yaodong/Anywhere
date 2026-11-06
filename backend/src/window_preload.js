@@ -243,6 +243,8 @@ window.api = {
     writeLocalFile,
     listLocalConversations: (...args) => invokeConversationRpc('listLocalConversations', ...args),
     migrateJsonConversation: (input = {}) => invokeConversationRpc('migrateJsonConversation', input),
+    forkConversation: (input = {}) => invokeConversationRpc('forkConversation', input),
+    openConversationWindow: (input = {}) => invokeConversationRpc('openConversationWindow', input),
     createConversation: (input = {}) => invokeConversationRpc('createConversation', input),
     openConversation: (input = {}) => invokeConversationRpc('openConversation', input),
     loadConversationPage: (input = {}) => invokeConversationRpc('loadConversationPage', input),

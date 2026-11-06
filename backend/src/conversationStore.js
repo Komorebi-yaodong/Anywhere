@@ -1141,6 +1141,48 @@ async function createConversation({ dirPath, title, sessionData = {}, projectId 
   return { ok: true, descriptor, databasePath }
 }
 
+const forkQueues = new Map()
+
+async function forkConversationInDirectory({dirPath, conversationId, uiMessageId} = {}) {
+  const opened = await openConversation({dirPath, reference: conversationId, activeOnly: false, pageSize: 0})
+  const source = opened.sessionData
+  const uiIndex = source.chat_show.findIndex(message => message.uiStorageId === uiMessageId)
+  const target = source.chat_show[uiIndex]
+  if (!target || !['user', 'assistant'].includes(target.role) || !target.storageId) throw new Error('conversation_fork_message_not_found')
+  const historyIndex = source.fullHistory.findIndex(message => message.storageId === target.storageId)
+  if (historyIndex < 0) throw new Error('conversation_fork_message_not_found')
+  let end = historyIndex + 1
+  // Tool results belong to their assistant bubble and must not become dangling calls.
+  const calls = new Set((source.fullHistory[historyIndex].tool_calls || []).map(call => call.id))
+  while (end < source.fullHistory.length && source.fullHistory[end].role === 'tool'
+    && calls.has(source.fullHistory[end].tool_call_id)) end++
+  const projects = await readLocalProjects(dirPath)
+  const base = opened.descriptor.title.replace(/^fork\d*-/, '')
+  const titles = new Set(Object.values(projects.conversations || {}).map(item => item.title))
+  let index = 0, title
+  do { title = `fork${index === 0 ? '' : index}-${base}`; index++ } while (titles.has(title))
+  const fullHistory = source.fullHistory.slice(0, end)
+  const chatShow = source.chat_show.slice(0, uiIndex + 1)
+  const timestamp = nowIso()
+  const sessionData = {...source, fullHistory, chat_show: chatShow, history: [], conversationStorage: null,
+    sessionMetadata: {title, createdAt: timestamp, updatedAt: timestamp},
+    promptDraft: '', draftFileList: [], pendingAppendBuffer: [], pendingRemoteConfigPatch: null,
+    taskList: [], subAgentTasks: [], subAgentDetails: {}, compactArchives: [], conversationOwnerId: crypto.randomUUID()}
+  const projectId = projects.projects.find(project => project.conversationIds.includes(conversationId))?.id || ''
+  const created = await createConversation({dirPath, title, sessionData, projectId})
+  return openConversation({dirPath, reference: created.descriptor.conversationId, activeOnly: true, pageSize: 200})
+}
+
+async function forkConversation(input = {}) {
+  if (!normalizeText(input.dirPath).trim()) throw new Error('conversation_local_dir_required')
+  const directory = path.resolve(input.dirPath)
+  const previous = forkQueues.get(directory) || Promise.resolve()
+  const running = previous.catch(() => {}).then(() => forkConversationInDirectory({...input, dirPath: directory}))
+  forkQueues.set(directory, running)
+  try { return await running }
+  finally { if (forkQueues.get(directory) === running) forkQueues.delete(directory) }
+}
+
 async function openConversation({ dirPath, reference, activeOnly = true, pageSize = 200 } = {}) {
   const normalizedDir = path.resolve(normalizeText(dirPath).trim())
   let projects = await synchronizeLocalProjectsWithDatabases(normalizedDir)
@@ -1900,6 +1942,7 @@ async function getConversationDescriptor({ dirPath, reference } = {}) {
 const CONVERSATION_SCHEMA_VERSION = SCHEMA_VERSION
 
 module.exports = {
+  forkConversation,
   migrateJsonConversation,
   createConversation,
   openConversation,

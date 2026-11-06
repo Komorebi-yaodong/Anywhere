@@ -8,6 +8,8 @@ const CONVERSATION_RPC_METHOD_TARGETS = Object.freeze({
   listLocalConversations: 'listLocalConversations',
   migrateJsonConversation: 'migrateJsonConversation',
   createConversation: 'createConversation',
+  forkConversation: 'forkConversation',
+  openConversationWindow: null,
   openConversation: 'openConversation',
   loadConversationPage: 'loadConversationPage',
   getConversationRequestMessages: 'getConversationRequestMessages',

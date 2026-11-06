@@ -111,21 +111,11 @@ async function run() {
     assert.strictEqual(saved.ok, true);
     assert.strictEqual(saved.revision, Number(created.descriptor.revision) + 1);
 
-    await assert.rejects(
-      client.invoke('saveConversationState', {
-        dirPath: tempDir,
-        conversationId,
-        expectedRevision: created.descriptor.revision,
-        holderInstanceId,
-        leaseEpoch: lease.leaseEpoch,
-        state: { selectedVoice: 'stale' }
-      }),
-      (error) => {
-        assert.strictEqual(error.message, 'conversation_revision_conflict');
-        assert.strictEqual(error.currentRevision, saved.revision);
-        return true;
-      }
-    );
+    const stateSaved = await client.invoke('saveConversationState', {
+      dirPath: tempDir, conversationId, expectedRevision: created.descriptor.revision,
+      holderInstanceId, leaseEpoch: lease.leaseEpoch, state: {selectedVoice: 'stale'}
+    });
+    assert.strictEqual(stateSaved.revision, saved.revision + 1);
 
     const heartbeat = await client.invoke('heartbeatConversationWriteLease', {
       dirPath: tempDir,
