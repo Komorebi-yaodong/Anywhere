@@ -909,6 +909,7 @@ const handleConversationRpcRequest = createConversationRpcRequestHandler({
       });
       if (lease) {
         windowConversationLeaseRegistry.set(request.senderId, lease);
+        require('./data.js').registerConversationWindow(request.senderId, lease);
         bindWindowLeaseCleanup(request.senderId, windowMap.get(request.senderId));
       }
     } else if (method === 'releaseConversationWriteLease' && result?.ok) {

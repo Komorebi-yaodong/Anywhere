@@ -817,14 +817,8 @@ const releaseCurrentConversationLease = async () => {
 const ensureConversationWriteAccess = (message = '') => {
   const storage = currentConversationStorage.value;
   if (!storage?.conversationId) return true;
-  const confirmedExpiry = Date.parse(conversationLease.value?.expiresAt);
-  if (Number.isFinite(confirmedExpiry) && confirmedExpiry <= Date.now()) conversationLeasePending.value = true;
   if (conversationLeasePending.value) {
     if (message) showDismissibleMessage.warning('正在确认会话编辑权，请稍后再试');
-    return false;
-  }
-  if (conversationReadOnly.value || !conversationLease.value?.leaseEpoch) {
-    if (message) showDismissibleMessage.warning('当前会话正在其他客户端编辑，本窗口为只读模式');
     return false;
   }
   return true;
@@ -847,11 +841,7 @@ const acquireCurrentConversationLease = async () => {
       holderInstanceId: conversationInstanceId,
       holderApp: 'utools'
     });
-    conversationReadOnly.value = lease?.readonly === true || lease?.ok === false;
-    if (conversationReadOnly.value) {
-      showDismissibleMessage.warning(`该会话正在由${lease?.holderApp || '另一个客户端'}编辑，当前以只读模式打开`);
-      return;
-    }
+    conversationReadOnly.value = false;
     conversationLease.value = lease;
     const authoritativeRevision = Number(lease.revision);
     currentConversationStorage.value = {
@@ -880,50 +870,7 @@ const acquireCurrentConversationLease = async () => {
       await reloadConversationWindowFromStore({ activeOnly: true, pageSize: Number(storage.pageSize) || 200 });
       showDismissibleMessage.info('已安全修复历史会话的消息索引映射');
     }
-    let heartbeatInFlight = false;
-    conversationLeaseHeartbeatTimer = setInterval(async () => {
-      const currentLease = conversationLease.value;
-      const currentStorage = currentConversationStorage.value;
-      if (!currentLease?.leaseEpoch || !currentStorage?.conversationId) return;
-      if (!(Date.parse(currentLease.expiresAt) > Date.now())) conversationLeasePending.value = true;
-      if (heartbeatInFlight) return;
-      const dirPath = currentStorage.dirPath || currentConfig.value?.webdav?.localChatPath || '';
-      const isCurrent = () => conversationLease.value === currentLease
-        && currentConversationStorage.value?.conversationId === currentStorage.conversationId
-        && (currentConversationStorage.value?.dirPath || currentConfig.value?.webdav?.localChatPath || '') === dirPath;
-      heartbeatInFlight = true;
-      try {
-        const result = await window.api.heartbeatConversationWriteLease({
-          dirPath,
-          conversationId: currentStorage.conversationId,
-          holderInstanceId: conversationInstanceId,
-          leaseEpoch: currentLease.leaseEpoch
-        });
-        if (!isCurrent()) return;
-        if (result?.ok === false) {
-          conversationReadOnly.value = true;
-          conversationLeasePending.value = false;
-          conversationLease.value = null;
-          stopConversationLeaseHeartbeat();
-          showDismissibleMessage.warning('会话编辑权已失效，已切换为只读模式');
-        } else if (result?.ok === true && Number.isFinite(Date.parse(result.expiresAt))) {
-          currentLease.expiresAt = result.expiresAt;
-          conversationLeasePending.value = false;
-        } else {
-          throw new Error('conversation_heartbeat_response_invalid');
-        }
-      } catch {
-        if (!isCurrent()) return;
-        // Transport/SQLite errors are not evidence that another writer owns the lease.
-        // Keep retrying this exact holder/epoch, but never write past its confirmed expiry.
-        if (!(Date.parse(currentLease.expiresAt) > Date.now())) {
-          if (!conversationLeasePending.value) showDismissibleMessage.warning('暂时无法确认会话编辑权，已暂停写入，正在重试；未保存内容仍保留在窗口中');
-          conversationLeasePending.value = true;
-        }
-      } finally {
-        heartbeatInFlight = false;
-      }
-    }, 5000);
+
   } catch (error) {
     const failedLease = conversationLease.value;
     if (failedLease?.leaseEpoch) {
@@ -935,9 +882,9 @@ const acquireCurrentConversationLease = async () => {
       }).catch(() => {});
     }
     window.api.clearRegisteredConversationWriteLease?.();
-    conversationReadOnly.value = true;
+    conversationReadOnly.value = false;
     conversationLease.value = null;
-    showDismissibleMessage.warning(`确认或修复会话编辑状态失败，当前以只读模式打开: ${error?.message || error}`);
+    showDismissibleMessage.warning(`读取或修复会话状态失败: ${error?.message || error}`);
   } finally {
     conversationLeasePending.value = false;
   }
@@ -4075,10 +4022,6 @@ const autoSaveSession = async (force = false, { skipProjectAssignment = false, v
     lastAutoSaveError = null;
     return true;
   } catch (error) {
-    if (/conversation_(revision_conflict|write_lease_lost)/.test(String(error?.message || ''))) {
-      conversationReadOnly.value = true;
-      showDismissibleMessage.warning('会话已在其他客户端更新，当前窗口已切换为只读模式');
-    }
     lastAutoSaveError = error;
     console.error('Auto-save failed:', error);
     return false;
@@ -4153,10 +4096,6 @@ const autoSaveSessionRequestConfig = async (force = false, { version = sessionMu
     lastAutoSaveError = null;
     return true;
   } catch (error) {
-    if (/conversation_(revision_conflict|write_lease_lost)/.test(String(error?.message || ''))) {
-      conversationReadOnly.value = true;
-      showDismissibleMessage.warning('会话已在其他客户端更新，当前窗口已切换为只读模式');
-    }
     lastAutoSaveError = error;
     console.error('Request-config state save failed:', error);
     return false;
@@ -8028,11 +7967,6 @@ const handleRestoreCompact = async (payload = null) => {
       showDismissibleMessage.success('已还原最外层压缩');
       return;
     } catch (error) {
-      if (/conversation_(revision_conflict|write_lease_lost)/.test(String(error?.message || ''))) {
-        conversationReadOnly.value = true;
-        showDismissibleMessage.warning('会话编辑权已失效，当前窗口已切换为只读模式');
-        return;
-      }
       showDismissibleMessage.error(`恢复压缩失败: ${error?.message || error}`);
       return;
     }

@@ -1142,7 +1142,46 @@ function copyText(content) {
 
 let windowCreationQueue = Promise.resolve();
 
+const conversationWindowOpens = new Map();
+const conversationWindowIds = new Map();
+
+function conversationWindowKey(config, conversationId, dirPath = '') {
+  const directory = dirPath || config?.webdav?.localChatPath || '';
+  return conversationId && directory ? JSON.stringify([path.resolve(directory), String(conversationId)]) : '';
+}
+
+function registerConversationWindow(senderId, input = {}) {
+  const win = windowMap.get(senderId);
+  const key = conversationWindowKey({}, input.conversationId, input.dirPath);
+  if (win && !win.isDestroyed() && key) conversationWindowIds.set(key, senderId);
+}
+
 async function openWindow(config, msg) {
+  const key = conversationWindowKey(config, msg?.conversation?.descriptor?.conversationId,
+    msg?.conversation?.dirPath || msg?.conversation?.worktreeDir || msg?.conversation?.sessionData?.conversationStorage?.dirPath);
+  if (!key) return createConversationWindow(config, msg);
+  const pending = conversationWindowOpens.get(key);
+  if (pending) return pending;
+  const existingId = conversationWindowIds.get(key);
+  const existing = windowMap.get(existingId);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized?.()) existing.restore();
+    existing.show();
+    existing.focus();
+    return existingId;
+  }
+  conversationWindowIds.delete(key);
+  const opening = createConversationWindow(config, msg).then(id => {
+    const win = windowMap.get(id);
+    if (win && !win.isDestroyed()) conversationWindowIds.set(key, id);
+    return id;
+  });
+  conversationWindowOpens.set(key, opening);
+  try { return await opening; }
+  finally { if (conversationWindowOpens.get(key) === opening) conversationWindowOpens.delete(key); }
+}
+
+async function createConversationWindow(config, msg) {
   // 计时开始
   let startTime;
   if (utools.isDev()) {
@@ -2050,6 +2089,7 @@ module.exports = {
   getUser,
   copyText,
   openWindow,
+  registerConversationWindow,
   applyConversationWindowState,
   coderedirect,
   setZoomFactor,
