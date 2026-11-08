@@ -2,12 +2,13 @@
 import { computed, ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
 import { Bubble, Thinking, XMarkdown } from 'vue-element-plus-x';
 import { ElTooltip, ElButton, ElInput, ElCollapse, ElCollapseItem, ElIcon, ElCheckbox, ElTag, ElMessage } from 'element-plus';
-import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Share, Edit, Check, Close, CloseBold, Picture } from '@element-plus/icons-vue';
+import { DocumentCopy, Refresh, Delete, Document, CaretTop, CaretBottom, Edit, Check, Close, CloseBold, Picture } from '@element-plus/icons-vue';
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
 
 import { formatTimestamp, formatMessageText, sanitizeToolArgs, formatToolResult } from '../utils/formatters.js';
 import ChoiceCard from './ChoiceCard.vue';
+import ForkIcon from './ForkIcon.vue';
 
 let html2canvasPromise = null;
 const loadHtml2Canvas = () => {
@@ -811,7 +812,7 @@ const truncateFilename = (filename, maxLength = 30) => {
                 <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small"
                   circle />
                 <el-tooltip content="Fork 会话" placement="top" :show-after="500">
-                  <el-button :icon="Share" @click="emit('fork-message', index)" size="small" circle />
+                  <el-button :icon="ForkIcon" @click="emit('fork-message', index)" size="small" circle />
                 </el-tooltip>
                 <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
                   @click="onToggleCollapse($event)" size="small" circle />
@@ -955,7 +956,7 @@ const truncateFilename = (filename, maxLength = 30) => {
               <el-button v-if="isEditable" :icon="Edit" @click="emit('edit-message-requested', index)" size="small"
                 circle />
                 <el-tooltip content="Fork 会话" placement="top" :show-after="500">
-                  <el-button :icon="Share" @click="emit('fork-message', index)" size="small" circle />
+                  <el-button :icon="ForkIcon" @click="emit('fork-message', index)" size="small" circle />
                 </el-tooltip>
               <el-button v-if="shouldShowCollapseButton" :icon="isCollapsed ? CaretBottom : CaretTop"
                 @click="onToggleCollapse($event)" size="small" circle />

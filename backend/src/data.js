@@ -1,5 +1,6 @@
 const { webFrame, nativeImage } = require('electron');
 const crypto = require('crypto');
+const path = require('path');
 const {
   setCompatibleFeatureDescription,
   getCompatibleFeatureDescription,

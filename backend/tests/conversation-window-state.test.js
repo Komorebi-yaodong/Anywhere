@@ -173,6 +173,13 @@ async function main() {
   });
   assert.deepEqual(overlapApplied.bounds, { x: 170, y: 130, width: 720, height: 610 });
 
+  // Exercise the REAL CommonJS module with a non-empty directory. No injected path global.
+  const savedMessage = {...message, conversation: {...message.conversation, dirPath: 'synthetic-saved-directory'}};
+  const savedId = await store.openWindow(config, savedMessage);
+  const countBeforeReuse = createdWindows.length;
+  assert.equal(await store.openWindow(config, savedMessage), savedId);
+  assert.equal(createdWindows.length, countBeforeReuse, 'real module reuses saved conversation without missing path dependency');
+
   const initMessage = sentMessages.find((entry) => entry.channel === 'window')?.payload;
   assert.ok(initMessage);
   assert.equal(initMessage.type, 'conversation');
