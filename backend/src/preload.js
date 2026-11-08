@@ -518,6 +518,8 @@ window.api = {
     const task = tasks[taskId];
     if (!task) return false;
     if (!reconcileTaskDeviceState(task).enabled) return false;
+    if (task.promptKey === '' && !task.conversationId) throw new Error('task_conversation_required');
+    if (task.conversationId) {await runConversationTask(taskId, task, configResult.config); return true;}
 
     const windowConfig = JSON.parse(JSON.stringify(configResult.config));
 
@@ -1175,7 +1177,41 @@ function getDueTaskRunSlotKey(taskId, task, now, nowDate) {
   return null;
 }
 
+const conversationTaskDelivery = require('./conversationTaskDelivery.js').createConversationTaskDelivery({send: async (senderId, task) => {
+  const win = windowMap.get(senderId);
+  if (!win || win.isDestroyed()) return {ok: false};
+  win.webContents.send('conversation-task-run', task);
+  return {ok: true};
+}});
+ipcRenderer.on('conversation-task-ready', (_event, {senderId, capability} = {}) => {
+  if (!isMatchingConversationRpcCapability({senderId, capability})) return;
+  const win = windowMap.get(senderId);
+  if (win && !win.isDestroyed()) win.__conversationTaskReady = true;
+});
+ipcRenderer.on('conversation-task-receipt', (_event, {senderId, capability, ...result} = {}) => {
+  if (!isMatchingConversationRpcCapability({senderId, capability})) return;
+  conversationTaskDelivery.complete(senderId, result);
+});
+async function runConversationTask(taskId, task, config) {
+  if (task.promptKey) throw new Error('task_target_conflict');
+  const dirPath = config.webdav?.localChatPath;
+  if (!dirPath) throw new Error('task_local_storage_required');
+  const opened = await conversationDbHelperClient.invoke('openConversation', [{dirPath, reference: task.conversationId, activeOnly: true, pageSize: 200}]);
+  const senderId = await openWindow(config, {type: 'conversation', code: opened.sessionData.CODE || 'AI', conversation: {...opened, dirPath}});
+  const readyDeadline = Date.now() + 30000;
+  while (windowMap.get(senderId)?.__conversationTaskReady !== true) {
+    const win = windowMap.get(senderId);
+    if (!win || win.isDestroyed() || Date.now() >= readyDeadline) throw new Error('task_window_not_ready');
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  const result = await conversationTaskDelivery.deliver(senderId, {conversationId: task.conversationId, taskConfig: {...task, id: taskId}, payload: task.description || ''});
+  if (!result.ok) throw new Error(result.reason);
+  return senderId;
+}
+
 async function runScheduledTask(taskId, task, configResult) {
+  if (task.promptKey === '' && !task.conversationId) throw new Error('task_conversation_required');
+  if (task.conversationId) return runConversationTask(taskId, task, configResult.config);
   const windowConfig = JSON.parse(JSON.stringify(configResult.config));
 
   if (task.promptKey === '__DEFAULT__') {
@@ -1242,6 +1278,13 @@ async function checkScheduledTasks() {
         processedTaskRunSlots.set(slotKey, completedAt);
         needsUpdate = true;
       } catch (error) {
+        if (error?.message === 'task_receipt_timeout') {
+          task.lastRunTime = Date.now();
+          task.lastRunSlotKey = slotKey;
+          processedTaskRunSlots.set(slotKey, task.lastRunTime);
+          if (task.triggerType === 'single') setCurrentTaskDeviceEnabled(task, false);
+          needsUpdate = true;
+        }
         console.error(`[Task Scheduler] failed to run task ${taskId}:`, error);
       }
     }

@@ -3252,6 +3252,8 @@ onMounted(async () => {
     }
 
     await fetchSkillsList();
+    conversationTaskReady.value = true;
+    window.api.notifyConversationTaskReady?.();
 
     if (shouldDirectSend) {
       if (isAtBottom.value) scrollToBottom();
@@ -3264,6 +3266,7 @@ onMounted(async () => {
     }, 100);
   };
 
+  window.preload?.onConversationTask?.(handleConversationTask);
   if (window.preload && typeof window.preload.receiveMsg === 'function') {
     window.preload.receiveMsg(async (data) => {
       await initializeWindow(data);
@@ -4275,6 +4278,31 @@ const handleForkMessage = async (index, remoteCommand = null) => {
   } finally {forkInProgress.value = false;}
 };
 const onForkMessage = (index) => {void handleForkMessage(index).catch(error => showDismissibleMessage.error(`Fork失败: ${error?.message || error}`));};
+
+const conversationTaskReady = ref(false);
+let conversationTaskAdmitting = false;
+const handleConversationTask = async (input = {}) => {
+  const receipt = {requestId: input.requestId, conversationId: input.conversationId};
+  const reply = (ok, reason = '') => window.api.reportConversationTask({...receipt, ok, reason});
+  if (conversationTaskAdmitting || input.expiresAt <= Date.now()) {await reply(false, 'task_busy'); return;}
+  conversationTaskAdmitting = true;
+  try {
+    while (!conversationTaskReady.value && Date.now() < input.expiresAt && !isClosingWindow.value) await new Promise(resolve => setTimeout(resolve, 30));
+    if (activeApplyMcpPromise) await activeApplyMcpPromise;
+    if (Date.now() >= input.expiresAt || isClosingWindow.value || currentConversationStorage.value?.conversationId !== input.conversationId
+      || loading.value || compacting.value || isPreparingSend.value || isMcpLoading.value || activeAssistantTurnMeta || currentTaskConfig.value
+      || !ensureConversationWriteAccess(false)) {await reply(false, 'task_conversation_busy'); return;}
+    currentTaskConfig.value = {...input.taskConfig, conversationId: input.conversationId};
+    const content = `## Scheduled Task\n\n**system_time**:${new Date().toLocaleString('sv-SE')}\n\n${input.payload || ''}\n\nScheduled task triggered! Execute autonomously and provide correct feedback.`;
+    appendLinkedUserMessage({historyContent: content, uiContent: [{type: 'text', text: content}], timestamp: new Date().toISOString()});
+    let started = false;
+    // forceSend uses the appended message, leaving the existing composer draft untouched.
+    await askAI(true, () => {started = true; return reply(true);});
+    if (!started) {currentTaskConfig.value = null; await reply(false, 'task_not_started');}
+  } catch (error) {
+    await reply(false, error?.message || 'task_conversation_failed');
+  } finally {conversationTaskAdmitting = false;}
+};
 
 const getSessionDataAsObject = (options = {}) => {
   const createStorageId = createConversationStorageId;
@@ -8334,7 +8362,7 @@ const truncateToolResultForHistory = (text = '') => {
 };
 
 
-const askAI = async (forceSend = false) => {
+const askAI = async (forceSend = false, onStarted = null) => {
   if (isClosingWindow.value || !ensureConversationWriteAccess(true)) return;
   if (loading.value || isPreparingSend.value || compacting.value) return;
   if (isMcpLoading.value) {
@@ -8369,6 +8397,7 @@ const askAI = async (forceSend = false) => {
 
   // --- 2. 初始化 AI 回合 ---
   loading.value = true;
+  if (onStarted) await Promise.resolve(onStarted()).catch(() => {});
   syncAutoCloseOnBlurListener();
   const turnId = activeAssistantTurnId.value + 1;
   activeAssistantTurnId.value = turnId;
@@ -9233,9 +9262,9 @@ const askAI = async (forceSend = false) => {
         let savedFileName = '未保存';
         let savedConversationId = '';
         try {
-          if (currentTaskConfig.value.autoSave && currentConfig.value.webdav?.localChatPath) {
+          if ((currentTaskConfig.value.autoSave || currentTaskConfig.value.conversationId) && currentConfig.value.webdav?.localChatPath) {
             const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/[\/ :]/g, '-').replace(/,/g, '');
-            defaultConversationName.value = `定时任务-${currentTaskConfig.value.name}-${timeStr}`;
+            if (!currentTaskConfig.value.conversationId) defaultConversationName.value = `定时任务-${currentTaskConfig.value.name}-${timeStr}`;
             const dirPath = currentConfig.value.webdav.localChatPath;
             const localProjects = normalizeWindowProjects(await window.api.readLocalProjects(dirPath));
             const taskProjectId = typeof currentTaskConfig.value.autoSaveProjectId === 'string' ? currentTaskConfig.value.autoSaveProjectId : '';
@@ -9258,7 +9287,7 @@ const askAI = async (forceSend = false) => {
                 storageMode: 'local'
               };
             } else {
-              await executeAutoSaveRequest({ reason: 'scheduled-task-finalized', force: true, version: ++sessionMutationVersion });
+              if (!await executeAutoSaveRequest({ reason: 'scheduled-task-finalized', force: true, version: ++sessionMutationVersion })) throw new Error('task_save_failed');
             }
             savedFileName = defaultConversationName.value;
             savedConversationId = currentConversationStorage.value?.conversationId || '';

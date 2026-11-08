@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import {fileURLToPath} from 'node:url'
 import {createRequire} from 'node:module'
 const desktop = createRequire(import.meta.url)('../src/conversationStore.js')
 
@@ -16,7 +17,7 @@ export async function verifyFork(store = desktop) {
       {role: 'assistant', content: 'later answer', storageId: 'later'}
     ]
     const chat_show = fullHistory.filter(m => m.role !== 'tool').map((m, i) => ({...m, id: i+1, uiStorageId: `ui-${m.storageId}`}))
-    const created = await store.createConversation({dirPath: root, title: 'Steam游戏调研', sessionData: {CODE: 'Code', fullHistory, chat_show, promptDraft: 'private unsent', pendingAppendBuffer: [{text: 'unsent'}]}})
+    const created = await store.createConversation({dirPath: root, title: 'Steam游戏调研', sessionData: {CODE: 'Code', basic_msg: {conversation: {tail: 'original initializer must not leak'}}, fullHistory, chat_show, promptDraft: 'private unsent', pendingAppendBuffer: [{text: 'unsent'}]}})
     const input = {dirPath: root, conversationId: created.descriptor.conversationId, uiMessageId: 'ui-a'}
     const [first, second] = await Promise.all([store.forkConversation(input), store.forkConversation(input)])
     assert.equal(first.descriptor.title, 'fork-Steam游戏调研')
@@ -25,6 +26,7 @@ export async function verifyFork(store = desktop) {
     assert.deepEqual(first.sessionData.fullHistory.map(m => m.storageId), ['sys','u','a','t'])
     assert.deepEqual(first.sessionData.chat_show.map(m => m.uiStorageId), ['ui-sys','ui-u','ui-a'])
     assert.equal(first.sessionData.CODE, 'Code')
+    assert.equal(JSON.stringify(first.sessionData.basic_msg).includes('original initializer'), false)
     assert.equal(first.sessionData.promptDraft, '')
     assert.deepEqual(first.sessionData.pendingAppendBuffer, [])
     assert.equal(first.sessionData.fullHistory[1].content[1].image_url.url, fullHistory[1].content[1].image_url.url)
@@ -40,4 +42,4 @@ export async function verifyFork(store = desktop) {
     console.log('PASS fork prefix/tools/attachments/names/concurrency/source-unchanged/reopen')
   } finally {await fs.rm(root, {recursive: true, force: true})}
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, '$1'))) await verifyFork()
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await verifyFork()

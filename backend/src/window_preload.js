@@ -128,6 +128,12 @@ const invokeConversationLeaseHeartbeat = (input = {}) => {
     return conversationLeaseHeartbeatPromise;
 };
 
+let conversationTaskCallback = null;
+const pendingConversationTasks = [];
+ipcRenderer.on('conversation-task-run', (_event, input) => {
+    if (conversationTaskCallback) conversationTaskCallback(input);
+    else if (pendingConversationTasks.length < 8) pendingConversationTasks.push(input);
+});
 window.preload = {
     receiveMsg: (callback) => {
         ipcRenderer.on(channel, (event, data) => {
@@ -144,6 +150,10 @@ window.preload = {
                 callback(safeData);
             }
         });
+    },
+    onConversationTask: (callback) => {
+        conversationTaskCallback = callback;
+        for (const task of pendingConversationTasks.splice(0)) callback(task);
     },
     onAppendMessage: (callback) => {
         ipcRenderer.on('window-append-msg', (event, data) => {
@@ -245,6 +255,8 @@ window.api = {
     migrateJsonConversation: (input = {}) => invokeConversationRpc('migrateJsonConversation', input),
     forkConversation: (input = {}) => invokeConversationRpc('forkConversation', input),
     openConversationWindow: (input = {}) => invokeConversationRpc('openConversationWindow', input),
+    notifyConversationTaskReady: () => utools.sendToParent('conversation-task-ready', {senderId, capability: conversationRpcCapability}),
+    reportConversationTask: (input) => utools.sendToParent('conversation-task-receipt', {...input, senderId, capability: conversationRpcCapability}),
     createConversation: (input = {}) => invokeConversationRpc('createConversation', input),
     openConversation: (input = {}) => invokeConversationRpc('openConversation', input),
     loadConversationPage: (input = {}) => invokeConversationRpc('loadConversationPage', input),

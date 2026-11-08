@@ -1165,9 +1165,10 @@ async function forkConversationInDirectory({dirPath, conversationId, uiMessageId
   const chatShow = source.chat_show.slice(0, uiIndex + 1)
   const timestamp = nowIso()
   const sessionData = {...source, fullHistory, chat_show: chatShow, history: [], conversationStorage: null,
+    basic_msg: {code: source.CODE || 'AI', type: 'conversation', payload: ''},
     sessionMetadata: {title, createdAt: timestamp, updatedAt: timestamp},
     promptDraft: '', draftFileList: [], pendingAppendBuffer: [], pendingRemoteConfigPatch: null,
-    taskList: [], subAgentTasks: [], subAgentDetails: {}, compactArchives: [], conversationOwnerId: crypto.randomUUID()}
+    taskList: [], subAgentTasks: [], subAgentDetails: {}, compactArchives: (source.compactArchives || []).filter(item => fullHistory.some(message => message.role === 'compaction' && message.snapshotId === item.id)), conversationOwnerId: crypto.randomUUID()}
   const projectId = projects.projects.find(project => project.conversationIds.includes(conversationId))?.id || ''
   const created = await createConversation({dirPath, title, sessionData, projectId})
   return openConversation({dirPath, reference: created.descriptor.conversationId, activeOnly: true, pageSize: 200})

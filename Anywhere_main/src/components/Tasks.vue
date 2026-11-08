@@ -124,6 +124,24 @@ const availableMcpServers = computed(() => {
 // 获取所有技能
 const availableSkills = ref([]);
 
+const taskConversationOptions = ref([]);
+const refreshTaskConversationOptions = async () => {
+    const dirPath = currentConfig.value?.webdav?.localChatPath;
+    if (!dirPath) {taskConversationOptions.value = []; return;}
+    try {
+        const projects = await window.api.readLocalProjects(dirPath);
+        taskConversationOptions.value = Object.values(projects.conversations || {}).map(item => ({value: item.conversationId, label: item.title || item.conversationId}));
+    } catch {taskConversationOptions.value = [];}
+};
+const changeTaskTarget = async (type) => {
+    const id = activeTaskId.value;
+    if (!id) return;
+    const patch = type === 'conversation' ? {promptKey: '', conversationId: selectedTask.value.conversationId || ''} : {promptKey: '__DEFAULT__', conversationId: ''};
+    Object.assign(currentConfig.value.tasks[id], patch);
+    await atomicSave(config => {if (config.tasks[id]) Object.assign(config.tasks[id], patch);});
+};
+const taskTargetType = computed(() => selectedTask.value?.conversationId || selectedTask.value?.promptKey === '' ? 'conversation' : 'agent');
+
 const localProjectOptions = ref([]);
 
 const refreshLocalProjectOptions = async () => {
@@ -153,6 +171,7 @@ onMounted(async () => {
     if (taskIds.length > 0) activeTaskId.value = taskIds[0];
 
     await refreshLocalProjectOptions();
+    await refreshTaskConversationOptions();
 
     if (currentConfig.value.skillPath) {
         try {
@@ -165,10 +184,12 @@ onMounted(async () => {
 onActivated(async () => {
     window.addEventListener('keydown', handleGlobalKeyDown);
     await refreshLocalProjectOptions();
+    await refreshTaskConversationOptions();
 });
 
 watch(() => currentConfig.value?.webdav?.localChatPath, () => {
     void refreshLocalProjectOptions();
+    void refreshTaskConversationOptions();
 });
 
 onDeactivated(() => {
@@ -426,6 +447,8 @@ async function saveTaskSetting(key, value) {
 
     if (currentConfig.value.tasks[taskId]) {
         currentConfig.value.tasks[taskId][key] = value;
+        if (key === 'conversationId' && value) currentConfig.value.tasks[taskId].promptKey = '';
+        if (key === 'promptKey' && value) currentConfig.value.tasks[taskId].conversationId = '';
         if (enabledAt) {
             currentConfig.value.tasks[taskId].lastRunTime = enabledAt;
         }
@@ -434,6 +457,8 @@ async function saveTaskSetting(key, value) {
     await atomicSave(config => {
         if (!config.tasks[taskId]) return;
         config.tasks[taskId][key] = value;
+        if (key === 'conversationId' && value) config.tasks[taskId].promptKey = '';
+        if (key === 'promptKey' && value) config.tasks[taskId].conversationId = '';
         if (enabledAt) {
             config.tasks[taskId].lastRunTime = enabledAt;
         }
@@ -443,9 +468,10 @@ async function saveTaskSetting(key, value) {
 async function runTaskNow() {
     if (!activeTaskId.value) return;
     try {
-        await window.api.runTaskNow(activeTaskId.value);
+        const result = await window.api.runTaskNow(activeTaskId.value);
+        if (result === false || result?.success === false) ElMessage.error(result?.reason || '任务未启动，请检查目标会话与本地存储设置');
     } catch (error) {
-        console.error(error);
+        ElMessage.error(error?.message || '任务未启动');
     }
 }
 
@@ -749,7 +775,18 @@ async function openTaskChat(logFile, conversationId = '') {
                                         </el-icon> <span>{{ t('tasks.executionContentTitle') }}</span>
                                     </div>
                                     <div class="task-card-body">
-                                        <el-form-item>
+                                        <el-form-item label="目标类型">
+                                            <el-radio-group :model-value="taskTargetType" @change="changeTaskTarget">
+                                                <el-radio-button value="agent">智能体</el-radio-button>
+                                                <el-radio-button value="conversation" :disabled="!currentConfig.webdav?.localChatPath">本地会话</el-radio-button>
+                                            </el-radio-group>
+                                        </el-form-item>
+                                        <el-form-item v-if="taskTargetType === 'conversation'" label="目标会话（需开启本地存储）">
+                                            <el-select v-model="selectedTask.conversationId" filterable :disabled="!currentConfig.webdav?.localChatPath" @visible-change="val => val && refreshTaskConversationOptions()" @change="val => saveTaskSetting('conversationId', val)" style="width: 100%;">
+                                                <el-option v-for="item in taskConversationOptions" :key="item.value" :label="item.label" :value="item.value" />
+                                            </el-select>
+                                        </el-form-item>
+                                        <el-form-item v-if="taskTargetType === 'agent'">
                                             <template #label>{{ t('tasks.targetPromptLabel') }} <el-tooltip
                                                     :content="t('tasks.targetPromptTooltip')"><el-icon>
                                                         <InfoFilled />
