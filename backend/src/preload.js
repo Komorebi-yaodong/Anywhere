@@ -1197,7 +1197,7 @@ async function runConversationTask(taskId, task, config) {
   const dirPath = config.webdav?.localChatPath;
   if (!dirPath) throw new Error('task_local_storage_required');
   const opened = await conversationDbHelperClient.invoke('openConversation', [{dirPath, reference: task.conversationId, activeOnly: true, pageSize: 200}]);
-  const senderId = await openWindow(config, {type: 'conversation', code: opened.sessionData.CODE || 'AI', conversation: {...opened, dirPath}});
+  const senderId = await openWindow(config, {type: 'conversation', preserveExistingVisibility: true, code: opened.sessionData.CODE || 'AI', conversation: {...opened, dirPath}});
   const readyDeadline = Date.now() + 30000;
   while (windowMap.get(senderId)?.__conversationTaskReady !== true) {
     const win = windowMap.get(senderId);

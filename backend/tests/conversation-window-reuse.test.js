@@ -26,6 +26,8 @@ const open = vm.runInNewContext(`${block}; openWindow`, context);
   assert.equal(await open({}, msg), 'window-1');
   assert.equal(shown, 1);
   assert.equal(focused, 1);
+  assert.equal(await open({}, {...msg, preserveExistingVisibility: true}), 'window-1');
+  assert.equal(shown, 1); assert.equal(focused, 1, 'scheduled task does not reveal/refocus an existing window');
   windowMap.get('window-1').isDestroyed = () => true;
   const c = open({}, msg); finish();
   assert.equal(await c, 'window-2');

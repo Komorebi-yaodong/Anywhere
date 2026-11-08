@@ -1165,9 +1165,11 @@ async function openWindow(config, msg) {
   const existingId = conversationWindowIds.get(key);
   const existing = windowMap.get(existingId);
   if (existing && !existing.isDestroyed()) {
-    if (existing.isMinimized?.()) existing.restore();
-    existing.show();
-    existing.focus();
+    if (msg?.preserveExistingVisibility !== true) {
+      if (existing.isMinimized?.()) existing.restore();
+      existing.show();
+      existing.focus();
+    }
     return existingId;
   }
   conversationWindowIds.delete(key);

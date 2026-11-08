@@ -10,7 +10,7 @@ let ready = false, opened = 0, delivered = 0;
 const win = {isDestroyed: () => false};
 const context = {Date, Error,
   conversationDbHelperClient: {invoke: async (method, args) => {assert.equal(method, 'openConversation'); assert.equal(args[0].reference, 'target'); return {sessionData: {CODE: 'Code'}};}},
-  openWindow: async (_config, message) => {opened++; assert.equal(message.type, 'conversation'); return 'window';},
+  openWindow: async (_config, message) => {opened++; assert.equal(message.type, 'conversation'); assert.equal(message.preserveExistingVisibility, true); return 'window';},
   windowMap: {get: () => Object.assign(win, {__conversationTaskReady: ready})},
   setTimeout: fn => {ready = true; fn();},
   conversationTaskDelivery: {deliver: async () => {assert.equal(ready, true); delivered++; return {ok: true};}}

@@ -65,7 +65,8 @@ function harness() {
   const context = vm.createContext({
     computed, ref, watch, nextTick,
     loading: ref(false), isPreparingSend: ref(false), compacting: ref(false), isMcpLoading: ref(false),
-    isClosingWindow: ref(false), desktopTakeoverPending: ref(false), pendingAppendBuffer: ref([]), prompt: ref('unsent draft'),
+    isClosingWindow: ref(false), desktopTakeoverPending: ref(false), scheduledTaskQueueSaving: 0,
+    currentTaskConfig: ref(null), pendingAppendBuffer: ref([]), prompt: ref('unsent draft'),
     fileList: ref([{ name: 'draft.txt', url: 'synthetic draft' }]),
     ensureConversationWriteAccess: () => controls.write,
     scheduleAutoSave: (options) => saves.push(options.reason),

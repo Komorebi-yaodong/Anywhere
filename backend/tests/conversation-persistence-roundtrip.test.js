@@ -287,6 +287,8 @@ async function run() {
       });
       revision = snapshot.revision;
       const statePatch = {
+        pendingAppendBuffer: [{kind: 'scheduled-task', requestId: `queued-${round}`, text: `instruction-${round}`, taskConfig: {id: `task-${round}`, conversationId}, preview: 'scheduled'}],
+        promptDraft: 'preserved draft', draftFileList: [{name: 'synthetic.txt'}],
         model: `provider|patched-${round}`,
         currentPromptConfig: {
           model: `provider|patched-${round}`,
@@ -317,6 +319,8 @@ async function run() {
       assert.strictEqual(requestMessages.messages.find((message) => message.storageId === 'message-21')?.content, `round-${round}-message-21`);
       if (round === 2) assert.strictEqual(requestMessages.messages.find((message) => message.storageId === 'message-1')?.content, 'round-2-message-1');
       if (round === 3) assert.strictEqual(requestMessages.messages.some((message) => message.storageId === 'message-1'), false);
+      assert.deepStrictEqual(opened.sessionData.pendingAppendBuffer, statePatch.pendingAppendBuffer, 'scheduled task identity/config survive SQLite state save and reopen');
+      assert.strictEqual(opened.sessionData.promptDraft, 'preserved draft');
       assert.strictEqual(opened.sessionData.model, statePatch.model);
       assert.deepStrictEqual(opened.sessionData.currentPromptConfig, statePatch.currentPromptConfig);
       assert.strictEqual(opened.sessionData.selectedVoice, statePatch.selectedVoice);
