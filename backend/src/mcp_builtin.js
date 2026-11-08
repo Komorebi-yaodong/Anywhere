@@ -11,6 +11,7 @@ const { createChatCompletion } = require('./chat.js');
 const { formatSubAgentError, requestSubAgentCompletion } = require('./subAgentRequest.js');
 const { setCurrentTaskDeviceEnabled } = require('./task_devices.js');
 const { fetchWebResource } = require('./webFetch.js');
+const { MEMORY_TOOLS, createMemoryHandlers, memorySummaryDescription } = require('./memory.js');
 
 const isWin = process.platform === 'win32';
 const currentOS = process.platform === 'win32' ? 'Windows' : (process.platform === 'darwin' ? 'macOS' : 'Linux');
@@ -1414,134 +1415,7 @@ IMPORTANT:
             }
         }
     ],
-    "builtin_memory": [
-        {
-            name: "create_memory",
-            description: "Create a new structured memory. It initializes with a default 'Main' section. CRITICAL: Upon successful creation, you MUST inform the user of the generated 'name'. You are highly encouraged to use 'update_section' or 'add_to_list' later to create custom categorized sections (e.g., 'Preferences', 'Code Snippets', 'Todos') to keep data organized, rather than dumping everything into 'Main'.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    name: { type: "string", description: "Unique identifier/name for this memory." },
-                    content: { type: "string", description: "Optional initial content. Focus on capturing user preferences or requirements." }
-                },
-                required: ["name"]
-            }
-        },
-        {
-            name: "list_memories",
-            description: "Please list all available memories and read the necessary relevant memory content before starting the formal chat.",
-            inputSchema: { type: "object", properties: {} }
-        },
-        {
-            name: "get_memory_summary",
-            description: "Get a high-level summary of a memory.",
-            inputSchema: {
-                type: "object",
-                properties: { memory_id: { type: "string", description: "The ID of the memory to summarize." } },
-                required: ["memory_id"]
-            }
-        },
-        {
-            name: "get_full_memory",
-            description: "Retrieve the complete content of a memory with all Markdown formatting preserved. Please naturally integrate memories to better maintain memory continuity across sessions.",
-            inputSchema: {
-                type: "object",
-                properties: { memory_id: { type: "string", description: "The ID(not the name of memory, use list_memories to get memory_id) of the memory to retrieve." } },
-                required: ["memory_id"]
-            }
-        },
-        {
-            name: "get_section",
-            description: "Retrieve a specific section from a memory. Please naturally integrate memories to better maintain memory continuity across sessions.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    memory_id: { type: "string", description: "The ID of the memory to read from." },
-                    section: { type: "string", description: "The section name to retrieve." }
-                },
-                required: ["memory_id", "section"]
-            }
-        },
-        {
-            name: "search_within_memory",
-            description: "Search for information within a memory. Please naturally integrate memories to better maintain memory continuity across sessions.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    memory_id: { type: "string", description: "The ID of the memory to search." },
-                    query: { type: "string", description: "The search query (words or phrases)." }
-                },
-                required: ["memory_id", "query"]
-            }
-        },
-        {
-            name: "update_section",
-            description: "Update a section of a memory. If the 'section' name does not exist, it will be CREATED AUTOMATICALLY. Use this to organize data into meaningful categories (e.g., 'User Preferences', 'Project Links'). Content supports full Markdown formatting.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    memory_id: { type: "string", description: "The ID of the memory to update." },
-                    section: { type: "string", description: "The section name to update." },
-                    content: { type: "string", description: "The new content for the section. Supports full Markdown." },
-                    mode: { type: "string", enum: ["append", "replace"], description: "Whether to append to or replace the section content (default: append).", default: "append" }
-                },
-                required: ["memory_id", "section", "content"]
-            }
-        },
-        {
-            name: "add_to_list",
-            description: "Add an item to a list section in a memory. If the 'section' does not exist, a NEW list section will be CREATED AUTOMATICALLY.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    memory_id: { type: "string", description: "The ID of the memory to update." },
-                    section: { type: "string", description: "The section name to add the item to." },
-                    item: { type: "object", description: "The item data (object) to add." }
-                },
-                required: ["memory_id", "section", "item"]
-            }
-        },
-        {
-            name: "update_list_item",
-            description: "Update an existing item in a list section. It uses fuzzy matching to find the item.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    memory_id: { type: "string", description: "The ID of the memory to update." },
-                    section: { type: "string", description: "The section containing the item to update." },
-                    item_identifier: { type: "string", description: "Identifier for the item to update (e.g., name, keyword)." },
-                    updates: { type: "object", description: "Fields to update with their new values." }
-                },
-                required: ["memory_id", "section", "item_identifier", "updates"]
-            }
-        },
-        {
-            name: "move_list_item",
-            description: "Move an item from one section to another.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    memory_id: { type: "string", description: "The ID of the memory to update." },
-                    from_section: { type: "string", description: "The source section containing the item." },
-                    to_section: { type: "string", description: "The destination section for the item." },
-                    item_identifier: { type: "string", description: "Identifier for the item to move." },
-                    reason: { type: "string", description: "Optional reason for the move (stored as metadata)." }
-                },
-                required: ["memory_id", "from_section", "to_section", "item_identifier"]
-            }
-        },
-        {
-            name: "delete_memory",
-            description: "Delete an existing memory completely. This action is irreversible.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    memory_id: { type: "string", description: "The ID of the memory to delete." }
-                },
-                required: ["memory_id"]
-            }
-        }
-    ],
+    "builtin_memory": MEMORY_TOOLS,
     "builtin_betterwork": [
         {
             name: "ask_user_choice",
@@ -1982,6 +1856,13 @@ ${userContext || 'No additional context provided.'}
         try {
             // 3.1 LLM 思考 (使用 chat.js)
             const currentApiType = apiType || 'chat_completions';
+            if (availableTools.some(tool => tool.function.name === 'get_memory_summary')) {
+                const memoryTools = getBuiltinTools('builtin_memory');
+                const description = memoryTools.find(tool => tool.name === 'get_memory_summary').description;
+                availableTools = availableTools.map(tool => tool.function.name === 'get_memory_summary'
+                    ? { ...tool, function: { ...tool.function, description } } : tool);
+            }
+            if (signal?.aborted) throw new Error('Sub-Agent execution aborted by user.');
 
             const response = await requestSubAgentCompletion(createChatCompletion, {
                 baseUrl: baseUrl,
@@ -4068,209 +3949,13 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
         }
     },
 
-    // Memory MCP Handlers
-    create_memory: async ({ name, content }) => {
-        const id = Date.now().toString(36);
-        const fullId = `anywhere_mem_${id}`;
-        try {
-            await utools.db.promises.put({
-                _id: fullId,
-                name: name,
-                sections: { "Main": content || "" },
-                updated_at: Date.now()
-            });
-            return `Memory created successfully.\nID: ${id}\nName: ${name}\nPlease use this ID for future operations.`;
-        } catch (e) {
-            return `Failed to create memory: ${e.message}`;
-        }
-    },
-
-    list_memories: async () => {
-        try {
-            const docs = await utools.db.promises.allDocs('anywhere_mem_');
-            if (!docs || docs.length === 0) return "No memory found.";
-            return docs.map(d => `- ID: ${d._id.replace('anywhere_mem_', '')} | Name: ${d.name} | Updated: ${new Date(d.updated_at || Date.now()).toLocaleString()}`).join('\n');
-        } catch (e) {
-            return `Failed to list memories: ${e.message}`;
-        }
-    },
-
-    get_memory_summary: async ({ memory_id }) => {
-        const doc = await utools.db.promises.get(`anywhere_mem_${memory_id}`);
-        if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-        const sections = Object.keys(doc.sections || {});
-        let summary = `Memory Name: ${doc.name}\nID: ${memory_id}\nLast Updated: ${new Date(doc.updated_at || Date.now()).toLocaleString()}\n\nSections:\n`;
-        for (const sec of sections) {
-            const data = doc.sections[sec];
-            if (Array.isArray(data)) {
-                summary += `- ${sec} (List: ${data.length} items)\n`;
-            } else {
-                summary += `- ${sec} (Text: ${String(data).length} chars)\n`;
-            }
-        }
-        return summary;
-    },
-
-    get_full_memory: async ({ memory_id }) => {
-        const doc = await utools.db.promises.get(`anywhere_mem_${memory_id}`);
-        if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-        let full = `# ${doc.name}\nID: ${memory_id}\n\n`;
-        for (const [sec, data] of Object.entries(doc.sections || {})) {
-            full += `## Section: ${sec}\n`;
-            if (Array.isArray(data)) {
-                full += JSON.stringify(data, null, 2) + "\n\n";
-            } else {
-                full += data + "\n\n";
-            }
-        }
-        return full;
-    },
-
-    get_section: async ({ memory_id, section }) => {
-        const doc = await utools.db.promises.get(`anywhere_mem_${memory_id}`);
-        if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-        if (!doc.sections || doc.sections[section] === undefined) return `Error: Section '${section}' not found in memory '${memory_id}'.`;
-        const data = doc.sections[section];
-        return Array.isArray(data) ? JSON.stringify(data, null, 2) : String(data);
-    },
-
-    search_within_memory: async ({ memory_id, query }) => {
-        const doc = await utools.db.promises.get(`anywhere_mem_${memory_id}`);
-        if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-        let results = [];
-        const q = (query || "").toLowerCase();
-        for (const [sec, data] of Object.entries(doc.sections || {})) {
-            const strData = typeof data === 'string' ? data : JSON.stringify(data);
-            if (strData.toLowerCase().includes(q)) {
-                const idx = strData.toLowerCase().indexOf(q);
-                const start = Math.max(0, idx - 50);
-                const end = Math.min(strData.length, idx + q.length + 50);
-                results.push(`[Section: ${sec}] ...${strData.substring(start, end)}...`);
-            }
-        }
-        return results.length === 0 ? `No matches found for '${query}'.` : results.join('\n\n');
-    },
-
-    update_section: async ({ memory_id, section, content, mode = "append" }) => {
-        const fullId = `anywhere_mem_${memory_id}`;
-        const unlock = await acquireLock(fullId);
-        try {
-            const doc = await utools.db.promises.get(fullId);
-            if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-            if (!doc.sections) doc.sections = {};
-
-            let current = doc.sections[section] || "";
-            if (Array.isArray(current)) return `Error: Section '${section}' is a list. Use list tools to modify it.`;
-
-            if (mode === 'append') {
-                doc.sections[section] = current ? current + "\n" + content : content;
-            } else {
-                doc.sections[section] = content;
-            }
-            doc.updated_at = Date.now();
-            await utools.db.promises.put(doc);
-            return `Section '${section}' successfully updated.`;
-        } catch(e) {
-            return `Error: ${e.message}`;
-        } finally {
-            unlock();
-        }
-    },
-
-    add_to_list: async ({ memory_id, section, item }) => {
-        const fullId = `anywhere_mem_${memory_id}`;
-        const unlock = await acquireLock(fullId);
-        try {
-            const doc = await utools.db.promises.get(fullId);
-            if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-            if (!doc.sections) doc.sections = {};
-
-            if (doc.sections[section] === undefined) doc.sections[section] = [];
-            if (!Array.isArray(doc.sections[section])) return `Error: Section '${section}' is not a list.`;
-
-            doc.sections[section].push(item);
-            doc.updated_at = Date.now();
-            await utools.db.promises.put(doc);
-            return `Item added to list section '${section}'.`;
-        } catch(e) {
-            return `Error: ${e.message}`;
-        } finally {
-            unlock();
-        }
-    },
-
-    update_list_item: async ({ memory_id, section, item_identifier, updates }) => {
-        const fullId = `anywhere_mem_${memory_id}`;
-        const unlock = await acquireLock(fullId);
-        try {
-            const doc = await utools.db.promises.get(fullId);
-            if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-            if (!doc.sections || !Array.isArray(doc.sections[section])) return `Error: Section '${section}' is not a valid list.`;
-
-            const list = doc.sections[section];
-            const idStr = String(item_identifier).toLowerCase();
-            
-            // 模糊匹配寻找该项
-            let foundIdx = list.findIndex(item => JSON.stringify(item).toLowerCase().includes(idStr));
-            if (foundIdx === -1) return `Error: Item matching '${item_identifier}' not found in section '${section}'.`;
-
-            list[foundIdx] = { ...list[foundIdx], ...updates };
-            doc.updated_at = Date.now();
-            await utools.db.promises.put(doc);
-            return `Item updated in section '${section}'.`;
-        } catch(e) {
-            return `Error: ${e.message}`;
-        } finally {
-            unlock();
-        }
-    },
-
-    move_list_item: async ({ memory_id, from_section, to_section, item_identifier, reason }) => {
-        const fullId = `anywhere_mem_${memory_id}`;
-        const unlock = await acquireLock(fullId);
-        try {
-            const doc = await utools.db.promises.get(fullId);
-            if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-            if (!doc.sections || !Array.isArray(doc.sections[from_section])) return `Error: Source section '${from_section}' is not a valid list.`;
-
-            if (doc.sections[to_section] === undefined) doc.sections[to_section] = [];
-            if (!Array.isArray(doc.sections[to_section])) return `Error: Destination section '${to_section}' is not a valid list.`;
-
-            const list = doc.sections[from_section];
-            const idStr = String(item_identifier).toLowerCase();
-            
-            let foundIdx = list.findIndex(item => JSON.stringify(item).toLowerCase().includes(idStr));
-            if (foundIdx === -1) return `Error: Item matching '${item_identifier}' not found in section '${from_section}'.`;
-
-            const itemToMove = list.splice(foundIdx, 1)[0];
-            if (reason) itemToMove._move_reason = reason; // 附加上移动原因元数据
-
-            doc.sections[to_section].push(itemToMove);
-            doc.updated_at = Date.now();
-            await utools.db.promises.put(doc);
-            return `Item moved from '${from_section}' to '${to_section}'.`;
-        } catch(e) {
-            return `Error: ${e.message}`;
-        } finally {
-            unlock();
-        }
-    },
-
-    delete_memory: async ({ memory_id }) => {
-        const fullId = `anywhere_mem_${memory_id}`;
-        const unlock = await acquireLock(fullId);
-        try {
-            const doc = await utools.db.promises.get(fullId);
-            if (!doc) return `Error: Memory ID '${memory_id}' not found.`;
-            
-            await utools.db.promises.remove(fullId);
-            return `memory '${memory_id}' and all its sections successfully deleted.`;
-        } catch(e) {
-            return `Error: ${e.message}`;
-        } finally {
-            unlock();
-        }
-    },
+    // Same notebook behavior on Desktop and uTools; only storage adapters differ.
+    ...createMemoryHandlers({
+        get: id => utools.db.promises.get(id),
+        put: doc => utools.db.promises.put(doc),
+        remove: id => utools.db.promises.remove(id),
+        acquireLock
+    }),
 };
 
 // --- Exports ---
@@ -4282,6 +3967,10 @@ function getBuiltinServers() {
 function getBuiltinTools(serverId) {
     // 必须深拷贝，避免修改原始常量导致叠加污染
     const tools = JSON.parse(JSON.stringify(BUILTIN_TOOLS[serverId] || []));
+    if (serverId === 'builtin_memory') {
+        const docs = utools.db.allDocs('anywhere_mem_') || [];
+        tools.find(tool => tool.name === 'get_memory_summary').description = memorySummaryDescription(docs);
+    }
 
     // [动态注入] Super-Agent 自动枚举所有可用 Agent，消除模型幻觉
     if (serverId === 'builtin_superagent') {

@@ -710,6 +710,20 @@ async function initializeMcpClient(activeServerConfigs = {}, cachedToolsMap = {}
   };
 }
 
+// Refresh metadata only: preserve aliases, enabled flags and existing client connections.
+async function refreshMemoryTools() {
+  const entries = [...fullToolInfoMap.entries()].filter(([, info]) =>
+    info.isBuiltin && info.serverConfig?.id === 'builtin_memory' && info.rawName === 'get_memory_summary');
+  if (!entries.length) return [];
+  const tools = getBuiltinTools('builtin_memory');
+  const description = tools.find(tool => tool.name === 'get_memory_summary').description;
+  return entries.map(([name, info]) => {
+    info.description = description;
+    return { name, description };
+  });
+}
+
+
 function buildOpenaiFormattedTools() {
   const formattedTools = [];
   for (const [, toolInfo] of fullToolInfoMap.entries()) {
@@ -852,6 +866,7 @@ async function closeMcpClient() {
 }
 
 module.exports = {
+  refreshMemoryTools,
   initializeMcpClient,
   invokeMcpTool,
   closeMcpClient,

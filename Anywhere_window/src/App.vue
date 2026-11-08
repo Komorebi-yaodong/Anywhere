@@ -6417,6 +6417,19 @@ const getSystemTime = () => {
   return `${year}-${month}-${day} (${weekDay})`;
 }
 
+// Refresh discovery metadata per request without rebuilding clients or writing history.
+const getRequestMcpTools = async () => {
+  if (sessionMcpServerIds.value.includes('builtin_memory') && window.api?.refreshMemoryTools) {
+    const updates = await window.api.refreshMemoryTools();
+    const descriptions = new Map(updates.map(item => [item.name, item.description]));
+    openaiFormattedTools.value = openaiFormattedTools.value.map(tool => descriptions.has(tool?.function?.name)
+      ? { ...tool, function: { ...tool.function, description: descriptions.get(tool.function.name) } }
+      : tool);
+  }
+  return [...openaiFormattedTools.value];
+};
+
+
 const generateMcpSystemPrompt = () => {
   return `
 ## SYSTEM CONTEXT
@@ -7766,7 +7779,7 @@ const estimateCurrentDynamicToolPrompt = async () => {
   if (openaiFormattedTools.value.length > 0 || sessionSkillIds.value.length > 0) {
     overheadMessages.push({ role: 'system', content: generateMcpSystemPrompt() });
   }
-  let activeTools = [...openaiFormattedTools.value];
+  let activeTools = await getRequestMcpTools();
   if (sessionSkillIds.value.length > 0 && currentConfig.value.skillPath) {
     try {
       const skillTool = await window.api.getSkillToolDefinition(currentConfig.value.skillPath, sessionSkillIds.value);
@@ -8562,7 +8575,7 @@ const askAI = async (forceSend = false, onStarted = null) => {
       if (iterationReasoningEffort && iterationReasoningEffort !== 'default') requestParams.reasoning_effort = iterationReasoningEffort;
 
       // --- 构建工具列表 (MCP + Skill) ---
-      let activeTools = [...openaiFormattedTools.value];
+      let activeTools = await getRequestMcpTools();
 
       if (iterationSkillIds.length > 0 && currentConfig.value.skillPath) {
         try {

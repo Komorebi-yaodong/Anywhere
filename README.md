@@ -57,6 +57,16 @@ Anywhere 是一款为 **uTools** 打造的深度定制化 AI 智能体（Agent�
 
 ![MCP管理界面](image/定时任务界面.png)
 
+### 记忆笔记本（Memory MCP）
+
+* 笔记本独立存在，不绑定 Agent 或名称，也不需要用户分配。AI 根据当前角色、名称和自由文本用途说明，自主选择相关记忆。
+* `get_memory_summary` 的工具描述直接列出所有笔记本的名称、用途和稳定 ID；不再提供 `list_memories`。正文按需读取，下一次模型请求会刷新索引，不向聊天历史追加更新记录。
+* `create_memory` 支持可选 `description`；`update_memory` 可改名/修改用途且 ID 不变。旧数据无需迁移，备份导入导出保留用途字段。
+* 支持章节改名/删除、`replace_memory_text` 字面精确替换及列表项删除；多处命中默认拒绝，列表可使用唯一 `item_identifier` 或刚读取的零基 `item_index`。
+* `search_within_memory` 使用 `memory_id` 或 `memory_ids` 明确搜索范围；支持 `limit`、`offset`、`snippet_length`、`max_chars`，返回命中片段及分页/截断状态，不默认搜索全部笔记本。
+* 不做后台提炼、自动人格分类或修改历史。插件记忆专项测试：在 `backend` 目录运行 `pnpm run test:memory`。
+
+
 ### 真正的智能 Agent (MCP 支持)
 
 通过引入 **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)**，Anywhere 让 AI 拥有了“双手”：

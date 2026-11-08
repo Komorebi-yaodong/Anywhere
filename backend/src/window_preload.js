@@ -317,6 +317,7 @@ window.api = {
     desktopCaptureSources: utools.desktopCaptureSources,
     copyImage: utools.copyImage,
     getMcpToolCache,
+    refreshMemoryTools: () => getMcpModule().refreshMemoryTools(),
     initializeMcpClient: async (activeServerConfigs) => {
         const { initializeMcpClient } = getMcpModule();
         try {
