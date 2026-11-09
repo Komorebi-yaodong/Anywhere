@@ -1405,6 +1405,7 @@ const handleBetterWorkTool = async (toolCall, args, uiToolCall) => {
 const isMcpDialogVisible = ref(false);
 const sessionMcpServerIds = ref([]);
 const openaiFormattedTools = ref([]);
+const builtinAgentListToolName = ref('');
 const mcpSearchQuery = ref('');
 const mcpFilter = ref('all');
 const isRefreshingMcp = ref(false);
@@ -6378,11 +6379,13 @@ async function applyMcpTools(show_none = true, reason = 'unknown') {
   try {
     const {
       openaiFormattedTools: newFormattedTools,
+      builtinAgentListToolName: agentListToolName = '',
       successfulServerIds,
       failedServerIds
     } = await window.api.initializeMcpClient(activeServerConfigs);
 
     openaiFormattedTools.value = newFormattedTools;
+    builtinAgentListToolName.value = typeof agentListToolName === 'string' ? agentListToolName : '';
     sessionMcpServerIds.value = successfulServerIds;
     lastAppliedMcpConfigFingerprint.value = buildSelectedMcpConfigFingerprint(successfulServerIds, currentConfig.value?.mcpServers || {});
 
@@ -6406,6 +6409,7 @@ async function applyMcpTools(show_none = true, reason = 'unknown') {
     console.error("Failed to initialize MCP tools:", error);
     showDismissibleMessage.error(`加载MCP工具失败: ${error.message}`);
     openaiFormattedTools.value = [];
+    builtinAgentListToolName.value = '';
     sessionMcpServerIds.value = [];
     lastAppliedMcpConfigFingerprint.value = buildSelectedMcpConfigFingerprint([], currentConfig.value?.mcpServers || {});
   } finally {
@@ -6493,7 +6497,18 @@ const getRequestMcpTools = async () => {
       ? { ...tool, function: { ...tool.function, description: descriptions.get(tool.function.name) } }
       : tool);
   }
-  return [...openaiFormattedTools.value];
+  const tools = [...openaiFormattedTools.value];
+  if (!sessionMcpServerIds.value.includes('builtin_superagent') || !builtinAgentListToolName.value) return tools;
+  const storage = currentConversationStorage.value;
+  const conversationId = typeof storage?.conversationId === 'string' ? storage.conversationId.trim() : '';
+  if (storage?.format !== 'sqlite' || storage.storageMode !== 'local'
+    || typeof storage.dirPath !== 'string' || !storage.dirPath.trim()
+    || !/^[a-zA-Z0-9_-]{1,128}$/.test(conversationId)) return tools;
+  // Request-only copy: never put a window's identity into the shared tool cache or history.
+  const note = `\n\n[CURRENT LOCAL CONVERSATION]\nconversation_id: ${JSON.stringify(conversationId)}\nUse this ID with create_task or edit_task to target this conversation. Do not pass agent_name together with conversation_id. This is not a window_id.`;
+  return tools.map(tool => tool?.function?.name === builtinAgentListToolName.value
+    ? { ...tool, function: { ...tool.function, description: `${tool.function.description || ''}${note}` } }
+    : tool);
 };
 
 
