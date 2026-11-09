@@ -1,8 +1,8 @@
 <script setup>
-import { ref, watch, reactive, onMounted, onActivated, onDeactivated, computed, inject } from 'vue'
+import { ref, watch, reactive, onMounted, onActivated, onDeactivated, computed, inject, h } from 'vue'
 import { Plus, Delete, Document, Edit, Search, InfoFilled, Refresh, Clock, Setting as SettingIcon, List, VideoPlay } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElCheckbox, ElMessage, ElMessageBox } from 'element-plus';
 
 const { t, locale } = useI18n();
 const currentConfig = inject('config');
@@ -353,85 +353,119 @@ function handleRenameTask() {
     ElMessage.success(t('common.saveSuccess'));
 }
 
-function deleteTask() {
-    if (!activeTaskId.value) return;
-    ElMessageBox.confirm(t('tasks.deleteConfirm'), t('tasks.warning'), { type: 'warning', confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel') }).then(() => {
-        const idToDelete = activeTaskId.value;
-        atomicSave(config => {
+const normalizeConversationId = (value) => typeof value === 'string' ? value.trim() : '';
+
+const taskReferencesConversation = (tasks, conversationId) => Object.values(tasks || {}).some(task =>
+    normalizeConversationId(task?.conversationId) === conversationId
+);
+
+async function confirmConversationDeletion({ message, title, confirmButtonText, type = 'warning' }) {
+    let deleteConversations = false;
+    await ElMessageBox.confirm(
+        h('div', [
+            h('p', { style: 'margin: 0 0 12px;' }, message),
+            h(ElCheckbox, {
+                onChange: (value) => { deleteConversations = value === true; }
+            }, { default: () => t('tasks.deleteConversationsOption') }),
+            h('p', { style: 'margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 12px;' }, t('tasks.deleteConversationsHelp'))
+        ]),
+        title,
+        { confirmButtonText, cancelButtonText: t('common.cancel'), type }
+    );
+    return deleteConversations;
+}
+
+async function deleteUnboundConversations(conversationIds) {
+    const localPath = currentConfig.value?.webdav?.localChatPath;
+    if (!localPath || !window.api?.deleteConversation) return { removed: 0, protected: 0, failed: 0 };
+    let removed = 0;
+    let protectedCount = 0;
+    let failed = 0;
+    for (const conversationId of new Set(conversationIds.map(normalizeConversationId).filter(Boolean))) {
+        // Always inspect the latest task mapping immediately before an irreversible deletion.
+        if (taskReferencesConversation(currentConfig.value?.tasks, conversationId)) {
+            protectedCount++;
+            continue;
+        }
+        try {
+            const result = await window.api.deleteConversation({ dirPath: localPath, conversationId, deleteLegacyJson: true });
+            if (result?.removed) removed++;
+        } catch (error) {
+            failed++;
+            console.warn(`Failed to delete explicitly selected task conversation: ${conversationId}`, error);
+        }
+    }
+    return { removed, protected: protectedCount, failed };
+}
+
+async function deleteTask() {
+    const idToDelete = activeTaskId.value;
+    const task = selectedTask.value;
+    if (!idToDelete || !task) return;
+
+    try {
+        const targetConversationId = normalizeConversationId(task.conversationId);
+        const deleteConversation = targetConversationId
+            ? await confirmConversationDeletion({
+                message: t('tasks.deleteConfirm'), title: t('tasks.warning'),
+                confirmButtonText: t('common.confirm')
+            })
+            : (await ElMessageBox.confirm(t('tasks.deleteConfirm'), t('tasks.warning'), {
+                type: 'warning', confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel')
+            }), false);
+
+        await atomicSave(config => {
+            if (!config.tasks?.[idToDelete]) return;
             delete config.tasks[idToDelete];
             const remaining = Object.keys(config.tasks);
             activeTaskId.value = remaining.length > 0 ? remaining[0] : null;
         });
-        ElMessage.success(t('tasks.deleted'));
-    }).catch(() => { });
+
+        const result = deleteConversation
+            ? await deleteUnboundConversations([targetConversationId])
+            : { removed: 0, protected: 0, failed: 0 };
+        ElMessage.success(result.removed > 0 ? t('tasks.deletedWithConversations', { count: result.removed }) : t('tasks.deleted'));
+        if (result.protected > 0) ElMessage.info(t('tasks.boundConversationsKept', { count: result.protected }));
+        if (result.failed > 0) ElMessage.warning(t('tasks.conversationDeletionFailed', { count: result.failed }));
+    } catch {
+        // User cancelled.
+    }
 }
 
-// 清除历史记录与对应文件
 async function clearTaskHistory() {
-    if (!selectedTask.value || !selectedTask.value.history || selectedTask.value.history.length === 0) {
+    const taskId = activeTaskId.value;
+    const task = selectedTask.value;
+    const history = Array.isArray(task?.history) ? [...task.history] : [];
+    if (!taskId || history.length === 0) {
         ElMessage.info(t('tasks.noHistoryToClear'));
         return;
     }
 
     try {
-        await ElMessageBox.confirm(
-            t('tasks.clearHistoryConfirm'),
-            t('tasks.dangerConfirm'),
-            { confirmButtonText: t('tasks.confirmClear'), cancelButtonText: t('common.cancel'), type: 'error' }
-        );
+        const historyConversationIds = [task.conversationId, ...history.map(log => log?.conversationId)];
+        const deleteConversations = historyConversationIds.some(normalizeConversationId)
+            ? await confirmConversationDeletion({
+                message: t('tasks.clearHistoryConfirm'), title: t('tasks.dangerConfirm'),
+                confirmButtonText: t('tasks.confirmClear'), type: 'error'
+            })
+            : (await ElMessageBox.confirm(t('tasks.clearHistoryConfirm'), t('tasks.dangerConfirm'), {
+                confirmButtonText: t('tasks.confirmClear'), cancelButtonText: t('common.cancel'), type: 'error'
+            }), false);
 
-        // 提取本地路径
-        const localPath = currentConfig.value.webdav?.localChatPath;
-        let deleteCount = 0;
-
-        if (localPath) {
-            // 遍历所有带有 json 文件的日志记录，并尝试从本地删除
-            for (const log of selectedTask.value.history) {
-                if (log.conversationId) {
-                    try {
-                        const result = await window.api.deleteConversation({ dirPath: localPath, conversationId: log.conversationId, deleteLegacyJson: true });
-                        if (result?.removed) deleteCount++;
-                    } catch (err) {
-                        console.warn(`本地数据库会话删除跳过或失败: ${log.conversationId}`, err);
-                    }
-                    continue;
-                }
-
-                if (log.file && log.file.endsWith('.json')) {
-                    // 使用原生 path.join 防呆，若不可用则使用正则过滤掉双斜杠
-                    let filePath = "";
-                    if (window.api && window.api.pathJoin) {
-                        filePath = window.api.pathJoin(localPath, log.file);
-                    } else {
-                        filePath = `${localPath}/${log.file}`.replace(/\\/g, '/').replace(/\/{2,}/g, '/');
-                    }
-
-                    try {
-                        await window.api.deleteLocalFile(filePath);
-                        deleteCount++;
-                    } catch (err) {
-                        console.warn(`本地文件删除跳过或失败: ${filePath}`, err);
-                    }
-                }
-            }
-        }
-
-        // 库中数据清空 (增加 await 确保原子保存完成)
         await atomicSave(config => {
-            config.tasks[activeTaskId.value].history = [];
+            if (config.tasks?.[taskId]) config.tasks[taskId].history = [];
         });
 
-        // 界面数据响应式更新
-        if (currentConfig.value.tasks[activeTaskId.value]) {
-            currentConfig.value.tasks[activeTaskId.value].history = [];
-        }
-
-        const msg = deleteCount > 0
-            ? t('tasks.historyClearedWithFiles', { count: deleteCount })
-            : t('tasks.historyCleared');
-        ElMessage.success(msg);
-    } catch (e) {
-        // 用户取消
+        // Old filename-only entries intentionally only lose their record: without a stable
+        // conversation ID their ownership cannot be proven, so deleting a file would be unsafe.
+        const result = deleteConversations
+            ? await deleteUnboundConversations(historyConversationIds)
+            : { removed: 0, protected: 0, failed: 0 };
+        ElMessage.success(result.removed > 0 ? t('tasks.historyClearedWithConversations', { count: result.removed }) : t('tasks.historyCleared'));
+        if (result.protected > 0) ElMessage.info(t('tasks.boundConversationsKept', { count: result.protected }));
+        if (result.failed > 0) ElMessage.warning(t('tasks.conversationDeletionFailed', { count: result.failed }));
+    } catch {
+        // User cancelled.
     }
 }
 
