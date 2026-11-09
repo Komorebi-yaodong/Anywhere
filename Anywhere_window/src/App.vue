@@ -6505,7 +6505,7 @@ const getRequestMcpTools = async () => {
     || typeof storage.dirPath !== 'string' || !storage.dirPath.trim()
     || !/^[a-zA-Z0-9_-]{1,128}$/.test(conversationId)) return tools;
   // Request-only copy: never put a window's identity into the shared tool cache or history.
-  const note = `\n\n[CURRENT LOCAL CONVERSATION]\nconversation_id: ${JSON.stringify(conversationId)}\nUse this ID with create_task or edit_task to target this conversation. Do not pass agent_name together with conversation_id. This is not a window_id.`;
+  const note = `\n\n[CURRENT CONVERSATION]\nconversation_id: ${JSON.stringify(conversationId)}`;
   return tools.map(tool => tool?.function?.name === builtinAgentListToolName.value
     ? { ...tool, function: { ...tool.function, description: `${tool.function.description || ''}${note}` } }
     : tool);

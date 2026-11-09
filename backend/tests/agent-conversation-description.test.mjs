@@ -123,7 +123,7 @@ const description = baseTools.find(
 ).description;
 assert.match(description, /CURRENTLY AVAILABLE AGENTS.*__DEFAULT__.*Code/);
 assert.match(description, /You are an Agent named "Code"/);
-assert.doesNotMatch(description, /CURRENT LOCAL CONVERSATION|Hidden/);
+assert.doesNotMatch(description, /CURRENT CONVERSATION|Hidden/);
 
 const requestStart = renderer.indexOf("const getRequestMcpTools =");
 const requestEnd = renderer.indexOf("\n};", requestStart) + 3;
@@ -189,12 +189,15 @@ assert.match(
   firstDescription,
   /conversation_id: "11111111-1111-4111-8111-111111111111"/,
 );
-assert.match(firstDescription, /create_task or edit_task/);
 assert.match(
   firstDescription,
-  /Do not pass agent_name together with conversation_id/,
+  /\n\n\[CURRENT CONVERSATION\]\nconversation_id: "11111111-1111-4111-8111-111111111111"$/,
 );
-assert.match(firstDescription, /not a window_id/);
+assert.doesNotMatch(
+  firstDescription,
+  /create_task or edit_task|Do not pass agent_name|not a window_id/,
+);
+assert.equal(firstDescription.split("CURRENT CONVERSATION").length, 2);
 assert.doesNotMatch(
   firstDescription,
   /SYNTHETIC_PRIVATE_DIRECTORY|SYNTHETIC_PRIVATE_DATABASE|model_route/,
@@ -285,7 +288,7 @@ assert.match(refreshed[0].function.description, /saved-during-refresh/);
 assert.equal(refreshed[3].function.description, "fresh memory index");
 assert.doesNotMatch(
   memory.context.openaiFormattedTools.value[0].function.description,
-  /CURRENT LOCAL CONVERSATION/,
+  /CURRENT CONVERSATION/,
 );
 assert.ok(
   (renderer.match(/let activeTools = await getRequestMcpTools\(\)/g) || [])
