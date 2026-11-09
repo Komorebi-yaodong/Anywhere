@@ -82,6 +82,34 @@ const blobToDataUrl = async (blob, signal) => {
   return `data:${blob.type};base64,${btoa(binary)}`
 }
 
+// Prepare newly added chat attachments before they enter the draft. The draft URL is then
+// the single source used by the preview, model input, buffered sends, and persisted history.
+export async function prepareDraftImageAttachment(file, signal) {
+  const match = typeof file?.url === 'string'
+    ? /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(file.url)
+    : null
+  if (!match) return file
+  const mimeType = match[1].toLowerCase()
+  const optimized = await prepareViewImagePayload({
+    __anywhereToolResult: 'image',
+    image: { mimeType, encodedBytes: match[2], detail: 'high' },
+    display: { text: 'Image attached from the chat input.' }
+  }, signal)
+  const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' }[optimized.mimeType]
+  const name = optimized.mimeType !== mimeType
+    ? `${String(file.name || 'image').replace(/\.[^.]+$/, '')}${extension}`
+    : file.name
+  return {
+    ...file,
+    name,
+    type: optimized.mimeType,
+    size: optimized.bytes,
+    url: optimized.dataUrl,
+    animationFlattened: optimized.optimized && ['image/gif', 'image/webp'].includes(mimeType)
+  }
+}
+
+
 export async function prepareViewImagePayload(result, signal) {
   if (result?.__anywhereToolResult !== 'image') return null
   const mimeType = result?.image?.mimeType

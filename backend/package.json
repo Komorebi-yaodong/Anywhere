@@ -12,6 +12,8 @@
     "test:preload-lazy-runtime": "node tests/preload-lazy-runtime.test.js",
     "test:release-size": "node tests/release-size.test.js",
     "test:sqlite-compat": "node tests/conversation-sqlite-compat.test.js",
+    "test:view-image-url": "node tests/view-image-url.test.mjs",
+    "test:shell-output": "node tests/shell-output.test.mjs",
     "test:memory": "node tests/memory.test.mjs && node tests/memory-mcp.test.mjs",
     "test:agent-conversation-description": "node tests/agent-conversation-description.test.mjs",
     "test:conversation-task": "node tests/conversation-task.test.mjs && node tests/conversation-task-queue.test.mjs && node tests/conversation-task-open.test.js",

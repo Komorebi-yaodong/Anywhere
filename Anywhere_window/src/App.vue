@@ -15,7 +15,7 @@ import TextSearchUI from './utils/TextSearchUI.js';
 import { formatTimestamp, formatToolResult, sanitizeToolArgs, sanitizeToolFunctionName } from './utils/formatters.js';
 import { resolveSafeConversationMutationTarget } from './utils/conversationMessageTarget.js';
 import { createConversationDeleteRecovery } from './utils/conversationDeleteRecovery.js';
-import { prepareViewImagePayload } from './utils/viewImageCompression.js';
+import { prepareViewImagePayload, prepareDraftImageAttachment } from './utils/viewImageCompression.js';
 import { createLinkedUserMessagePair } from './utils/linkedUserMessage.js';
 import { completeConversationClose, createConversationMutationQueue, createConversationPersistenceTracker, mergeConversationMutationRequests as mergeAutoSaveRequests } from './utils/conversationMutationQueue.js';
 import { MAX_AUTOMATIC_NETWORK_RETRIES, createNetworkRetryingStream, runWithNetworkRetries } from './utils/conversationNetworkRetry.js';
@@ -2306,6 +2306,7 @@ const onAvatarClick = async (role, event) => {
 };
 
 const handleSubmit = () => {
+  if (pendingDraftAttachments.value > 0) { showDismissibleMessage.info('图片或附件正在处理，请稍后发送'); return; }
   if (!ensureConversationWriteAccess(true)) return;
 
   if (compacting.value || loading.value || isPreparingSend.value) {
@@ -2324,8 +2325,17 @@ const handleCancel = () => {
 };
 const handleClearHistory = () => clearHistory();
 const handleRemoveFile = (index) => fileList.value.splice(index, 1);
+const pendingDraftAttachments = ref(0);
 const handleUpload = async ({ fileList: newFiles }) => {
-  for (const file of newFiles) await file2fileList(file, fileList.value.length + 1);
+  pendingDraftAttachments.value++;
+  try {
+    for (const file of newFiles) {
+      try { await file2fileList(file, fileList.value.length + 1); }
+      catch (error) { showDismissibleMessage.error(`处理文件 ${file.name} 失败: ${error.message}`); }
+    }
+  } finally {
+    pendingDraftAttachments.value--;
+  }
   chatInputRef.value?.focus({ cursor: 'end' });
 };
 const handleOpenMcpDialog = () => toggleMcpDialog();
@@ -3207,12 +3217,14 @@ onMounted(async () => {
           }
         }
       } else if (data.type === "img" && data.payload) {
+        const imageAttachment = await prepareDraftImageAttachment({ uid: 1, name: '截图.png', size: 0, type: 'image/png', url: String(data.payload) });
+        if (isClosingWindow.value) return;
         if (currentPromptConfig.isDirectSend_image ?? true) {
-          const imageContent = [{ type: "image_url", image_url: { url: String(data.payload) } }];
+          const imageContent = [{ type: "image_url", image_url: { url: imageAttachment.url } }];
           appendLinkedUserMessage({ historyContent: imageContent, uiContent: imageContent });
           shouldDirectSend = true;
         } else {
-          fileList.value.push({ uid: 1, name: "截图.png", size: 0, type: "image/png", url: String(data.payload) });
+          fileList.value.push(imageAttachment);
         }
       } else if (data.type === "files" && data.payload) {
         try {
@@ -3309,7 +3321,9 @@ onMounted(async () => {
       if (data.type === "over" && data.payload) {
         appendLinkedUserMessage({ historyContent: data.payload, uiContent: [{ type: "text", text: data.payload }], timestamp: nowTime });
       } else if (data.type === "img" && data.payload) {
-        const imageContent = [{ type: "image_url", image_url: { url: String(data.payload) } }];
+        const imageAttachment = await prepareDraftImageAttachment({ name: '截图.png', size: 0, type: 'image/png', url: String(data.payload) });
+        if (isClosingWindow.value) return;
+        const imageContent = [{ type: "image_url", image_url: { url: imageAttachment.url } }];
         appendLinkedUserMessage({ historyContent: imageContent, uiContent: imageContent, timestamp: nowTime });
       } else if (data.type === "files" && data.payload) {
         try {
@@ -6154,15 +6168,19 @@ const file2fileList = async (file, idx) => {
     }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-      fileList.value.push({
-        uid: idx,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: e.target.result
-      });
-      resolve();
+    reader.onload = async (e) => {
+      try {
+        const draftFiles = fileList.value;
+        const attachment = await prepareDraftImageAttachment({
+          uid: idx, name: file.name, size: file.size, type: file.type, url: e.target.result
+        });
+        if (isClosingWindow.value || fileList.value !== draftFiles) { resolve(); return; }
+        fileList.value.push(attachment);
+        if (attachment.animationFlattened) showDismissibleMessage.info('图片已压缩为静态预览，动画不包含在发送内容中');
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
     };
     reader.onerror = () => {
       const errorMsg = `读取文件 ${file.name} 失败`;

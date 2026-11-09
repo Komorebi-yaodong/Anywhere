@@ -78,7 +78,7 @@ function setup({
     btoa: (value) => Buffer.from(value, 'binary').toString('base64')
   })
   const prepare = vm.runInContext(
-    source.replace('export async function', 'async function') + '\nprepareViewImagePayload',
+    source.replaceAll('export async function', 'async function') + '\nprepareViewImagePayload',
     context
   )
   return { prepare, calls, canvases, images, load: () => load(), listeners }

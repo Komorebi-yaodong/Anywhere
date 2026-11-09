@@ -141,6 +141,7 @@ function sleepForDuration(durationMs, signal = null) {
 const MAX_VIEW_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_VIEW_IMAGE_PIXELS = 24 * 1024 * 1024;
 const MAX_VIEW_PDF_BYTES = 50 * 1024 * 1024;
+const VIEW_IMAGE_FORMAT_HINT = 'Supported formats: PNG, JPEG, WebP, GIF.';
 
 function inspectViewableImage(buffer) {
     if (!Buffer.isBuffer(buffer) || buffer.length < 10) return null;
@@ -181,6 +182,126 @@ function inspectViewableImage(buffer) {
         }
     }
     return null;
+}
+
+function isHttpImageUrl(value = '') {
+    return /^https?:\/\//i.test(value);
+}
+
+function hasUrlScheme(value = '') {
+    // Two or more characters before ':' so a Windows drive path like C:\dir is not a scheme.
+    return /^[a-z][a-z0-9+.-]+:/i.test(value);
+}
+
+function describeRemoteImageName(rawUrl = '') {
+    try {
+        const rawName = new URL(rawUrl).pathname.split('/').filter(Boolean).pop() || '';
+        let decoded = rawName;
+        try {
+            decoded = decodeURIComponent(rawName);
+        } catch {
+            decoded = rawName;
+        }
+        // Strip control characters without a control-character regex (avoids no-control-regex).
+        const cleaned = [...decoded]
+            .filter((char) => char.codePointAt(0) > 31 && char.codePointAt(0) !== 127)
+            .join('')
+            .trim()
+            .slice(0, 120);
+        return cleaned || 'image';
+    } catch {
+        return 'image';
+    }
+}
+
+function imageTooLargeError(maxBytes) {
+    return new Error(`Image is too large for visual inspection (>${Math.round(maxBytes / 1024 / 1024)}MB).`);
+}
+
+/**
+ * Read an image over http(s) without touching disk. The declared Content-Length is only a
+ * pre-check; streamed bytes are counted so a missing or false header cannot bypass the cap.
+ * Caller cancellation is forwarded and the body reader is released on every path.
+ */
+async function readRemoteImageBytes(url, { signal = null, fetchImpl = null, maxBytes = MAX_VIEW_IMAGE_BYTES, timeoutMs = 30000 } = {}) {
+    const aborted = () => Object.assign(new Error('Operation aborted by user.'), { name: 'AbortError' });
+    if (signal?.aborted) throw aborted();
+    if (typeof fetchImpl !== 'function') throw new Error('network fetch is unavailable.');
+    const controller = new AbortController();
+    let body = null;
+    let reader = null;
+    let iterator = null;
+    let bodyStopped = false;
+    let failure = null;
+    const stopBody = () => {
+        if (!body || bodyStopped) return;
+        bodyStopped = true;
+        try {
+            if (reader) Promise.resolve(reader.cancel()).catch(() => {});
+            else if (typeof body?.cancel === 'function') Promise.resolve(body.cancel()).catch(() => {});
+            else if (typeof body?.destroy === 'function') body.destroy();
+            else if (iterator?.return) Promise.resolve(iterator.return()).catch(() => {});
+        } catch { /* the original failure remains authoritative */ }
+    };
+    let rejectCancellation;
+    const cancellation = new Promise((_, reject) => { rejectCancellation = reject; });
+    cancellation.catch(() => {});
+    const onAbort = () => { failure = aborted(); controller.abort(); stopBody(); rejectCancellation(failure); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    const wait = async operation => {
+        let timer;
+        try {
+            return await Promise.race([operation, cancellation, new Promise((_, reject) => {
+                timer = setTimeout(() => {
+                    failure = new Error('Image request timed out while waiting for network data.');
+                    controller.abort();
+                    stopBody();
+                    reject(failure);
+                }, timeoutMs);
+            })]);
+        } finally { clearTimeout(timer); }
+    };
+    const chunks = [];
+    let total = 0;
+    try {
+        if (signal?.aborted) onAbort();
+        const response = await wait(Promise.resolve(fetchImpl(url, { signal: controller.signal, redirect: 'follow' })).then(value => {
+            body = value?.body;
+            if (controller.signal.aborted) stopBody();
+            return value;
+        }));
+        if (signal?.aborted) throw aborted();
+        if (!response || response.ok !== true) {
+            const status = Number(response?.status) || 0;
+            throw new Error(status ? `HTTP ${status}` : 'request failed.');
+        }
+        const declared = String(response.headers?.get?.('content-length') || '').trim();
+        if (/^\d+$/.test(declared) && BigInt(declared) > BigInt(maxBytes)) throw imageTooLargeError(maxBytes);
+        if (typeof body?.getReader === 'function') reader = body.getReader();
+        else if (typeof body?.[Symbol.asyncIterator] === 'function') iterator = body[Symbol.asyncIterator]();
+        // Do not fall back to arrayBuffer(): its unbounded allocation defeats the input cap.
+        else throw new Error('Image response does not provide a readable stream.');
+        for (;;) {
+            if (signal?.aborted) throw aborted();
+            const { done, value } = await wait(reader ? reader.read() : iterator.next());
+            if (failure) throw failure;
+            if (signal?.aborted) throw aborted();
+            if (done) break;
+            if (!Buffer.isBuffer(value) && !(value instanceof Uint8Array)) throw new Error('Invalid image response chunk.');
+            if (value.byteLength > maxBytes - total) throw imageTooLargeError(maxBytes);
+            total += value.byteLength;
+            chunks.push(Buffer.from(value));
+        }
+        return Buffer.concat(chunks, total);
+    } catch (error) {
+        controller.abort();
+        stopBody();
+        if (signal?.aborted) throw aborted();
+        throw error;
+    } finally {
+        signal?.removeEventListener('abort', onAbort);
+        try { reader?.releaseLock(); } catch { /* ignore release failure */ }
+    }
 }
 
 function estimatePdfPageCount(buffer) {
@@ -967,11 +1088,11 @@ const BUILTIN_TOOLS = {
         },
         {
             name: "view_image",
-            description: "View a local image file from the filesystem when visual inspection is needed. Use this for images already available on disk. Do not use read_file for images.",
+            description: "View an image from a local file or an http(s) URL when visual inspection is needed. Supports PNG, JPEG, WebP, and GIF. Do not use read_file for images.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    file_path: { type: "string", description: "Absolute path to a local PNG, JPEG, WebP, or GIF image file." },
+                    file_path: { type: "string", description: "Absolute path to a local image file, or an http(s) URL to download one. PNG, JPEG, WebP, or GIF." },
                     detail: { type: "string", enum: ["high", "original"], description: "Optional image detail hint. Defaults to high." }
                 },
                 required: ["file_path"]
@@ -2372,18 +2493,40 @@ ${contextBlock}
     view_image: async ({ file_path, detail } = {}, context, signal) => {
         try {
             if (!file_path || typeof file_path !== 'string') return 'Error: file_path is required.';
+            const requestedPath = file_path.trim();
+            if (!requestedPath) return 'Error: file_path is required.';
             if (detail !== undefined && !['high', 'original'].includes(detail)) {
                 return "Error: view_image.detail only supports 'high' or 'original'.";
             }
-            const safePath = resolvePath(file_path);
+            // Reject unsupported schemes instead of letting them become a relative filesystem path.
+            if (!isHttpImageUrl(requestedPath) && hasUrlScheme(requestedPath)) {
+                return 'Error: view_image accepts a local absolute path or an http(s) URL only.';
+            }
+            if (isHttpImageUrl(requestedPath)) {
+                if (signal?.aborted) throw Object.assign(new Error('Operation aborted by user.'), { name: 'AbortError' });
+                const fetchImpl = typeof fetch === 'function' ? fetch : null;
+                const bytes = await readRemoteImageBytes(requestedPath, { signal, fetchImpl });
+                const image = inspectViewableImage(bytes);
+                if (!image || !image.width || !image.height) return `Error: Unsupported or invalid image data. ${VIEW_IMAGE_FORMAT_HINT}`;
+                if (image.width * image.height > MAX_VIEW_IMAGE_PIXELS) return `Error: Image dimensions exceed the ${MAX_VIEW_IMAGE_PIXELS / 1000000}MP visual inspection limit.`;
+                const fileName = describeRemoteImageName(requestedPath);
+                const displayText = `Remote image loaded for visual inspection: ${fileName} (${image.format}, ${image.width}×${image.height}, ${(bytes.length / 1024 / 1024).toFixed(2)} MB).`;
+                return {
+                    __anywhereToolResult: 'image',
+                    image: { encodedBytes: bytes.toString('base64'), mimeType: image.mimeType, detail: detail || 'high' },
+                    display: { text: displayText, fileName, format: image.format, width: image.width, height: image.height, bytes: bytes.length }
+                };
+            }
+            const safePath = resolvePath(requestedPath);
             if (!isPathSafe(safePath)) return `[Security Block] Access to sensitive system file '${path.basename(safePath)}' is restricted.`;
             const stats = await fs.promises.stat(safePath);
             if (!stats.isFile()) return `Error: Image path is not a file: ${safePath}`;
             if (stats.size > MAX_VIEW_IMAGE_BYTES) return `Error: Image is too large for visual inspection (>${MAX_VIEW_IMAGE_BYTES / 1024 / 1024}MB).`;
             if (signal?.aborted) throw Object.assign(new Error('Operation aborted by user.'), { name: 'AbortError' });
             const bytes = await fs.promises.readFile(safePath, signal ? { signal } : undefined);
+            if (bytes.length > MAX_VIEW_IMAGE_BYTES) throw imageTooLargeError(MAX_VIEW_IMAGE_BYTES);
             const image = inspectViewableImage(bytes);
-            if (!image || !image.width || !image.height) return 'Error: Unsupported or invalid image data. Supported formats: PNG, JPEG, WebP, GIF.';
+            if (!image || !image.width || !image.height) return `Error: Unsupported or invalid image data. ${VIEW_IMAGE_FORMAT_HINT}`;
             if (image.width * image.height > MAX_VIEW_IMAGE_PIXELS) return `Error: Image dimensions exceed the ${MAX_VIEW_IMAGE_PIXELS / 1000000}MP visual inspection limit.`;
             const displayText = `Local image loaded for visual inspection: ${path.basename(safePath)} (${image.format}, ${image.width}×${image.height}, ${(stats.size / 1024 / 1024).toFixed(2)} MB).`;
             return {
@@ -2992,7 +3135,7 @@ if (Get-Variable -Name PSStyle -ErrorAction SilentlyContinue) { $PSStyle.OutputR
                 if (errorStr) result += `\n[Stderr]:\n${errorStr}`;
 
                 if (!result.trim()) result = "Command executed successfully.";
-                resolve(`[CWD: ${bashCwd}]\n${result}`);
+                resolve(result);
             });
 
             child.on('error', (err) => {

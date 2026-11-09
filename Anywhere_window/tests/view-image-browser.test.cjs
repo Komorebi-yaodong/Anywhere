@@ -121,7 +121,7 @@ app
       'data:text/html,<html><body>Isolated synthetic image codec test</body></html>'
     )
     const report = await win.webContents.executeJavaScript(`(async () => {
-    ${source.replace('export async function', 'async function')}
+    ${source.replaceAll('export async function', 'async function')}
     ${getPayload}
     const messageIdCounter = {value: 1};
     const createConversationStorageId = () => 'synthetic-image-storage';
