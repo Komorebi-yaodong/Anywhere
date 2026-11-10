@@ -12,7 +12,7 @@ const {
   registerConversation,
   removeConversation: removeConversationFromProjects,
   updateConversation,
-  writeLocalProjects,
+  mutateLocalProjects,
   writeLocalProjectsBestEffort
 } = require('./projects.js');
 
@@ -197,7 +197,21 @@ async function synchronizeLocalProjectsWithDatabases(dirPath) {
     nextProjects = registerConversation(nextProjects, descriptor)
   }
   if (JSON.stringify(nextProjects) !== JSON.stringify(projects)) {
-    await writeLocalProjects(normalizedDir, nextProjects)
+    const committed = await mutateLocalProjects(normalizedDir, async current => {
+      let next = current
+      for (const [id, previous] of Object.entries(projects.conversations || {})) {
+        if (!nextProjects.conversations?.[id] && JSON.stringify(current.conversations?.[id]) === JSON.stringify(previous)) next = removeConversationFromProjects(next, id)
+      }
+      for (const [id, descriptor] of selectedDescriptors.entries()) {
+        // A conversation deleted after the directory scan must not be resurrected in the index.
+        try { await fs.access(path.join(normalizedDir, descriptor.dbFile)) }
+        catch (error) { if (error?.code === 'ENOENT') continue; throw error }
+        const latest = next.conversations?.[id]
+        if (!latest || Number(descriptor.revision) >= Number(latest.revision)) next = registerConversation(next, descriptor)
+      }
+      return next
+    })
+    nextProjects = committed.data
   }
   return nextProjects
 }
@@ -1099,9 +1113,10 @@ async function migrateJsonConversation({ dirPath, jsonBasename, instanceId = '',
     }
     await fs.rename(tempPath, finalPath)
 
-    const project = findProjectByBasename(projects, legacyJson)
-    projects = registerConversation(projects, descriptor, { projectId: project?.id || '', projectName: project?.name || '' })
-    await writeLocalProjects(normalizedDir, projects)
+    await mutateLocalProjects(normalizedDir, current => {
+      const project = findProjectByBasename(current, legacyJson)
+      return registerConversation(current, descriptor, { projectId: project?.id || '', projectName: project?.name || '' })
+    })
     return { ok: true, migrated: true, descriptor, databasePath: finalPath }
   } finally {
     if (lockHandle) await lockHandle.close().catch(() => {})
@@ -1136,8 +1151,7 @@ async function createConversation({ dirPath, title, sessionData = {}, projectId 
     db.close()
   }
   await fs.rename(tempPath, databasePath)
-  const projects = registerConversation(await readLocalProjects(normalizedDir), descriptor, { projectId, projectName })
-  await writeLocalProjects(normalizedDir, projects)
+  await mutateLocalProjects(normalizedDir, current => registerConversation(current, descriptor, { projectId, projectName }))
   return { ok: true, descriptor, databasePath }
 }
 
@@ -1410,7 +1424,7 @@ async function saveConversationSnapshot({ dirPath, conversationId, sessionData =
       return { revision: nextRevision, title: nextTitle, updatedAt }
     })
 
-    const warning = await writeLocalProjectsBestEffort(dirPath, updateConversation(projects, conversationId, {
+    const warning = await writeLocalProjectsBestEffort(dirPath, current => updateConversation(current, conversationId, {
       title: result.title,
       revision: result.revision,
       updatedAt: result.updatedAt
@@ -1451,8 +1465,7 @@ async function saveConversationState({ dirPath, conversationId, state = {}, uiMe
         .run(nextTitle, nowIso(), nextRevision, conversationId)
       return { revision: nextRevision, title: nextTitle }
     })
-    const nextProjects = updateConversation(projects, conversationId, { title: result.title, revision: result.revision, updatedAt: nowIso() })
-    const warning = await writeLocalProjectsBestEffort(dirPath, nextProjects)
+    const warning = await writeLocalProjectsBestEffort(dirPath, current => updateConversation(current, conversationId, { title: result.title, revision: result.revision, updatedAt: nowIso() }))
     return { ok: true, ...result, ...(warning ? { warning } : {}) }
   } finally { db.close() }
 }
@@ -1524,7 +1537,7 @@ async function repairConversationUiLinks({ dirPath, conversationId, } = {}) {
     })
   } finally { db.close() }
 
-  const warning = await writeLocalProjectsBestEffort(dirPath, updateConversation(projects, conversationId, {
+  const warning = await writeLocalProjectsBestEffort(dirPath, current => updateConversation(current, conversationId, {
     title: result.title,
     revision: result.revision,
     updatedAt: result.updatedAt
@@ -1714,7 +1727,7 @@ async function restoreConversationCompaction({
       updatedAt: row.updated_at
     }
     try {
-      await writeLocalProjects(dirPath, updateConversation(projects, conversationId, {
+      await mutateLocalProjects(dirPath, current => updateConversation(current, conversationId, {
         title: result.title,
         revision: result.revision,
         updatedAt: result.updatedAt
@@ -1781,9 +1794,7 @@ async function renameConversation({
         .run(nextTitle, updatedAt, revision, conversationId)
     })
   } finally { db.close() }
-  const assignedProjects = assignConversationProject(projects, conversationId, projectId)
-  const nextProjects = updateConversation(assignedProjects, conversationId, { title: nextTitle, revision, updatedAt })
-  await writeLocalProjects(dirPath, nextProjects)
+  await mutateLocalProjects(dirPath, current => updateConversation(assignConversationProject(current, conversationId, projectId), conversationId, { title: nextTitle, revision, updatedAt }))
   return { ok: true, conversationId, title: nextTitle, dbFile: descriptor.dbFile, revision, updatedAt }
 }
 
@@ -1801,7 +1812,7 @@ async function deleteConversation({ dirPath, conversationId, deleteLegacyJson = 
   }
   await fs.rm(databasePath, { force: true })
   if (deleteLegacyJson && descriptor.legacyJson) await fs.rm(path.join(path.resolve(dirPath), descriptor.legacyJson), { force: true })
-  await writeLocalProjects(dirPath, removeConversationFromProjects(projects, conversationId))
+  await mutateLocalProjects(dirPath, current => removeConversationFromProjects(current, conversationId))
   return { ok: true, removed: true }
 }
 
@@ -1925,8 +1936,7 @@ async function importConversationSnapshot({ dirPath, descriptor: rawDescriptor =
       createdAt: normalizeTimestamp(importedMetadata.created_at) || nowIso(),
       updatedAt: normalizeTimestamp(importedMetadata.updated_at) || normalizeTimestamp(importedMetadata.created_at) || nowIso()
     }
-    const projects = registerConversation(await readLocalProjects(normalizedDir), descriptor)
-    await writeLocalProjects(normalizedDir, projects)
+    await mutateLocalProjects(normalizedDir, current => registerConversation(current, descriptor))
     return { ok: true, descriptor, databasePath: finalPath }
   } catch (error) {
     await fs.rm(downloadPath, { force: true }).catch(() => {})

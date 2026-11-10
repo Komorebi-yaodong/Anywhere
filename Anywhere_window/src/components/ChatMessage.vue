@@ -313,6 +313,8 @@ const onCopyImage = async () => {
 
 // 如果是最后一条消息 && 正在加载 && 没有正在进行的思考内容
 const preparingStatusText = computed(() => {
+  if (props.message?.status === 'requesting') return '正在连接并等待响应…';
+  if (props.message?.status === 'waiting-output') return '已连接，等待回复…';
   if (props.message?.status === 'retrying') return props.message?.retryMessage || '网络异常，正在自动重试…';
   return '';
 });

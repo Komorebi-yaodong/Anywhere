@@ -4447,6 +4447,7 @@ const normalizeWindowProjects = (data) => {
     ? data.conversations : {};
   return {
     version: Number(data?.version) || 2,
+    ...(typeof data?._localRevision === 'string' ? { _localRevision: data._localRevision } : {}),
     conversations,
     projects: projects
       .filter((p) => p && typeof p === 'object')
@@ -4528,7 +4529,7 @@ const reassignLocalProject = async ({ projectId, projectName, addFilename, remov
       p.id === projectId ? { ...p, files: [...p.files, addFilename] } : p
     );
   }
-  await window.api.writeLocalProjects(localPath, { version: data.version || 1, projects });
+  await window.api.writeLocalProjects(localPath, { ...data, version: data.version || 1, projects });
 };
 
 // 云端项目归属：读取云端 projects.yaml → 单文件归属合并 → 写回（webdav 在渲染层）。
@@ -6842,13 +6843,16 @@ const flushAppendBuffer = async () => {
   // A buffered turn may begin only after the previous turn has fully released ownership.
   // isMcpLoading is deliberately declared before this function.
   if (isClosingWindow.value || !ensureConversationWriteAccess(false)) return;
+  if (!pendingAppendBuffer.value.length) return;
   if (isFlushingAppendBuffer || loading.value || isPreparingSend.value || compacting.value || isMcpLoading.value || activeAssistantTurnMeta || scheduledTaskQueueSaving || currentTaskConfig.value) return;
   isFlushingAppendBuffer = true;
   let startedTurn = false;
+  let attemptedTask = null;
   try {
     if (pendingAppendBuffer.value[0]?.kind === 'scheduled-task') {
       if (!conversationTaskReady.value) return;
-      startedTurn = await startQueuedConversationTask(pendingAppendBuffer.value[0]);
+      attemptedTask = pendingAppendBuffer.value[0];
+      startedTurn = await startQueuedConversationTask(attemptedTask);
       return;
     }
     const appendedAny = await drainBufferIntoHistory();
@@ -6859,11 +6863,11 @@ const flushAppendBuffer = async () => {
   } finally {
     isFlushingAppendBuffer = false;
     // The turn finalizer cannot drain while this lock is held. Resume later arrivals now.
-    if (startedTurn && pendingAppendBuffer.value.length) nextTick(() => { flushAppendBuffer(); });
+    if ((startedTurn || attemptedTask && !pendingAppendBuffer.value.includes(attemptedTask)) && pendingAppendBuffer.value.length) nextTick(() => { flushAppendBuffer(); });
   }
 };
 
-watch([isMcpLoading, compacting, isPreparingSend], (now, prev) => {
+watch([conversationLeasePending, loading, currentTaskConfig, isMcpLoading, compacting, isPreparingSend], (now, prev) => {
   if (!isFlushingAppendBuffer && prev.some((busy, index) => busy && !now[index])) {
     nextTick(() => { flushAppendBuffer(); });
   }
@@ -8537,6 +8541,7 @@ const askAI = async (forceSend = false, onStarted = null) => {
     assistantMessageId: null,
     cancellationRecorded: false,
     cancelledByUser: false,
+    taskConfig: currentTaskConfig.value,
     settlementPromise: turnSettlementPromise,
     resolveSettlement: resolveTurnSettlement
   };
@@ -8549,6 +8554,7 @@ const askAI = async (forceSend = false, onStarted = null) => {
     }
   };
 
+  try {
   const shouldTriggerAutoNaming = !defaultConversationName.value && chat_show.value.filter(isUserAuthoredMessage).length === 1;
   if (shouldTriggerAutoNaming) {
     triggerAutoNamingForFirstUserMessage({ force: false, requestSignal }).catch((error) => {
@@ -8733,10 +8739,17 @@ const askAI = async (forceSend = false, onStarted = null) => {
       let responseMessage;
 
 
+      chat_show.value[currentAssistantChatShowIndex].status = 'requesting';
       if (useStream) {
         // --- 流式处理 ---
         const stream = createNetworkRetryingStream(
-          () => window.api.createChatCompletion(requestParams),
+          async () => {
+            const bubble = chat_show.value[currentAssistantChatShowIndex];
+            if (bubble && !isTurnAborted()) bubble.status = 'requesting';
+            const response = await window.api.createChatCompletion(requestParams);
+            if (bubble && !isTurnAborted()) bubble.status = 'waiting-output';
+            return response;
+          },
           {
             maxRetries: MAX_AUTOMATIC_NETWORK_RETRIES,
             signal: requestSignal,
@@ -8795,7 +8808,7 @@ const askAI = async (forceSend = false, onStarted = null) => {
 
 
         for await (const part of stream) {
-          if (chat_show.value[currentAssistantChatShowIndex]?.status === 'retrying' && hasMeaningfulAssistantStreamOutput(part)) {
+          if (['retrying', 'requesting', 'waiting-output'].includes(chat_show.value[currentAssistantChatShowIndex]?.status) && hasMeaningfulAssistantStreamOutput(part)) {
             chat_show.value[currentAssistantChatShowIndex].status = '';
             delete chat_show.value[currentAssistantChatShowIndex].retryMessage;
           }
@@ -9383,16 +9396,17 @@ const askAI = async (forceSend = false, onStarted = null) => {
       await nextTick();
       focusChatInputIfSafe({ cursor: 'end' });
 
-      if (currentTaskConfig.value) {
+      const finishingTask = turnMeta.taskConfig;
+      if (finishingTask) {
         let savedFileName = '未保存';
         let savedConversationId = '';
         try {
-          if ((currentTaskConfig.value.autoSave || currentTaskConfig.value.conversationId) && currentConfig.value.webdav?.localChatPath) {
+          if ((finishingTask.autoSave || finishingTask.conversationId) && currentConfig.value.webdav?.localChatPath) {
             const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/[\/ :]/g, '-').replace(/,/g, '');
-            if (!currentTaskConfig.value.conversationId) defaultConversationName.value = `定时任务-${currentTaskConfig.value.name}-${timeStr}`;
+            if (!finishingTask.conversationId) defaultConversationName.value = `定时任务-${finishingTask.name}-${timeStr}`;
             const dirPath = currentConfig.value.webdav.localChatPath;
             const localProjects = normalizeWindowProjects(await window.api.readLocalProjects(dirPath));
-            const taskProjectId = typeof currentTaskConfig.value.autoSaveProjectId === 'string' ? currentTaskConfig.value.autoSaveProjectId : '';
+            const taskProjectId = typeof finishingTask.autoSaveProjectId === 'string' ? finishingTask.autoSaveProjectId : '';
             const projectName = localProjects.projects.find((p) => p.id === taskProjectId)?.name || '';
             if (!currentConversationStorage.value?.conversationId) {
               const created = await window.api.createConversation({
@@ -9417,7 +9431,7 @@ const askAI = async (forceSend = false, onStarted = null) => {
             savedFileName = defaultConversationName.value;
             savedConversationId = currentConversationStorage.value?.conversationId || '';
           }
-          await window.api.addTaskHistory(currentTaskConfig.value.id, {
+          await window.api.addTaskHistory(finishingTask.id, {
             time: Date.now(),
             status: 'success',
             file: savedFileName,
@@ -9425,18 +9439,19 @@ const askAI = async (forceSend = false, onStarted = null) => {
           });
 
           // 自动关闭窗口
-          if (currentTaskConfig.value.autoClose && !pendingAppendBuffer.value.length && !scheduledTaskQueueSaving) {
+          if (finishingTask.autoClose && !pendingAppendBuffer.value.length && !scheduledTaskQueueSaving) {
             window.api.windowControl('close-window');
           }
         } catch (taskErr) {
           console.error("Task Finalize Error:", taskErr);
-          await window.api.addTaskHistory(currentTaskConfig.value.id, {
+          await window.api.addTaskHistory(finishingTask.id, {
             time: Date.now(),
             status: 'error',
             file: '报错'
-          });
+          }).catch(() => {});
+        } finally {
+          if (currentTaskConfig.value === finishingTask) currentTaskConfig.value = null;
         }
-        currentTaskConfig.value = null; // 清空标记，避免后续手动问答也触发
       } else {
         scheduleAutoSave({ reason: 'assistant-turn-finalized', immediate: true }); // 普通对话的自动保存
         if (stillOwnsTurn) {
@@ -9444,16 +9459,23 @@ const askAI = async (forceSend = false, onStarted = null) => {
           await maybeAutoCompactAfterTurn();
         }
       }
-      if (activeAssistantTurnMeta === turnMeta) {
-        activeAssistantTurnMeta = null;
-        loading.value = false;
-        syncAutoCloseOnBlurListener();
-        await flushAppendBuffer();
-      }
-    } finally {
-      turnMeta.resolveSettlement?.();
+    } catch (error) {
+      console.error('[conversation] assistant finalization failed:', error);
     }
   }
+  } finally {
+    // This guard also handles failures before the inner network/tool try block is entered.
+    if (currentTaskConfig.value === turnMeta.taskConfig) currentTaskConfig.value = null;
+    if (signalController.value === requestAbortController) signalController.value = null;
+    if (activeAssistantTurnMeta === turnMeta) {
+      activeAssistantTurnMeta = null;
+      loading.value = false;
+      syncAutoCloseOnBlurListener();
+    }
+    turnMeta.resolveSettlement?.();
+    nextTick(() => { flushAppendBuffer(); });
+  }
+
 };
 
 const cancelAskAI = () => {
