@@ -3,8 +3,10 @@ import { ref, onMounted, computed, watch, onUnmounted, nextTick, onActivated, on
 import { useI18n } from 'vue-i18n'
 
 import { createClient } from "webdav/web";
-import { Refresh, Delete as DeleteIcon, ChatDotRound, Edit, Upload, Download, Switch, QuestionFilled, Brush, Share, Plus, ArrowRight, Folder } from '@element-plus/icons-vue'
+import { Refresh, Delete as DeleteIcon, ChatDotRound, InfoFilled, Edit, Upload, Download, Switch, QuestionFilled, Brush, Share, Plus, ArrowRight, Folder } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+
+import { formatConversationReference, normalizeConversationId } from '../../../shared/conversationReference.js';
 
 const { t } = useI18n();
 const currentConfig = inject('config');
@@ -776,6 +778,14 @@ const paginatedFiles = computed(() => {
 const activeProjectsData = computed(() =>
     activeView.value === 'local' ? localProjects.value : cloudProjects.value
 );
+
+const canCopyConversationId = (file) => activeView.value === 'local' && file?.format === 'sqlite' && !!normalizeConversationId(file.conversationId);
+const copyConversationId = async (file) => {
+    if (!canCopyConversationId(file)) return;
+    const reference = formatConversationReference(normalizeTitleValue(file), file.conversationId);
+    try { await window.api.copyText(reference); ElMessage.success('会话ID已复制'); }
+    catch { ElMessage.error('复制会话ID失败'); }
+};
 
 const getConversationReference = (file) => {
     if (file?.format === 'sqlite' && typeof file?.conversationId === 'string' && file.conversationId.trim()) {
@@ -2719,6 +2729,11 @@ const toggleSelectAll = () => {
                                         <el-button link type="primary" :icon="ChatDotRound"
                                             class="action-icon-btn chat-highlight" @click.stop="startChat(row.file)" />
                                     </el-tooltip>
+                                    <el-tooltip v-if="canCopyConversationId(row.file)" content="复制会话ID" placement="top" :show-after="500">
+                                        <el-button link type="info" :icon="InfoFilled" class="action-icon-btn"
+                                            aria-label="复制会话ID" @click.stop="copyConversationId(row.file)" />
+                                    </el-tooltip>
+
                                     <!-- 2. 分享/导出按钮（仅本地） -->
                                     <el-tooltip v-if="activeView === 'local'" :content="t('chats.actions.share')" placement="top" :show-after="500">
                                         <el-button link type="success" :icon="Share" class="action-icon-btn"

@@ -251,6 +251,7 @@ window.api = {
     renameLocalFile,
     listJsonFiles,
     writeLocalFile,
+    listConversationReferences: (dirPath = '') => invokeConversationRpc('listConversationReferences', dirPath),
     listLocalConversations: (...args) => invokeConversationRpc('listLocalConversations', ...args),
     migrateJsonConversation: (input = {}) => invokeConversationRpc('migrateJsonConversation', input),
     forkConversation: (input = {}) => invokeConversationRpc('forkConversation', input),

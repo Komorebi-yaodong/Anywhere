@@ -1154,7 +1154,19 @@ function conversationWindowKey(config, conversationId, dirPath = '') {
 function registerConversationWindow(senderId, input = {}) {
   const win = windowMap.get(senderId);
   const key = conversationWindowKey({}, input.conversationId, input.dirPath);
-  if (win && !win.isDestroyed() && key) conversationWindowIds.set(key, senderId);
+  if (win && !win.isDestroyed() && key) {
+    for (const [previousKey, id] of conversationWindowIds) {
+      if (id === senderId && previousKey !== key) conversationWindowIds.delete(previousKey);
+    }
+    conversationWindowIds.set(key, senderId);
+  }
+}
+
+function findLocalConversationWindow(config, conversationId, dirPath = '') {
+  const key = conversationWindowKey(config, conversationId, dirPath);
+  const id = key ? conversationWindowIds.get(key) : '';
+  const win = windowMap.get(id);
+  return win && !win.isDestroyed() ? id : '';
 }
 
 async function openWindow(config, msg) {
@@ -2093,6 +2105,7 @@ module.exports = {
   copyText,
   openWindow,
   registerConversationWindow,
+  findLocalConversationWindow,
   applyConversationWindowState,
   coderedirect,
   setZoomFactor,

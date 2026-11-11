@@ -201,6 +201,8 @@ window.api = {
     utools.outPlugin();
     return result;
   },
+  listConversationReferences: (dirPath = '') => require('./conversationReferences.js').listConversationReferences(dirPath),
+  openSavedConversationWindow: (input = {}) => openSavedConversationWindow(input),
   listLocalConversations: (...args) => conversationDbHelperClient.invoke('listLocalConversations', args),
   migrateJsonConversation: (input = {}) => conversationDbHelperClient.invoke('migrateJsonConversation', [input]),
   createConversation: (input = {}) => conversationDbHelperClient.invoke('createConversation', [input]),
@@ -890,6 +892,7 @@ function isMatchingConversationRpcCapability(request = {}) {
 }
 
 async function invokeConversationHelperMethod(method, args = [], options = {}) {
+  if (method === 'listConversationReferences') return window.api.listConversationReferences(args?.[0] || '');
   if (method === 'openConversationWindow') return window.api.openConversationWindow(args?.[0] || {});
   if (method === 'createCloudConversationWorktree') {
     return await createCloudConversationWorktree(args?.[0] || {});
@@ -1192,6 +1195,32 @@ ipcRenderer.on('conversation-task-receipt', (_event, {senderId, capability, ...r
   if (!isMatchingConversationRpcCapability({senderId, capability})) return;
   conversationTaskDelivery.complete(senderId, result);
 });
+async function openSavedConversationWindow({conversationId} = {}) {
+  if (typeof conversationId !== 'string' || !/^[A-Za-z0-9._:-]{16,160}$/.test(conversationId)) throw new Error('conversation_id_invalid');
+  const {config} = await getConfig();
+  const dirPath = config?.webdav?.localChatPath;
+  if (!dirPath) throw new Error('conversation_local_storage_required');
+  let senderId = require('./data.js').findLocalConversationWindow(config, conversationId, dirPath);
+  if (!senderId) {
+    const index = await require('./projects.js').readLocalProjects(dirPath, {readOnly: true});
+    const descriptor = index.conversations?.[conversationId];
+    if (!descriptor || descriptor.conversationId !== conversationId || descriptor.storageMode === 'cloud') throw new Error('conversation_not_found');
+    const opened = await conversationDbHelperClient.invoke('openConversation', [{dirPath, reference: conversationId, activeOnly: true, pageSize: 200}]);
+    if (opened?.sessionData?.conversationStorage?.conversationId !== conversationId || opened?.descriptor?.conversationId !== conversationId) throw new Error('conversation_target_mismatch');
+    senderId = await openWindow(config, {type: 'conversation', preserveExistingVisibility: true,
+      code: opened.sessionData?.CODE || 'AI', conversation: {...opened, dirPath, storageMode: 'local'}});
+  }
+  const deadline = Date.now() + 30000;
+  while (senderId) {
+    const win = windowMap.get(senderId);
+    if (!win || win.isDestroyed()) break;
+    if (win.__conversationTaskReady === true) return senderId;
+    if (Date.now() >= deadline) break;
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
+  throw new Error('conversation_window_not_ready');
+}
+
 async function runConversationTask(taskId, task, config) {
   if (task.promptKey) throw new Error('task_target_conflict');
   const dirPath = config.webdav?.localChatPath;

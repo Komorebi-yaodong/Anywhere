@@ -6,6 +6,7 @@ const DEFAULT_CONVERSATION_RPC_TIMEOUT_MS = 5 * 60 * 1000;
 
 const CONVERSATION_RPC_METHOD_TARGETS = Object.freeze({
   listLocalConversations: 'listLocalConversations',
+  listConversationReferences: null,
   migrateJsonConversation: 'migrateJsonConversation',
   createConversation: 'createConversation',
   forkConversation: 'forkConversation',

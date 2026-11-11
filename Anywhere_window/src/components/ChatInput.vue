@@ -3,6 +3,9 @@ import { ref, h, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'v
 import { ElFooter, ElRow, ElCol, ElText, ElDivider, ElButton, ElInput, ElMessage, ElMessageBox, ElTag, ElTooltip, ElScrollbar, ElIcon, ElImage, ElDialog, ElSwitch, ElInputNumber } from 'element-plus';
 import { Close, Check, Document, Delete, Collection, Picture, ChatLineRound, Fold, RefreshRight, InfoFilled, ArrowDown, ArrowRight } from '@element-plus/icons-vue';
 
+import { formatConversationReference, localConversationId } from '../../../shared/conversationReference.js';
+import { useConversationQuickSelect } from '../utils/useConversationQuickSelect.js';
+
 // --- Props and Emits ---
 const prompt = defineModel('prompt');
 const fileList = defineModel('fileList');
@@ -11,6 +14,9 @@ const tempReasoningEffort = defineModel('tempReasoningEffort');
 
 const props = defineProps({
     loading: Boolean,
+    conversationStorage: { type: Object, default: null },
+    conversationTitle: { type: String, default: '' },
+    localConversationDirectory: { type: String, default: '' },
 
     writeLocked: { type: Boolean, default: false },
     ctrlEnterToSend: Boolean,
@@ -92,6 +98,21 @@ const compactStatusText = computed(() => {
 const interactionLocked = computed(() => Boolean(props.loading || props.compacting || props.writeLocked));
 const configurationLocked = computed(() => Boolean(props.writeLocked));
 const draftInputLocked = computed(() => Boolean(isRecording.value || props.writeLocked));
+const currentLocalConversationId = computed(() => localConversationId(props.conversationStorage));
+const copyCurrentConversationId = async () => {
+    const reference = formatConversationReference(props.conversationTitle, currentLocalConversationId.value);
+    if (!reference) return;
+    try { await window.api.copyText(reference); ElMessage.success('会话ID已复制'); }
+    catch { ElMessage.error('复制会话ID失败'); }
+};
+const conversationQuick = useConversationQuickSelect({
+    prompt, senderRef,
+    getDirectory: () => props.localConversationDirectory,
+    isLocked: () => draftInputLocked.value
+});
+const { visible: showConversationQuickSelect, items: conversationQuickItems, highlighted: conversationQuickIndex,
+    loading: conversationQuickLoading, error: conversationQuickError } = conversationQuick;
+
 
 watch(() => props.compactConfig, (next) => {
     if (!next || typeof next !== 'object') return;
@@ -394,6 +415,7 @@ const filteredSkillList = computed(() => {
 // 监听 prompt 变化以触发快捷选择
 watch(prompt, (newVal) => {
     // 处理 MCP (@) - 匹配行首或空格后的 @
+    if (showConversationQuickSelect.value) { showMcpQuickSelect.value = false; showSkillQuickSelect.value = false; return; }
     const mcpMatch = newVal.match(/(?:^|\s)@([^@\s]*)$/);
     if (mcpMatch) {
         mcpFilterKeyword.value = mcpMatch[1];
@@ -416,6 +438,10 @@ watch(prompt, (newVal) => {
     // 都不匹配则关闭
     showMcpQuickSelect.value = false;
     showSkillQuickSelect.value = false;
+});
+
+watch(showConversationQuickSelect, (visible) => {
+    if (visible) { showMcpQuickSelect.value = false; showSkillQuickSelect.value = false; }
 });
 
 // --- Helper function ---
@@ -448,6 +474,7 @@ const handleSkillTab = () => {
 // --- Event Handlers ---
 const handleKeyDown = (event) => {
     if (event.isComposing) return;
+    if (conversationQuick.keydown(event)) return;
 
     // [MCP 快捷选择键盘逻辑]
     if (showMcpQuickSelect.value && filteredMcpList.value.length > 0) {
@@ -807,6 +834,7 @@ const handleConfirmAndSendRecording = () => {
 const handleClickOutside = (event) => {
     const target = event.target;
     if (!target) return;
+    if (!senderRef.value?.$el?.contains(target) && !target.closest?.('.conversation-quick-select')) conversationQuick.close();
     if (isReasoningSelectorVisible.value && reasoningSelectorRef.value && !reasoningSelectorRef.value.contains(target) && reasoningButtonRef.value && !reasoningButtonRef.value.$el.contains(target)) {
         isReasoningSelectorVisible.value = false;
     }
@@ -1102,10 +1130,32 @@ defineExpose({ focus, senderRef });
                         </div>
                     </div>
 
+                    <div v-if="showConversationQuickSelect" class="mcp-quick-select conversation-quick-select">
+                        <div class="mcp-quick-header">
+                            <span class="header-title">会话选择</span>
+                            <span class="header-hint">⇅ 选择 <span class="divider">|</span> Tab 插入 <span class="divider">|</span> Esc 取消</span>
+                        </div>
+                        <div class="mcp-quick-list-scroll">
+                            <div v-if="conversationQuickLoading" class="conversation-quick-status">正在读取本地会话…</div>
+                            <div v-else-if="conversationQuickError" class="conversation-quick-status">{{ conversationQuickError }}</div>
+                            <div v-else-if="!conversationQuickItems.length" class="conversation-quick-status">{{ localConversationDirectory ? '没有匹配的已保存会话' : '请先配置本地会话目录' }}</div>
+                            <div v-for="(item, idx) in conversationQuickItems" :key="item.conversationId"
+                                class="mcp-quick-item conversation-quick-item" :class="{ highlighted: idx === conversationQuickIndex }"
+                                @mousedown.prevent="conversationQuick.choose(item)">
+                                <div class="mcp-item-left">
+                                    <span class="mcp-name">{{ item.title }}</span>
+                                    <span class="mcp-tag" :title="item.projectNames?.join(' / ')">{{ item.projectNames?.join(' / ') || '未分组' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="input-wrapper">
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
-                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : (loading ? '输入、粘贴或拖拽内容后，发送将加入缓冲区' : '输入、粘贴、拖拽以发送内容，“ @”选择MCP，“ /”选择skill')"
+                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : (loading ? '输入、粘贴或拖拽内容后，发送将加入缓冲区' : '输入、粘贴、拖拽以发送内容，“ @”选择MCP，“ /”选择skill，行首“>”引用会话')"
                             :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleKeyDown"
+                            @input="conversationQuick.sync" @click="conversationQuick.sync" @keyup="conversationQuick.onKeyUp"
+                            @compositionstart="conversationQuick.onCompositionStart" @compositionend="conversationQuick.onCompositionEnd"
                             :disabled="draftInputLocked" />
                     </div>
                     <div class="input-actions-bar">
@@ -1192,7 +1242,7 @@ defineExpose({ focus, senderRef });
                                     </el-icon>
                                 </el-button>
                             </el-tooltip>
-                            <el-tooltip :content="compacting ? '压缩进行中…' : '会话压缩'">
+                            <el-tooltip :content="compacting ? '会话（压缩进行中…）' : '会话'">
                                 <el-button size="default" circle :disabled="isRecording || configurationLocked"
                                     :class="{ 'is-active-special': compacting || canRestoreCompact }"
                                     @click="openCompactDialog">
@@ -1298,7 +1348,10 @@ defineExpose({ focus, senderRef });
         :show-close="true" align-center>
         <template #header>
             <div class="compact-dialog-header">
-                <div class="compact-dialog-title">会话压缩</div>
+                <div class="compact-dialog-title">当前会话</div>
+                <el-tooltip v-if="currentLocalConversationId" content="点击复制会话ID引用" placement="top">
+                    <el-button link type="primary" class="conversation-id-copy" @click="copyCurrentConversationId">会话ID</el-button>
+                </el-tooltip>
             </div>
         </template>
 
@@ -2682,9 +2735,13 @@ html.dark .compact-dialog-scroll::-webkit-scrollbar-thumb {
 
 .compact-dialog-header {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-right: 24px;
 }
+
+.conversation-quick-status { padding: 14px; font-size: 12px; opacity: 0.7; }
 
 .compact-dialog-title-row {
     display: flex;

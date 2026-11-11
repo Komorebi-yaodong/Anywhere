@@ -6236,17 +6236,34 @@ const buildAgentToolContentList = async ({ text, filePaths, source = 'agent_tool
   };
 };
 
-const AGENT_MESSAGE_QUEUED = 'The other agent is currently responding. Your message has been queued and will be viewed after it finishes its current response.';
-const AGENT_MESSAGE_SENT = 'Message sent successfully. The other agent is now responding to your message.';
+const AGENT_MESSAGE_QUEUED = 'Message accepted into the target conversation buffer. It will be included at the next safe model request boundary, or start a turn when idle. Do not resend it. Remote control remains unchanged.';
 
-const isAgentMessageBusy = () => loading.value || isPreparingSend.value || compacting.value || isMcpLoading.value || Boolean(activeAssistantTurnMeta) || isFlushingAppendBuffer;
+const isAgentMessageBusy = () => loading.value || isPreparingSend.value || compacting.value || isMcpLoading.value || Boolean(activeAssistantTurnMeta) || isFlushingAppendBuffer || scheduledTaskQueueSaving > 0 || pendingAppendBuffer.value.length > 0 || Boolean(currentTaskConfig.value);
 
-const queueAgentToolMessage = (message, prepend = false) => {
+const queueAgentToolMessage = async (message) => {
   const item = { kind: 'agent', ...message, preview: message.text || `[${message.filePaths.length} files]` };
-  if (prepend) pendingAppendBuffer.value.unshift(item);
-  else pendingAppendBuffer.value.push(item);
-  scheduleAutoSave({ reason: 'agent-message-buffered', immediate: true });
-  return AGENT_MESSAGE_QUEUED;
+  const conversationId = currentConversationStorage.value?.conversationId;
+  scheduledTaskQueueSaving++;
+  pendingAppendBuffer.value.push(item);
+  syncAutoCloseOnBlurListener();
+  try {
+    if (conversationId) {
+      const saved = await executeAutoSaveRequest({ reason: 'agent-message-buffered', force: true, stateOnly: true, version: ++sessionMutationVersion });
+      if (saved !== true || isClosingWindow.value || currentConversationStorage.value?.conversationId !== conversationId) throw new Error('agent_message_queue_save_failed');
+    } else {
+      scheduleAutoSave({ reason: 'agent-message-buffered', immediate: true });
+    }
+    return AGENT_MESSAGE_QUEUED;
+  } catch (error) {
+    const index = pendingAppendBuffer.value.indexOf(item);
+    if (index >= 0) pendingAppendBuffer.value.splice(index, 1);
+    scheduleAutoSave({ reason: 'agent-message-admission-failed', immediate: true, force: Boolean(conversationId), stateOnly: true });
+    throw error;
+  } finally {
+    scheduledTaskQueueSaving--;
+    syncAutoCloseOnBlurListener();
+    nextTick(() => { flushAppendBuffer(); });
+  }
 };
 
 const appendAgentToolContent = (contentList) => {
@@ -6272,29 +6289,8 @@ const sendAgentToolMessage = async ({ text, filePaths, source = 'agent_tool' } =
     source
   };
   if (!message.text && !message.filePaths.length) throw new Error('No text or valid attachments were provided.');
-  if (isAgentMessageBusy() || pendingAppendBuffer.value.length) {
-    const result = queueAgentToolMessage(message);
-    nextTick(() => { flushAppendBuffer(); });
-    return result;
-  }
-
-  // Reserve preparation before awaiting attachments; never use or clear the user's draft.
-  isPreparingSend.value = true;
-  try {
-    const { contentList } = await buildAgentToolContentList(message);
-    if (isClosingWindow.value || !ensureConversationWriteAccess(false)) {
-      throw new Error('The target conversation is closing, read-only, or its write lease is unavailable.');
-    }
-    if (loading.value || compacting.value || isMcpLoading.value || activeAssistantTurnMeta) {
-      // This message reserved the idle slot before later arrivals were queued.
-      return queueAgentToolMessage(message, true);
-    }
-    appendAgentToolContent(contentList);
-  } finally {
-    isPreparingSend.value = false;
-  }
-  askAI(true).catch((err) => console.error('Background generation error:', err));
-  return AGENT_MESSAGE_SENT;
+  // Agent collaboration is an admitted input, not a local keyboard/control action.
+  return await queueAgentToolMessage(message);
 };
 
 const sendFile = async () => {
@@ -10074,6 +10070,8 @@ const scrollToMessageByIndex = (index) => {
             :compact-config="compactConfig"
             :prompt-token-breakdown="promptTokenBreakdown"
             :can-restore-compact="canRestoreCompact"
+          :conversation-storage="currentConversationStorage" :conversation-title="defaultConversationName || currentConversationStorage?.title || ''"
+          :local-conversation-directory="currentConfig.webdav?.localChatPath || ''"
  ref="chatInputRef" v-model:prompt="prompt" v-model:fileList="fileList"
           v-model:selectedVoice="selectedVoice" v-model:tempReasoningEffort="tempReasoningEffort" :loading="loading || compacting" :write-locked="conversationReadOnly || conversationLeasePending || isClosingWindow"
           :ctrlEnterToSend="currentConfig.CtrlEnterToSend" :layout="inputLayout" :voiceList="currentConfig.voiceList"
