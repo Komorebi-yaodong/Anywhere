@@ -1152,7 +1152,7 @@ defineExpose({ focus, senderRef });
 
                     <div class="input-wrapper">
                         <el-input ref="senderRef" class="chat-textarea-vertical" v-model="prompt" type="textarea"
-                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : (loading ? '输入、粘贴或拖拽内容后，发送将加入缓冲区' : '输入、粘贴、拖拽以发送内容，“ @”选择MCP，“ /”选择skill，行首“>”引用会话')"
+                            :placeholder="isRecording ? '录音中... 结束后将连同文本一起发送' : (loading ? '输入、粘贴或拖拽内容后，发送将加入缓冲区' : '“@”选择MCP，“/”选择Skill，“>”引用会话')"
                             :autosize="{ minRows: 1, maxRows: 15 }" resize="none" @keydown="handleKeyDown"
                             @input="conversationQuick.sync" @click="conversationQuick.sync" @keyup="conversationQuick.onKeyUp"
                             @compositionstart="conversationQuick.onCompositionStart" @compositionend="conversationQuick.onCompositionEnd"

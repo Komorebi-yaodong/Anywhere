@@ -13,6 +13,7 @@ const {
   killAllBackgroundShells,
 } = require('./mcp_builtin.js');
 const {
+  refreshMemoryTools,
   initializeMcpClient,
   invokeMcpTool,
   closeMcpClient,
@@ -45,6 +46,7 @@ module.exports = {
   invokeBuiltinTool,
   handleBgShellRequest,
   killAllBackgroundShells,
+  refreshMemoryTools,
   initializeMcpClient,
   invokeMcpTool,
   closeMcpClient,
